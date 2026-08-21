@@ -1,7 +1,8 @@
-# aenima — Design Specification v2.0 (web)
+# aenima — Design Specification v2.1 (web)
 
 <!-- Full rewrite for direct vibe-coding: every value explicit, no Figma step assumed. Supersedes v1.x.
-v2.0: aesthetic consolidated as "liquid-glass instrument, retro terminal heart, tactile controls." Aqua promoted to the single primary accent (Brand blue #246BFD retired to the hero gradient only). JetBrains Mono promoted to a first-class UI role for data readouts. Tactile press physics, glass edge highlights, and dot-grid texture added. Token set minimized. All 17 open proposals (form controls, elevation, z-ladder, scrollbars, selection, borders, font loading, charts, degraded pages, validation, sidebar, keyboard) folded in as law. -->
+v2.0: aesthetic consolidated as "liquid-glass instrument, retro terminal heart, tactile controls." Aqua promoted to the single primary accent (Brand blue #246BFD retired to the hero gradient only). JetBrains Mono promoted to a first-class UI role for data readouts. Tactile press physics, glass edge highlights, and dot-grid texture added. Token set minimized. All 17 open proposals (form controls, elevation, z-ladder, scrollbars, selection, borders, font loading, charts, degraded pages, validation, sidebar, keyboard) folded in as law.
+v2.1: three gaps found during build ticket T0.2 closed as law — chip padding (§8), skeleton shimmer sweep geometry (§6), and what "self-hosted" means in practice for font delivery (§3). No aesthetic changes. -->
 
 ## 0. Design language
 
@@ -107,7 +108,9 @@ Dark-only. Every accent has two tones: **fill** (surface color; label sits on it
 
 ## 3. Typography
 
-Three faces, all SIL Open Font License, all self-hosted woff2 (no CDN), `font-display: swap`, preload SpaceGrotesk-Bold + SpaceGrotesk-Medium:
+Three faces, all SIL Open Font License, all self-hosted woff2 (no CDN), `font-display: swap`, preload SpaceGrotesk-Bold + SpaceGrotesk-Medium and the UI face:
+
+**What self-hosted means:** the browser never contacts a font CDN at runtime. Every `@font-face` resolves to a same-origin woff2 on our own domain. A build-time fetch that emits those files as static assets satisfies this (Next's `next/font/google` does exactly that); vendoring the woff2 files into the repo is equivalent and equally acceptable. Latin Extended is required on all three faces — TR `ğĞşŞİı` and NL `ĳĲ` are non-negotiable coverage. Where a face ships as a variable font, one file per subset covers every weight in the scale below and no weight arrays are declared.
 
 ```css
 --font-display: 'Space Grotesk', system-ui, sans-serif; /* titles — retro-tech voice */
@@ -180,7 +183,7 @@ No-`backdrop-filter` fallback: solid #1B1E24, keep border + edge.
 - **Press physics (the retro click — applies to all buttons, chips-with-actions, toggle, checkbox):** on `:active`, instantly (0ms in): `transform: translateY(1px)`, edge highlight off, `box-shadow: inset 0 2px 4px rgba(0,0,0,.32)`. On release: spring back over `--t-fast` with `--ease`. The press must feel immediate; only the release animates.
 - **Focus-visible** (keyboard only): `outline: 2px solid var(--prime); outline-offset: 2px;` plus `box-shadow: var(--prime-glow)` — the aero glow lives on focus and on live dots, nowhere else.
 - Meter fill animates width `--t-slow`; 100% triggers a one-time 600ms `--hero-gradient` shimmer sweep.
-- Skeleton shimmer: `--surface-2` base, moving highlight rgba(255,255,255,.04), 1.2s linear loop.
+- Skeleton shimmer: `--surface-2` base, moving highlight rgba(255,255,255,.04), 1.2s linear loop. Geometry: a 200%-wide linear-gradient (transparent → highlight → transparent) traversing the element left to right, one pass per loop.
 - `prefers-reduced-motion`: kill shimmer, press-translate (keep the inner-shadow state change), meter animation, lift.
 
 ---
@@ -220,7 +223,7 @@ States: hover overlay · press physics · loading (spinner replaces label, width
 
 **Toggle.** 56×28, `--r-pill`, 2px inset, thumb 24 circle. Off: `--surface-2` track, `--n-secondary` thumb. On: `--prime` track, `--n-white` thumb. Track/thumb transition `--t-fast`.
 
-**Chips & badges.** Chip 24h, `--r-pill`, `--surface-2` fill, ui-caption; interactive chips get hover + press. Type badge (Feature, Enhancement, Technical, Content, Experiment, Fix, Spike): outline chip, `--glass-border`, `--n-secondary` — types are informative, never colorful. Gap chips: open Must = `--warning-soft` bg + `--warning` text · open Should = `--surface-2` + `--n-secondary` · accepted = `--surface-2` + `--n-secondary` + accepter name · excluded = transparent + `--n-disabled` outline. Count badges: display-num in a `--surface-2` pill. **File chip:** chip + file-type icon 16 + name (middle-truncate) + size in mono-readout.
+**Chips & badges.** Chip 24h, pad 4/10, gap 4, `--r-pill`, `--surface-2` fill, ui-caption; interactive chips get hover + press. (The vertical padding is derived, not free: ui-caption's 16px line box plus 4 above and below is exactly the 24 height; the 10 horizontal matches the sm button.) Type badge (Feature, Enhancement, Technical, Content, Experiment, Fix, Spike): outline chip, `--glass-border`, `--n-secondary` — types are informative, never colorful. Gap chips: open Must = `--warning-soft` bg + `--warning` text · open Should = `--surface-2` + `--n-secondary` · accepted = `--surface-2` + `--n-secondary` + accepter name · excluded = transparent + `--n-disabled` outline. Count badges: display-num in a `--surface-2` pill. **File chip:** chip + file-type icon 16 + name (middle-truncate) + size in mono-readout.
 
 **Avatars.** Circular, sizes 24 · 32 · 40 · 44 · 48 · 56 · 64 · 80 · 96 · 112 (nearest to context: row 32, switcher 40, profile 96). Status dot bottom-right: `--success` present, `--warning` away — same dot language as freshness.
 
@@ -298,4 +301,4 @@ No light mode · no RTL (EN/TR/NL are LTR) · no sound (tactility is visual) · 
 
 ---
 
-*v2.0 — complete and closed: no open items. Changes cut new versions of this document.*
+*v2.1 — complete and closed: no open items. Changes cut new versions of this document.*
