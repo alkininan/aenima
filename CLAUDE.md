@@ -11,6 +11,8 @@ Drizzle ORM · Vitest + Playwright · Vercel
 ## Commands
 ```
 dev        pnpm dev
+build      pnpm build                # next build
+start      pnpm start                # serve the production build
 test       pnpm test                 # vitest, whole suite
 test one   pnpm test <path>
 e2e        pnpm e2e                  # playwright
