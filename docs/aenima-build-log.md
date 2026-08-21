@@ -11,8 +11,8 @@
 **Repo:** github.com/alkininan/aenima
 **Deployed:** no
 
-`docs/design-spec.md` is now **v2.1** — chip padding, shimmer sweep geometry, and font delivery
-closed as law.
+`docs/design-spec.md` is now **v2.2** — dot diameters, panel offset, overlay padding,
+option-row precedence, the two toast clocks, and dismissal order closed as law.
 
 ## Stack
 
