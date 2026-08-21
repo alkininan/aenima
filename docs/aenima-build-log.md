@@ -7,47 +7,60 @@
 ## Current state
 
 **Phase:** 0 — foundation
-**Next ticket:** T0.1 (scaffold and quality gates)
-**Repo:** not yet created
+**Next ticket:** T0.3
+**Repo:** github.com/alkininan/aenima
 **Deployed:** no
+
+`docs/design-spec.md` is now **v2.1** — chip padding, shimmer sweep geometry, and font delivery
+closed as law.
 
 ## Stack
 
 | Layer | Choice | Status |
 |---|---|---|
-| Framework | Next.js 15, App Router, TypeScript strict | proposed |
-| Styling | Tailwind v4 | proposed |
-| Data + auth | Supabase (Postgres, Auth, Storage, RLS) | proposed |
-| ORM | Drizzle | proposed |
-| Jobs | Inngest, or Vercel cron + a jobs table | proposed |
-| Tests | Vitest + Playwright | proposed |
-| Hosting | Vercel | proposed |
+| Framework | Next.js 16, App Router, TypeScript strict | confirmed |
+| Styling | Tailwind v4 | confirmed |
+| Data + auth | Supabase (Postgres, Auth, Storage, RLS) | confirmed |
+| ORM | Drizzle | confirmed |
+| Jobs | decide at Phase 2, default Inngest | deferred |
+| Tests | Vitest + Playwright | confirmed |
+| Hosting | Vercel | confirmed |
 
 Mark each **confirmed** before T0.1. Swapping after T1.1 is expensive.
 
 ## Tickets done
 
-_(none yet — add a line per completed ticket: ID, one line of what shipped, commit hash)_
+T0.1 — scaffold, strict TS, ESLint+Prettier, Vitest, Playwright, folder skeleton — `4e4d5ae`
+T0.2 — design tokens, three faces, Æ mark, five primitives, /dev/primitives preview — `bdbaab6`
 
 ## Decisions made during the build
 
 _(when a ticket's report-back raises a question and you answer it, record the answer here.
 If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in the repo.)_
 
+- `build` and `start` stay in `package.json` and in CLAUDE.md's Commands block.
+- `exactOptionalPropertyTypes` and `noUncheckedIndexedAccess` on deliberately.
+- Prettier `printWidth` 100.
+- Font faces declared in `@theme static`, not `:root` — Tailwind tree-shakes unused theme vars,
+  so `static` is load-bearing.
+- `next/font/google` accepted as self-hosted per design spec v2.1 §3; DM Sans preloaded alongside
+  Space Grotesk.
+
 ## Open questions
 
-1. Stack confirmation (above).
-2. Seed content still owed: TR formality register per product, the ~80-term universal loanword
+1. Seed content still owed: TR formality register per product, the ~80-term universal loanword
    list, confirmation of the appendix A baseline numbers, at-risk sort weights after four weeks
    of real use. None of these block phases 0–1.
 
 ## Accounts and keys needed
 
-- [ ] Supabase project (URL, anon key, service role key)
+- [x] Supabase project (URL, anon key, service role key)
 - [ ] Anthropic and/or OpenAI API key — the workspace BYO key for the AI layer
 - [ ] Notion internal integration (token + the pages/databases it can see)
 - [ ] Figma personal access token
 - [ ] Google Cloud OAuth client (Google sign-in, Drive watch)
 - [ ] Apple sign-in credentials
-- [ ] Vercel project
+- [ ] Vercel project — not yet
 - [ ] Resend or Postmark (digest email) — not needed until phase 6
+
+Supabase and Playwright MCP servers are connected.
