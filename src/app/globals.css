@@ -1,26 +1,427 @@
 @import "tailwindcss";
 
+/* ---------------------------------------------------------------------------
+ * Design tokens — design-spec.md §2, copied verbatim from the spec's :root
+ * block. Do not edit values here; edit the spec, then re-copy. `prettier-ignore`
+ * keeps the copy byte-identical to the source so a diff against the spec is
+ * meaningful.
+ * ------------------------------------------------------------------------- */
+/* prettier-ignore */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* surfaces */
+  --bg-base: #0E0F11;            /* app background */
+  --bg-scrim: rgba(14,15,17,.80);/* modal scrim (Base-Soft) */
+  --surface-1: #202228;          /* cards, inputs, composer, table rows */
+  --surface-2: #333740;          /* nested fills, meter tracks, hover-on-1, skeletons */
+  --surface-3: #2A2F39;          /* hover on nested cards, pressed rows */
+  /* glass */
+  --glass-fill: rgba(34,38,46,.80);      /* glass panels; pair with blur */
+  --glass-border: rgba(77,81,89,.64);    /* 1px border on glass + cards */
+  --glass-blur: 24px;
+  --press-overlay: rgba(255,255,255,.08);
+  --hover-overlay: rgba(255,255,255,.04);
+  --edge-highlight: rgba(255,255,255,.14); /* 1px inner top specular line */
+  --scrim-top: linear-gradient(180deg, rgba(14,15,17,.72), rgba(14,15,17,.24), rgba(14,15,17,0));
+  --scrim-bottom: linear-gradient(0deg, rgba(14,15,17,.72), rgba(14,15,17,.24), rgba(14,15,17,0));
+  /* neutrals (text/icons) */
+  --n-primary: #E0E5EB;   /* default text */
+  --n-secondary: #9DA3B0; /* secondary text, labels, inactive icons */
+  --n-white: #FFFFFF;     /* emphasis on fills */
+  --n-placeholder: #737780; /* placeholders only — fails AA by design */
+  --n-disabled: #4D5159;    /* disabled only — fails AA by design */
+  /* prime accent — aqua */
+  --prime: #21B8DC;         /* bright: text, icons, strokes, meter fill, links */
+  --prime-deep: #0E7E9B;    /* fill tone for solid shapes needing a light label */
+  --prime-soft: rgba(33,184,220,.14);
+  --prime-glow: 0 0 12px rgba(33,184,220,.24);
+  /* agent accent — violet */
+  --agent: #A78BFF;
+  --agent-deep: #5B2BD9;
+  --agent-soft: rgba(167,139,255,.14);
+  /* semantic */
+  --success: #22C55E;  --success-deep: #12813C;  --success-soft: rgba(34,197,94,.12);
+  --warning: #EBA92F;                             --warning-soft: rgba(235,169,47,.12);
+  --danger: #FF7276;   --danger-deep: #D93A3F;   --danger-soft: rgba(255,114,118,.12);
+  /* hero gradient — marketing surfaces + 100%-meter shimmer only */
+  --hero-gradient: linear-gradient(90deg, #172EE1, #692BEA 21%, #4393F7 69%, #0AC0FF);
 }
 
+/* ---------------------------------------------------------------------------
+ * Shape (§5) and motion (§6). Same rule: values are copied.
+ * The §3 typefaces are declared in the @theme block below, not here.
+ * ------------------------------------------------------------------------- */
+:root {
+  /* radius — §5. Never square corners anywhere. */
+  --r-pill: 999px;
+  --r-lg: 24px;
+  --r-md: 20px;
+  --r-sm: 16px;
+  --r-xs: 8px;
+
+  /* motion — §6 */
+  --t-fast: 120ms;
+  --t-med: 200ms;
+  --t-slow: 320ms;
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+/* ---------------------------------------------------------------------------
+ * Tailwind wiring. `inline` makes every utility emit the spec variable itself
+ * (`background-color: var(--prime)`), so the tokens above stay the single
+ * source of truth and nothing is duplicated into a second variable.
+ * ------------------------------------------------------------------------- */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* surfaces */
+  --color-bg-base: var(--bg-base);
+  --color-bg-scrim: var(--bg-scrim);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+
+  /* glass */
+  --color-glass-fill: var(--glass-fill);
+  --color-glass-border: var(--glass-border);
+  --color-press-overlay: var(--press-overlay);
+  --color-hover-overlay: var(--hover-overlay);
+  --color-edge-highlight: var(--edge-highlight);
+  --blur-glass: var(--glass-blur);
+
+  /* neutrals */
+  --color-n-primary: var(--n-primary);
+  --color-n-secondary: var(--n-secondary);
+  --color-n-white: var(--n-white);
+  --color-n-placeholder: var(--n-placeholder);
+  --color-n-disabled: var(--n-disabled);
+
+  /* accents */
+  --color-prime: var(--prime);
+  --color-prime-deep: var(--prime-deep);
+  --color-prime-soft: var(--prime-soft);
+  --color-agent: var(--agent);
+  --color-agent-deep: var(--agent-deep);
+  --color-agent-soft: var(--agent-soft);
+
+  /* semantic */
+  --color-success: var(--success);
+  --color-success-deep: var(--success-deep);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-deep: var(--danger-deep);
+  --color-danger-soft: var(--danger-soft);
+
+  /* shape */
+  --radius-pill: var(--r-pill);
+  --radius-lg: var(--r-lg);
+  --radius-md: var(--r-md);
+  --radius-sm: var(--r-sm);
+  --radius-xs: var(--r-xs);
+
+  /* motion */
+  --ease-brand: var(--ease);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* ---------------------------------------------------------------------------
+ * Typefaces — §3. Declared as real theme variables rather than in :root:
+ * `--font-mono` is also a Tailwind default, and overriding a default in its own
+ * namespace replaces it outright instead of shadowing it from a later layer.
+ * `static` emits all three whatever Tailwind thinks is used, because the type
+ * scale reads them through var() from hand-written CSS, not from utilities.
+ *
+ * The spec names the families directly ('Space Grotesk', …); next/font
+ * self-hosts each one at build time and hands us a variable holding the
+ * generated family plus its metric-matched fallback, so the family name is
+ * substituted for the raw string. See src/app/layout.tsx.
+ * ------------------------------------------------------------------------- */
+@theme static {
+  --font-display: var(--font-space-grotesk), system-ui, sans-serif;
+  --font-ui: var(--font-dm-sans), system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
+}
+
+@layer base {
+  /* §3 — root 16px. Every px value in the design spec is read against it. */
+  html {
+    font-size: 16px;
+  }
+
+  body {
+    background-color: var(--bg-base);
+    color: var(--n-primary);
+    font-family: var(--font-ui);
+  }
+
+  /* §11 — the prime ring is the only focus affordance, keyboard only. */
+  :focus-visible {
+    outline: 2px solid var(--prime);
+    outline-offset: 2px;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* ---------------------------------------------------------------------------
+ * Type scale — §3. One class per row of the table, exact px size and line.
+ * Space Grotesk carries −1% tracking per §3; mono readouts carry tabular-nums.
+ * ------------------------------------------------------------------------- */
+@layer components {
+  .type-display-xl,
+  .type-display-lg,
+  .type-display-md,
+  .type-display-num {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+
+  .type-ui-headline,
+  .type-ui-button,
+  .type-ui-input,
+  .type-ui-subhead,
+  .type-ui-button-sm,
+  .type-ui-body,
+  .type-ui-footnote,
+  .type-ui-caption,
+  .type-special-otp {
+    font-family: var(--font-ui);
+  }
+
+  .type-mono-code,
+  .type-mono-readout,
+  .type-mono-micro {
+    font-family: var(--font-mono);
+  }
+
+  .type-display-xl {
+    font-weight: 700;
+    font-size: 32px;
+    line-height: 38px;
+  }
+
+  .type-display-lg {
+    font-weight: 500;
+    font-size: 24px;
+    line-height: 28px;
+  }
+
+  .type-display-md {
+    font-weight: 500;
+    font-size: 18px;
+    line-height: 24px;
+  }
+
+  /* Numbers in a data context — §3 puts every such numeral on tabular-nums. */
+  .type-display-num {
+    font-weight: 700;
+    font-size: 18px;
+    line-height: 22px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .type-ui-headline {
+    font-weight: 600;
+    font-size: 17px;
+    line-height: 22px;
+  }
+
+  .type-ui-button {
+    font-weight: 500;
+    font-size: 17px;
+    line-height: 20px;
+  }
+
+  .type-ui-input {
+    font-weight: 400;
+    font-size: 17px;
+    line-height: 22px;
+  }
+
+  .type-ui-subhead {
+    font-weight: 600;
+    font-size: 15px;
+    line-height: 22px;
+  }
+
+  .type-ui-button-sm {
+    font-weight: 500;
+    font-size: 15px;
+    line-height: 20px;
+  }
+
+  .type-ui-body {
+    font-weight: 400;
+    font-size: 15px;
+    line-height: 22px;
+  }
+
+  .type-ui-footnote {
+    font-weight: 400;
+    font-size: 13px;
+    line-height: 18px;
+  }
+
+  .type-ui-caption {
+    font-weight: 500;
+    font-size: 12px;
+    line-height: 16px;
+  }
+
+  .type-mono-code {
+    font-weight: 400;
+    font-size: 14px;
+    line-height: 22px;
+  }
+
+  .type-mono-readout {
+    font-weight: 500;
+    font-size: 12px;
+    line-height: 16px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .type-mono-micro {
+    font-weight: 600;
+    font-size: 10px;
+    line-height: 14px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .type-special-otp {
+    font-weight: 700;
+    font-size: 22px;
+    line-height: 24px;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Tactile control — §6 press physics, §7 interaction states.
+ *
+ * box-shadow is composed from two slots so the specular edge, the pressed
+ * inner shadow and the focus glow can each change without the others being
+ * restated. `.control` owns the physics; the fills and labels stay in the
+ * component's Tailwind classes.
+ * ------------------------------------------------------------------------- */
+@layer components {
+  .control {
+    position: relative;
+    isolation: isolate;
+    cursor: pointer;
+    --control-edge: inset 0 1px 0 var(--edge-highlight);
+    --control-glow: 0 0 #0000;
+    box-shadow: var(--control-edge), var(--control-glow);
+    transition:
+      transform var(--t-fast) var(--ease),
+      box-shadow var(--t-fast) var(--ease),
+      color var(--t-fast) var(--ease),
+      background-color var(--t-fast) var(--ease),
+      border-color var(--t-fast) var(--ease),
+      opacity var(--t-fast) var(--ease);
+  }
+
+  /* §7 hover/press overlay. Negative z inside the control's own stacking
+   * context paints it over the fill but under the label. */
+  .control::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background-color: transparent;
+    pointer-events: none;
+    transition: background-color var(--t-fast) var(--ease);
+  }
+
+  .control:hover:not(:disabled):not([aria-disabled="true"])::after {
+    background-color: var(--hover-overlay);
+  }
+
+  /* §6 — the press must feel immediate; only the release animates. */
+  .control:active:not(:disabled):not([aria-disabled="true"]) {
+    transform: translateY(1px);
+    --control-edge: inset 0 2px 4px rgba(0, 0, 0, 0.32);
+    transition-duration: 0ms;
+  }
+
+  .control:active:not(:disabled):not([aria-disabled="true"])::after {
+    background-color: var(--press-overlay);
+    transition-duration: 0ms;
+  }
+
+  /* §6 focus-visible — prime ring plus the aero glow. */
+  .control:focus-visible {
+    --control-glow: var(--prime-glow);
+  }
+
+  /* §7 disabled — edge highlight off, no hover, cursor default. A loading
+   * control also carries aria-disabled, but loading is not disabled: it keeps
+   * its fill and its specular edge, so only the cursor is shared. */
+  .control:disabled,
+  .control[aria-disabled="true"] {
+    cursor: default;
+  }
+
+  .control:disabled {
+    --control-edge: 0 0 #0000;
+  }
+
+  /* §8 primary button — inset edge highlight at 24% white. */
+  .control-edge-strong {
+    --control-edge: inset 0 1px 0 rgba(255, 255, 255, 0.24);
+  }
+
+  /* §8 states the specular edge for Primary only; the quiet variants opt out. */
+  .control-edge-none {
+    --control-edge: 0 0 #0000;
+  }
+
+  /* §8 spinner — 2px stroke, 800ms linear rotation, colour from currentColor. */
+  .spinner-ring {
+    border-radius: var(--r-pill);
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    animation: aenima-spin 800ms linear infinite;
+  }
+
+  /* §6 skeleton shimmer — surface-2 base, rgba(255,255,255,.04) highlight,
+   * 1.2s linear loop. The sweep travels the full width of the element. */
+  .shimmer {
+    background-color: var(--surface-2);
+    background-image: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.04), transparent);
+    background-size: 200% 100%;
+    background-repeat: no-repeat;
+    animation: aenima-shimmer 1.2s linear infinite;
+  }
+}
+
+@keyframes aenima-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes aenima-shimmer {
+  from {
+    background-position: 150% 0;
+  }
+  to {
+    background-position: -50% 0;
+  }
+}
+
+/* §6 — reduced motion kills the press translate (the inner-shadow state change
+ * stays, so the control still reads as pressed) and kills the shimmer. */
+@media (prefers-reduced-motion: reduce) {
+  .control,
+  .control::after {
+    transition: none;
+  }
+
+  .control:active:not(:disabled):not([aria-disabled="true"]) {
+    transform: none;
+  }
+
+  .shimmer {
+    animation: none;
+  }
 }
