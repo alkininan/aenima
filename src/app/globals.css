@@ -63,6 +63,26 @@
   --t-med: 200ms;
   --t-slow: 320ms;
   --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+
+  /* elevation — §5. Shadows only for truly floating layers; everything else
+   * is a surface step plus a border. */
+  --shadow-dropdown: 0 8px 24px rgba(0, 0, 0, 0.4);
+  --shadow-modal: 0 16px 48px rgba(0, 0, 0, 0.56);
+
+  /* §5 — the solid stand-in where backdrop-filter is unsupported. */
+  --glass-fill-fallback: #1b1e24;
+
+  /* §2 dot grid — #E0E5EB at 4%. Decorative surfaces only (§0 law 9). */
+  --texture-dot: rgba(224, 229, 235, 0.04);
+
+  /* z-ladder — §4. The whole ladder, so no layer is ever improvised. */
+  --z-content: 0;
+  --z-sticky: 100;
+  --z-chat: 200;
+  --z-popover: 300;
+  --z-modal: 400;
+  --z-toast: 500;
+  --z-tooltip: 600;
 }
 
 /* ---------------------------------------------------------------------------
@@ -394,9 +414,143 @@
   }
 }
 
+/* ---------------------------------------------------------------------------
+ * Composite surfaces — §5 glass and elevation, §8 panels, §2 texture,
+ * §4 scrollbars. Same rule as above: every value is quoted from the spec.
+ * ------------------------------------------------------------------------- */
+@layer components {
+  /* §5 glass recipe. The specular edge is mandatory (§0 law 5), so it is baked
+   * in; `--glass-elevation` is a second box-shadow slot that lets a floating
+   * layer add §5's drop shadow without restating the edge. */
+  .glass {
+    --glass-elevation: 0 0 #0000;
+    background-color: var(--glass-fill);
+    backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--glass-border);
+    box-shadow:
+      inset 0 1px 0 var(--edge-highlight),
+      var(--glass-elevation);
+  }
+
+  /* §5 — no-backdrop-filter fallback: solid, keep border + edge. */
+  @supports not (backdrop-filter: blur(1px)) {
+    .glass {
+      background-color: var(--glass-fill-fallback);
+    }
+  }
+
+  /* §8 select and menu panels: --surface-1, radius 12, dropdown shadow, 6 pad.
+   * 12 is the one radius §5 names without giving it a token. */
+  .panel {
+    background-color: var(--surface-1);
+    border-radius: 12px;
+    box-shadow: var(--shadow-dropdown);
+    padding: 6px;
+  }
+
+  /* §2 dot grid: 2px dot on a 16px pitch over Base. */
+  .dot-grid {
+    background-color: var(--bg-base);
+    background-image: radial-gradient(circle, var(--texture-dot) 1px, transparent 1px);
+    background-size: 16px 16px;
+  }
+
+  /* §4 scrollbars — 8px thin, thumb --surface-2 brightening to --glass-border,
+   * transparent track. Applied to the inner-scroll surfaces this ticket adds. */
+  .scroll-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--surface-2) transparent;
+  }
+
+  .scroll-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .scroll-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scroll-thin::-webkit-scrollbar-thumb {
+    background-color: var(--surface-2);
+    border-radius: var(--r-pill);
+  }
+
+  .scroll-thin::-webkit-scrollbar-thumb:hover {
+    background-color: var(--glass-border);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Tactile hosts — §8 gives checkbox, radio and toggle a hit area covering the
+ * whole row, so hover, press and focus have to reach a `.control` box that is
+ * not itself the element under the pointer. The real input stays in the DOM,
+ * visually hidden, and drives every state through `:has()`.
+ * ------------------------------------------------------------------------- */
+@layer components {
+  .control-host {
+    cursor: pointer;
+  }
+
+  /* §7 disabled: no hover, cursor default. */
+  .control-host:has(:disabled) {
+    cursor: default;
+  }
+
+  .control-host:not(:has(:disabled)):hover .control::after {
+    background-color: var(--hover-overlay);
+  }
+
+  /* §6 press physics, reached from the row rather than the box. */
+  .control-host:not(:has(:disabled)):active .control {
+    transform: translateY(1px);
+    --control-edge: inset 0 2px 4px rgba(0, 0, 0, 0.32);
+    transition-duration: 0ms;
+  }
+
+  .control-host:not(:has(:disabled)):active .control::after {
+    background-color: var(--press-overlay);
+    transition-duration: 0ms;
+  }
+
+  /* §6 focus-visible. The input is clipped to a pixel, so the ring has to be
+   * drawn on the box the user can actually see. */
+  .control-host:has(:focus-visible) .control {
+    outline: 2px solid var(--prime);
+    outline-offset: 2px;
+    --control-glow: var(--prime-glow);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Overlay motion — §6 puts panels and drawers on --t-med.
+ * ------------------------------------------------------------------------- */
+@layer components {
+  /* §8 side sheet: right slide-in. */
+  .sheet-in {
+    animation: aenima-sheet-in var(--t-med) var(--ease);
+  }
+
+  .fade-in {
+    animation: aenima-fade-in var(--t-med) var(--ease);
+  }
+}
+
 @keyframes aenima-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes aenima-sheet-in {
+  from {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes aenima-fade-in {
+  from {
+    opacity: 0;
   }
 }
 
@@ -421,7 +575,13 @@
     transform: none;
   }
 
-  .shimmer {
+  .control-host:not(:has(:disabled)):active .control {
+    transform: none;
+  }
+
+  .shimmer,
+  .sheet-in,
+  .fade-in {
     animation: none;
   }
 }

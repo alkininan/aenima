@@ -1,11 +1,15 @@
 /*
- * DELETE BEFORE LAUNCH — visual scaffold for T0.2 only.
+ * DELETE BEFORE LAUNCH — visual scaffold for T0.2 and T0.3 only.
  *
  * Renders every variant, size and state of the primitives on --bg-base so the
  * design system can be eyeballed. No product surface links here, nothing here
  * ships, and the labels below are variant names, not product copy.
+ *
+ * The page stays a Server Component; the composites need state, so they live in
+ * a client island below.
  */
 import { AeMark } from "@/components/AeMark";
+import { CompositesPreview } from "./Composites";
 import { Button } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
 import { IconButton } from "@/components/ui/IconButton";
@@ -262,6 +266,8 @@ export default function PrimitivesPage() {
           ))}
         </Row>
       </Section>
+
+      <CompositesPreview />
     </main>
   );
 }

@@ -20,6 +20,7 @@ const eslintConfig = defineConfig([
     "coverage/**",
     "playwright-report/**",
     "test-results/**",
+    ".playwright-mcp/**",
   ]),
 ]);
 

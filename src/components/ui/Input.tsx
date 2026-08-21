@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, type InputHTMLAttributes, type ReactNode } from "react";
+import { useId, type InputHTMLAttributes, type ReactNode, type Ref } from "react";
 
 import { cx } from "@/lib/cx";
 
@@ -21,6 +21,12 @@ type InputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "size"> & {
   trailingIcon?: ReactNode;
   /** Classes for the outer composite. `fieldClassName` targets the pill itself. */
   fieldClassName?: string;
+  /**
+   * Forwarded to the `<input>`. React 19 passes `ref` like any other prop, so
+   * it rides along in `...rest` — composites built on this field (Select) need
+   * it to put focus back where §11 says it belongs.
+   */
+  ref?: Ref<HTMLInputElement>;
 };
 
 /**
