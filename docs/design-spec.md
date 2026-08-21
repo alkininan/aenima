@@ -1,8 +1,9 @@
-# aenima — Design Specification v2.1 (web)
+# aenima — Design Specification v2.2 (web)
 
 <!-- Full rewrite for direct vibe-coding: every value explicit, no Figma step assumed. Supersedes v1.x.
 v2.0: aesthetic consolidated as "liquid-glass instrument, retro terminal heart, tactile controls." Aqua promoted to the single primary accent (Brand blue #246BFD retired to the hero gradient only). JetBrains Mono promoted to a first-class UI role for data readouts. Tactile press physics, glass edge highlights, and dot-grid texture added. Token set minimized. All 17 open proposals (form controls, elevation, z-ladder, scrollbars, selection, borders, font loading, charts, degraded pages, validation, sidebar, keyboard) folded in as law.
-v2.1: three gaps found during build ticket T0.2 closed as law — chip padding (§8), skeleton shimmer sweep geometry (§6), and what "self-hosted" means in practice for font delivery (§3). No aesthetic changes. -->
+v2.1: three gaps found during build ticket T0.2 closed as law — chip padding (§8), skeleton shimmer sweep geometry (§6), and what "self-hosted" means in practice for font delivery (§3). No aesthetic changes.
+v2.2: seven gaps found during build ticket T0.3 closed as law — dot diameters, panel offset, and overlay interior padding (§8); option-row height precedence and the two toast clocks (§8); dismissal order separated from the paint ladder (§4, §11). No aesthetic changes. -->
 
 ## 0. Design language
 
@@ -150,7 +151,8 @@ Rules: max reading measure 68ch (doc reader). Links `--prime`, underline on hove
 - **Density.** List rows 56 · table rows 44 · menu rows 36 · touch targets ≥40.
 - **Sidebar.** `--bg-base`; lockup top: Æ mark 24px + `aenima` wordmark; nav items 40px (icon 20 + ui-body); active = `--prime-soft` pill + `--n-primary`; product switcher = avatar 40 + display-md. Sidebar never collapses in v1; the chat dock is what collapses.
 - **Topbar per page.** display-xl title + mono-readout freshness + one primary action. Sticky topbars use glass recipe + `--scrim-top`.
-- **Z-ladder** (never improvise): content 0 · sticky bars 100 · chat dock 200 · dropdown/popover 300 · modal scrim+modal 400 · toast 500 · tooltip 600. `Esc` closes the topmost layer.
+- **Z-ladder** (never improvise): content 0 · sticky bars 100 · chat dock 200 · dropdown/popover 300 · modal scrim+modal 400 · toast 500 · tooltip 600. **The ladder governs painting only.** Dismissal is last-opened-wins: `Esc` closes the most recently opened layer regardless of its rung, so a select opened inside a modal takes the first `Esc` and the modal takes the second. Ranking dismissal by rung would strand the inner layer.
+- **Overlay interior.** Modals, sheets, and toasts pad 20; stacked content inside them gaps on the 8-grid. Panels (select, menu, dropdown) sit 8 from their trigger.
 - **Scrollbars.** 8px thin; thumb `--surface-2`, hover `--glass-border`; track transparent. (`scrollbar-width: thin` + webkit styles.)
 - **Text selection.** `::selection { background: var(--prime-soft); color: var(--n-primary); }`
 - **Border widths.** 1px everywhere; 2px reserved for meaning: focus ring, agent violet border, bucket accents.
@@ -217,15 +219,15 @@ States: hover overlay · press physics · loading (spinner replaces label, width
 **Inputs.** Field 52h, `--r-pill`, `--surface-1` fill, 1px `--glass-border`, pad 14/16, icon slots 24 leading/trailing, gap 8, ui-input text, `--n-placeholder` placeholder. Composite: label (ui-subhead) → 8 → field → 8 → helper (ui-footnote, `--n-secondary`). Focus: `--prime` border + ring/glow. Error: `--danger` border, helper flips to `--danger`. Disabled: 40% opacity. **Validation timing:** validate on blur; after a field's first error, re-validate on change; never on first keystroke; on submit, surface the first error and scroll to it.
 **Textarea/composer:** starts 52h pill; past ~4 lines, radius = height ÷ 4 (proportional rule), max ~8 lines then inner scroll. **Search:** leading icon variant of the standard field. **Date field:** standard pill field + native browser picker (custom calendar is v1.1). **OTP:** 6 boxes 52×52, radius 27, gap 16, special-otp centered; filled box border `--prime`.
 
-**Select/dropdown.** Trigger = pill field with trailing chevron (20). Panel: `--surface-1`, radius 12, dropdown shadow, 6px padding; options 36h, ui-body, pad 8/12, radius 8; hover `--surface-3`; selected `--prime-soft` + check icon 16. Opens below (above if <320px space); max-height 320 with inner scroll; type-to-jump.
+**Select/dropdown.** Trigger = pill field with trailing chevron (20). Panel: `--surface-1`, radius 12, dropdown shadow, 6px padding; options 36h, ui-body, pad 12 horizontal, radius 8; hover `--surface-3`; selected `--prime-soft` + check icon 16. **Height wins:** 36 comes from §4 density and governs the whole system; the label centres within it rather than adding vertical padding. Opens below (above if <320px space), 8 from the trigger; max-height 320 with inner scroll; type-to-jump.
 
-**Checkbox & radio.** 20×20; checkbox radius 6, radio circle. Unchecked: `--surface-1` fill + `--glass-border`. Checked: `--prime` fill, #0E0F11 check/dot. Press physics apply. Label ui-body, gap 10, whole row clickable.
+**Checkbox & radio.** 20×20; checkbox radius 6, radio circle. Unchecked: `--surface-1` fill + `--glass-border`. Checked: `--prime` fill, #0E0F11 check/dot — the radio dot is 8. Press physics apply. Label ui-body, gap 10, whole row clickable.
 
 **Toggle.** 56×28, `--r-pill`, 2px inset, thumb 24 circle. Off: `--surface-2` track, `--n-secondary` thumb. On: `--prime` track, `--n-white` thumb. Track/thumb transition `--t-fast`.
 
 **Chips & badges.** Chip 24h, pad 4/10, gap 4, `--r-pill`, `--surface-2` fill, ui-caption; interactive chips get hover + press. (The vertical padding is derived, not free: ui-caption's 16px line box plus 4 above and below is exactly the 24 height; the 10 horizontal matches the sm button.) Type badge (Feature, Enhancement, Technical, Content, Experiment, Fix, Spike): outline chip, `--glass-border`, `--n-secondary` — types are informative, never colorful. Gap chips: open Must = `--warning-soft` bg + `--warning` text · open Should = `--surface-2` + `--n-secondary` · accepted = `--surface-2` + `--n-secondary` + accepter name · excluded = transparent + `--n-disabled` outline. Count badges: display-num in a `--surface-2` pill. **File chip:** chip + file-type icon 16 + name (middle-truncate) + size in mono-readout.
 
-**Avatars.** Circular, sizes 24 · 32 · 40 · 44 · 48 · 56 · 64 · 80 · 96 · 112 (nearest to context: row 32, switcher 40, profile 96). Status dot bottom-right: `--success` present, `--warning` away — same dot language as freshness.
+**Avatars.** Circular, sizes 24 · 32 · 40 · 44 · 48 · 56 · 64 · 80 · 96 · 112 (nearest to context: row 32, switcher 40, profile 96). Status dot bottom-right, 8 diameter: `--success` present, `--warning` away — same dot language as freshness. Every system dot in the product (status, freshness, toast leading dot) is 8.
 
 **Tooltip.** `--surface-2`, radius 8, ui-caption, pad 6/10, max-width 240, no arrow, 500ms show delay, instant hide, z 600.
 
@@ -235,7 +237,7 @@ States: hover overlay · press physics · loading (spinner replaces label, width
 
 **Tabs.** ui-subhead; inactive `--n-secondary`; active `--n-primary` + 2px `--prime` underline (radius 2); hover overlay on hit area 36h.
 
-**Toasts.** Bottom-center, glass recipe, radius 12, ui-body + optional undo (`--prime`), leading dot `--success`/`--warning`; never a red toast — errors surface inline. Auto-dismiss 5s, hover pauses, z 500.
+**Toasts.** Bottom-center, glass recipe, radius 12, ui-body + optional undo (`--prime`), leading dot `--success`/`--warning`; never a red toast — errors surface inline. **Two clocks:** auto-dismiss 5s by default, 8s when the toast carries an undo action — undo needs reaction time (§12). Hover or focus pauses either. z 500.
 
 **Modals & sheets.** Scrim `--bg-scrim`. Modal: glass recipe, `--r-md`, modal shadow, max 400 (confirm) / 640 (content); title display-lg; footer buttons right, primary last. Side sheets (evidence, decision log): 480 wide, right slide-in `--t-med`, glass recipe, `--r-lg` on the leading corners only.
 
@@ -274,7 +276,7 @@ Series order: `--prime` #21B8DC · `--agent` #A78BFF · `--success` #22C55E · `
 
 ## 11. Keyboard & focus
 
-`Cmd/Ctrl+K` focus chat · `Esc` closes topmost z-layer · `Enter` confirms focused proposal, `Cmd/Ctrl+Enter` sends in composer · arrow keys walk menus/selects/list rows · `/` focuses search in list views. Every interactive element reachable by Tab in visual order; focus ring per §6; focus trapped inside modals; on close, focus returns to the opener.
+`Cmd/Ctrl+K` focus chat · `Esc` closes the most recently opened layer (last-opened-wins, per §4 — not the highest rung) · `Enter` confirms focused proposal, `Cmd/Ctrl+Enter` sends in composer · arrow keys walk menus/selects/list rows · `/` focuses search in list views. Every interactive element reachable by Tab in visual order; focus ring per §6; focus trapped inside modals; on close, focus returns to the opener.
 
 ## 12. Voice in UI
 
@@ -301,4 +303,4 @@ No light mode · no RTL (EN/TR/NL are LTR) · no sound (tactility is visual) · 
 
 ---
 
-*v2.1 — complete and closed: no open items. Changes cut new versions of this document.*
+*v2.2 — complete and closed: no open items. Changes cut new versions of this document.*

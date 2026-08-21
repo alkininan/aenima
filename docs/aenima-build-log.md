@@ -7,7 +7,7 @@
 ## Current state
 
 **Phase:** 0 — foundation
-**Next ticket:** T0.3
+**Next ticket:** T0.4
 **Repo:** github.com/alkininan/aenima
 **Deployed:** no
 
@@ -32,6 +32,7 @@ Mark each **confirmed** before T0.1. Swapping after T1.1 is expensive.
 
 T0.1 — scaffold, strict TS, ESLint+Prettier, Vitest, Playwright, folder skeleton — `4e4d5ae`
 T0.2 — design tokens, three faces, Æ mark, five primitives, /dev/primitives preview — `bdbaab6`
+T0.3 — eleven composites, page.tsx replaced, layout metadata, scaffold assets removed — `e04da9f`
 
 ## Decisions made during the build
 
@@ -45,6 +46,17 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
   so `static` is load-bearing.
 - `next/font/google` accepted as self-hosted per design spec v2.1 §3; DM Sans preloaded alongside
   Space Grotesk.
+- Select and menu option rows: 36h wins over §8's pad 8/12; horizontal padding 12, vertical
+  centred within the 36.
+- Toasts run 5s by default, 8s when carrying an undo action. §8 is the default, §12 the undo case.
+- `Esc` is last-opened-wins. The z-ladder governs painting only — a popover inside a modal takes
+  the first Escape even though §4 ranks it lower.
+- System status dot and the radio's inner dot are both 8px; floating panels stand off their
+  trigger by 8px.
+- Overlay padding (modal, sheet, toast) is 20; any gap the spec does not name falls on the
+  8-grid.
+- jsdom + @testing-library/{react,dom,user-event} added as devDependencies — the focus-trap and
+  keyboard tests §11 requires cannot run without a DOM.
 
 ## Open questions
 
