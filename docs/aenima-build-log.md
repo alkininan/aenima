@@ -47,6 +47,10 @@ T0.4 follow-up 2 — the ledger's actor id becomes a recorded fact, not a foreig
 T0.5 — form language onto design spec v2.3: 48h fields, floating labels bound at every
   moment, reserved label zone and helper line, autofill paint, subtitle slot, §8 multi-step
   action row. OTP responsive per v2.4 — `0cad302`.
+  **§4 ruling:** "any control on the path from invite link to landed session carries a <768
+  rule" means **verified usable at 375, not given a distinct narrow variant**. Add a variant
+  only where verification fails — the OTP needed one because it overflowed. Settled; do not
+  re-litigate.
 T1.1 — `gap` and `decision` tables, `item.flow_intent`, RLS on both, the typed query layer
   over the object tree, derived stage as a pure function, extended seed — `19e55a8`,
   migration `0004`.
