@@ -7,12 +7,16 @@
 ## Current state
 
 **Phase:** 1 — the spine · phase 0 (foundation) complete
-**Next ticket:** T1.1
+**Next ticket:** T1.2 — bucket assignment (your move / at risk / flowing)
 **Repo:** github.com/alkininan/aenima
 **Deployed:** no
 
-`docs/design-spec.md` is now **v2.2** — dot diameters, panel offset, overlay padding,
-option-row precedence, the two toast clocks, and dismissal order closed as law.
+`docs/design-spec.md` is **v2.4**, complete and closed. v2.3 was the form-language
+revision — 48h fields, floating labels, state-only helper lines, the subtitle slot,
+autofill paint, the multi-step action row. v2.4 added the OTP's two sizes (≥768 52/r27/
+gap 16 · <768 44/r22/gap 8), retired its visible label row, and named **the auth flow as
+the exception to "read-only mobile web" (§4)**: it must be fully usable at 375, because an
+invited member signs in on whatever they are holding. Code matches both.
 
 ## Stack
 
@@ -38,6 +42,14 @@ T0.4 — Supabase + Drizzle, object tree schema, RLS isolation, three-layer appe
 T0.4 follow-up — sign-in verified end to end (code arrives, verifies, session sticks). Guard test
   pinning the OTP call arguments — `5c6709c`. First-run `/app` crash fixed: `bootstrap_workspace`
   now returns the workspace row and is idempotent — `5a1514d`, migration `0002`.
+T0.4 follow-up 2 — the ledger's actor id becomes a recorded fact, not a foreign key, so an
+  auth user can be deleted without rewriting history — `91c0b0f`, migration `0003`.
+T0.5 — form language onto design spec v2.3: 48h fields, floating labels bound at every
+  moment, reserved label zone and helper line, autofill paint, subtitle slot, §8 multi-step
+  action row. OTP responsive per v2.4 — `0cad302`.
+T1.1 — `gap` and `decision` tables, `item.flow_intent`, RLS on both, the typed query layer
+  over the object tree, derived stage as a pure function, extended seed — `19e55a8`,
+  migration `0004`.
 
 ## Decisions made during the build
 
@@ -96,6 +108,31 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
   refuses — and `NO ACTION` / `RESTRICT` only trade that for a blocked parent delete. The ledger's
   actor columns therefore carry **no FK into `auth.users`**: the id is a recorded fact, so the user
   is deletable and the ledger is immutable. Mutable tables keep theirs. See `docs/schema.md` §1.
+- **Where an append-only table does keep a parent reference, it is `RESTRICT`** — the only shape
+  that fails legibly. `CASCADE` is refused by the trigger because a cascade is a DELETE; `SET NULL`
+  is refused the same way, and on a composite key it also nulls `workspace_id`, which is `NOT NULL`.
+  Both surface as an append-only error naming the *child*, from a delete aimed at a parent.
+  `RESTRICT` names the constraint and the table actually holding the reference. Neither of
+  `activity`'s two original FKs ever worked; `0004` corrects them.
+- **`gap` is mutable and its lifecycle column is `disposition`.** §5's three negotiation moves are
+  transitions on that row, so it cannot be append-only. `disposition` rather than `state` because
+  the first-law test forbids `status`/`stage`/`state` anywhere in `public` and **that test stays
+  broad and absolute** — a legitimate exception picks a different word rather than asking the guard
+  to carve one out. A gap's lifecycle is *declared* by a human, which is the opposite of a derived
+  stage, so the different word is also the more accurate one.
+- **`decision` is append-only, with `supersedes_id`.** §8's packet is a frozen coordinate carrying
+  the decision-log extract, §15 calls history load-bearing, and §8 wants "who agreed to ship
+  without offline handling?" answerable forever. Correcting one is logging another that supersedes
+  it — §11's revert-as-new-version. Without the self-reference, append-only plus supersede-not-edit
+  is conventional rather than real.
+- **Stage lives in TypeScript (`src/lib/stage.ts`), never SQL.** Phase 2 feeds it app-layer scores
+  and it must be testable without a database — but the decisive reason is that a SQL derivation
+  means a view column named `stage`, which the first-law test would catch. The test is telling you
+  where derivation belongs. `information_schema` carries no forbidden column and no views at all.
+- **`Database` types are generated from the live schema via the Supabase MCP server**, not the CLI
+  — `supabase gen types --db-url` needs a container runtime this machine does not have.
+  **Regenerate after every migration**; the clients are parameterised with them, so drift and typos
+  both surface as `pnpm typecheck` failures rather than runtime nulls.
 
 ## Open questions
 
@@ -106,6 +143,10 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
    answerable by name forever; the ledger currently holds only a uuid that stops resolving once
    the auth user is deleted. Decide the actor-label snapshot when the ceremony packet is built,
    and prefer a display name over an email. Deferred, not dropped.
+3. **Unattended agent decision logging — revisit at Phase 3.** `decision.decided_by_user_id` is
+   human-only, with no `actor_kind` pair, because §13 has the agent *capture* decision moments and
+   a human confirm them. If an agent ever needs to log one unattended, this needs the same
+   `actor_kind` shape `activity` and `artifact_version` carry.
 
 ## Accounts and keys needed
 
