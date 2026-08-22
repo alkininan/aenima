@@ -36,6 +36,29 @@ Rollback is §11's revert-as-new-version — restoring v4 inserts v7 carrying v4
 content. History never rewrites, so a signature always points at a version that
 still exists.
 
+**An append-only table cannot carry `ON DELETE SET NULL`, or any FK that blocks
+its parent.** Nulling a column is an UPDATE, which the trigger refuses, so a
+`SET NULL` reference makes the *parent* undeletable — and it fails at delete
+time with an append-only error that names the child, which reads like a bug in
+the wrong table. `NO ACTION` and `RESTRICT` are no better: they reject the
+parent delete outright. `CASCADE` is worse still, since it would launder rows
+out of the ledger.
+
+So the actor columns — `activity.actor_user_id` and
+`artifact_version.authored_by_user_id` — carry **no foreign key at all**. They
+hold the uuid of whoever acted as a recorded fact, which is what a ledger is
+for: the auth user can be deleted and the row does not move. The cost is
+accepted deliberately — nothing stops a write naming a user id that never
+existed, and a reader joining to `auth.users` must tolerate a missing row.
+Resolving an actor to a *name* after deletion needs a snapshot taken at write
+time; that is deferred, see the open questions in `docs/aenima-build-log.md`.
+
+Mutable tables are unaffected: `product.decider_user_id` (`SET NULL`) and
+`membership.user_id` (`CASCADE`) both work, because only `activity` and
+`artifact_version` carry `app.deny_mutation()`. The rule is not "never
+reference `auth.users`" — it is "an append-only table's references must not
+require the ledger to change".
+
 **2. There is no status column.**
 Not in any table. Stage is derived from which artifacts exist and what they
 score (product-spec.md §3). A test asserts that no `status`, `stage` or `state`

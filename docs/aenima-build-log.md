@@ -92,12 +92,20 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
   really does open several render passes at once. It still never mints a second workspace.
 - Guard tests for this class assert **request counts, not returned values**. The value was correct
   throughout — only the traffic was wrong — so any mock that answers honestly hides the bug.
+- An append-only table cannot carry `ON DELETE SET NULL`, because nulling is an UPDATE the trigger
+  refuses — and `NO ACTION` / `RESTRICT` only trade that for a blocked parent delete. The ledger's
+  actor columns therefore carry **no FK into `auth.users`**: the id is a recorded fact, so the user
+  is deletable and the ledger is immutable. Mutable tables keep theirs. See `docs/schema.md` §1.
 
 ## Open questions
 
 1. Seed content still owed: TR formality register per product, the ~80-term universal loanword
    list, confirmation of the appendix A baseline numbers, at-risk sort weights after four weeks
    of real use. None of these block phases 0–1.
+2. **Actor label in the ledger — decide at Phase 5.** Product spec §8 requires sign-off
+   answerable by name forever; the ledger currently holds only a uuid that stops resolving once
+   the auth user is deleted. Decide the actor-label snapshot when the ceremony packet is built,
+   and prefer a display name over an email. Deferred, not dropped.
 
 ## Accounts and keys needed
 

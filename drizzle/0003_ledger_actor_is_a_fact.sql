@@ -1,0 +1,43 @@
+-- ============================================================================
+-- The ledger's actor id is a recorded fact, not a live reference.
+--
+-- `activity.actor_user_id` and `artifact_version.authored_by_user_id` carried
+-- `ON DELETE SET NULL` into `auth.users`. Nulling a column is an UPDATE, and
+-- both tables refuse UPDATE — so deleting an auth user failed:
+--
+--   ERROR: activity is append-only: UPDATE is not permitted (SQLSTATE 23001)
+--
+-- Which meant no user who had ever acted could be deleted, and first-run
+-- bootstrap writes an activity row for every user by design. Two T0.4
+-- decisions in direct conflict, not a Supabase quirk.
+--
+-- `NO ACTION` and `RESTRICT` do not fix it: they reject the parent delete
+-- instead, so the user stays undeletable and only the error message changes.
+-- Verified against this schema before choosing — with both constraints
+-- switched to NO ACTION, `delete from auth.users` failed with "update or
+-- delete on table users violates foreign key constraint activity_actor_fk".
+--
+-- Dropping the constraint is what expresses the requirement: the auth user can
+-- go, and the ledger row does not move. The column keeps the uuid of whoever
+-- acted, which is the point of a ledger — product law 6, "who accepted this
+-- gap" stays answerable. The id survives the account.
+--
+-- What this gives up is referential integrity on insert: nothing now stops a
+-- write from naming a user id that never existed. Accepted deliberately. Those
+-- columns are written by `app.bootstrap_workspace` and the request path, both
+-- of which take the id from `auth.uid()`, and a ledger that a parent delete can
+-- rewrite is a worse failure than one that can record a bad id.
+--
+-- Consequence for readers: `actor_user_id` may point at a deleted user, so any
+-- join to `auth.users` must tolerate a missing row. Resolving an actor to a
+-- *name* after deletion needs a snapshot taken at write time — deferred to
+-- Phase 5, see the open questions in docs/aenima-build-log.md.
+--
+-- The mutable tables do not have this problem and are left alone:
+-- `product.decider_user_id` (SET NULL) and `membership.user_id` (CASCADE) both
+-- work, because only `activity` and `artifact_version` carry
+-- `app.deny_mutation()`.
+-- ============================================================================
+
+ALTER TABLE activity DROP CONSTRAINT activity_actor_fk;--> statement-breakpoint
+ALTER TABLE artifact_version DROP CONSTRAINT artifact_version_author_fk;--> statement-breakpoint
