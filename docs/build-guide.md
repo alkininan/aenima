@@ -12,7 +12,7 @@ You are hand-running the loop the platform will eventually automate.
 
 | Layer | Choice | Why |
 |---|---|---|
-| Framework | Next.js 15, App Router, TypeScript strict | One deploy target, best agent support, server actions remove most API boilerplate |
+| Framework | Next.js 16, App Router, TypeScript strict | One deploy target, best agent support, server actions remove most API boilerplate |
 | Styling | Tailwind v4 | The design spec is already written as CSS custom properties; Tailwind v4 consumes them natively |
 | Data + auth | Supabase (Postgres, Auth, Storage) | You already know it from Sociera. Ships passwordless email OTP + Google + Apple. RLS enforces product isolation |
 | ORM | Drizzle | Typed schema in TS, migrations that read like SQL, light enough for an agent to reason about |
@@ -35,11 +35,12 @@ mkdir -p docs
 
 Then:
 
-1. Copy `aenima-product-spec.md` → `docs/product-spec.md`
-2. Copy `aenima-design-spec.md` → `docs/design-spec.md`
+1. Copy the product spec → `docs/product-spec.md`
+2. Copy the design spec → `docs/design-spec.md`
 3. Copy `CLAUDE.md` → repo root
-4. `cp CLAUDE.md AGENTS.md` — the Linux Foundation standard, read by Codex and most other tools
-5. Add `ae-mark.svg` and `ae-favicon.svg` → `public/`
+4. Leave `AGENTS.md` alone — `next dev` writes and re-adds the Next.js agent-rules block
+   there, and CLAUDE.md's last line imports it with `@AGENTS.md`
+5. Add `ae-mark.svg` and the brand PNGs → `public/`; the favicon is `src/app/favicon.ico`
 6. `git add -A && git commit -m "scaffold + specs"`
 7. Open Claude Code in the repo root: `claude`
 
@@ -81,6 +82,8 @@ Phases are sequential; tickets inside a phase mostly are too.
 - 0.2 Design tokens + primitive components
 - 0.3 Composite components
 - 0.4 Auth + workspace/product/membership
+- 0.5 Form language onto design spec v2.3, OTP responsiveness per v2.4
+- 0.6 Second form-language pass onto design spec v2.5
 
 **Phase 1 — the spine** (prompts written, below)
 - 1.1 Core data model: opportunities, items, artifacts, versions, gaps, decisions, activity

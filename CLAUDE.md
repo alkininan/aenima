@@ -21,7 +21,7 @@ types      pnpm typecheck            # tsc --noEmit
 db gen     pnpm db:generate          # write a migration from the schema files
 db migrate pnpm db:migrate           # apply pending migrations (needs DATABASE_URL)
 db baseline pnpm db:baseline         # record already-applied migrations, once per environment
-db seed    pnpm db:seed              # one workspace, product, opportunity, items
+db seed    pnpm db:seed              # one workspace, two products, opportunities, items
 ```
 
 ## Conventions

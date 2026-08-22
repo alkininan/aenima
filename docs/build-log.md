@@ -11,12 +11,17 @@
 **Repo:** github.com/alkininan/aenima
 **Deployed:** no
 
-`docs/design-spec.md` is **v2.4**, complete and closed. v2.3 was the form-language
+`docs/design-spec.md` is **v2.5**, complete and closed. v2.3 was the form-language
 revision — 48h fields, floating labels, state-only helper lines, the subtitle slot,
 autofill paint, the multi-step action row. v2.4 added the OTP's two sizes (≥768 52/r27/
 gap 16 · <768 44/r22/gap 8), retired its visible label row, and named **the auth flow as
 the exception to "read-only mobile web" (§4)**: it must be fully usable at 375, because an
-invited member signs in on whatever they are holding. Code matches both.
+invited member signs in on whatever they are holding. v2.5 is the second form-language
+pass — the step header replaces the action row and steps left-align (OTP excepted), the
+floated label gets its own `ui-label` token, fields carry one text only, focus splits
+pointer from keyboard, validation flags slow and clears fast, `--n-placeholder` dims to
+#5C6069, and Iconoir is named as the icon set. Code matches all three, with one spec
+correction still owed — see open question 4.
 
 ## Stack
 
@@ -54,6 +59,10 @@ T0.5 — form language onto design spec v2.3: 48h fields, floating labels bound 
 T1.1 — `gap` and `decision` tables, `item.flow_intent`, RLS on both, the typed query layer
   over the object tree, derived stage as a pure function, extended seed — `19e55a8`,
   migration `0004`.
+T0.6 — second form-language pass onto design spec v2.5: Iconoir replaces the hand-drawn
+  glyphs with `icons.tsx` as the single import point, step header, `ui-label`, one-text
+  fields, the focus split, flag-slow validation, dimmed placeholder — `e078857`; the spec
+  revision itself is `ceb5789`.
 
 ## Decisions made during the build
 
@@ -133,6 +142,14 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
   and it must be testable without a database — but the decisive reason is that a SQL derivation
   means a view column named `stage`, which the first-law test would catch. The test is telling you
   where derivation belongs. `information_schema` carries no forbidden column and no views at all.
+- **`:focus-visible` is not the focus split.** Chromium matches it on a clicked text input,
+  so gating the ring on it keeps the double stroke the split exists to remove. The modality
+  is tracked on `<html>` instead (`src/lib/focus-modality.ts`), rendered server-side and set
+  before first paint, and the ring is drawn behind it.
+- Icons come from **Iconoir**, and `src/components/ui/icons.tsx` is the only module that
+  imports `iconoir-react`. Call sites take named exports from it.
+- A field carries **one text** — the floated label. Format-hint placeholders are refused by
+  `Input` itself rather than trusted to call sites.
 - **`Database` types are generated from the live schema via the Supabase MCP server**, not the CLI
   — `supabase gen types --db-url` needs a container runtime this machine does not have.
   **Regenerate after every migration**; the clients are parameterised with them, so drift and typos
@@ -151,6 +168,9 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
    human-only, with no `actor_kind` pair, because §13 has the agent *capture* decision moments and
    a human confirm them. If an agent ever needs to log one unattended, this needs the same
    `actor_kind` shape `activity` and `artifact_version` carry.
+4. **Design spec §6 still names the wrong mechanism.** v2.5's §6 and §8 describe the focus
+   split as `:focus-visible`; T0.6 found that insufficient and moved to the `<html>` modality
+   attribute. A spec edit is owed — the code is already right.
 
 ## Accounts and keys needed
 
@@ -163,4 +183,5 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
 - [ ] Vercel project — not yet
 - [x] Resend — arrived at T0.4 as the Supabase SMTP sender for the OTP mail, not phase 6
 
-Supabase and Playwright MCP servers are connected.
+Supabase MCP is connected from the repo's `.mcp.json`, read-only. Playwright MCP is
+configured in local Claude Code settings only, so it does not travel with the repo.

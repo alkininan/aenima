@@ -233,11 +233,23 @@ helper functions, the append-only and version-numbering triggers, RLS on every
 table with the policy set above, and `bootstrap_workspace`. Hand-written because
 it is the security boundary and because Drizzle's DSL cannot express it.
 
+`drizzle/0002_bootstrap_returns_workspace.sql` — `bootstrap_workspace` returns
+the workspace row it settled on and is idempotent under a per-user advisory
+lock, so no caller has to read back what it just wrote.
+
+`drizzle/0003_ledger_actor_is_a_fact.sql` — drops the `auth.users` foreign keys
+from `activity.actor_user_id` and `artifact_version.authored_by_user_id`, per
+invariant 1.
+
+`drizzle/0004_gap_decision_flow_intent.sql` — hand-written like 0001: the `gap`
+and `decision` tables, `item.flow_intent`, their RLS policies, and `activity`'s
+two parent FKs corrected to `RESTRICT`.
+
 ```
 pnpm db:generate   # diff the schema files into a new migration
 pnpm db:migrate    # apply pending migrations to DATABASE_URL
 pnpm db:baseline   # once per environment: record migrations already applied by hand
-pnpm db:seed       # one workspace, product, opportunity, and seven items
+pnpm db:seed       # one workspace, two products, three opportunities, nine items
 ```
 
 **Never `drizzle-kit push` here.** The policies above are not expressible in the
