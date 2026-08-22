@@ -1,9 +1,10 @@
-# aenima — Design Specification v2.2 (web)
+# aenima — Design Specification v2.3 (web)
 
 <!-- Full rewrite for direct vibe-coding: every value explicit, no Figma step assumed. Supersedes v1.x.
 v2.0: aesthetic consolidated as "liquid-glass instrument, retro terminal heart, tactile controls." Aqua promoted to the single primary accent (Brand blue #246BFD retired to the hero gradient only). JetBrains Mono promoted to a first-class UI role for data readouts. Tactile press physics, glass edge highlights, and dot-grid texture added. Token set minimized. All 17 open proposals (form controls, elevation, z-ladder, scrollbars, selection, borders, font loading, charts, degraded pages, validation, sidebar, keyboard) folded in as law.
 v2.1: three gaps found during build ticket T0.2 closed as law — chip padding (§8), skeleton shimmer sweep geometry (§6), and what "self-hosted" means in practice for font delivery (§3). No aesthetic changes.
-v2.2: seven gaps found during build ticket T0.3 closed as law — dot diameters, panel offset, and overlay interior padding (§8); option-row height precedence and the two toast clocks (§8); dismissal order separated from the paint ladder (§4, §11). No aesthetic changes. -->
+v2.2: seven gaps found during build ticket T0.3 closed as law — dot diameters, panel offset, and overlay interior padding (§8); option-row height precedence and the two toast clocks (§8); dismissal order separated from the paint ladder (§4, §11). No aesthetic changes.
+v2.3: form-language revision from first real use of the sign-in flow. Field height 52 → 48 (OTP boxes stay 52); floating labels replace the static label row (§8); helper line speaks only in states — instructional copy moves to the title's subtitle slot (§8, §12); browser-autofill paint override (§8); back-button and action-row convention for multi-step flows (§8); subtitle slot formalised (§4). First revision that changes component geometry. -->
 
 ## 0. Design language
 
@@ -33,7 +34,7 @@ Laws (override any component default):
 
 The identity is the **Æ ligature** — two letters fused into one glyph, which is what the product does to spec and design.
 
-**Working logo (flat Æ).** `ae-mark.svg` (vectorized, final). Geometric monogram: uniform stroke ≈ cap-height ÷ 8, gently rounded A apex, flat vertical arm terminals, equal-length E arms, the A's right side shared with the E's spine. Default rendering **#E0E5EB on dark**; #FFFFFF for emphasis; #0E0F11 on light surfaces. Always flat, one color — never gradients, never effects on the working mark.
+**Working logo (flat Æ).** `ae-mark.svg` (vectorized, final). Geometric monogram: uniform stroke ≈ cap-height ÷ 8, gently rounded A apex, flat vertical arm terminals, equal-length E arms, the A's right side shared with the E's spine. Default rendering **#E0E5EB on dark**; #FFFFFF for emphasis; #0E0F11 on light surfaces. In product the mark renders via `currentColor` — the SVG's baked-in fill is overridden so tokens decide, and the component never carries a hardcoded hex. Always flat, one color — never gradients, never effects on the working mark.
 
 **Sizes.** Sidebar 24px · favicon 16px (`ae-favicon.svg` — heavier variant: stroke ≈ cap-height ÷ 6, slightly shorter middle arm) · avatar: mark centered in a #0E0F11 rounded square, corner radius 22% of the square · packet and doc headers 32px. Clearspace ≥ one stroke-width on all sides. Minimum 14px.
 
@@ -151,6 +152,7 @@ Rules: max reading measure 68ch (doc reader). Links `--prime`, underline on hove
 - **Density.** List rows 56 · table rows 44 · menu rows 36 · touch targets ≥40.
 - **Sidebar.** `--bg-base`; lockup top: Æ mark 24px + `aenima` wordmark; nav items 40px (icon 20 + ui-body); active = `--prime-soft` pill + `--n-primary`; product switcher = avatar 40 + display-md. Sidebar never collapses in v1; the chat dock is what collapses.
 - **Topbar per page.** display-xl title + mono-readout freshness + one primary action. Sticky topbars use glass recipe + `--scrim-top`.
+- **Subtitle slot.** Any page or step title may carry one subtitle line beneath it: ui-body, `--n-secondary`, 8 below the title. Instructional copy ("We'll send a six-digit code") lives here, and only here — never in a field's helper line (§8 Inputs). One line; it truncates rather than wraps on narrow widths.
 - **Z-ladder** (never improvise): content 0 · sticky bars 100 · chat dock 200 · dropdown/popover 300 · modal scrim+modal 400 · toast 500 · tooltip 600. **The ladder governs painting only.** Dismissal is last-opened-wins: `Esc` closes the most recently opened layer regardless of its rung, so a select opened inside a modal takes the first `Esc` and the modal takes the second. Ranking dismissal by rung would strand the inner layer.
 - **Overlay interior.** Modals, sheets, and toasts pad 20; stacked content inside them gaps on the 8-grid. Panels (select, menu, dropdown) sit 8 from their trigger.
 - **Scrollbars.** 8px thin; thumb `--surface-2`, hover `--glass-border`; track transparent. (`scrollbar-width: thin` + webkit styles.)
@@ -186,7 +188,7 @@ No-`backdrop-filter` fallback: solid #1B1E24, keep border + edge.
 - **Focus-visible** (keyboard only): `outline: 2px solid var(--prime); outline-offset: 2px;` plus `box-shadow: var(--prime-glow)` — the aero glow lives on focus and on live dots, nowhere else.
 - Meter fill animates width `--t-slow`; 100% triggers a one-time 600ms `--hero-gradient` shimmer sweep.
 - Skeleton shimmer: `--surface-2` base, moving highlight rgba(255,255,255,.04), 1.2s linear loop. Geometry: a 200%-wide linear-gradient (transparent → highlight → transparent) traversing the element left to right, one pass per loop.
-- `prefers-reduced-motion`: kill shimmer, press-translate (keep the inner-shadow state change), meter animation, lift.
+- `prefers-reduced-motion`: kill shimmer, press-translate (keep the inner-shadow state change), meter animation, lift, and the floating-label slide (§8 — the label snaps between positions).
 
 ---
 
@@ -216,10 +218,15 @@ Confirmed dimensions come from Sociera v2.0's real components (Figma node intros
 - **Danger:** `--danger-deep` fill, white label; destructive actions always get a confirm step.
 States: hover overlay · press physics · loading (spinner replaces label, width locked) · disabled. **Icon buttons:** 28/34/48 square, same radius/padding grammar (pad ≈ quarter of box), same variants.
 
-**Inputs.** Field 52h, `--r-pill`, `--surface-1` fill, 1px `--glass-border`, pad 14/16, icon slots 24 leading/trailing, gap 8, ui-input text, `--n-placeholder` placeholder. Composite: label (ui-subhead) → 8 → field → 8 → helper (ui-footnote, `--n-secondary`). Focus: `--prime` border + ring/glow. Error: `--danger` border, helper flips to `--danger`. Disabled: 40% opacity. **Validation timing:** validate on blur; after a field's first error, re-validate on change; never on first keystroke; on submit, surface the first error and scroll to it.
-**Textarea/composer:** starts 52h pill; past ~4 lines, radius = height ÷ 4 (proportional rule), max ~8 lines then inner scroll. **Search:** leading icon variant of the standard field. **Date field:** standard pill field + native browser picker (custom calendar is v1.1). **OTP:** 6 boxes 52×52, radius 27, gap 16, special-otp centered; filled box border `--prime`.
+**Inputs.** Field 48h, `--r-pill`, `--surface-1` fill, 1px `--glass-border`, pad 16 horizontal (height wins: the value centres vertically, per the §8 option-row rule), icon slots 24 leading/trailing, gap 8, ui-input text. 48 aligns fields with the lg button, so a field and its submit sit at one height. Focus: `--prime` border + ring/glow. Error: `--danger` border. Disabled: 40% opacity.
+**Floating label.** The label is a real `<label>`, always in the DOM, never a placeholder. At rest (empty, unfocused) it renders inside the field where the value will sit — ui-input size, `--n-secondary` (AA), not placeholder tone. On focus or once filled, it floats to the label zone above the field: ui-caption, `--n-secondary`, 4 above the field. The float animates translateY + size over `--t-fast` `--ease`; `prefers-reduced-motion` snaps it. The label zone (20h = ui-caption line + 4 gap) is **always reserved**, so floating never shifts layout. A true placeholder (`--n-placeholder`, non-information-carrying — format hints like "you@company.com" only) may appear once the label has floated and the field is still empty. **Exempt from the floating label:** Search (the leading icon names it; placeholder "Search" allowed at rest) and the chat composer (the dock names it) — both are labelled by context, not by a `<label>` row.
+**Helper line speaks only in states.** The helper slot (ui-footnote, 8 below the field) carries validation outcomes exclusively — error `--danger`, warning `--warning`, success `--success` — never instructions; instructional copy lives in the subtitle slot (§4). Forms **reserve one helper line** (18h) under any field that can produce a state, so an error appearing never shifts layout. **Validation timing:** validate on blur; after a field's first error, re-validate on change; never on first keystroke; on submit, surface the first error and scroll to it.
+**Autofill paint.** Browser autofill (Chrome's yellow/white flash) is overridden as law, not left to chance: `input:-webkit-autofill { -webkit-box-shadow: inset 0 0 0 1000px var(--surface-1); -webkit-text-fill-color: var(--n-primary); caret-color: var(--prime); transition: background-color 9999s; }` — the field must look identical filled by hand or by the browser.
+**Textarea/composer:** starts 48h pill; past ~4 lines, radius = height ÷ 4 (proportional rule), max ~8 lines then inner scroll. **Search:** leading icon variant of the standard field. **Date field:** standard pill field + native browser picker (custom calendar is v1.1). **OTP:** 6 boxes stay **52×52**, radius 27, gap 16, special-otp centered; filled box border `--prime` — a distinct component with its own geometry, deliberately exempt from the 48 field height.
 
-**Select/dropdown.** Trigger = pill field with trailing chevron (20). Panel: `--surface-1`, radius 12, dropdown shadow, 6px padding; options 36h, ui-body, pad 12 horizontal, radius 8; hover `--surface-3`; selected `--prime-soft` + check icon 16. **Height wins:** 36 comes from §4 density and governs the whole system; the label centres within it rather than adding vertical padding. Opens below (above if <320px space), 8 from the trigger; max-height 320 with inner scroll; type-to-jump.
+**Multi-step flows (sign-in, onboarding, ceremony steps).** Step layout: title (display-lg) → subtitle (§4 slot, carries the step instruction) → controls → action row. The **action row** holds a back control whenever a previous step exists: IconButton ghost 48, arrow-left icon 24, on the left, gap 8 to the primary; the primary fills the remaining width. Back always means "previous step" and replaces textual escape hatches that mean the same thing ("Use a different email" is the back button). Tertiary actions ("Send a new code") sit beneath the action row, **centered**, as ghost buttons; maximum one per step. Step changes are instant — no slide transitions between steps in v1.
+
+**Select/dropdown.** Trigger = pill field with trailing chevron (20) — it inherits the full input grammar, 48h and floating label included. Panel: `--surface-1`, radius 12, dropdown shadow, 6px padding; options 36h, ui-body, pad 12 horizontal, radius 8; hover `--surface-3`; selected `--prime-soft` + check icon 16. **Height wins:** 36 comes from §4 density and governs the whole system; the label centres within it rather than adding vertical padding. Opens below (above if <320px space), 8 from the trigger; max-height 320 with inner scroll; type-to-jump.
 
 **Checkbox & radio.** 20×20; checkbox radius 6, radio circle. Unchecked: `--surface-1` fill + `--glass-border`. Checked: `--prime` fill, #0E0F11 check/dot — the radio dot is 8. Press physics apply. Label ui-body, gap 10, whole row clickable.
 
@@ -288,6 +295,7 @@ Sentence case everywhere including buttons. No exclamation marks. Calm vocabular
 - Accent text/icons always use bright tones; deep tones are fills with labels on them.
 - Meters always pair color with the numeric value; gap states carry text labels, not color alone.
 - Focus-visible on everything; full keyboard paths (list → item → chat → sign); `prefers-reduced-motion` per §6; minimum text on glass verified against the busiest backdrop.
+- Floating labels are real `<label>` elements bound to their inputs at every moment of the animation — the at-rest state is a styled label, never a placeholder standing in for one.
 
 ## 14. Email & digest
 
@@ -303,4 +311,4 @@ No light mode · no RTL (EN/TR/NL are LTR) · no sound (tactility is visual) · 
 
 ---
 
-*v2.2 — complete and closed: no open items. Changes cut new versions of this document.*
+*v2.3 — complete and closed: no open items. Changes cut new versions of this document.*
