@@ -177,6 +177,17 @@
     outline: 2px solid var(--prime);
     outline-offset: 2px;
   }
+
+  /* §8 autofill paint — law, not chance. Chrome paints its own yellow/white
+   * over a filled field; the inset box-shadow is the only way to repaint it,
+   * and the 9999s transition keeps it from flashing through on the way in. The
+   * field must look identical filled by hand or by the browser. */
+  input:-webkit-autofill {
+    -webkit-box-shadow: inset 0 0 0 1000px var(--surface-1);
+    -webkit-text-fill-color: var(--n-primary);
+    caret-color: var(--prime);
+    transition: background-color 9999s;
+  }
 }
 
 /* ---------------------------------------------------------------------------
@@ -523,6 +534,102 @@
 }
 
 /* ---------------------------------------------------------------------------
+ * Form fields — §8 "Inputs" and "Floating label" (v2.3).
+ *
+ * The label is a real `<label>` that never leaves the DOM and never stops being
+ * bound to its input (§13). It moves between two positions rather than being
+ * swapped for a placeholder, so what the assistive tree sees does not change
+ * mid-animation.
+ *
+ * Both positions are derived from the field's own geometry, never guessed:
+ *
+ *   label zone   20 = ui-caption line 16 + the 4 gap §8 puts above the field
+ *   floated      top of the zone, ui-caption 12/16
+ *   at rest      where the value sits — 20 (zone) + (48 − 22) / 2 = 33 down,
+ *                ui-input 17/22, vertically centred in the 48h pill
+ *
+ * The zone is always reserved, so floating shifts nothing. §8 animates
+ * translateY *and size* — and only those two, which is what fixes the
+ * horizontal origin: the label sits at the value's x in both states, so a
+ * leading icon moves it right without any second position to define.
+ * ------------------------------------------------------------------------- */
+@layer components {
+  .field {
+    position: relative;
+    /* §8: the label zone is always reserved. */
+    padding-top: 20px;
+  }
+
+  /* §8 exemptions — Search and the chat composer are labelled by context, so
+   * they reserve no zone and keep a resting placeholder. */
+  .field-unlabelled {
+    padding-top: 0;
+  }
+
+  .field-label {
+    position: absolute;
+    top: 0;
+    left: var(--field-label-x, 16px);
+    margin: 0;
+    color: var(--n-secondary);
+    font-family: var(--font-ui);
+    /* Floated is the resting style in CSS terms: it is what the label wears
+     * whenever the field is focused or filled, which is most of its life. */
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 16px;
+    /* The label is a hit target for the input beneath it only via `for`; it
+     * must never eat a click meant for the field. */
+    pointer-events: none;
+    transition:
+      transform var(--t-fast) var(--ease),
+      font-size var(--t-fast) var(--ease),
+      line-height var(--t-fast) var(--ease);
+  }
+
+  /* At rest: empty *and* unfocused. `:placeholder-shown` is what makes this
+   * work without JS — every field carries a placeholder (a format hint, or a
+   * single space when it has none), so "empty" is expressible in CSS. */
+  .field:has(.field-input:placeholder-shown:not(:focus)) .field-label {
+    transform: translateY(33px);
+    font-size: 17px;
+    font-weight: 400;
+    line-height: 22px;
+  }
+
+  /* A leading icon (24) plus the 8 gap moves where the value starts, and the
+   * label tracks it: 16 + 24 + 8. */
+  .field-with-leading-icon {
+    --field-label-x: 48px;
+  }
+
+  /* §8: a true placeholder is a format hint only, and appears once the label
+   * has floated and the field is still empty. Floating happens on focus, so
+   * that is exactly when it may paint.
+   *
+   * Scoped away from the exempt fields: Search is named by its leading icon and
+   * §8 allows its "Search" placeholder at rest, so hiding it until focus would
+   * leave that field with nothing to say what it is. */
+  .field:not(.field-unlabelled) .field-input::placeholder {
+    color: transparent;
+  }
+
+  .field:not(.field-unlabelled) .field-input:focus::placeholder {
+    color: var(--n-placeholder);
+  }
+
+  .field-unlabelled .field-input::placeholder {
+    color: var(--n-placeholder);
+  }
+
+  /* §8: reserve one helper line under any field that can produce a state, so
+   * an error appearing never shifts layout. ui-footnote is 13/18. */
+  .field-helper-reserved {
+    min-height: 18px;
+  }
+}
+
+/* ---------------------------------------------------------------------------
  * Overlay motion — §6 puts panels and drawers on --t-med.
  * ------------------------------------------------------------------------- */
 @layer components {
@@ -583,5 +690,11 @@
   .sheet-in,
   .fade-in {
     animation: none;
+  }
+
+  /* §6/§8 — the floating label snaps between its two positions. It still
+   * moves; it just does not slide. */
+  .field-label {
+    transition: none;
   }
 }

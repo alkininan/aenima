@@ -172,6 +172,14 @@ function Composites() {
       </Section>
 
       <Section label="Select">
+        {/* §8 (v2.3): a helper line carries validation outcomes and nothing
+            else. What these demos needed to say about each case is description,
+            not state, so it sits in a caption above the grid — the helper lines
+            below show only the one case that actually has a state. */}
+        <p className="type-ui-footnote text-n-secondary">
+          Arrow keys walk and letters jump on every one. The second has 14 rows, past the 320 max
+          height; the third skips a disabled row.
+        </p>
         <div className="grid gap-[24px] sm:grid-cols-2">
           <Select
             label="placeholder"
@@ -179,14 +187,12 @@ function Composites() {
             options={SELECT_OPTIONS}
             value={type}
             onValueChange={setType}
-            helper="Arrow keys walk, letters jump"
           />
           <Select
             label="selected + inner scroll"
             options={LONG_OPTIONS}
             value={long}
             onValueChange={setLong}
-            helper="14 rows past the 320 max height"
           />
           <Select
             label="disabled option"
@@ -202,7 +208,7 @@ function Composites() {
             value={null}
             onValueChange={() => {}}
             invalid
-            helper="helper flips to danger"
+            helper="Pick one to carry on."
           />
           <Select
             label="disabled"
@@ -216,19 +222,17 @@ function Composites() {
       </Section>
 
       <Section label="OTP">
+        {/* §8 (v2.3): state-only helper lines, so what these demos demonstrate
+            is described here rather than under the boxes. §8 (v2.4): the group
+            steps to 44/r22/gap 8 below 768 and back to 52/r27/gap 16 above it —
+            narrow the window to see it. */}
+        <p className="type-ui-footnote text-n-secondary">
+          Type, paste, or walk the boxes with the arrow keys. A filled box takes a prime border. The
+          label is sr-only: the step title names the group.
+        </p>
         <div className="grid gap-[24px] sm:grid-cols-2">
-          <OtpInput
-            label="Empty"
-            helper="Type, paste, or walk it with the arrow keys"
-            value={otp}
-            onValueChange={setOtp}
-          />
-          <OtpInput
-            label="Partly filled"
-            helper="A filled box takes a prime border"
-            value={otpFilled}
-            onValueChange={setOtpFilled}
-          />
+          <OtpInput label="Empty" value={otp} onValueChange={setOtp} />
+          <OtpInput label="Partly filled" value={otpFilled} onValueChange={setOtpFilled} />
           <OtpInput
             label="Error"
             invalid
@@ -236,13 +240,7 @@ function Composites() {
             value="482913"
             onValueChange={() => {}}
           />
-          <OtpInput
-            label="Disabled"
-            disabled
-            helper="helper"
-            value="4829"
-            onValueChange={() => {}}
-          />
+          <OtpInput label="Disabled" disabled value="4829" onValueChange={() => {}} />
         </div>
       </Section>
 

@@ -21,20 +21,23 @@ export const en = {
     title: "Sign in",
     // §12: no account enumeration, so the copy never implies an account exists.
     emailLabel: "Email",
-    emailPlaceholder: "you@company.com",
-    emailHelper: "We'll send a six-digit code.",
+    // §8: a format hint, not information — it paints only once the label has
+    // floated and the field is still empty.
+    emailHint: "you@company.com",
+    // §4 subtitle slot: instructional copy lives here and only here, never in a
+    // field's helper line (§8).
+    emailSubtitle: "We'll send a six-digit code.",
     sendCode: "Send code",
     emailInvalid: "That doesn't look like an email address yet.",
     codeTitle: "Enter your code",
     // Deliberately "if there's an account" — the same words whether or not there is.
     codeSentTo: (email: string) => `If there's an account for ${email}, a code is on its way.`,
     codeLabel: "Six-digit code",
-    codeHelper: "The code works for about ten minutes.",
+    codeSubtitle: "The code works for about ten minutes.",
     codeIncomplete: "That's not six digits yet.",
     codeRejected: "That code didn't work. Check it, or ask for a new one.",
     codeExpired: "That code has expired. Ask for a new one.",
     resend: "Send a new code",
-    useAnotherEmail: "Use a different email",
     // §10: calm on the degraded path, no red banner, no blame.
     rateLimited: "That's a few codes in a short while. Give it a minute, then try again.",
     unavailable: "Sign-in is unavailable right now.",

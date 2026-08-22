@@ -146,11 +146,14 @@ export type InputFieldClassOptions = {
   className?: string | undefined;
 };
 
-// §8: field 52h, --r-pill, --surface-1 fill, 1px --glass-border, pad 14/16,
-// icon slots 24 leading/trailing, gap 8.
+// §8 (v2.3): field 48h, --r-pill, --surface-1 fill, 1px --glass-border, pad 16
+// horizontal, icon slots 24 leading/trailing, gap 8. No vertical padding: the
+// option-row rule says height wins, so the value centres inside the 48 rather
+// than the 48 being built from padding. 48 also aligns the field with the lg
+// button, so a field and its submit sit at one height.
 const INPUT_FIELD_BASE =
-  "flex h-[52px] items-center gap-[8px] rounded-pill border bg-surface-1 " +
-  "px-[16px] py-[14px] transition-[border-color,box-shadow,opacity] " +
+  "flex h-[48px] items-center gap-[8px] rounded-pill border bg-surface-1 " +
+  "px-[16px] transition-[border-color,box-shadow,opacity] " +
   "duration-[var(--t-fast)] ease-brand";
 
 // §8: focus gives a --prime border plus ring/glow (§6's focus treatment).
@@ -172,21 +175,81 @@ export function inputFieldClasses({
   );
 }
 
-/** The `<input>` itself — §8 ui-input text, --n-placeholder placeholder. */
-export const INPUT_CONTROL_CLASSES =
-  "type-ui-input min-w-0 flex-1 bg-transparent text-n-primary " +
-  "placeholder:text-n-placeholder focus:outline-none disabled:cursor-default";
+/**
+ * The composite wrapper — §8's always-reserved label zone lives here.
+ *
+ * `field` carries the 20h zone and the positioning context the label floats
+ * in; `field-unlabelled` is the §8 exemption for Search and the chat composer,
+ * which are labelled by context and reserve nothing.
+ */
+export function inputCompositeClasses({
+  floatingLabel = true,
+  leadingIcon = false,
+  className,
+}: {
+  floatingLabel?: boolean | undefined;
+  leadingIcon?: boolean | undefined;
+  className?: string | undefined;
+} = {}): string {
+  return cx(
+    "field w-full",
+    floatingLabel ? null : "field-unlabelled",
+    leadingIcon ? "field-with-leading-icon" : null,
+    className,
+  );
+}
 
-/** §8 composite: label (ui-subhead) → 8 → field → 8 → helper (ui-footnote). */
-export const INPUT_LABEL_CLASSES = "type-ui-subhead mb-[8px] block text-n-primary";
+/**
+ * The `<input>` itself — §8 ui-input text.
+ *
+ * `field-input` is what the composite's `:has()` reads to decide whether the
+ * label is at rest or floated, so it has to be on the control and nowhere else.
+ * Placeholder colour is not set here: §8 lets a placeholder paint only once the
+ * label has floated, which globals.css expresses as a focus-only rule.
+ */
+export const INPUT_CONTROL_CLASSES =
+  "field-input type-ui-input min-w-0 flex-1 bg-transparent text-n-primary " +
+  "focus:outline-none disabled:cursor-default";
+
+/**
+ * The floating label — §8, §13.
+ *
+ * Sizes and positions come from globals.css, because both states and the
+ * transition between them are one rule; splitting them across Tailwind
+ * utilities would leave the at-rest geometry expressible only as a magic
+ * number here.
+ */
+export const INPUT_LABEL_CLASSES = "field-label";
 
 /** §8 icon slots are 24 square, leading and trailing. */
 export const INPUT_ICON_SLOT_CLASSES =
   "inline-flex size-[24px] shrink-0 items-center justify-center text-n-secondary [&_svg]:size-full";
 
-export function inputHelperClasses(invalid = false): string {
-  // §8: helper is ui-footnote --n-secondary; on error it flips to --danger.
-  return cx("type-ui-footnote mt-[8px] block", invalid ? "text-danger" : "text-n-secondary");
+/**
+ * §8 (v2.3): the helper line speaks only in states — error, warning, success.
+ * Instructional copy belongs in the §4 subtitle slot, so there is no neutral
+ * tone here and no default text.
+ */
+export type InputHelperTone = "error" | "warning" | "success";
+
+export const INPUT_HELPER_TONES: readonly InputHelperTone[] = ["error", "warning", "success"];
+
+const INPUT_HELPER_TONE_CLASSES: Record<InputHelperTone, string> = {
+  error: "text-danger",
+  warning: "text-warning",
+  success: "text-success",
+};
+
+/**
+ * The helper slot: ui-footnote, 8 below the field, one line (18h) reserved
+ * under any field that can produce a state so an error never shifts layout.
+ */
+export function inputHelperClasses(tone?: InputHelperTone | undefined, reserved = true): string {
+  return cx(
+    "type-ui-footnote mt-[8px] block",
+    reserved ? "field-helper-reserved" : null,
+    tone ? INPUT_HELPER_TONE_CLASSES[tone] : null,
+  );
 }
 
 /* -------------------------------------------------------------------------- */
@@ -734,10 +797,17 @@ export const OTP_BOX_COUNT = 6;
 // border --prime." Radius 27 is the resolved value, not the proportional rule:
 // a 52h pill clamps to half its height at 26, and the spec wrote 27 — one past
 // the clamp, so the box is unambiguously a pill however it is measured.
-export const OTP_GROUP_CLASSES = "flex gap-[16px]";
+//
+// v2.4 steps the group down below 768: 44×44, radius 22, gap 8. Six 52s with
+// five 16 gaps need 392px, which does not fit a 375 viewport — the boxes ran off
+// the screen. 6×44 + 5×8 = 304 does. `md` is Tailwind's 768, which is exactly
+// §4's breakpoint, so the step happens where the spec puts it. The OTP stays
+// exempt from the 48 field height in both directions; this is its own scale.
+export const OTP_GROUP_CLASSES = "flex gap-[8px] md:gap-[16px]";
 
 const OTP_BOX_BASE =
-  "size-[52px] rounded-[27px] border bg-surface-1 text-center type-special-otp " +
+  "size-[44px] rounded-[22px] md:size-[52px] md:rounded-[27px] " +
+  "border bg-surface-1 text-center type-special-otp " +
   "text-n-primary caret-prime transition-[border-color,box-shadow] " +
   "duration-[var(--t-fast)] ease-brand focus:outline-none " +
   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 " +

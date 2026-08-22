@@ -109,3 +109,21 @@ export function MailIcon({ className }: IconProps) {
     </svg>
   );
 }
+
+/** §8 multi-step flows: the back control's arrow-left, drawn at 24. */
+export function ArrowLeftIcon({ className }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      aria-hidden="true"
+      focusable="false"
+      className={className}
+    >
+      <path d="M19 12H5" strokeLinecap="round" />
+      <path d="m11 6-6 6 6 6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}

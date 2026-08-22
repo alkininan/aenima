@@ -192,25 +192,61 @@ export default function PrimitivesPage() {
         ))}
       </Section>
 
+      {/* §8 (v2.3): every state the field can be in, so the reserved label zone
+          and reserved helper line can be eyeballed for shift. Nothing here
+          changes height between states — that is the thing to check. */}
       <Section label="Input">
         <div className="grid gap-[24px] sm:grid-cols-2">
-          <Input placeholder="placeholder" aria-label="bare" />
-          <Input label="label" helper="helper" placeholder="placeholder" />
-          <Input label="leading icon" leadingIcon={<SearchIcon />} placeholder="search" />
+          <Input label="At rest" hint="you@company.com" />
+          <Input label="Filled" hint="you@company.com" defaultValue="filled" readOnly />
+          <Input label="Leading icon" leadingIcon={<SearchIcon />} />
           <Input
-            label="trailing icon"
+            label="Trailing icon"
             trailingIcon={<ChevronIcon />}
             defaultValue="filled"
             readOnly
           />
           <Input
-            label="error"
-            helper="helper flips to danger"
+            label="Error"
+            helper="That doesn't look right yet."
             invalid
             defaultValue="bad"
             readOnly
           />
-          <Input label="disabled" helper="helper" placeholder="placeholder" disabled />
+          <Input
+            label="Error with icon"
+            helper="That doesn't look right yet."
+            invalid
+            leadingIcon={<SearchIcon />}
+            defaultValue="bad"
+            readOnly
+          />
+          <Input
+            label="Warning"
+            helper="This one is unusual."
+            helperTone="warning"
+            defaultValue="ok"
+            readOnly
+          />
+          <Input
+            label="Success"
+            helper="That works."
+            helperTone="success"
+            defaultValue="ok"
+            readOnly
+          />
+          <Input label="Disabled" hint="you@company.com" disabled />
+          <Input label="Disabled filled" defaultValue="filled" disabled />
+          {/* §8 exemption: Search is named by its leading icon, so it floats no
+              label, reserves no zone, and keeps a resting placeholder. */}
+          <Input
+            label="Search"
+            floatingLabel={false}
+            reserveHelper={false}
+            hint="Search"
+            leadingIcon={<SearchIcon />}
+          />
+          <Input label="No state possible" reserveHelper={false} hint="no helper line reserved" />
         </div>
       </Section>
 

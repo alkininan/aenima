@@ -4,13 +4,7 @@ import { useId, useRef, type ClipboardEvent, type KeyboardEvent } from "react";
 
 import { cx } from "@/lib/cx";
 
-import {
-  OTP_BOX_COUNT,
-  OTP_GROUP_CLASSES,
-  otpBoxClasses,
-  inputHelperClasses,
-  INPUT_LABEL_CLASSES,
-} from "./variants";
+import { OTP_BOX_COUNT, OTP_GROUP_CLASSES, otpBoxClasses, inputHelperClasses } from "./variants";
 
 type OtpInputProps = {
   value: string;
@@ -18,11 +12,12 @@ type OtpInputProps = {
   /** Fired once the last box is filled, so the form can submit itself. */
   onComplete?: (value: string) => void;
   label: string;
-  helper?: string;
-  invalid?: boolean;
-  disabled?: boolean;
-  autoFocus?: boolean;
-  className?: string;
+  /** §8 (v2.3): validation outcome only — the instruction is in the subtitle. */
+  helper?: string | undefined;
+  invalid?: boolean | undefined;
+  disabled?: boolean | undefined;
+  autoFocus?: boolean | undefined;
+  className?: string | undefined;
 };
 
 const DIGITS = /^\d+$/;
@@ -138,7 +133,10 @@ export function OtpInput({
 
   return (
     <div className={cx("w-full", className)}>
-      <span id={groupId} className={INPUT_LABEL_CLASSES}>
+      {/* §8: the boxes are a group, not a field, so they carry no floating
+          label. The name stays in the accessibility tree; the visible naming is
+          the step title above (§8 multi-step layout). */}
+      <span id={groupId} className="sr-only">
         {label}
       </span>
 
@@ -173,11 +171,11 @@ export function OtpInput({
         })}
       </div>
 
-      {helper ? (
-        <span id={helperId} className={inputHelperClasses(invalid)}>
-          {helper}
-        </span>
-      ) : null}
+      {/* §8 (v2.3): state-only, and the line is reserved so an error appearing
+          under the boxes does not move the action row beneath it. */}
+      <span id={helperId} className={inputHelperClasses(invalid ? "error" : undefined)}>
+        {helper}
+      </span>
     </div>
   );
 }

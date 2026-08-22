@@ -5,9 +5,10 @@ import { useState, useTransition, type FormEvent } from "react";
 
 import { AeMark } from "@/components/AeMark";
 import { Button } from "@/components/ui/Button";
+import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/Input";
 import { OtpInput } from "@/components/ui/OtpInput";
-import { MailIcon } from "@/components/ui/icons";
+import { ArrowLeftIcon, MailIcon } from "@/components/ui/icons";
 import { OTP_BOX_COUNT } from "@/components/ui/variants";
 import { isValidEmail, isValidOtp } from "@/lib/auth/otp";
 import { enabledProviders } from "@/lib/auth/providers";
@@ -109,16 +110,27 @@ export function SignInForm() {
     });
   };
 
+  const back = () => {
+    setStep("email");
+    setCode("");
+    setCodeError(null);
+  };
+
   return (
     <div className="flex w-full max-w-[400px] flex-col gap-[24px]">
-      <div className="flex flex-col items-center gap-[16px] text-center">
-        <AeMark size={32} className="text-n-primary" />
+      {/* §8 multi-step: title → subtitle → controls → action row. Step changes
+          are instant — no slide transition between the two. */}
+      <div className="flex flex-col items-center gap-[8px] text-center">
+        <AeMark size={32} className="mb-[8px] text-n-primary" />
         <h1 className="type-display-lg text-n-primary">
           {step === "email" ? t.signIn.title : t.signIn.codeTitle}
         </h1>
-        {step === "code" && notice ? (
-          <p className="type-ui-footnote text-n-secondary">{notice}</p>
-        ) : null}
+        {/* §4 subtitle slot: ui-body, --n-secondary, 8 below the title, one
+            line, truncates rather than wraps. This is where the instruction
+            lives now — it is no longer a helper line under the field. */}
+        <p className="type-ui-body w-full truncate text-n-secondary">
+          {step === "email" ? t.signIn.emailSubtitle : (notice ?? t.signIn.codeSubtitle)}
+        </p>
       </div>
 
       {step === "email" ? (
@@ -129,8 +141,8 @@ export function SignInForm() {
             autoComplete="email"
             autoFocus
             label={t.signIn.emailLabel}
-            placeholder={t.signIn.emailPlaceholder}
-            helper={emailError ?? t.signIn.emailHelper}
+            hint={t.signIn.emailHint}
+            helper={emailError ?? undefined}
             invalid={emailError !== null}
             value={email}
             leadingIcon={<MailIcon />}
@@ -146,6 +158,8 @@ export function SignInForm() {
             }}
           />
 
+          {/* §8 action row. Step one has no previous step, so no back control —
+              the primary fills the row on its own. */}
           {providers.includes("email") ? (
             <Button type="submit" size="lg" fullWidth loading={pending}>
               {t.signIn.sendCode}
@@ -164,7 +178,7 @@ export function SignInForm() {
           <OtpInput
             autoFocus
             label={t.signIn.codeLabel}
-            helper={codeError ?? t.signIn.codeHelper}
+            helper={codeError ?? undefined}
             invalid={codeError !== null}
             disabled={pending}
             value={code}
@@ -175,25 +189,27 @@ export function SignInForm() {
             onComplete={submitCode}
           />
 
-          <Button type="submit" size="lg" fullWidth loading={pending}>
-            {t.common.continue}
-          </Button>
-
-          <div className="flex items-center justify-between">
-            <Button
+          {/* §8 action row: IconButton ghost 48 with arrow-left on the left,
+              gap 8, primary fills the rest. Back means "previous step" — it is
+              the whole escape hatch, so there is no "use a different email"
+              link saying the same thing in words. */}
+          <div className="flex items-center gap-[8px]">
+            <IconButton
               type="button"
               variant="ghost"
-              size="sm"
+              size="lg"
+              label={t.common.back}
+              icon={<ArrowLeftIcon />}
               disabled={pending}
-              onClick={() => {
-                setStep("email");
-                setCode("");
-                setCodeError(null);
-                setNotice(null);
-              }}
-            >
-              {t.signIn.useAnotherEmail}
+              onClick={back}
+            />
+            <Button type="submit" size="lg" className="flex-1" loading={pending}>
+              {t.common.continue}
             </Button>
+          </div>
+
+          {/* §8: one tertiary action per step, beneath the action row, centred. */}
+          <div className="flex justify-center">
             <Button
               type="button"
               variant="ghost"

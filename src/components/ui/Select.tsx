@@ -1,14 +1,6 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useRef,
-  useState,
-  type KeyboardEvent,
-  type ReactNode,
-} from "react";
+import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 
 import { cx } from "@/lib/cx";
 import { nextRovingIndex } from "@/lib/roving";
@@ -17,14 +9,7 @@ import { TYPEAHEAD_RESET_MS, matchTypeahead } from "@/lib/typeahead";
 import { Input } from "./Input";
 import { CheckIcon, ChevronDownIcon } from "./icons";
 import { useEscapeLayer, useOutsideDismiss, usePanelPlacement } from "./useLayer";
-import {
-  INPUT_LABEL_CLASSES,
-  PANEL_MAX_HEIGHT,
-  inputHelperClasses,
-  panelClasses,
-  panelRowClasses,
-  type PanelPlacement,
-} from "./variants";
+import { PANEL_MAX_HEIGHT, panelClasses, panelRowClasses, type PanelPlacement } from "./variants";
 
 export type SelectOption = {
   value: string;
@@ -37,8 +22,11 @@ type SelectProps = {
   /** Null renders the placeholder. */
   value: string | null;
   onValueChange: (value: string) => void;
-  label?: ReactNode;
+  /** §8: the trigger inherits the field's floating label, so this is a string. */
+  label: string;
+  /** §8: validation outcome only — instructions live in the subtitle slot. */
   helper?: string;
+  /** §8 format hint, painted once the label has floated and nothing is picked. */
   placeholder?: string;
   invalid?: boolean;
   disabled?: boolean;
@@ -72,7 +60,6 @@ export function Select({
   const baseId = useId();
   const inputId = `${baseId}-input`;
   const listId = `${baseId}-list`;
-  const helperId = `${baseId}-helper`;
   const optionId = (index: number) => `${baseId}-option-${index}`;
 
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -201,85 +188,74 @@ export function Select({
   };
 
   return (
-    <div className={cx("w-full", className)}>
-      {label ? (
-        <label htmlFor={inputId} className={INPUT_LABEL_CLASSES}>
-          {label}
-        </label>
-      ) : null}
-
-      {/* The positioning context is the field alone, so the panel's 8px
-          stand-off is measured from the pill and not from the helper line. */}
-      <div ref={rootRef} className="relative">
-        <Input
-          id={inputId}
-          ref={inputRef}
-          role="combobox"
-          readOnly
-          disabled={disabled}
-          invalid={invalid}
-          aria-expanded={open}
-          aria-controls={listId}
-          aria-haspopup="listbox"
-          aria-autocomplete="none"
-          aria-activedescendant={open && activeIndex >= 0 ? optionId(activeIndex) : undefined}
-          aria-describedby={helper ? helperId : undefined}
-          value={selected?.label ?? ""}
-          placeholder={placeholder ?? ""}
-          onKeyDown={onKeyDown}
-          onClick={() => {
-            if (disabled) return;
-            if (open) close();
-            else openPanel(selectedIndex);
-          }}
-          trailingIcon={
-            // §8 gives the trigger a 20px chevron; the T0.2 icon slot is 24.
-            <span className="flex size-[20px] items-center justify-center">
-              <ChevronDownIcon />
-            </span>
-          }
-        />
-
-        {open ? (
-          <ul
-            ref={listRef}
-            id={listId}
-            role="listbox"
-            aria-label={typeof label === "string" ? label : undefined}
-            className={panelClasses({ placement, className: "inset-x-0" })}
-          >
-            {options.map((option, index) => (
-              <li
-                key={option.value}
-                id={optionId(index)}
-                role="option"
-                aria-selected={index === selectedIndex}
-                aria-disabled={option.disabled ?? false}
-                className={panelRowClasses({
-                  active: index === activeIndex,
-                  selected: index === selectedIndex,
-                  disabled: option.disabled ?? false,
-                })}
-                onClick={() => commit(index)}
-                onMouseMove={() => {
-                  if (!option.disabled) setActiveIndex(index);
-                }}
-              >
-                <span className="min-w-0 flex-1 truncate">{option.label}</span>
-                {index === selectedIndex ? (
-                  <CheckIcon className="size-[16px] shrink-0 text-prime" />
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </div>
-
-      {helper ? (
-        <span id={helperId} className={inputHelperClasses(invalid)}>
-          {helper}
-        </span>
-      ) : null}
+    <div ref={rootRef} className={cx("w-full", className)}>
+      <Input
+        id={inputId}
+        ref={inputRef}
+        role="combobox"
+        readOnly
+        label={label}
+        hint={placeholder}
+        helper={helper}
+        disabled={disabled}
+        invalid={invalid}
+        aria-expanded={open}
+        aria-controls={listId}
+        aria-haspopup="listbox"
+        aria-autocomplete="none"
+        aria-activedescendant={open && activeIndex >= 0 ? optionId(activeIndex) : undefined}
+        value={selected?.label ?? ""}
+        onKeyDown={onKeyDown}
+        onClick={() => {
+          if (disabled) return;
+          if (open) close();
+          else openPanel(selectedIndex);
+        }}
+        trailingIcon={
+          // §8 gives the trigger a 20px chevron; the T0.2 icon slot is 24.
+          <span className="flex size-[20px] items-center justify-center">
+            <ChevronDownIcon />
+          </span>
+        }
+        // The panel rides in the field's own positioning context, so its §8
+        // 8px stand-off is measured from the pill — not from the composite,
+        // whose reserved label zone sits above it and helper line below.
+        fieldOverlay={
+          open ? (
+            <ul
+              ref={listRef}
+              id={listId}
+              role="listbox"
+              aria-label={label}
+              className={panelClasses({ placement, className: "inset-x-0" })}
+            >
+              {options.map((option, index) => (
+                <li
+                  key={option.value}
+                  id={optionId(index)}
+                  role="option"
+                  aria-selected={index === selectedIndex}
+                  aria-disabled={option.disabled ?? false}
+                  className={panelRowClasses({
+                    active: index === activeIndex,
+                    selected: index === selectedIndex,
+                    disabled: option.disabled ?? false,
+                  })}
+                  onClick={() => commit(index)}
+                  onMouseMove={() => {
+                    if (!option.disabled) setActiveIndex(index);
+                  }}
+                >
+                  <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                  {index === selectedIndex ? (
+                    <CheckIcon className="size-[16px] shrink-0 text-prime" />
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          ) : null
+        }
+      />
     </div>
   );
 }

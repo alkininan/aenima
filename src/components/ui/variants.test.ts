@@ -11,7 +11,11 @@ import {
   chipClasses,
   iconButtonClasses,
   inputFieldClasses,
+  OTP_BOX_COUNT,
+  OTP_GROUP_CLASSES,
+  inputCompositeClasses,
   inputHelperClasses,
+  otpBoxClasses,
   spinnerClasses,
   type ButtonVariant,
 } from "@/components/ui/variants";
@@ -126,21 +130,34 @@ describe("iconButtonClasses", () => {
 });
 
 describe("inputFieldClasses", () => {
-  // §8: field 52h, --r-pill, --surface-1 fill, 1px --glass-border, pad 14/16, gap 8.
-  it("builds the resting 52h pill", () => {
+  // §8 (v2.3): field 48h, --r-pill, --surface-1 fill, 1px --glass-border, pad 16
+  // horizontal, gap 8. 48 aligns the field with the lg button.
+  it("builds the resting 48h pill", () => {
     const classes = inputFieldClasses();
     expect(
       has(
         classes,
-        "h-[52px]",
+        "h-[48px]",
         "rounded-pill",
         "bg-surface-1",
         "border-glass-border",
         "px-[16px]",
-        "py-[14px]",
         "gap-[8px]",
       ),
     ).toBe(true);
+  });
+
+  // §8 option-row rule: height wins, so the value centres inside the 48 rather
+  // than the 48 being built out of vertical padding. A py- utility here would
+  // make the field 48 + padding.
+  it("declares no vertical padding — height wins", () => {
+    expect(inputFieldClasses()).not.toMatch(/\bpy-/);
+  });
+
+  // §8: the lg button is 48 too, so a field and its submit sit at one height.
+  it("matches the lg button height, so a field and its submit align", () => {
+    expect(buttonClasses({ size: "lg" })).toContain("h-[48px]");
+    expect(inputFieldClasses()).toContain("h-[48px]");
   });
 
   // §8 focus: --prime border + ring/glow.
@@ -164,14 +181,89 @@ describe("inputFieldClasses", () => {
   });
 });
 
+describe("inputCompositeClasses", () => {
+  // §8: the label zone is always reserved, so floating never shifts layout.
+  it("reserves the label zone by default", () => {
+    expect(has(inputCompositeClasses(), "field")).toBe(true);
+    expect(inputCompositeClasses()).not.toContain("field-unlabelled");
+  });
+
+  // §8 exemption: Search and the chat composer are labelled by context.
+  it("drops the zone for the fields §8 exempts", () => {
+    expect(has(inputCompositeClasses({ floatingLabel: false }), "field-unlabelled")).toBe(true);
+  });
+
+  // A leading icon moves where the value starts (16 + 24 + 8), and the label
+  // tracks it — §8 animates translateY only, so there is one x for both states.
+  it("shifts the label to the value's x when there is a leading icon", () => {
+    expect(has(inputCompositeClasses({ leadingIcon: true }), "field-with-leading-icon")).toBe(true);
+    expect(inputCompositeClasses()).not.toContain("field-with-leading-icon");
+  });
+});
+
 describe("inputHelperClasses", () => {
-  // §8: helper is ui-footnote --n-secondary, flipping to --danger on error.
-  it("flips the helper to danger only on error", () => {
-    expect(has(inputHelperClasses(), "type-ui-footnote", "text-n-secondary", "mt-[8px]")).toBe(
+  // §8 (v2.3): the helper speaks only in states — error, warning, success. It
+  // has no neutral tone, because instructions belong in the subtitle slot.
+  it("carries one tone per state and none by default", () => {
+    expect(has(inputHelperClasses(), "type-ui-footnote", "mt-[8px]")).toBe(true);
+    expect(has(inputHelperClasses("error"), "text-danger")).toBe(true);
+    expect(has(inputHelperClasses("warning"), "text-warning")).toBe(true);
+    expect(has(inputHelperClasses("success"), "text-success")).toBe(true);
+  });
+
+  it("stays toneless when there is no state to report", () => {
+    const neutral = inputHelperClasses();
+    for (const tone of ["text-danger", "text-warning", "text-success"]) {
+      expect(neutral).not.toContain(tone);
+    }
+  });
+
+  // §8: reserve one helper line (18h) under any field that can produce a state,
+  // so an error appearing never shifts layout.
+  it("reserves its line by default and gives it up only on request", () => {
+    expect(has(inputHelperClasses(), "field-helper-reserved")).toBe(true);
+    expect(inputHelperClasses(undefined, false)).not.toContain("field-helper-reserved");
+  });
+});
+
+describe("otp geometry", () => {
+  /**
+   * §8: the OTP group is a distinct component, deliberately exempt from the 48
+   * field height — in both directions. v2.4 gives it its own responsive step
+   * rather than folding it into the field scale.
+   *
+   * The arithmetic is the reason the step exists: six 52s with five 16 gaps is
+   * 392px, which does not fit a 375 viewport, and the boxes ran off the screen.
+   * 6×44 + 5×8 is 304, which does. Both sums are asserted below, because the
+   * failure they prevent is invisible until someone opens the page on a phone.
+   */
+  it("steps down below 768 and back up above it", () => {
+    const box = otpBoxClasses();
+    expect(has(box, "size-[44px]", "rounded-[22px]", "md:size-[52px]", "md:rounded-[27px]")).toBe(
       true,
     );
-    expect(has(inputHelperClasses(true), "text-danger")).toBe(true);
-    expect(inputHelperClasses()).not.toContain("text-danger");
+    expect(has(OTP_GROUP_CLASSES, "gap-[8px]", "md:gap-[16px]")).toBe(true);
+  });
+
+  it("fits a 375 viewport narrow and keeps the §8 size wide", () => {
+    const width = (boxPx: number, gapPx: number) =>
+      OTP_BOX_COUNT * boxPx + (OTP_BOX_COUNT - 1) * gapPx;
+
+    expect(width(44, 8)).toBe(304);
+    expect(width(44, 8)).toBeLessThan(375);
+    expect(width(52, 16)).toBe(392);
+  });
+
+  // §4 density: touch targets are never below 40, and 44 is the narrow size.
+  it("keeps the narrow box above the §4 touch-target floor", () => {
+    expect(44).toBeGreaterThanOrEqual(40);
+  });
+
+  // §8: a filled box takes --prime; error still wins over filled.
+  it("borders a filled box in prime and an errored one in danger", () => {
+    expect(otpBoxClasses({ filled: true })).toContain("border-prime");
+    expect(otpBoxClasses({ filled: true, invalid: true })).toContain("border-danger");
+    expect(otpBoxClasses({ filled: true, invalid: true })).not.toContain("border-prime");
   });
 });
 
