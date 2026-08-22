@@ -53,7 +53,7 @@ for: the auth user can be deleted and the row does not move. The cost is
 accepted deliberately — nothing stops a write naming a user id that never
 existed, and a reader joining to `auth.users` must tolerate a missing row.
 Resolving an actor to a *name* after deletion needs a snapshot taken at write
-time; that is deferred, see the open questions in `docs/aenima-build-log.md`.
+time; that is deferred, see the open questions in `docs/build-log.md`.
 
 Mutable tables are unaffected: `product.decider_user_id` (`SET NULL`) and
 `membership.user_id` (`CASCADE`) both work, because only `activity`,

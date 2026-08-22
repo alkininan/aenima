@@ -1,4 +1,4 @@
-# aenima — build guide
+# aenima — build guide v1.0
 
 How to get from two spec documents to a running product using Claude Code.
 

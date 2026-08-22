@@ -1,4 +1,4 @@
-Close out the ticket just completed. Update docs/aenima-build-log.md:
+Close out the ticket just completed. Update docs/build-log.md:
 
 1. Current state → set "Next ticket" to the next ticket in the build
    guide's order. Mark the phase complete if this was its last ticket.

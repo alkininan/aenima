@@ -31,7 +31,7 @@
 -- Consequence for readers: `actor_user_id` may point at a deleted user, so any
 -- join to `auth.users` must tolerate a missing row. Resolving an actor to a
 -- *name* after deletion needs a snapshot taken at write time — deferred to
--- Phase 5, see the open questions in docs/aenima-build-log.md.
+-- Phase 5, see the open questions in docs/build-log.md.
 --
 -- The mutable tables do not have this problem and are left alone:
 -- `product.decider_user_id` (SET NULL) and `membership.user_id` (CASCADE) both
