@@ -19,15 +19,13 @@ export type SelectOption = {
 
 type SelectProps = {
   options: readonly SelectOption[];
-  /** Null renders the placeholder. */
+  /** Null leaves the trigger empty, with its label at rest inside it. */
   value: string | null;
   onValueChange: (value: string) => void;
   /** §8: the trigger inherits the field's floating label, so this is a string. */
   label: string;
   /** §8: validation outcome only — instructions live in the subtitle slot. */
   helper?: string;
-  /** §8 format hint, painted once the label has floated and nothing is picked. */
-  placeholder?: string;
   invalid?: boolean;
   disabled?: boolean;
   className?: string;
@@ -52,7 +50,6 @@ export function Select({
   onValueChange,
   label,
   helper,
-  placeholder,
   invalid = false,
   disabled = false,
   className,
@@ -195,7 +192,6 @@ export function Select({
         role="combobox"
         readOnly
         label={label}
-        hint={placeholder}
         helper={helper}
         disabled={disabled}
         invalid={invalid}

@@ -5,11 +5,9 @@ import { describe, expect, it } from "vitest";
 
 import { Input } from "@/components/ui/Input";
 
-function Harness({ hint }: { hint?: string }) {
+function Harness() {
   const [value, setValue] = useState("");
-  return (
-    <Input label="Email" hint={hint} value={value} onChange={(e) => setValue(e.target.value)} />
-  );
+  return <Input label="Email" value={value} onChange={(e) => setValue(e.target.value)} />;
 }
 
 const composite = (container: HTMLElement) => container.querySelector(".field") as HTMLElement;
@@ -55,30 +53,40 @@ describe("Input floating label", () => {
   });
 
   // §8: "empty" has to be expressible as a selector for the CSS to place the
-  // label without React telling it anything, so an unhinted field still gets a
+  // label without React telling it anything, so the field carries a
   // placeholder — a space, which paints nothing.
   it("always carries a placeholder so :placeholder-shown can see an empty field", () => {
-    const { container } = render(<Harness />);
+    render(<Harness />);
     expect(field().getAttribute("placeholder")).toBe(" ");
+  });
 
-    render(<Harness hint="you@company.com" />, { container });
-    expect(field().getAttribute("placeholder")).toBe("you@company.com");
+  /**
+   * §8 (v2.5): a field shows one text, ever — its label. Format hints are
+   * abolished, and the rule is enforced in the component rather than trusted to
+   * call sites: a hint that slips through paints grey text in an empty field
+   * and looks deliberate, so nothing catches it but a reader.
+   */
+  it("refuses a caller's placeholder on a floating-label field", () => {
+    render(<Input label="Email" placeholder="you@company.com" />);
+    expect(field().getAttribute("placeholder")).toBe(" ");
   });
 
   // §8 exemption: Search keeps a resting placeholder and reserves no zone, but
   // §13 still wants a bound label — so it is hidden, not absent.
   it("keeps a bound label even where §8 exempts the field from floating", () => {
     const { container } = render(
-      <Input label="Search" floatingLabel={false} hint="Search" reserveHelper={false} />,
+      <Input label="Search" floatingLabel={false} placeholder="Search" reserveHelper={false} />,
     );
 
     expect(screen.getByLabelText("Search")).not.toBeNull();
     expect(composite(container).className).toContain("field-unlabelled");
+    // The exempt fields are the only ones that keep a real resting placeholder.
+    expect(screen.getByLabelText("Search").getAttribute("placeholder")).toBe("Search");
   });
 });
 
 describe("Input reserved slots", () => {
-  // The label zone is 20h and always present, so the label floating into it
+  // The label zone is 22h and always present, so the label floating into it
   // cannot move the field or anything below it.
   it("reserves the label zone in every state", async () => {
     const user = userEvent.setup();

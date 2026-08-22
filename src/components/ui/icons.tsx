@@ -1,129 +1,62 @@
 /**
- * The handful of glyphs the composites themselves specify: design-spec.md §8
- * gives the select trigger a chevron (20) and the selected option a check (16).
- * The product icon set is not part of this ticket — anything else a screen
- * needs is passed in by the caller.
+ * The product's glyphs — design-spec.md §8 "Icons" (v2.5).
  *
- * Each glyph paints in `currentColor` and fills its box, so the size comes from
- * the slot it sits in.
+ * The set is Iconoir: hairline line icons on a 24 grid, stroke inheriting
+ * `currentColor`. This file is the single import point. Nothing else in the
+ * codebase imports from `iconoir-react` directly, so "one library, no mixing"
+ * has exactly one place to be enforced and exactly one place to look when the
+ * next glyph is needed. Named exports of a tree-shakeable ESM package: the
+ * bundle carries the glyphs that are used and no others.
+ *
+ * Every glyph here sits beside a real label — a button's text, an IconButton's
+ * `aria-label`, a field's `<label>` — so all of them are decorative and carry
+ * `aria-hidden`. §8 asks a *meaningful* icon for a label instead; there is not
+ * one in the product yet, and it would not be given this default.
+ *
+ * Size comes from the slot, never from here: the slot classes set the SVG's
+ * width and height in CSS, which beats Iconoir's 24×24 attributes.
  */
+import { ArrowLeft, Check, Mail, NavArrowDown, NavArrowRight, Plus, Search } from "iconoir-react";
+
 type IconProps = { className?: string };
 
+/** §8 select trigger: the chevron, at 20. */
 export function ChevronDownIcon({ className }: IconProps) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      aria-hidden="true"
-      focusable="false"
-      className={className}
-    >
-      <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+  return <NavArrowDown className={className} aria-hidden="true" focusable="false" />;
 }
 
+/** §8 select panel: the selected row's check, at 16. */
 export function CheckIcon({ className }: IconProps) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      aria-hidden="true"
-      focusable="false"
-      className={className}
-    >
-      <path d="m5 12.5 5 5 9-11" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+  return <Check className={className} aria-hidden="true" focusable="false" />;
 }
 
 /**
- * The checkbox tick. Drawn to the 20×20 box §8 gives the control rather than to
- * an icon size, so no icon token is invented for it.
+ * The checkbox tick. The same glyph as the select's check — one library means
+ * one check mark — scaled by CSS into the 20×20 box §8 gives the control.
  */
 export function CheckboxTickIcon({ className }: IconProps) {
-  return (
-    <svg
-      viewBox="0 0 20 20"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      aria-hidden="true"
-      focusable="false"
-      className={className}
-    >
-      <path d="m5 10.5 3.5 3.5L15 6.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-/**
- * Google's "G". Present for the deferred Google provider (product-spec.md §12)
- * so the seam is complete when it is switched on; nothing renders it today,
- * because a sign-in button for a provider that is off is worse than no button.
- *
- * The one glyph in this file that is not `currentColor`: Google's brand
- * guidelines require the four fixed colours, so it does not take the theme.
- */
-export function GoogleIcon({ className }: IconProps) {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" className={className}>
-      <path
-        fill="#4285F4"
-        d="M23.06 12.25c0-.85-.08-1.67-.22-2.45H12v4.63h6.2a5.3 5.3 0 0 1-2.3 3.48v2.89h3.72c2.18-2 3.44-4.96 3.44-8.55Z"
-      />
-      <path
-        fill="#34A853"
-        d="M12 23.5c3.11 0 5.72-1.03 7.62-2.8l-3.72-2.88c-1.03.69-2.35 1.1-3.9 1.1-3 0-5.540-2.02-6.45-4.74H1.7v2.98A11.5 11.5 0 0 0 12 23.5Z"
-      />
-      <path
-        fill="#FBBC05"
-        d="M5.55 14.18a6.9 6.9 0 0 1 0-4.36V6.84H1.7a11.5 11.5 0 0 0 0 10.32l3.85-2.98Z"
-      />
-      <path
-        fill="#EA4335"
-        d="M12 5.08c1.69 0 3.21.58 4.4 1.72l3.3-3.3C17.72 1.63 15.11.5 12 .5A11.5 11.5 0 0 0 1.7 6.84l3.85 2.98C6.46 7.1 9 5.08 12 5.08Z"
-      />
-    </svg>
-  );
+  return <Check className={className} aria-hidden="true" focusable="false" />;
 }
 
 /** Envelope, for the email provider's control. */
 export function MailIcon({ className }: IconProps) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      aria-hidden="true"
-      focusable="false"
-      className={className}
-    >
-      <rect x="3" y="5" width="18" height="14" rx="3" />
-      <path d="m4 8 7.1 4.7a1.6 1.6 0 0 0 1.8 0L20 8" strokeLinecap="round" />
-    </svg>
-  );
+  return <Mail className={className} aria-hidden="true" focusable="false" />;
 }
 
-/** §8 multi-step flows: the back control's arrow-left, drawn at 24. */
+/** §8 multi-step flows: the step header's back control, at 24. */
 export function ArrowLeftIcon({ className }: IconProps) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      aria-hidden="true"
-      focusable="false"
-      className={className}
-    >
-      <path d="M19 12H5" strokeLinecap="round" />
-      <path d="m11 6-6 6 6 6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+  return <ArrowLeft className={className} aria-hidden="true" focusable="false" />;
+}
+
+/** Leading glyph for the §8 Search field. */
+export function SearchIcon({ className }: IconProps) {
+  return <Search className={className} aria-hidden="true" focusable="false" />;
+}
+
+export function PlusIcon({ className }: IconProps) {
+  return <Plus className={className} aria-hidden="true" focusable="false" />;
+}
+
+export function ChevronRightIcon({ className }: IconProps) {
+  return <NavArrowRight className={className} aria-hidden="true" focusable="false" />;
 }

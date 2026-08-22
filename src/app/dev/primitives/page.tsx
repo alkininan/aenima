@@ -15,38 +15,13 @@ import { Chip } from "@/components/ui/Chip";
 import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/Input";
 import { Spinner } from "@/components/ui/Spinner";
+import { ChevronRightIcon, PlusIcon, SearchIcon } from "@/components/ui/icons";
 import {
   BUTTON_SIZES,
   BUTTON_VARIANTS,
   CHIP_GAP_TONES,
   SPINNER_SIZES,
 } from "@/components/ui/variants";
-
-/* Placeholder glyphs — the icon set is not part of T0.2. */
-function PlusIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-      <path d="M12 5v14M5 12h14" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function ChevronIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-      <path d="m9 6 6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function SearchIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-      <circle cx="11" cy="11" r="7" />
-      <path d="m20 20-3.5-3.5" strokeLinecap="round" />
-    </svg>
-  );
-}
 
 const TYPE_SCALE = [
   ["type-display-xl", "display-xl — 32/38"],
@@ -60,6 +35,7 @@ const TYPE_SCALE = [
   ["type-ui-button-sm", "ui-button-sm — 15/20"],
   ["type-ui-body", "ui-body — 15/22 · ığüşöç ĳ ë — TR/NL coverage"],
   ["type-ui-footnote", "ui-footnote — 13/18"],
+  ["type-ui-label", "ui-label — 13/18 Medium · floated field labels"],
   ["type-ui-caption", "ui-caption — 12/16"],
   ["type-mono-code", "type-mono-code — 14/22"],
   ["type-mono-readout", "mono-readout — 12/16 · 2026-08-21 · 1234567890"],
@@ -128,14 +104,14 @@ export default function PrimitivesPage() {
                 <Button variant={variant} size={size} leadingIcon={<PlusIcon />}>
                   leading
                 </Button>
-                <Button variant={variant} size={size} trailingIcon={<ChevronIcon />}>
+                <Button variant={variant} size={size} trailingIcon={<ChevronRightIcon />}>
                   trailing
                 </Button>
                 <Button
                   variant={variant}
                   size={size}
                   leadingIcon={<PlusIcon />}
-                  trailingIcon={<ChevronIcon />}
+                  trailingIcon={<ChevronRightIcon />}
                 >
                   both
                 </Button>
@@ -192,17 +168,18 @@ export default function PrimitivesPage() {
         ))}
       </Section>
 
-      {/* §8 (v2.3): every state the field can be in, so the reserved label zone
-          and reserved helper line can be eyeballed for shift. Nothing here
-          changes height between states — that is the thing to check. */}
+      {/* §8 (v2.5): every state the field can be in, so the reserved label zone
+          (22h now) and reserved helper line can be eyeballed for shift. Nothing
+          here changes height between states — that is the thing to check. And
+          no field but Search shows any text but its label. */}
       <Section label="Input">
         <div className="grid gap-[24px] sm:grid-cols-2">
-          <Input label="At rest" hint="you@company.com" />
-          <Input label="Filled" hint="you@company.com" defaultValue="filled" readOnly />
+          <Input label="At rest" />
+          <Input label="Filled" defaultValue="filled" readOnly />
           <Input label="Leading icon" leadingIcon={<SearchIcon />} />
           <Input
             label="Trailing icon"
-            trailingIcon={<ChevronIcon />}
+            trailingIcon={<ChevronRightIcon />}
             defaultValue="filled"
             readOnly
           />
@@ -235,18 +212,19 @@ export default function PrimitivesPage() {
             defaultValue="ok"
             readOnly
           />
-          <Input label="Disabled" hint="you@company.com" disabled />
+          <Input label="Disabled" disabled />
           <Input label="Disabled filled" defaultValue="filled" disabled />
           {/* §8 exemption: Search is named by its leading icon, so it floats no
-              label, reserves no zone, and keeps a resting placeholder. */}
+              label, reserves no zone, and keeps a resting placeholder — the one
+              place in the product where --n-placeholder paints. */}
           <Input
             label="Search"
             floatingLabel={false}
             reserveHelper={false}
-            hint="Search"
+            placeholder="Search"
             leadingIcon={<SearchIcon />}
           />
-          <Input label="No state possible" reserveHelper={false} hint="no helper line reserved" />
+          <Input label="No state possible" reserveHelper={false} />
         </div>
       </Section>
 
@@ -255,7 +233,7 @@ export default function PrimitivesPage() {
           <Chip>base</Chip>
           <Chip leadingIcon={<PlusIcon />}>leading</Chip>
           <Chip interactive>interactive</Chip>
-          <Chip interactive trailingIcon={<ChevronIcon />}>
+          <Chip interactive trailingIcon={<ChevronRightIcon />}>
             interactive
           </Chip>
         </Row>

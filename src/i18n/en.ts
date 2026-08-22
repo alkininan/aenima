@@ -21,9 +21,6 @@ export const en = {
     title: "Sign in",
     // §12: no account enumeration, so the copy never implies an account exists.
     emailLabel: "Email",
-    // §8: a format hint, not information — it paints only once the label has
-    // floated and the field is still empty.
-    emailHint: "you@company.com",
     // §4 subtitle slot: instructional copy lives here and only here, never in a
     // field's helper line (§8).
     emailSubtitle: "We'll send a six-digit code.",

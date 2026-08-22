@@ -152,15 +152,16 @@ export type InputFieldClassOptions = {
 // than the 48 being built from padding. 48 also aligns the field with the lg
 // button, so a field and its submit sit at one height.
 const INPUT_FIELD_BASE =
-  "flex h-[48px] items-center gap-[8px] rounded-pill border bg-surface-1 " +
+  "field-pill flex h-[48px] items-center gap-[8px] rounded-pill border bg-surface-1 " +
   "px-[16px] transition-[border-color,box-shadow,opacity] " +
   "duration-[var(--t-fast)] ease-brand";
 
-// §8: focus gives a --prime border plus ring/glow (§6's focus treatment).
-const INPUT_FIELD_FOCUS =
-  "focus-within:border-prime focus-within:shadow-[var(--prime-glow)] " +
-  "has-[:focus-visible]:outline has-[:focus-visible]:outline-2 " +
-  "has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-prime";
+// §8 (v2.5): focus splits. The border swaps on any focus and stays here; the
+// ring and the glow are keyboard affordances and live in globals.css, keyed off
+// the modality attribute. `:focus-visible` cannot express them on its own — a
+// text input matches it on a mouse click, which is the double stroke §6 kills.
+// See src/lib/focus-modality.ts.
+const INPUT_FIELD_FOCUS = "focus-within:border-prime";
 
 export function inputFieldClasses({
   invalid = false,
@@ -178,7 +179,7 @@ export function inputFieldClasses({
 /**
  * The composite wrapper — §8's always-reserved label zone lives here.
  *
- * `field` carries the 20h zone and the positioning context the label floats
+ * `field` carries the 22h zone and the positioning context the label floats
  * in; `field-unlabelled` is the §8 exemption for Search and the chat composer,
  * which are labelled by context and reserve nothing.
  */
@@ -204,8 +205,9 @@ export function inputCompositeClasses({
  *
  * `field-input` is what the composite's `:has()` reads to decide whether the
  * label is at rest or floated, so it has to be on the control and nowhere else.
- * Placeholder colour is not set here: §8 lets a placeholder paint only once the
- * label has floated, which globals.css expresses as a focus-only rule.
+ * Placeholder colour is not set here: §8 (v2.5) gives a floating-label field
+ * one text only, so globals.css keeps its sentinel placeholder transparent in
+ * every state.
  */
 export const INPUT_CONTROL_CLASSES =
   "field-input type-ui-input min-w-0 flex-1 bg-transparent text-n-primary " +
@@ -803,15 +805,17 @@ export const OTP_BOX_COUNT = 6;
 // the screen. 6×44 + 5×8 = 304 does. `md` is Tailwind's 768, which is exactly
 // §4's breakpoint, so the step happens where the spec puts it. The OTP stays
 // exempt from the 48 field height in both directions; this is its own scale.
-export const OTP_GROUP_CLASSES = "flex gap-[8px] md:gap-[16px]";
+// §8 (v2.5): steps left-align, and the OTP group is the one exception —
+// six discrete boxes are a display, not a text field, so the group stays
+// centred in the content width.
+export const OTP_GROUP_CLASSES = "flex justify-center gap-[8px] md:gap-[16px]";
 
 const OTP_BOX_BASE =
-  "size-[44px] rounded-[22px] md:size-[52px] md:rounded-[27px] " +
+  "otp-box size-[44px] rounded-[22px] md:size-[52px] md:rounded-[27px] " +
   "border bg-surface-1 text-center type-special-otp " +
   "text-n-primary caret-prime transition-[border-color,box-shadow] " +
   "duration-[var(--t-fast)] ease-brand focus:outline-none " +
-  "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 " +
-  "focus-visible:outline-prime disabled:cursor-default disabled:opacity-40";
+  "disabled:cursor-default disabled:opacity-40";
 
 export type OtpBoxClassOptions = {
   /** §8: a filled box takes a --prime border. */
@@ -829,8 +833,9 @@ export function otpBoxClasses({
   return cx(
     OTP_BOX_BASE,
     invalid ? "border-danger" : filled ? "border-prime" : "border-glass-border",
-    // §8 focus: --prime border plus the ring and glow.
-    !invalid && "focus:border-prime focus:shadow-[var(--prime-glow)]",
+    // §8 (v2.5) focus split: the border swaps on any focus. The ring and the
+    // glow are the keyboard path's, and live in globals.css with the field's.
+    !invalid && "focus:border-prime",
     className,
   );
 }

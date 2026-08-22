@@ -1,6 +1,12 @@
 import type { Metadata } from "next";
 import { DM_Sans, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 
+import {
+  DEFAULT_FOCUS_MODALITY,
+  FOCUS_MODALITY_ATTRIBUTE,
+  FOCUS_MODALITY_SCRIPT,
+} from "@/lib/focus-modality";
+
 import "./globals.css";
 
 /**
@@ -57,8 +63,17 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
+      // §6 (v2.5): the default modality is rendered, not left to the script to
+      // add. Setting it client-side only would mismatch the server's HTML on
+      // hydration, and it keeps the keyboard ring working with JS disabled.
+      {...{ [FOCUS_MODALITY_ATTRIBUTE]: DEFAULT_FOCUS_MODALITY }}
       className={`${spaceGrotesk.variable} ${dmSans.variable} ${jetBrainsMono.variable} h-full antialiased`}
     >
+      <head>
+        {/* §6 (v2.5): the focus split needs to know which device moved focus,
+            and it has to know before the first paint — sign-in autofocuses. */}
+        <script dangerouslySetInnerHTML={{ __html: FOCUS_MODALITY_SCRIPT }} />
+      </head>
       <body className="flex min-h-full flex-col">{children}</body>
     </html>
   );

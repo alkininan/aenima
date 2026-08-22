@@ -20,15 +20,7 @@ const WITH_DISABLED: readonly SelectOption[] = [
 
 function Harness({ options = OPTIONS }: { options?: readonly SelectOption[] }) {
   const [value, setValue] = useState<string | null>(null);
-  return (
-    <Select
-      label="Type"
-      placeholder="Pick a type"
-      options={options}
-      value={value}
-      onValueChange={setValue}
-    />
-  );
+  return <Select label="Type" options={options} value={value} onValueChange={setValue} />;
 }
 
 const combobox = () => screen.getByRole("combobox") as HTMLInputElement;

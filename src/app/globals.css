@@ -27,7 +27,8 @@
   --n-primary: #E0E5EB;   /* default text */
   --n-secondary: #9DA3B0; /* secondary text, labels, inactive icons */
   --n-white: #FFFFFF;     /* emphasis on fills */
-  --n-placeholder: #737780; /* placeholders only — fails AA by design */
+  --n-placeholder: #5C6069; /* placeholders only — fails AA by design; sits between
+                               secondary and disabled so a ghost never reads as typed text */
   --n-disabled: #4D5159;    /* disabled only — fails AA by design */
   /* prime accent — aqua */
   --prime: #21B8DC;         /* bright: text, icons, strokes, meter fill, links */
@@ -210,6 +211,7 @@
   .type-ui-button-sm,
   .type-ui-body,
   .type-ui-footnote,
+  .type-ui-label,
   .type-ui-caption,
   .type-special-otp {
     font-family: var(--font-ui);
@@ -285,6 +287,15 @@
 
   .type-ui-footnote {
     font-weight: 400;
+    font-size: 13px;
+    line-height: 18px;
+  }
+
+  /* §3 (v2.5): ui-footnote's metrics at Medium. Its own token because the
+   * floated label is the only thing wearing it, and §8 sizes that label by
+   * name — not by borrowing the helper line's. */
+  .type-ui-label {
+    font-weight: 500;
     font-size: 13px;
     line-height: 18px;
   }
@@ -534,7 +545,7 @@
 }
 
 /* ---------------------------------------------------------------------------
- * Form fields — §8 "Inputs" and "Floating label" (v2.3).
+ * Form fields — §8 "Inputs" and "Floating label" (v2.5).
  *
  * The label is a real `<label>` that never leaves the DOM and never stops being
  * bound to its input (§13). It moves between two positions rather than being
@@ -543,9 +554,9 @@
  *
  * Both positions are derived from the field's own geometry, never guessed:
  *
- *   label zone   20 = ui-caption line 16 + the 4 gap §8 puts above the field
- *   floated      top of the zone, ui-caption 12/16
- *   at rest      where the value sits — 20 (zone) + (48 − 22) / 2 = 33 down,
+ *   label zone   22 = ui-label line 18 + the 4 gap §8 puts above the field
+ *   floated      top of the zone, ui-label 13/18
+ *   at rest      where the value sits — 22 (zone) + (48 − 22) / 2 = 35 down,
  *                ui-input 17/22, vertically centred in the 48h pill
  *
  * The zone is always reserved, so floating shifts nothing. §8 animates
@@ -556,8 +567,8 @@
 @layer components {
   .field {
     position: relative;
-    /* §8: the label zone is always reserved. */
-    padding-top: 20px;
+    /* §8 (v2.5): the label zone is always reserved, now 22. */
+    padding-top: 22px;
   }
 
   /* §8 exemptions — Search and the chat composer are labelled by context, so
@@ -575,9 +586,9 @@
     font-family: var(--font-ui);
     /* Floated is the resting style in CSS terms: it is what the label wears
      * whenever the field is focused or filled, which is most of its life. */
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 500;
-    line-height: 16px;
+    line-height: 18px;
     /* The label is a hit target for the input beneath it only via `for`; it
      * must never eat a click meant for the field. */
     pointer-events: none;
@@ -591,7 +602,7 @@
    * work without JS — every field carries a placeholder (a format hint, or a
    * single space when it has none), so "empty" is expressible in CSS. */
   .field:has(.field-input:placeholder-shown:not(:focus)) .field-label {
-    transform: translateY(33px);
+    transform: translateY(35px);
     font-size: 17px;
     font-weight: 400;
     line-height: 22px;
@@ -603,19 +614,16 @@
     --field-label-x: 48px;
   }
 
-  /* §8: a true placeholder is a format hint only, and appears once the label
-   * has floated and the field is still empty. Floating happens on focus, so
-   * that is exactly when it may paint.
+  /* §8 (v2.5): a field shows one text, ever — its label. Format hints are
+   * abolished, so the placeholder a floating-label field carries is the
+   * sentinel space that makes "empty" expressible to `:placeholder-shown`,
+   * and it never paints in any state.
    *
-   * Scoped away from the exempt fields: Search is named by its leading icon and
-   * §8 allows its "Search" placeholder at rest, so hiding it until focus would
-   * leave that field with nothing to say what it is. */
+   * Scoped away from the exempt fields: Search and the composer are named by
+   * context rather than by a floating label, and §8 keeps their resting
+   * placeholder — `--n-placeholder` exists only for those two. */
   .field:not(.field-unlabelled) .field-input::placeholder {
     color: transparent;
-  }
-
-  .field:not(.field-unlabelled) .field-input:focus::placeholder {
-    color: var(--n-placeholder);
   }
 
   .field-unlabelled .field-input::placeholder {
@@ -626,6 +634,24 @@
    * an error appearing never shifts layout. ui-footnote is 13/18. */
   .field-helper-reserved {
     min-height: 18px;
+  }
+
+  /* §6/§7/§8 (v2.5) — the focus split, keyboard half.
+   *
+   * The border swap is a utility on the control itself and fires on any focus.
+   * The ring and the glow are keyboard affordances, and they cannot be
+   * expressed with `:focus-visible` alone: a text input matches it on a mouse
+   * click, so gating on it paints ring *and* border together under the cursor —
+   * the double stroke this revision removes. The modality attribute on <html>
+   * is what separates the two; see src/lib/focus-modality.ts.
+   *
+   * `:focus-visible` is still in the selector, and still doing work: it is what
+   * keeps the ring off a field that is merely focused programmatically. */
+  html[data-focus-modality="keyboard"] .field-pill:has(:focus-visible),
+  html[data-focus-modality="keyboard"] .otp-box:focus-visible {
+    outline: 2px solid var(--prime);
+    outline-offset: 2px;
+    box-shadow: var(--prime-glow);
   }
 }
 

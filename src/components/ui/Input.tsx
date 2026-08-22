@@ -15,11 +15,6 @@ import {
 type InputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "size"> & {
   /** §13: always rendered, always bound. Never stands in for a placeholder. */
   label: string;
-  /**
-   * §8 format hint — "you@company.com". Paints only once the label has floated
-   * and the field is still empty; never carries information.
-   */
-  hint?: string | undefined;
   /** §8: validation outcome only. Instructions belong in the subtitle slot. */
   helper?: string | undefined;
   /** Tone of the helper line. `invalid` is the shorthand for the error tone. */
@@ -35,6 +30,9 @@ type InputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "size"> & {
    * §8 exemption — Search and the chat composer are labelled by context, so
    * they keep a resting placeholder and reserve no label zone. The `<label>`
    * still exists and is still bound; it is only visually hidden.
+   *
+   * This is also the only way to get a visible `placeholder` onto a field:
+   * while it is true, the one this component renders is the sentinel.
    */
   floatingLabel?: boolean | undefined;
   leadingIcon?: ReactNode | undefined;
@@ -57,9 +55,9 @@ type InputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "size"> & {
 };
 
 /**
- * Pill field with its floating label and state line (design-spec.md §8, v2.3).
+ * Pill field with its floating label and state line (design-spec.md §8, v2.5).
  *
- * 48h field · label zone 20h above it, always reserved · helper line 18h below,
+ * 48h field · label zone 22h above it, always reserved · helper line 18h below,
  * reserved by default. Nothing in the composite changes height between states,
  * which is the whole point: focusing a field or failing validation must not
  * move the page.
@@ -72,17 +70,21 @@ type InputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "size"> & {
  *
  * Which state the label is in is decided in CSS from `:placeholder-shown` and
  * `:focus`, so there is no "has value" prop to keep in sync and a browser
- * autofill floats the label without telling React anything. That is why every
- * field carries a placeholder even when it has no hint — a single space, which
- * is invisible and makes "empty" expressible as a selector.
+ * autofill floats the label without telling React anything. That is why a
+ * floating-label field always carries a placeholder — a single space, which
+ * paints nothing and makes "empty" expressible as a selector.
  *
- * Validation timing is the caller's: §8 asks for validate-on-blur, then
- * re-validate on change once a field has errored — never on first keystroke.
- * This component only renders the state it is handed.
+ * §8 (v2.5): a field shows one text, ever — its label. Format hints are
+ * abolished, so a caller's `placeholder` is honoured only on the §8-exempt
+ * fields, where it is the resting name. On every other field it is replaced by
+ * the sentinel: the rule is enforced here rather than trusted to call sites,
+ * because one hint slipping through is invisible until someone reads the page.
+ *
+ * Validation timing is the caller's — §8's flag-slow/clear-fast clock lives in
+ * `useFieldValidation`. This component only renders the state it is handed.
  */
 export function Input({
   label,
-  hint,
   helper,
   helperTone,
   invalid = false,
@@ -95,6 +97,7 @@ export function Input({
   fieldClassName,
   disabled = false,
   id,
+  placeholder,
   ...rest
 }: InputProps) {
   const generatedId = useId();
@@ -119,9 +122,9 @@ export function Input({
             aria-invalid={invalid || undefined}
             aria-describedby={helper ? helperId : undefined}
             className={INPUT_CONTROL_CLASSES}
-            // A space, not "", when there is no hint: `:placeholder-shown` is
-            // how the label knows it is at rest, and "" does not match it.
-            placeholder={floatingLabel ? (hint ?? " ") : hint}
+            // A space, not "": `:placeholder-shown` is how the label knows it
+            // is at rest, and "" does not match it.
+            placeholder={floatingLabel ? " " : placeholder}
             {...rest}
           />
           {trailingIcon ? <span className={INPUT_ICON_SLOT_CLASSES}>{trailingIcon}</span> : null}

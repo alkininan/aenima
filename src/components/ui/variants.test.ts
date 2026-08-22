@@ -160,10 +160,36 @@ describe("inputFieldClasses", () => {
     expect(inputFieldClasses()).toContain("h-[48px]");
   });
 
-  // §8 focus: --prime border + ring/glow.
-  it("moves the border to prime on focus", () => {
+  // §8 (v2.5) focus split: pointer focus swaps the border and stops there.
+  it("moves the border to prime on any focus", () => {
     expect(inputFieldClasses()).toContain("focus-within:border-prime");
-    expect(inputFieldClasses()).toContain("focus-within:shadow-[var(--prime-glow)]");
+  });
+
+  /**
+   * The double stroke this revision kills. No utility may paint a ring or a
+   * glow on focus: both are keyboard affordances, and globals.css draws them
+   * behind the modality attribute because `:focus-visible` matches a *clicked*
+   * text input. A glow that reappears here is the bug coming back.
+   *
+   * The hook class is asserted too — the CSS rule selects on it, so dropping it
+   * would silently take the keyboard ring away with no test to notice.
+   */
+  it("leaves the ring and the glow to the modality-gated CSS", () => {
+    const classes = inputFieldClasses();
+
+    expect(classes).toContain("field-pill");
+    expect(classes).not.toContain("prime-glow");
+    expect(classes).not.toContain("outline-prime");
+  });
+
+  // The OTP box is a field too, and carries the same split.
+  it("gives the OTP box the same pointer/keyboard split", () => {
+    const classes = otpBoxClasses();
+
+    expect(classes).toContain("otp-box");
+    expect(classes).toContain("focus:border-prime");
+    expect(classes).not.toContain("prime-glow");
+    expect(classes).not.toContain("outline-prime");
   });
 
   // §8 error: --danger border.

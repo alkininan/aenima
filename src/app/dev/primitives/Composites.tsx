@@ -14,6 +14,7 @@ import { Checkbox } from "@/components/ui/Checkbox";
 import { Chip } from "@/components/ui/Chip";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { IconButton } from "@/components/ui/IconButton";
+import { Input } from "@/components/ui/Input";
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
 import { Modal } from "@/components/ui/Modal";
 import { OtpInput } from "@/components/ui/OtpInput";
@@ -26,6 +27,11 @@ import { ToastProvider, useToast } from "@/components/ui/Toast";
 import { Toggle } from "@/components/ui/Toggle";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { AVATAR_SIZES, SKELETON_SHAPES, TOAST_TONES } from "@/components/ui/variants";
+import {
+  VALIDATION_MIN_LENGTH,
+  VALIDATION_PAUSE_MS,
+  useFieldValidation,
+} from "@/components/ui/useFieldValidation";
 
 function Section({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -144,6 +150,38 @@ function ToastRow() {
   );
 }
 
+/**
+ * §8 (v2.5) validation timing, live. The clock is the thing to feel here: type
+ * two characters and nothing happens however long you wait; type a third bad
+ * one and the message arrives 1.5s after you stop; fix it and the message is
+ * gone before you lift the key.
+ */
+function ValidationDemo() {
+  const [value, setValue] = useState("");
+  const field = useFieldValidation({
+    value,
+    validate: (next) => (next.includes("@") ? null : "Needs an @ to be an address."),
+  });
+
+  return (
+    <div className="grid gap-[24px] sm:grid-cols-2">
+      <Input
+        label="Email"
+        value={value}
+        helper={field.error ?? undefined}
+        invalid={field.error !== null}
+        onChange={(event) => setValue(event.target.value)}
+        onBlur={field.onBlur}
+      />
+      <p className="type-ui-footnote self-center text-n-secondary">
+        Silent under {VALIDATION_MIN_LENGTH} characters, blur included. Above it:{" "}
+        {VALIDATION_PAUSE_MS}
+        ms of quiet before a flag, immediate on blur, and an instant clear the moment it parses.
+      </p>
+    </div>
+  );
+}
+
 function Composites() {
   const [type, setType] = useState<string | null>(null);
   const [long, setLong] = useState<string | null>("option-9");
@@ -182,8 +220,7 @@ function Composites() {
         </p>
         <div className="grid gap-[24px] sm:grid-cols-2">
           <Select
-            label="placeholder"
-            placeholder="Pick a type"
+            label="empty — label at rest"
             options={SELECT_OPTIONS}
             value={type}
             onValueChange={setType}
@@ -196,14 +233,12 @@ function Composites() {
           />
           <Select
             label="disabled option"
-            placeholder="One row is skipped"
             options={DISABLED_OPTIONS}
             value={gapped}
             onValueChange={setGapped}
           />
           <Select
             label="error"
-            placeholder="Pick a type"
             options={SELECT_OPTIONS}
             value={null}
             onValueChange={() => {}}
@@ -212,13 +247,19 @@ function Composites() {
           />
           <Select
             label="disabled"
-            placeholder="Pick a type"
             options={SELECT_OPTIONS}
             value={null}
             onValueChange={() => {}}
             disabled
           />
         </div>
+      </Section>
+
+      <Section label="Validation timing">
+        <p className="type-ui-footnote text-n-secondary">
+          Flag slow, clear fast — the §8 clock, on the same hook every form will use.
+        </p>
+        <ValidationDemo />
       </Section>
 
       <Section label="OTP">
@@ -340,7 +381,6 @@ function Composites() {
             <p>The body scrolls and the footer stays put.</p>
             <Select
               label="a popover inside a modal"
-              placeholder="Esc closes this first"
               options={SELECT_OPTIONS}
               value={null}
               onValueChange={() => {}}
