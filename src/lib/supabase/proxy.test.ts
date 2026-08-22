@@ -9,7 +9,9 @@ import { isPublicPath } from "@/lib/supabase/proxy";
  * leaves the workspace open.
  */
 describe("isPublicPath", () => {
-  it.each(["/", "/sign-in", "/auth/sign-out", "/auth/callback", "/dev/primitives"])(
+  // One real route per public prefix. Keep them real: a sample for a route
+  // that was never built reads as evidence the route exists.
+  it.each(["/", "/sign-in", "/auth/sign-out", "/dev/primitives"])(
     "leaves %s reachable without a session",
     (path) => {
       expect(isPublicPath(path)).toBe(true);
