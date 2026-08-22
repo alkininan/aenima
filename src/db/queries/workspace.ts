@@ -43,23 +43,35 @@ export async function getCurrentWorkspace(): Promise<WorkspaceSummary | null> {
  * for two reasons: a user with no membership can satisfy no INSERT policy on
  * `workspace`, and doing it in one statement keeps workspace, membership and
  * the activity row in a single transaction. No service-role key is involved.
+ *
+ * **The function returns the workspace row, and this must keep using it rather
+ * than re-reading.** A read-after-write here is not merely wasteful, it is
+ * wrong: Next memoizes identical GET fetches for a whole render pass, so a
+ * second `getCurrentWorkspace()` in this function does not reach PostgREST at
+ * all — it replays the response from the call above, taken *before* the write,
+ * which is empty. That is what made first run throw while every later request
+ * succeeded: a fresh render pass starts with an empty memo cache, so the early
+ * return on line 1 hides it. The read below the write is the only one that
+ * ever sees a stale answer, and no amount of retrying inside one pass will
+ * change it. Both reads are GETs on the same URL with the same headers, which
+ * is exactly the key `createDedupeFetch` dedupes on.
+ *
+ * `bootstrap_workspace` is idempotent, so concurrent first-run render passes
+ * all get the same workspace back instead of one winning and the rest erroring.
  */
 export async function ensureWorkspace(name: string): Promise<WorkspaceSummary> {
   const existing = await getCurrentWorkspace();
   if (existing) return existing;
 
   const supabase = await createClient();
-  const { error } = await supabase.rpc("bootstrap_workspace", { p_name: name });
 
-  if (error) {
-    // Two tabs racing through first run: the function refuses the second, and
-    // the first one's workspace is the right answer for both.
-    const created = await getCurrentWorkspace();
-    if (created) return created;
-    throw new Error(`Could not create workspace: ${error.message}`);
-  }
+  // An RPC is a POST, which is never memoized — the write and the row it
+  // returns come back on the one request that cannot be served from the cache.
+  const { data, error } = await supabase
+    .rpc("bootstrap_workspace", { p_name: name })
+    .select("id, name, timezone, locale")
+    .single();
 
-  const created = await getCurrentWorkspace();
-  if (!created) throw new Error("Workspace was created but could not be read back");
-  return created;
+  if (error) throw new Error(`Could not create workspace: ${error.message}`);
+  return data;
 }
