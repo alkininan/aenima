@@ -16,8 +16,25 @@ export default defineConfig({
         test: {
           name: "node",
           include: ["src/**/*.{test,spec}.{ts,tsx}"],
-          exclude: ["src/**/*.dom.{test,spec}.{ts,tsx}"],
+          exclude: ["src/**/*.dom.{test,spec}.{ts,tsx}", "src/**/*.db.{test,spec}.{ts,tsx}"],
           environment: "node",
+        },
+      },
+      {
+        resolve,
+        test: {
+          // Hits a real Postgres, so it reads DATABASE_URL from .env.local and
+          // skips loudly when there is none. See src/db/rls.db.test.ts.
+          name: "db",
+          include: ["src/**/*.db.{test,spec}.{ts,tsx}"],
+          environment: "node",
+          setupFiles: ["./src/test/setup-db.ts"],
+          // Every one of these tests seeds two workspaces over a dozen-odd
+          // sequential round trips against a hosted Postgres. At the ~270ms
+          // RTT of a remote region that is comfortably past the 5s default,
+          // and a timeout there says nothing about the invariant under test.
+          testTimeout: 60_000,
+          hookTimeout: 60_000,
         },
       },
       {

@@ -722,3 +722,45 @@ const SKELETON_SHAPE_CLASSES: Record<SkeletonShape, string> = {
 export function skeletonClasses(shape: SkeletonShape = "block", className?: string): string {
   return cx("shimmer block", SKELETON_SHAPE_CLASSES[shape], className);
 }
+
+/* -------------------------------------------------------------------------- */
+/* OTP — §8 "Inputs" (OTP)                                                    */
+/* -------------------------------------------------------------------------- */
+
+/** §12: six-digit codes. */
+export const OTP_BOX_COUNT = 6;
+
+// §8: "OTP: 6 boxes 52×52, radius 27, gap 16, special-otp centered; filled box
+// border --prime." Radius 27 is the resolved value, not the proportional rule:
+// a 52h pill clamps to half its height at 26, and the spec wrote 27 — one past
+// the clamp, so the box is unambiguously a pill however it is measured.
+export const OTP_GROUP_CLASSES = "flex gap-[16px]";
+
+const OTP_BOX_BASE =
+  "size-[52px] rounded-[27px] border bg-surface-1 text-center type-special-otp " +
+  "text-n-primary caret-prime transition-[border-color,box-shadow] " +
+  "duration-[var(--t-fast)] ease-brand focus:outline-none " +
+  "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 " +
+  "focus-visible:outline-prime disabled:cursor-default disabled:opacity-40";
+
+export type OtpBoxClassOptions = {
+  /** §8: a filled box takes a --prime border. */
+  filled?: boolean | undefined;
+  /** §8 inputs: error swaps the border to --danger. */
+  invalid?: boolean | undefined;
+  className?: string | undefined;
+};
+
+export function otpBoxClasses({
+  filled = false,
+  invalid = false,
+  className,
+}: OtpBoxClassOptions = {}): string {
+  return cx(
+    OTP_BOX_BASE,
+    invalid ? "border-danger" : filled ? "border-prime" : "border-glass-border",
+    // §8 focus: --prime border plus the ring and glow.
+    !invalid && "focus:border-prime focus:shadow-[var(--prime-glow)]",
+    className,
+  );
+}

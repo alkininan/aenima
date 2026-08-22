@@ -16,6 +16,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { IconButton } from "@/components/ui/IconButton";
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
 import { Modal } from "@/components/ui/Modal";
+import { OtpInput } from "@/components/ui/OtpInput";
 import { Radio } from "@/components/ui/Radio";
 import { Select, type SelectOption } from "@/components/ui/Select";
 import { Sheet } from "@/components/ui/Sheet";
@@ -148,6 +149,8 @@ function Composites() {
   const [long, setLong] = useState<string | null>("option-9");
   const [gapped, setGapped] = useState<string | null>(null);
   const [tab, setTab] = useState("overview");
+  const [otp, setOtp] = useState("");
+  const [otpFilled, setOtpFilled] = useState("48291");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [contentOpen, setContentOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -208,6 +211,37 @@ function Composites() {
             value={null}
             onValueChange={() => {}}
             disabled
+          />
+        </div>
+      </Section>
+
+      <Section label="OTP">
+        <div className="grid gap-[24px] sm:grid-cols-2">
+          <OtpInput
+            label="Empty"
+            helper="Type, paste, or walk it with the arrow keys"
+            value={otp}
+            onValueChange={setOtp}
+          />
+          <OtpInput
+            label="Partly filled"
+            helper="A filled box takes a prime border"
+            value={otpFilled}
+            onValueChange={setOtpFilled}
+          />
+          <OtpInput
+            label="Error"
+            invalid
+            helper="That code didn't work"
+            value="482913"
+            onValueChange={() => {}}
+          />
+          <OtpInput
+            label="Disabled"
+            disabled
+            helper="helper"
+            value="4829"
+            onValueChange={() => {}}
           />
         </div>
       </Section>

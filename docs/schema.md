@@ -1,0 +1,171 @@
+# aenima — database schema
+
+The persistence layer behind product-spec.md §2's object tree. Postgres on
+Supabase; Drizzle owns the table definitions and migrations, RLS owns access.
+
+Referenced from CLAUDE.md. Change the schema files, run `pnpm db:generate`, and
+update this page in the same commit.
+
+---
+
+## Invariants
+
+These four are load-bearing. Each is enforced by the database, not by
+convention — a rule that lives only in TypeScript gets broken by the first
+script that talks to Postgres directly.
+
+**1. `artifact_version` and `activity` are append-only.**
+No UPDATE, no DELETE, ever. New content is a new row with an incrementing
+`version_no`. Three independent layers enforce it, because the first two have a
+hole the third closes:
+
+| Layer | Stops | Hole |
+|---|---|---|
+| RLS — no UPDATE/DELETE policy exists | signed-in users | service role holds `BYPASSRLS` |
+| Grants — `REVOKE UPDATE, DELETE` from `anon`, `authenticated` | the same | same |
+| Trigger — `app.deny_mutation()` raises | **everyone**, service role included | must be disabled explicitly, out of band |
+
+`artifact_version → artifact` is `ON DELETE RESTRICT`, not CASCADE: a cascade
+would delete version rows through the back door, and append-only that a parent
+delete can launder is not append-only. The practical consequence is that an
+artifact with versions cannot be deleted, and therefore neither can its item,
+product or workspace. That is intended for an audit-grade ledger; archival is a
+later ticket.
+
+Rollback is §11's revert-as-new-version — restoring v4 inserts v7 carrying v4's
+content. History never rewrites, so a signature always points at a version that
+still exists.
+
+**2. There is no status column.**
+Not in any table. Stage is derived from which artifacts exist and what they
+score (product-spec.md §3). A test asserts that no `status`, `stage` or `state`
+column exists anywhere in `public`.
+
+**3. Every table carries `workspace_id`, and RLS enforces it independently.**
+Product isolation is a security boundary. Two mechanisms, deliberately
+redundant:
+
+- **RLS** on all nine tables, `ENABLE` **and** `FORCE`. A verb with no policy is
+  denied; the missing policies are deliberate, not oversights.
+- **Composite foreign keys.** Every child references its parent as
+  `(workspace_id, id)`, never bare `id`. A plain FK would let a row in workspace
+  A point at a parent in workspace B while carrying A's `workspace_id`, and RLS
+  — which only reads `workspace_id` — would happily serve it. The composite form
+  makes cross-tenant stitching structurally impossible even with RLS off.
+
+`workspace` itself carries no `workspace_id`: its own `id` is the tenant key.
+
+**4. Every mutating action writes an `activity` row, and the agent is a
+first-class actor.**
+`actor_kind` is `'human' | 'agent'` and is required; a CHECK forces exactly one
+identity column to be populated per kind. An agent action is a positive
+assertion, never a null `user_id`.
+
+---
+
+## Tables
+
+| Table | Purpose |
+|---|---|
+| `workspace` | The tenant. One per account; holds name, timezone and locale. |
+| `membership` | Who belongs to a workspace, in which role, and whether they see all products. |
+| `membership_product` | Per-product visibility for members who do not have `all_products`. |
+| `product` | The isolation and permission boundary. Names its Decider (§14). |
+| `opportunity` | A problem or outcome that outlives individual bets. |
+| `item` | A unit of work moving through the stages. May be unlinked from any opportunity. |
+| `artifact` | The stable identity of an artifact on an item — one row per kind. |
+| `artifact_version` | Immutable content. Append-only; `version_no` assigned by trigger. |
+| `activity` | The ledger: actor, timestamp, trigger, subject. Append-only. |
+
+### Enums
+
+| Type | Values | Source |
+|---|---|---|
+| `item_type` | feature · enhancement · technical · content · experiment · fix · spike | §4, the seven types |
+| `artifact_kind` | brief · prd · tech_spec · design_package · backlog | §7.1–7.5 |
+| `member_role` | owner · product · developer · viewer | §14 |
+| `actor_kind` | human · agent | §2 |
+| `activity_trigger` | user · agent · schedule · webhook · sync | §2 |
+
+`item_type` is a real Postgres enum rather than free text: "one of seven" is a
+constraint the database should be able to state.
+
+---
+
+## Access
+
+| Path | Client | RLS |
+|---|---|---|
+| Request path (pages, actions, route handlers) | `src/lib/supabase/server.ts` | **enforced** as the signed-in user |
+| Browser | `src/lib/supabase/client.ts` | **enforced** |
+| Schema, migrations, seed | Drizzle over `DATABASE_URL` (`src/db/client.ts`) | **bypassed** |
+| Escape hatch | `src/lib/supabase/admin.ts` | **bypassed** |
+
+Both bypassing modules import `server-only`, so pulling either into client code
+is a build error rather than a review comment. Nothing in the request path uses
+the service-role key today: first-run workspace creation goes through
+`public.bootstrap_workspace()`, a `SECURITY DEFINER` function, precisely so that
+key never has to be in play.
+
+All database access lives in `src/db/queries/*` per CLAUDE.md, whatever the
+driver underneath.
+
+### Policy summary
+
+| Table | SELECT | INSERT | UPDATE | DELETE |
+|---|---|---|---|---|
+| `workspace` | member | — (bootstrap only) | owner | — |
+| `membership` | member | owner | owner | owner |
+| `membership_product` | member | owner | owner | owner |
+| `product` | member + visible | owner | owner | owner |
+| `opportunity` | member + visible | owner, product | owner, product | owner, product |
+| `item` | member + visible | owner, product | owner, product | owner, product |
+| `artifact` | member + visible | owner, product; developer for `tech_spec` | — | owner, product |
+| `artifact_version` | member + visible | as `artifact` | **never** | **never** |
+| `activity` | member + visible | owner, product, developer | **never** | **never** |
+
+Viewer appears in no write policy anywhere: §14 read-only means read-only.
+
+Helper functions live in the `app` schema — `workspace_ids()`, `role_in()`,
+`can_see_product()` — and are `SECURITY DEFINER` on purpose. A policy on
+`membership` that reads `membership` recurses forever; a definer function
+bypasses RLS on its own read, so the policy terminates. Each pins its
+`search_path`. `authenticated` has `USAGE` on `app` and nothing more; `anon` has
+nothing.
+
+---
+
+## Migrations
+
+`drizzle/0000_object_tree.sql` — tables, enums, keys, indexes, generated from
+the schema files.
+
+`drizzle/0001_policies.sql` — hand-written: `auth.users` foreign keys, the `app`
+helper functions, the append-only and version-numbering triggers, RLS on every
+table with the policy set above, and `bootstrap_workspace`. Hand-written because
+it is the security boundary and because Drizzle's DSL cannot express it.
+
+```
+pnpm db:generate   # diff the schema files into a new migration
+pnpm db:migrate    # apply pending migrations to DATABASE_URL
+pnpm db:baseline   # once per environment: record migrations already applied by hand
+pnpm db:seed       # one workspace, product, opportunity, and seven items
+```
+
+**Never `drizzle-kit push` here.** The policies above are not expressible in the
+schema DSL, so push cannot see them in `src/db/schema/*` and plans to
+`DROP POLICY … CASCADE` every one of them. Migrations are the only path.
+
+`DATABASE_URL` must be a **session-mode or direct** connection (port 5432). The
+transaction pooler on 6543 cannot run this DDL.
+
+---
+
+## Verifying the invariants
+
+`src/db/rls.db.test.ts` proves isolation and append-only against a real
+Postgres, impersonating users the way PostgREST does (`set local role
+authenticated` plus `request.jwt.claims`), inside transactions that roll back.
+
+It **skips when `DATABASE_URL` is absent** and says so loudly on stderr. A green
+`pnpm test` without that variable has not verified any of this.

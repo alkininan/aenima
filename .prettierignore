@@ -10,5 +10,11 @@ test-results
 .playwright-mcp
 public
 
+# Drizzle's generated migration snapshots — regenerated, never hand-edited.
+drizzle/meta
+
 # Prose is authored by humans and agents, not formatted by Prettier.
 *.md
+
+# Written by Claude Code, not by hand.
+.claude/settings.local.json

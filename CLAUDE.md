@@ -18,8 +18,10 @@ test one   pnpm test <path>
 e2e        pnpm e2e                  # playwright
 lint       pnpm lint                 # eslint + prettier --check
 types      pnpm typecheck            # tsc --noEmit
-db push    pnpm db:push              # drizzle → supabase
-db gen     pnpm db:generate
+db gen     pnpm db:generate          # write a migration from the schema files
+db migrate pnpm db:migrate           # apply pending migrations (needs DATABASE_URL)
+db baseline pnpm db:baseline         # record already-applied migrations, once per environment
+db seed    pnpm db:seed              # one workspace, product, opportunity, items
 ```
 
 ## Conventions
@@ -43,6 +45,10 @@ Only what differs from framework defaults:
 - Never invent endpoints, fields, or columns the ticket does not define.
 - Never hardcode a color, size, or piece of copy that the design spec defines.
 - Never let the agent write to an external system without an explicit human confirm step.
+- Never run `drizzle-kit push` on this project. The RLS policies live in
+  `drizzle/0001_policies.sql`, not in the schema DSL, so push does not know they
+  exist and plans to `DROP POLICY … CASCADE` all of them — deleting the product
+  isolation boundary. Migrations only: `db:generate` then `db:migrate`.
 - Where the spec is silent: stop and list the question. Never assume.
 
 ## Done means
