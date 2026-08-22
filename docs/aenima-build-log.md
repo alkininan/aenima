@@ -35,6 +35,9 @@ T0.2 — design tokens, three faces, Æ mark, five primitives, /dev/primitives p
 T0.3 — eleven composites, page.tsx replaced, layout metadata, scaffold assets removed — `e04da9f`
 T0.4 — Supabase + Drizzle, object tree schema, RLS isolation, three-layer append-only ledger,
   passwordless email OTP, first-run bootstrap, seed — `774621d`
+T0.4 follow-up — sign-in verified end to end (code arrives, verifies, session sticks). Guard test
+  pinning the OTP call arguments — `5c6709c`. First-run `/app` crash fixed: `bootstrap_workspace`
+  now returns the workspace row and is idempotent — `5a1514d`, migration `0002`.
 
 ## Decisions made during the build
 
@@ -78,6 +81,17 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
   (`aws-0-<region>.pooler.supabase.com:5432`, username `postgres.<ref>`). The direct
   `db.<ref>.supabase.co` host publishes AAAA only, so it fails on any IPv4-only network — CI and
   Vercel included — even where a v6-routed dev machine happens to reach it.
+- Next memoizes identical GET fetches for a whole render pass, and postgrest-js `.select()` is a
+  GET with `signal: undefined`, which is not the opt-out. **A read-after-write in one pass
+  replays the pre-write response.** So a write must return the row it wrote — RPCs are POSTs and
+  are never memoized. This cost a first-run crash that looked like stale JWT claims and was not:
+  the read-back never reached PostgREST at all.
+- `bootstrap_workspace` is idempotent and takes a per-user advisory lock. Idempotent because
+  raising on a second call forces the caller into exactly the read-after-write it cannot do;
+  locked because the membership lookup is then check-then-act under READ COMMITTED, and `/app`
+  really does open several render passes at once. It still never mints a second workspace.
+- Guard tests for this class assert **request counts, not returned values**. The value was correct
+  throughout — only the traffic was wrong — so any mock that answers honestly hides the bug.
 
 ## Open questions
 
