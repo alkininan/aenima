@@ -75,6 +75,15 @@ of its parents, `activity` was corrected to it in `0004`, and
 The practical consequence is unchanged and intended: a workspace or product
 carrying ledger rows cannot be deleted. Archival is a later ticket.
 
+**Applied migration files are immutable, for the same reason.** Once a
+migration has run anywhere, its bytes never change — not for a typo, not for a
+renamed path in a comment. A correction is a new migration. Postgres does not
+enforce this one: `scripts/db-baseline.ts` hashes each file's raw bytes to
+decide what is already recorded, so editing an applied file makes it stop
+matching the baseline it already passed. `drizzle/0003`'s comment still names
+`docs/aenima-build-log.md`, renamed since; the stale path is the cheaper half
+of the trade.
+
 **2. There is no status column.**
 Not in any table. Stage is derived from which artifacts exist and what they
 score (product-spec.md §3). A test asserts that no `status`, `stage` or `state`
