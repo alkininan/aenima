@@ -14,7 +14,7 @@ These four are load-bearing. Each is enforced by the database, not by
 convention — a rule that lives only in TypeScript gets broken by the first
 script that talks to Postgres directly.
 
-**1. `artifact_version` and `activity` are append-only.**
+**1. `artifact_version`, `activity` and `decision` are append-only.**
 No UPDATE, no DELETE, ever. New content is a new row with an incrementing
 `version_no`. Three independent layers enforce it, because the first two have a
 hole the third closes:
@@ -40,9 +40,11 @@ still exists.
 its parent.** Nulling a column is an UPDATE, which the trigger refuses, so a
 `SET NULL` reference makes the *parent* undeletable — and it fails at delete
 time with an append-only error that names the child, which reads like a bug in
-the wrong table. `NO ACTION` and `RESTRICT` are no better: they reject the
-parent delete outright. `CASCADE` is worse still, since it would launder rows
-out of the ledger.
+the wrong table. `NO ACTION` and `RESTRICT` do not make the parent deletable
+either — they reject the delete outright — but they reject it *legibly*, which
+is why `RESTRICT` is the right shape wherever the reference has to stay (see
+below). `CASCADE` is refused by the trigger for the same reason `SET NULL` is,
+and would launder rows out of the ledger if it ever succeeded.
 
 So the actor columns — `activity.actor_user_id` and
 `artifact_version.authored_by_user_id` — carry **no foreign key at all**. They
@@ -54,22 +56,69 @@ Resolving an actor to a *name* after deletion needs a snapshot taken at write
 time; that is deferred, see the open questions in `docs/aenima-build-log.md`.
 
 Mutable tables are unaffected: `product.decider_user_id` (`SET NULL`) and
-`membership.user_id` (`CASCADE`) both work, because only `activity` and
-`artifact_version` carry `app.deny_mutation()`. The rule is not "never
-reference `auth.users`" — it is "an append-only table's references must not
-require the ledger to change".
+`membership.user_id` (`CASCADE`) both work, because only `activity`,
+`artifact_version` and `decision` carry `app.deny_mutation()`. The rule is not
+"never reference `auth.users`" — it is "an append-only table's references must
+not require the ledger to change".
+
+**Where an append-only table does keep a parent reference, it is `RESTRICT`.**
+That is the only shape that fails legibly. `CASCADE` is refused by the trigger,
+because a cascade is a DELETE; `SET NULL` is refused for the same reason, and on
+a composite foreign key it is worse still, since `SET NULL` nulls *every*
+referencing column — including `workspace_id`, which is `NOT NULL`. Both
+surface as an append-only error naming the child, from a delete the caller aimed
+at a parent. `RESTRICT` surfaces as a foreign-key error naming the constraint
+and the table that actually holds the reference. `decision` uses it for all four
+of its parents, `activity` was corrected to it in `0004`, and
+`artifact_version → artifact` was already this shape.
+
+The practical consequence is unchanged and intended: a workspace or product
+carrying ledger rows cannot be deleted. Archival is a later ticket.
 
 **2. There is no status column.**
 Not in any table. Stage is derived from which artifacts exist and what they
 score (product-spec.md §3). A test asserts that no `status`, `stage` or `state`
 column exists anywhere in `public`.
 
+The derivation lives in **`src/lib/stage.ts`** and nowhere else — not in a
+column, not in a view, not in a function. `deriveStage()` takes an item's
+artifacts with their version counts and returns one of §3's four stages:
+
+| Evidence | Stage |
+|---|---|
+| nothing, or no PRD with content | Discover |
+| PRD with at least one version | Define |
+| design package with at least one version | Design |
+| signed packet | Handed over (terminal) |
+
+Two things about it are deliberate. An `artifact` row with **zero versions
+advances nothing** — an artifact row is identity, and §3 keys its stages on the
+artifact existing as content, so opening an empty PRD does not move an item.
+And the handover branch is **unreachable**: there is no packet table yet, so
+`StageInput.signedPacket` is typed `never` rather than `boolean`. A boolean
+would claim the signature is observable and currently false; `never` says it
+cannot be observed at all, which is the truth until §8's packet ships.
+
+It is TypeScript rather than SQL because Phase 2 feeds it readiness scores that
+live in the app layer, because it must be unit-testable without a database —
+and because a SQL derivation would mean a view column named `stage`, which the
+first-law test above would catch. The test is telling you where derivation
+belongs.
+
+This is also why `gap`'s lifecycle column is `disposition` and not `state`. A
+gap's lifecycle is *declared* by a human — §5's three negotiation moves are the
+act of declaring it — which is the opposite of a derived stage. The name keeps
+the guard blunt rather than asking it for an exception.
+
 **3. Every table carries `workspace_id`, and RLS enforces it independently.**
 Product isolation is a security boundary. Two mechanisms, deliberately
 redundant:
 
-- **RLS** on all nine tables, `ENABLE` **and** `FORCE`. A verb with no policy is
-  denied; the missing policies are deliberate, not oversights.
+- **RLS** on all eleven tables, `ENABLE` **and** `FORCE`. A verb with no policy
+  is denied; the missing policies are deliberate, not oversights — `gap` has no
+  DELETE policy because §5's answer to a gap that should not exist is
+  `excluded`, and `decision` has neither UPDATE nor DELETE because it is a
+  ledger.
 - **Composite foreign keys.** Every child references its parent as
   `(workspace_id, id)`, never bare `id`. A plain FK would let a row in workspace
   A point at a parent in workspace B while carrying A's `workspace_id`, and RLS
@@ -98,6 +147,8 @@ assertion, never a null `user_id`.
 | `item` | A unit of work moving through the stages. May be unlinked from any opportunity. |
 | `artifact` | The stable identity of an artifact on an item — one row per kind. |
 | `artifact_version` | Immutable content. Append-only; `version_no` assigned by trigger. |
+| `gap` | A failed check with the evidence it quoted. Mutable — §5's negotiation moves are transitions on it. |
+| `decision` | "Decision, reason, date, who" (§13). Append-only; corrections supersede. |
 | `activity` | The ledger: actor, timestamp, trigger, subject. Append-only. |
 
 ### Enums
@@ -109,6 +160,9 @@ assertion, never a null `user_id`.
 | `member_role` | owner · product · developer · viewer | §14 |
 | `actor_kind` | human · agent | §2 |
 | `activity_trigger` | user · agent · schedule · webhook · sync | §2 |
+| `flow_intent` | value · quality · risk · debt | §4, the Flow Framework tag |
+| `gap_tag` | must · should | §5, what each check is tagged |
+| `gap_disposition` | open · accepted · excluded | §5, the gap lifecycle |
 
 `item_type` is a real Postgres enum rather than free text: "one of seven" is a
 constraint the database should be able to state.
@@ -145,6 +199,8 @@ driver underneath.
 | `item` | member + visible | owner, product | owner, product | owner, product |
 | `artifact` | member + visible | owner, product; developer for `tech_spec` | — | owner, product |
 | `artifact_version` | member + visible | as `artifact` | **never** | **never** |
+| `gap` | member + visible | owner, product | owner, product | **none** |
+| `decision` | member + visible | owner, product | **never** | **never** |
 | `activity` | member + visible | owner, product, developer | **never** | **never** |
 
 Viewer appears in no write policy anywhere: §14 read-only means read-only.

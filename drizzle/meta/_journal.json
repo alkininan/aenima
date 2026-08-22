@@ -29,6 +29,13 @@
       "when": 1787331923703,
       "tag": "0003_ledger_actor_is_a_fact",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1787331923704,
+      "tag": "0004_gap_decision_flow_intent",
+      "breakpoints": true
     }
   ]
 }

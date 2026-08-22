@@ -2,6 +2,8 @@
 
 import { createBrowserClient } from "@supabase/ssr";
 
+import type { Database } from "@/db/database.types";
+
 import { publicEnv } from "@/lib/env";
 
 /**
@@ -9,5 +11,5 @@ import { publicEnv } from "@/lib/env";
  * cookie, so every query it makes is subject to RLS as that user.
  */
 export function createClient() {
-  return createBrowserClient(publicEnv.supabaseUrl(), publicEnv.supabaseKey());
+  return createBrowserClient<Database>(publicEnv.supabaseUrl(), publicEnv.supabaseKey());
 }

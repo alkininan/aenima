@@ -14,7 +14,16 @@ import {
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
-import { actorKind, activityTrigger, artifactKind, itemType, memberRole } from "./enums";
+import {
+  actorKind,
+  activityTrigger,
+  artifactKind,
+  flowIntent,
+  gapDisposition,
+  gapTag,
+  itemType,
+  memberRole,
+} from "./enums";
 
 /**
  * The object tree of product-spec.md §2: workspace → product → opportunity →
@@ -163,6 +172,13 @@ export const item = pgTable(
     /** §2: an item may be unlinked from any opportunity — advisory, never a block. */
     opportunityId: uuid("opportunity_id"),
     type: itemType("type").notNull(),
+    /**
+     * §4: assigned by the same classification call that proposes the type, and
+     * invisible in daily use — it exists for the flow-distribution view. Null
+     * until that classifier ships, which is a real state and not a default: an
+     * unclassified item is not a "value" item.
+     */
+    flowIntent: flowIntent("flow_intent"),
     title: text("title").notNull(),
     ...timestamps,
   },
@@ -296,5 +312,139 @@ export const activity = pgTable(
       sql`(${t.actorKind} = 'human' and ${t.actorUserId} is not null and ${t.actorAgent} is null)
        or (${t.actorKind} = 'agent' and ${t.actorAgent} is not null and ${t.actorUserId} is null)`,
     ),
+  ],
+);
+
+/**
+ * product-spec.md §5 — a failed check, quoting the exact gap it found.
+ *
+ * **Mutable, deliberately.** The three negotiation moves of §5 are state
+ * transitions on this row: "doesn't apply here" removes the check, "already
+ * covered" re-runs it against evidence, and "we accept this risk" converts the
+ * gap to `accepted` stamped with the accepter's name. A gap that could not
+ * change would make the whole protocol unrepresentable. Each transition writes
+ * an `activity` row, which is where the history §15 calls load-bearing lives —
+ * the gap holds the current answer, the ledger holds how it got there.
+ *
+ * `disposition`, not `state`: see the enum. `check_id` is free text until
+ * rubric packs arrive in Phase 2.
+ */
+export const gap = pgTable(
+  "gap",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    itemId: uuid("item_id").notNull(),
+    checkId: text("check_id").notNull(),
+    tag: gapTag("tag").notNull(),
+    disposition: gapDisposition("disposition").notNull().default("open"),
+    /** §5: "a failure quotes the exact gap" — evidence, not a verdict. */
+    evidence: text("evidence").notNull(),
+    /**
+     * §5 stamps accepted and excluded gaps with the accepter. No foreign key to
+     * `auth.users`, matching the ledger's actor: this is a historical stamp, and
+     * an account being deleted must not erase who accepted a risk. Deliberately
+     * unlike `product.decider_user_id`, where nulling on delete is correct
+     * because a decider is a *current* assignment rather than a record.
+     */
+    resolvedByUserId: authUsersId("resolved_by_user_id"),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    resolutionNote: text("resolution_note"),
+    ...timestamps,
+  },
+  (t) => [
+    unique("gap_workspace_id").on(t.workspaceId, t.id),
+    foreignKey({
+      columns: [t.workspaceId, t.itemId],
+      foreignColumns: [item.workspaceId, item.id],
+      name: "gap_item_fk",
+    }).onDelete("cascade"),
+    index("gap_item_idx").on(t.workspaceId, t.itemId),
+    check("gap_check_len", sql`length(btrim(${t.checkId})) between 1 and 120`),
+    check("gap_evidence_len", sql`length(btrim(${t.evidence})) between 1 and 2000`),
+    // An open gap carries no stamp; a resolved one carries all three parts of
+    // it. The shape is a constraint rather than a convention, the same way the
+    // actor shape is on `activity`.
+    check(
+      "gap_resolution_shape",
+      sql`(${t.disposition} = 'open'
+             and ${t.resolvedByUserId} is null and ${t.resolvedAt} is null
+             and ${t.resolutionNote} is null)
+       or (${t.disposition} in ('accepted','excluded')
+             and ${t.resolvedByUserId} is not null and ${t.resolvedAt} is not null
+             and length(btrim(${t.resolutionNote})) > 0)`,
+    ),
+  ],
+);
+
+/**
+ * product-spec.md §13 — "decision, reason, date, who".
+ *
+ * **Append-only**, for the same reason `activity` is. §8 makes the packet a
+ * frozen coordinate carrying "the decision-log extract", and says nothing
+ * signed is ever cleaner than reality; a decision that could be edited after
+ * signing would make that false. §15 calls history load-bearing, and §8 wants
+ * "who agreed to ship without offline handling?" answerable forever.
+ *
+ * Correcting a decision is logging a new one that supersedes it — the same
+ * revert-as-new-version shape §11 gives artifacts. `supersedes_id` is what
+ * makes that queryable rather than a convention nobody can follow.
+ *
+ * **Every parent reference is `RESTRICT`.** An append-only table cannot carry
+ * `SET NULL` (nulling is an UPDATE the trigger refuses) and cannot carry
+ * `CASCADE` (a cascade is a DELETE, refused the same way). `RESTRICT` is the
+ * only shape that fails legibly: a foreign-key error naming this table, rather
+ * than an append-only error naming it from a delete the caller aimed elsewhere.
+ * `artifact_version → artifact` is the same choice for the same reason.
+ *
+ * There is deliberately no `updated_at`. A row that can never change has none.
+ */
+export const decision = pgTable(
+  "decision",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id").notNull(),
+    productId: uuid("product_id").notNull(),
+    /** Null when the decision attaches to the product rather than one item. */
+    itemId: uuid("item_id"),
+    statement: text("statement").notNull(),
+    reason: text("reason").notNull(),
+    /** No foreign key, as on `gap` and the ledger: this is a record, not a link. */
+    decidedByUserId: authUsersId("decided_by_user_id").notNull(),
+    decidedAt: timestamp("decided_at", { withTimezone: true }).notNull().defaultNow(),
+    supersedesId: uuid("supersedes_id"),
+    createdAt: timestamps.createdAt,
+  },
+  (t) => [
+    unique("decision_workspace_id").on(t.workspaceId, t.id),
+    foreignKey({
+      columns: [t.workspaceId],
+      foreignColumns: [workspace.id],
+      name: "decision_workspace_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.workspaceId, t.productId],
+      foreignColumns: [product.workspaceId, product.id],
+      name: "decision_product_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.workspaceId, t.itemId],
+      foreignColumns: [item.workspaceId, item.id],
+      name: "decision_item_fk",
+    }).onDelete("restrict"),
+    // Self-reference: a correction points at the decision it replaces. Same
+    // composite shape and same RESTRICT as every other parent here.
+    foreignKey({
+      columns: [t.workspaceId, t.supersedesId],
+      foreignColumns: [t.workspaceId, t.id],
+      name: "decision_supersedes_fk",
+    }).onDelete("restrict"),
+    index("decision_product_idx").on(t.workspaceId, t.productId, t.decidedAt.desc()),
+    index("decision_item_idx").on(t.workspaceId, t.itemId),
+    check("decision_statement_len", sql`length(btrim(${t.statement})) between 1 and 2000`),
+    check("decision_reason_len", sql`length(btrim(${t.reason})) between 1 and 2000`),
+    check("decision_not_self", sql`${t.supersedesId} is distinct from ${t.id}`),
   ],
 );
