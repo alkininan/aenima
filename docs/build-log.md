@@ -20,8 +20,11 @@ invited member signs in on whatever they are holding. v2.5 is the second form-la
 pass — the step header replaces the action row and steps left-align (OTP excepted), the
 floated label gets its own `ui-label` token, fields carry one text only, focus splits
 pointer from keyboard, validation flags slow and clears fast, `--n-placeholder` dims to
-#5C6069, and Iconoir is named as the icon set. Code matches all three, with one spec
-correction still owed — see open question 4.
+#5C6069, and Iconoir is named as the icon set. v2.6 closes the three things T0.6 found
+while implementing v2.5: the focus split's mechanism is input-modality tracking, not
+`:focus-visible`; the floated label sits at the field's text inset rather than a hardcoded
+16, so a leading icon moves label and value together; and the step header's title joins
+the OTP group as a named exception to step left-alignment. Code matches.
 
 ## Stack
 
@@ -62,7 +65,7 @@ T1.1 — `gap` and `decision` tables, `item.flow_intent`, RLS on both, the typed
 T0.6 — second form-language pass onto design spec v2.5: Iconoir replaces the hand-drawn
   glyphs with `icons.tsx` as the single import point, step header, `ui-label`, one-text
   fields, the focus split, flag-slow validation, dimmed placeholder — `e078857`; the spec
-  revision itself is `ceb5789`.
+  revision itself is `ceb5789`. Its three findings closed as design spec v2.6 — `a609532`.
 
 ## Decisions made during the build
 
@@ -168,9 +171,6 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
    human-only, with no `actor_kind` pair, because §13 has the agent *capture* decision moments and
    a human confirm them. If an agent ever needs to log one unattended, this needs the same
    `actor_kind` shape `activity` and `artifact_version` carry.
-4. **Design spec §6 still names the wrong mechanism.** v2.5's §6 and §8 describe the focus
-   split as `:focus-visible`; T0.6 found that insufficient and moved to the `<html>` modality
-   attribute. A spec edit is owed — the code is already right.
 
 ## Accounts and keys needed
 
