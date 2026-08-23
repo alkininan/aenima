@@ -1,3 +1,5 @@
+Read CLAUDE.md first — it is this repo's constitution and overrides everything below.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know

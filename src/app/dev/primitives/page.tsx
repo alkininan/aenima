@@ -8,6 +8,7 @@
  * The page stays a Server Component; the composites need state, so they live in
  * a client island below.
  */
+import { devOnly } from "../dev-only";
 import { AeMark } from "@/components/AeMark";
 import { CompositesPreview } from "./Composites";
 import { Button } from "@/components/ui/Button";
@@ -72,6 +73,8 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 }
 
 export default function PrimitivesPage() {
+  devOnly();
+
   return (
     <main className="mx-auto flex w-full max-w-[1200px] flex-col gap-[48px] px-[24px] py-[48px]">
       <header className="flex flex-wrap items-end gap-[16px]">

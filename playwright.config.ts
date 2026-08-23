@@ -1,6 +1,13 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const baseURL = "http://localhost:3000";
+// Derived, not assumed: CI and preview deploys are not on localhost. The
+// default keeps `pnpm e2e` a no-setup command on a dev machine.
+const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000";
+
+// Only boot a dev server when the target is the local default. Pointed at a
+// deployed URL, starting one would serve nothing the tests visit and leave a
+// stray process behind.
+const startsOwnServer = !process.env.PLAYWRIGHT_BASE_URL;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -20,10 +27,14 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
     },
   ],
-  webServer: {
-    command: "pnpm dev",
-    url: baseURL,
-    reuseExistingServer: !process.env.CI,
-    timeout: 120 * 1000,
-  },
+  ...(startsOwnServer
+    ? {
+        webServer: {
+          command: "pnpm dev",
+          url: baseURL,
+          reuseExistingServer: !process.env.CI,
+          timeout: 120 * 1000,
+        },
+      }
+    : {}),
 });
