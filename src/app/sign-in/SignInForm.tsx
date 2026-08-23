@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition, type FormEvent } from "react";
 
 import { AeMark } from "@/components/AeMark";
+import { cx } from "@/lib/cx";
 import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/Input";
@@ -131,31 +132,40 @@ export function SignInForm() {
 
   return (
     <div className="flex w-full max-w-[400px] flex-col gap-[24px]">
-      {/* §8 (v2.5) multi-step: step header → controls → primary, all on one
-          left edge. Step changes are instant — no slide between the two. */}
+      {/* §8 (v2.7) multi-step: the Æ mark is centered above every step. A step
+          with no back button centers its title and subtitle beneath the mark; a
+          step with one uses the header grammar instead, where the title block
+          left-aligns to itself beside the back control rather than centering.
+          Step changes are instant — no slide between the two. */}
       <div className="flex flex-col gap-[8px]">
-        <AeMark size={32} className="mb-[8px] text-n-primary" />
-        {/* The step header is the mobile-navigation grammar: back on the left
-            whenever a previous step exists, gap 12, the title block beside it.
-            Back and title share a first line; `items-start` is what keeps them
-            sharing it once the title block is two lines tall. */}
+        <AeMark size={32} className="mb-[8px] self-center text-n-primary" />
+        {/* Back on the left whenever a previous step exists, gap 12, the title
+            block beside it. Back and title share a first line; `items-start` is
+            what keeps them sharing it once the title block is two lines tall. */}
         <div className="flex items-start gap-[12px]">
           {step === "code" ? (
             <IconButton
               type="button"
-              variant="ghost"
+              variant="neutral"
               size="lg"
               label={t.common.back}
               icon={<ArrowLeftIcon />}
               disabled={pending}
               onClick={back}
-              // The 48 box pads the glyph by 12, so its optical left edge sits
-              // 12 in from the column. Pulling the button back by that much is
-              // what puts the arrow on the same edge as everything below it.
-              className="-ml-[12px] shrink-0"
+              // §8 (v2.7): neutral paints a visible --surface-2 circle, so the
+              // control has an edge of its own and sits on the column edge. The
+              // v2.5 optical pull existed only because ghost had none.
+              className="shrink-0"
             />
           ) : null}
-          <div className="flex min-w-0 flex-1 flex-col gap-[8px]">
+          <div
+            className={cx(
+              "flex min-w-0 flex-1 flex-col gap-[8px]",
+              // §8 (v2.7): centered only where there is no back control to
+              // center it against.
+              step === "email" && "text-center",
+            )}
+          >
             <h1 className="type-display-lg text-n-primary">
               {step === "email" ? t.signIn.title : t.signIn.codeTitle}
             </h1>

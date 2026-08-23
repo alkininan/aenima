@@ -46,6 +46,7 @@ describe("buttonClasses", () => {
   it.each([
     ["primary", ["bg-prime", "text-bg-base", "control-edge-strong"]],
     ["soft", ["bg-prime-soft", "text-prime"]],
+    ["neutral", ["bg-surface-2", "text-n-primary"]],
     ["secondary", ["border", "border-glass-border", "bg-transparent", "text-n-primary"]],
     ["ghost", ["bg-transparent", "text-n-secondary"]],
     ["danger", ["bg-danger-deep", "text-n-white"]],
@@ -72,6 +73,7 @@ describe("buttonClasses", () => {
   it.each([
     ["primary", "disabled:bg-prime/40"],
     ["soft", "disabled:bg-prime-soft/40"],
+    ["neutral", "disabled:bg-surface-2/40"],
     ["secondary", "disabled:border-glass-border/40"],
     ["danger", "disabled:bg-danger-deep/40"],
   ] as const)("drops the %s fill to 40%% when disabled", (variant, expected) => {

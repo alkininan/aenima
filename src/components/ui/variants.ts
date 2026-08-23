@@ -15,12 +15,13 @@ import { cx } from "@/lib/cx";
 /* -------------------------------------------------------------------------- */
 
 export type ButtonSize = "sm" | "md" | "lg";
-export type ButtonVariant = "primary" | "soft" | "secondary" | "ghost" | "danger";
+export type ButtonVariant = "primary" | "soft" | "neutral" | "secondary" | "ghost" | "danger";
 
 export const BUTTON_SIZES: readonly ButtonSize[] = ["sm", "md", "lg"];
 export const BUTTON_VARIANTS: readonly ButtonVariant[] = [
   "primary",
   "soft",
+  "neutral",
   "secondary",
   "ghost",
   "danger",
@@ -49,6 +50,9 @@ const BUTTON_VARIANT_CLASSES: Record<ButtonVariant, string> = {
   primary: "control-edge-strong bg-prime text-bg-base",
   // §8: --prime-soft fill, --prime label.
   soft: "control-edge-none bg-prime-soft text-prime",
+  // §8: --surface-2 fill, --n-primary label. Chrome that stays visible without
+  // reading as an accent — the step-header back button is the first user.
+  neutral: "control-edge-none bg-surface-2 text-n-primary",
   // §8: transparent, 1px --glass-border, --n-primary label; hover brightens border.
   // The brightened value is §7's glass hover border.
   secondary:
@@ -65,6 +69,7 @@ const BUTTON_VARIANT_CLASSES: Record<ButtonVariant, string> = {
 const BUTTON_DISABLED_CLASSES: Record<ButtonVariant, string> = {
   primary: "disabled:bg-prime/40 disabled:text-n-disabled",
   soft: "disabled:bg-prime-soft/40 disabled:text-n-disabled",
+  neutral: "disabled:bg-surface-2/40 disabled:text-n-disabled",
   secondary: "disabled:border-glass-border/40 disabled:text-n-disabled",
   ghost: "disabled:text-n-disabled",
   danger: "disabled:bg-danger-deep/40 disabled:text-n-disabled",

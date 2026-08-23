@@ -17,7 +17,7 @@ vi.mock("next/navigation", () => ({
 const { SignInForm } = await import("./SignInForm");
 
 /**
- * The §8 (v2.5) step header, on the step that needs a backend to reach.
+ * The §8 (v2.7) step header, on the step that needs a backend to reach.
  *
  * The browser pass covers step one — alignment, the focus split, the absent
  * placeholder — but the code step is behind a server action that talks to
@@ -65,6 +65,36 @@ describe("sign-in step header", () => {
     // And is nowhere near the primary — the v2.3 action row that held both is
     // gone, so they no longer share a parent.
     expect(backButton().parentElement).not.toBe(primary().parentElement);
+  });
+
+  /**
+   * §8 (v2.7): the back is the neutral variant — a visible `--surface-2` circle,
+   * because ghost disappears in a header. The v2.5 optical pull that dragged the
+   * ghost 12 left goes with it: a control with its own edge sits on the column
+   * edge, so re-adding the pull would push the fill outside the column.
+   */
+  it("gives back a visible neutral fill and no optical pull", async () => {
+    await reachCodeStep();
+
+    expect(backButton().className).toContain("bg-surface-2");
+    expect(backButton().className).not.toContain("-ml-");
+  });
+
+  /**
+   * §8 (v2.7): a step with no back button centers its title and subtitle; a step
+   * with one keeps them left-aligned to each other, "never centered beside a
+   * back control". The browser pass measures the painted glyphs on step one —
+   * this is the half of the rule that only the unreachable step can show.
+   */
+  it("centers the title block on step one and left-aligns it on step two", async () => {
+    const titleBlock = () => screen.getByRole("heading").closest("div")!;
+
+    const { unmount } = render(<SignInForm />);
+    expect(titleBlock().className).toContain("text-center");
+    unmount();
+
+    await reachCodeStep();
+    expect(titleBlock().className).not.toContain("text-center");
   });
 
   /**

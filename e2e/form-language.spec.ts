@@ -283,32 +283,94 @@ test.describe("step layout", () => {
     [768, 1024],
     [375, 812],
   ] as const) {
-    test(`title, subtitle and field share one left edge at ${width}`, async ({ page }) => {
+    test(`the first step centers its mark, title and subtitle at ${width}`, async ({ page }) => {
       await page.setViewportSize({ width, height });
       await page.goto("/sign-in");
       await page.evaluate(() => document.fonts.ready);
 
-      const edges = await page.evaluate(() => {
-        const x = (selector: string) =>
-          Math.round(document.querySelector(selector)!.getBoundingClientRect().x);
+      const measured = await page.evaluate(() => {
+        /* Element boxes are the wrong instrument here. An h1 in a flex column
+         * spans the column whether its text is left-aligned or centered, so
+         * getBoundingClientRect().x reads identically under §8 v2.6 and v2.7 —
+         * a test built on it passes through the revision without noticing. A
+         * Range measures the painted glyphs, which is what the rule is about. */
+        const textBox = (el: Element) => {
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          return range.getBoundingClientRect();
+        };
+        const mid = (r: DOMRect) => Math.round(r.x + r.width / 2);
+        const column = document.querySelector(".field")!.getBoundingClientRect();
+
         return {
-          title: x("h1"),
-          subtitle: x("h1 + p"),
-          pill: x(".field-pill"),
-          submit: x('button[type="submit"]'),
+          columnMid: mid(column),
+          // The mark is the first svg in the page's reading order; the next one
+          // is the field's leading mail icon.
+          markMid: mid(document.querySelector("main svg")!.getBoundingClientRect()),
+          titleMid: mid(textBox(document.querySelector("h1")!)),
+          subtitleMid: mid(textBox(document.querySelector("h1 + p")!)),
         };
       });
 
-      // One edge, not four. The label sits at the pill's text inset, which is
-      // inside this edge by design — the pill is what aligns, and a leading
-      // icon would move the label further in without moving the pill.
-      expect(edges.subtitle).toBe(edges.title);
-      expect(edges.pill).toBe(edges.title);
-      expect(edges.submit).toBe(edges.title);
+      /* §8 (v2.7): the Æ mark is centered above every step, and a step with no
+       * back button centers its title and subtitle beneath it. One pixel of
+       * slack — a centered box on an odd column width lands on a half. */
+      expect(Math.abs(measured.markMid - measured.columnMid)).toBeLessThanOrEqual(1);
+      expect(Math.abs(measured.titleMid - measured.columnMid)).toBeLessThanOrEqual(1);
+      expect(Math.abs(measured.subtitleMid - measured.columnMid)).toBeLessThanOrEqual(1);
     });
   }
 
+  test("the floated label hugs the field edge, behind a leading icon", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/sign-in");
+    await page.evaluate(() => document.fonts.ready);
+
+    const email = page.getByLabel("Email");
+    await email.blur();
+    await page.waitForTimeout(250);
+
+    const read = () =>
+      page.evaluate(() => {
+        const input = document.querySelector('input[name="email"]') as HTMLInputElement;
+        const field = input.closest(".field")!;
+        const pill = input.parentElement!.getBoundingClientRect();
+        const label = field.querySelector("label")!.getBoundingClientRect();
+        /* The label box spans the zone; its text is what moves, so measure the
+         * glyphs rather than the box. */
+        const range = document.createRange();
+        range.selectNodeContents(field.querySelector("label")!);
+        return {
+          textFromEdge: Math.round(range.getBoundingClientRect().x - pill.x),
+          valueFromEdge: Math.round(input.getBoundingClientRect().x - pill.x),
+          zonePadding: Math.round(label.x - pill.x),
+        };
+      });
+
+    /* At rest the label sits where the value will, which this field puts behind
+     * a 24 mail icon: 16 pad + 24 icon + 8 gap. The value reads one more than
+     * the label because these are measured from the pill's border box and the
+     * pill carries a 1px border, which the absolutely-positioned label — a
+     * child of the composite, not of the pill — does not sit inside. */
+    const rest = await read();
+    expect(rest.textFromEdge).toBe(48);
+    expect(rest.valueFromEdge).toBe(49);
+
+    await email.focus();
+    await page.waitForTimeout(250);
+
+    /* §8 (v2.7): floated, the label hugs the field's left edge at 8 and stays
+     * there regardless of the icon — only the value moves for one. This is the
+     * assertion that would have failed before the revision, where the floated
+     * label tracked the value to 48. */
+    const floated = await read();
+    expect(floated.textFromEdge).toBe(8);
+    expect(floated.zonePadding).toBe(0);
+    expect(floated.valueFromEdge).toBe(49);
+  });
+
   /* Step two needs a live Supabase to reach, which is why the OTP geometry
-   * tests above use /dev/primitives. The step header's structure — back above
-   * the primary, not beside it — is pinned in SignInForm.dom.test.tsx. */
+   * tests above use /dev/primitives. The step header's structure — the neutral
+   * back beside a title block that left-aligns to itself rather than centering
+   * — is pinned in SignInForm.dom.test.tsx. */
 });

@@ -27,8 +27,11 @@ export const en = {
     sendCode: "Send code",
     emailInvalid: "That doesn't look like an email address yet.",
     codeTitle: "Enter your code",
-    // Deliberately "if there's an account" — the same words whether or not there is.
-    codeSentTo: (email: string) => `If there's an account for ${email}, a code is on its way.`,
+    // §12 (v2.7): stated flatly. `shouldCreateUser` is true in `requestCode`, so
+    // sign-in creates the account and every valid address receives a code — the
+    // old conditional hedged against a branch that does not exist. Still says the
+    // same words for every address, which is what keeps it non-enumerating.
+    codeSentTo: (email: string) => `Code sent to ${email}`,
     codeLabel: "Six-digit code",
     codeSubtitle: "The code works for about ten minutes.",
     codeIncomplete: "That's not six digits yet.",

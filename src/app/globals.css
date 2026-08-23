@@ -580,7 +580,14 @@
   .field-label {
     position: absolute;
     top: 0;
-    left: var(--field-label-x, 16px);
+    /* §8 (v2.7): the floated label hugs the field's left edge, sitting in a
+     * label zone padded 8 a side. It no longer tracks the value's text inset,
+     * so a leading icon moves the value and leaves the label where it is. */
+    left: 0;
+    right: 0;
+    padding-inline: 8px;
+    /* The zone is 22h and reserved; a label that wrapped would break that. */
+    white-space: nowrap;
     margin: 0;
     color: var(--n-secondary);
     font-family: var(--font-ui);
@@ -602,16 +609,19 @@
    * work without JS — every field carries a placeholder (a format hint, or a
    * single space when it has none), so "empty" is expressible in CSS. */
   .field:has(.field-input:placeholder-shown:not(:focus)) .field-label {
-    transform: translateY(35px);
+    /* At rest the label sits where the value will, so it travels horizontally
+     * as well as vertically: 16 - 8 of zone padding, or 48 - 8 behind an icon. */
+    transform: translate(var(--field-label-rest-x, 8px), 35px);
     font-size: 17px;
     font-weight: 400;
     line-height: 22px;
   }
 
-  /* A leading icon (24) plus the 8 gap moves where the value starts, and the
-   * label tracks it: 16 + 24 + 8. */
+  /* A leading icon (24) plus the 8 gap moves where the value starts — 16 + 24
+   * + 8 — so the at-rest label goes with it. The floated position does not
+   * move: §8 (v2.7) pins it to the field's edge, icon or no icon. */
   .field-with-leading-icon {
-    --field-label-x: 48px;
+    --field-label-rest-x: 40px;
   }
 
   /* §8 (v2.5): a field shows one text, ever — its label. Format hints are
