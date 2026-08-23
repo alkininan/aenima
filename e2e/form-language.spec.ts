@@ -299,8 +299,9 @@ test.describe("step layout", () => {
         };
       });
 
-      // One edge, not four. The label sits at the pill's 16px text inset, which
-      // is inside this edge by design — the pill is what aligns.
+      // One edge, not four. The label sits at the pill's text inset, which is
+      // inside this edge by design — the pill is what aligns, and a leading
+      // icon would move the label further in without moving the pill.
       expect(edges.subtitle).toBe(edges.title);
       expect(edges.pill).toBe(edges.title);
       expect(edges.submit).toBe(edges.title);
