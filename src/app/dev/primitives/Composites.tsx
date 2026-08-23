@@ -32,6 +32,9 @@ import {
   VALIDATION_PAUSE_MS,
   useFieldValidation,
 } from "@/components/ui/useFieldValidation";
+import { formatCountdown, useCooldown } from "@/components/ui/useCooldown";
+import { inputHelperClasses } from "@/components/ui/variants";
+import { getDictionary } from "@/i18n";
 
 function Section({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -182,6 +185,51 @@ function ValidationDemo() {
   );
 }
 
+/**
+ * §8 (v2.10) resend cooldown, and the pairing the rule exists for.
+ *
+ * The real hook and the real controls; only the request is stubbed, and it
+ * always comes back rate-limited because that is the case the law is about.
+ * The failure belongs to the resend, so it surfaces at the resend — the boxes
+ * beside it stay clean. Product copy rather than state names here, because the
+ * string itself is half of what is being demonstrated.
+ */
+function ResendDemo() {
+  const t = getDictionary();
+  const [code, setCode] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const cooldown = useCooldown();
+
+  return (
+    <div className="flex flex-col items-center gap-[16px]">
+      <OtpInput label={t.signIn.codeLabel} value={code} onValueChange={setCode} />
+
+      <div className="flex flex-col items-center">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={cooldown.active}
+          onClick={() => {
+            cooldown.start();
+            setError(t.signIn.rateLimited);
+          }}
+        >
+          {cooldown.active
+            ? t.signIn.resendIn(formatCountdown(cooldown.remainingMs))
+            : t.signIn.resend}
+        </Button>
+
+        {error ? (
+          <span role="status" className={inputHelperClasses("error", false)}>
+            {error}
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function Composites() {
   const [type, setType] = useState<string | null>(null);
   const [long, setLong] = useState<string | null>("option-9");
@@ -283,6 +331,16 @@ function Composites() {
           />
           <OtpInput label="Disabled" disabled value="4829" onValueChange={() => {}} />
         </div>
+      </Section>
+
+      <Section label="Resend cooldown">
+        <p className="type-ui-footnote text-n-secondary">
+          Press it: the control disables itself for 60s and counts down in its own label, back to
+          its normal one at zero. The stubbed reply is always a rate limit, and the message lands
+          here rather than on the boxes above — a helper line carries only errors about its own
+          field&apos;s value.
+        </p>
+        <ResendDemo />
       </Section>
 
       <Section label="Checkbox and radio">

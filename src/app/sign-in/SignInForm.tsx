@@ -10,7 +10,8 @@ import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/Input";
 import { OtpInput } from "@/components/ui/OtpInput";
 import { ArrowLeftIcon, MailIcon } from "@/components/ui/icons";
-import { OTP_BOX_COUNT } from "@/components/ui/variants";
+import { OTP_BOX_COUNT, inputHelperClasses } from "@/components/ui/variants";
+import { useCooldown, formatCountdown } from "@/components/ui/useCooldown";
 import { useFieldValidation } from "@/components/ui/useFieldValidation";
 import { isValidEmail, isValidOtp } from "@/lib/auth/otp";
 import { enabledProviders } from "@/lib/auth/providers";
@@ -51,6 +52,16 @@ export function SignInForm() {
    * parses, which is not what it is for.
    */
   const [serverError, setServerError] = useState<string | null>(null);
+
+  /**
+   * §8 (v2.10): the resend's failures are the resend's. A helper line carries
+   * only errors about its own field's value, so a rate limit — which is about
+   * the request, not about the six digits being typed — surfaces at the control
+   * that made it. This used to land on `codeError` and paint the OTP boxes red
+   * for something the person entering the code had not done.
+   */
+  const [resendError, setResendError] = useState<string | null>(null);
+  const resendCooldown = useCooldown();
 
   // Only email is on today; Google and Apple are declared-but-disabled, so this
   // renders one control and no dead buttons.
@@ -128,6 +139,33 @@ export function SignInForm() {
     setCode("");
     setCodeError(null);
     setServerError(null);
+    setResendError(null);
+    // The cooldown deliberately survives: it tracks the provider's window, and
+    // that window does not reset because someone stepped back and forward.
+  };
+
+  /**
+   * §8 (v2.10): the cooldown starts on the press, not on the reply. In between
+   * is exactly where the second tap used to land — and a control that cannot
+   * succeed yet is disabled, never merely apologised for.
+   */
+  const resend = () => {
+    setResendError(null);
+    resendCooldown.start();
+
+    startTransition(async () => {
+      const result = await requestCode(email);
+
+      if (result.status === "sent") {
+        setCode("");
+        setCodeError(null);
+        return;
+      }
+
+      setResendError(
+        result.status === "rate-limited" ? t.signIn.rateLimited : t.signIn.unavailable,
+      );
+    });
   };
 
   return (
@@ -238,29 +276,32 @@ export function SignInForm() {
             {t.common.continue}
           </Button>
 
-          {/* §8: one tertiary action per step, beneath the primary, centred. */}
-          <div className="flex justify-center">
+          {/* §8: one tertiary action per step, beneath the primary, centred.
+              §8 (v2.10): it disables itself for 60s after each use and counts
+              down in its own label, returning to its normal label at zero. */}
+          <div className="flex flex-col items-center">
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              disabled={pending}
-              onClick={() =>
-                startTransition(async () => {
-                  const result = await requestCode(email);
-                  setCodeError(
-                    result.status === "rate-limited"
-                      ? t.signIn.rateLimited
-                      : result.status === "sent"
-                        ? null
-                        : t.signIn.unavailable,
-                  );
-                  if (result.status === "sent") setCode("");
-                })
-              }
+              disabled={pending || resendCooldown.active}
+              onClick={resend}
             >
-              {t.signIn.resend}
+              {resendCooldown.active
+                ? t.signIn.resendIn(formatCountdown(resendCooldown.remainingMs))
+                : t.signIn.resend}
             </Button>
+
+            {/* §8 (v2.10): a failure belonging to this control surfaces at this
+                control. `role="status"` because it arrives after the press,
+                with focus still on the OTP boxes — unannounced, it would be a
+                message nobody driving by keyboard ever hears. Unreserved: it is
+                the last thing on the step, so nothing above it can shift. */}
+            {resendError ? (
+              <span role="status" className={inputHelperClasses("error", false)}>
+                {resendError}
+              </span>
+            ) : null}
           </div>
         </form>
       )}

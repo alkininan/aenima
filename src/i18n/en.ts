@@ -38,8 +38,17 @@ export const en = {
     codeRejected: "That code didn't work. Check it, or ask for a new one.",
     codeExpired: "That code has expired. Ask for a new one.",
     resend: "Send a new code",
-    // §10: calm on the degraded path, no red banner, no blame.
-    rateLimited: "That's a few codes in a short while. Give it a minute, then try again.",
+    /**
+     * §8 (v2.10): the cooldown counts down inside the control's own label. One
+     * string with the clock interpolated rather than a label plus a separate
+     * counter — §12 reserves +30% for TR/NL and the parenthetical does not sit
+     * in the same place in every language.
+     */
+    resendIn: (clock: string) => `Send a new code (${clock})`,
+    // §12 (v2.10): states the cause and stops there. The old line — "that's a
+    // few codes in a short while" — implied the person had been excessive, when
+    // the product was the one that left the button live between attempts.
+    rateLimited: "Too many requests. Wait a moment before asking for another code.",
     unavailable: "Sign-in is unavailable right now.",
   },
   workspace: {

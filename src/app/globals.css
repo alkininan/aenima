@@ -680,18 +680,22 @@
    * single space when it has none), so "empty" is expressible in CSS. */
   .field:has(.field-input:placeholder-shown:not(:focus)) .field-label {
     /* At rest the label sits where the value will, so it travels horizontally
-     * as well as vertically: 16 - 8 of zone padding, or 48 - 8 behind an icon. */
-    transform: translate(var(--field-label-rest-x, 8px), 35px);
+     * as well as vertically. The value's x is 1 + 16 — the pill's own border
+     * plus its padding — and the label is absolute to the composite, outside
+     * that border, so the border is part of the offset: 17 - 8 of zone padding
+     * is 9. §8 (v2.10): the border counts, it is not a rounding error. */
+    transform: translate(var(--field-label-rest-x, 9px), 35px);
     font-size: 17px;
     font-weight: 400;
     line-height: 22px;
   }
 
-  /* A leading icon (24) plus the 8 gap moves where the value starts — 16 + 24
-   * + 8 — so the at-rest label goes with it. The floated position does not
-   * move: §8 (v2.7) pins it to the field's edge, icon or no icon. */
+  /* A leading icon (24) plus the 8 gap moves where the value starts — 1 + 16 +
+   * 24 + 8 — so the at-rest label goes with it, border included: 49 - 8 is 41.
+   * The floated position does not move: §8 (v2.7) pins it to the field's edge,
+   * icon or no icon, and it is the field's edge that the 8 is measured from. */
   .field-with-leading-icon {
-    --field-label-rest-x: 40px;
+    --field-label-rest-x: 41px;
   }
 
   /* §8 (v2.5): a field shows one text, ever — its label. Format hints are

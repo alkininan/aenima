@@ -347,14 +347,18 @@ test.describe("step layout", () => {
         };
       });
 
-    /* At rest the label sits where the value will, which this field puts behind
-     * a 24 mail icon: 16 pad + 24 icon + 8 gap. The value reads one more than
-     * the label because these are measured from the pill's border box and the
-     * pill carries a 1px border, which the absolutely-positioned label — a
-     * child of the composite, not of the pill — does not sit inside. */
+    /* §8 (v2.10): at rest the label sits *where the value will*, and that is now
+     * exact rather than close. Both are measured from the pill's border box, and
+     * the pill's own 1px border is part of the offset the label has to clear —
+     * the label is absolutely positioned in the composite, outside that border,
+     * so it carries the 1 explicitly. Behind a 24 mail icon and its 8 gap:
+     * 1 + 16 + 24 + 8 = 49, for the glyphs and the value alike.
+     *
+     * Equality is the assertion, not the number: two constants that happen to
+     * match would pass a pair of `toBe`s while drifting apart. */
     const rest = await read();
-    expect(rest.textFromEdge).toBe(48);
-    expect(rest.valueFromEdge).toBe(49);
+    expect(rest.textFromEdge).toBe(rest.valueFromEdge);
+    expect(rest.textFromEdge).toBe(49);
 
     await email.focus();
     await page.waitForTimeout(250);
@@ -496,5 +500,65 @@ test.describe("aero materials", () => {
     expect(pressed.boxHeight).toBeLessThan(rest.boxHeight);
 
     await page.mouse.up();
+  });
+});
+
+/**
+ * §8 (v2.10) — the resend cooldown and where a control's failure is allowed to
+ * land, in a browser.
+ *
+ * The clock is proven on fake timers in `useCooldown.dom.test.ts` and the form's
+ * wiring in `SignInForm.dom.test.tsx`; the sign-in code step needs a live
+ * Supabase to reach, so what runs here is the same pairing on /dev/primitives —
+ * real hook, real controls, a stubbed reply that is always a rate limit.
+ */
+test.describe("resend cooldown", () => {
+  test("a resend failure lands on the resend, never on the OTP field", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/dev/primitives");
+
+    /* Scoped to its own section: the OTP section further up the page renders a
+     * deliberate error state, so a page-wide "no error anywhere" would pass for
+     * the wrong reason and fail for another. */
+    const demo = page
+      .locator("section")
+      .filter({ has: page.getByRole("heading", { name: "Resend cooldown" }) });
+
+    /* Exact: Playwright matches an accessible name loosely, and the cooling
+     * label "Send a new code (0:47)" contains the resting one — a loose
+     * matcher would find the disabled control and call it the live one. */
+    const resend = demo.getByRole("button", { name: "Send a new code", exact: true });
+    await expect(resend).toBeEnabled();
+
+    await resend.click();
+
+    // §8 (v2.10): the failure belongs to the control that made the request.
+    await expect(demo.getByRole("status")).toHaveText(
+      "Too many requests. Wait a moment before asking for another code.",
+    );
+
+    /* And the boxes beside it say nothing. The helper line under an OTP group is
+     * reserved, so it is always in the DOM — "carries no error" is an empty line
+     * and an unmarked group, not an absent element. */
+    const boxes = await demo.evaluate((section) => {
+      const group = section.querySelector('[role="group"]')!;
+      const inputs = [...group.querySelectorAll("input")];
+      // The composite is label / group / helper; the helper is the last of them.
+      const helper = group.parentElement!.lastElementChild!;
+      return {
+        helperText: (helper.textContent ?? "").trim(),
+        invalid: inputs.some((input) => input.hasAttribute("aria-invalid")),
+        describedBy: inputs.some((input) => input.hasAttribute("aria-describedby")),
+      };
+    });
+
+    expect(boxes.helperText).toBe("");
+    expect(boxes.invalid).toBe(false);
+    expect(boxes.describedBy).toBe(false);
+
+    // §8 (v2.10): and the control that cannot succeed yet is disabled, counting
+    // down in its own label rather than merely apologising.
+    await expect(resend).toHaveCount(0);
+    await expect(demo.getByRole("button", { name: /Send a new code \(\d:\d\d\)/ })).toBeDisabled();
   });
 });

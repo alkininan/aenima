@@ -172,3 +172,96 @@ describe("sign-in field language", () => {
     expect(screen.queryByText("Sign-in is unavailable right now.")).toBeNull();
   });
 });
+
+/**
+ * §8 (v2.10) resend cooldown, and where its failures are allowed to land.
+ *
+ * The clock itself is proven in `useCooldown.dom.test.ts` on fake timers. What
+ * only the form can show is the wiring: which state a failed resend writes to,
+ * and which control ends up wearing it.
+ */
+describe("sign-in resend", () => {
+  beforeEach(() => {
+    requestCode.mockReset();
+    verifyCode.mockReset();
+  });
+
+  const otpGroup = () => screen.getByRole("group");
+  /** The composite is label / group / helper — §8 reserves the helper line. */
+  const otpHelper = () => otpGroup().parentElement!.lastElementChild!;
+
+  /**
+   * §8 (v2.10): a field's helper line carries only errors about that field's
+   * own value. A rate limit is about the request the resend made, not about the
+   * six digits being typed — and it used to land on `codeError`, painting the
+   * boxes red for something the person entering the code had not done.
+   */
+  it("puts a resend failure on the resend, never on the OTP field", async () => {
+    const user = await reachCodeStep();
+    requestCode.mockResolvedValue({ status: "rate-limited" });
+
+    await user.click(screen.getByRole("button", { name: "Send a new code" }));
+
+    // §12 (v2.10): states the cause, does not scold.
+    const message = await screen.findByRole("status");
+    expect(message.textContent).toBe(
+      "Too many requests. Wait a moment before asking for another code.",
+    );
+
+    // The boxes stay unmarked and their reserved line stays empty.
+    expect(otpHelper().textContent).toBe("");
+    const boxes = within(otpGroup()).getAllByRole("textbox");
+    expect(boxes.some((box) => box.hasAttribute("aria-invalid"))).toBe(false);
+    expect(boxes.some((box) => box.hasAttribute("aria-describedby"))).toBe(false);
+  });
+
+  // §8 (v2.10): the cooldown starts on the press, not on the reply — the gap
+  // between them is exactly where a second tap would land.
+  it("disables the resend at the tap and counts down in its own label", async () => {
+    const user = await reachCodeStep();
+    requestCode.mockResolvedValue({ status: "sent" });
+
+    await user.click(screen.getByRole("button", { name: "Send a new code" }));
+
+    expect(screen.queryByRole("button", { name: "Send a new code" })).toBeNull();
+    const cooling = screen.getByRole("button", { name: /^Send a new code \(\d:\d\d\)$/ });
+    expect((cooling as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  /**
+   * A successful resend says nothing at all: §8's helper slot speaks only in
+   * states, and "it worked" is not one. The subtitle already carries where the
+   * code went.
+   */
+  it("says nothing on a resend that works", async () => {
+    const user = await reachCodeStep();
+    requestCode.mockResolvedValue({ status: "sent" });
+
+    await user.click(screen.getByRole("button", { name: "Send a new code" }));
+
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(otpHelper().textContent).toBe("");
+  });
+
+  /**
+   * §8 (v2.10): the cooldown is the mechanism, not advice. The second tap that
+   * used to hit the provider's rate limit does not reach it at all now — which
+   * is the whole reason the failure stopped needing somewhere to land.
+   */
+  it("refuses the second tap inside the window", async () => {
+    const user = await reachCodeStep();
+    requestCode.mockResolvedValue({ status: "rate-limited" });
+
+    // One call so far: the code request that reached this step.
+    expect(requestCode).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole("button", { name: "Send a new code" }));
+    await screen.findByRole("status");
+    expect(requestCode).toHaveBeenCalledTimes(2);
+
+    await user.click(screen.getByRole("button", { name: /Send a new code \(/ }));
+
+    // Still cooling down, so nothing new was asked for.
+    expect(requestCode).toHaveBeenCalledTimes(2);
+  });
+});
