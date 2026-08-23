@@ -43,7 +43,7 @@ test("a field does not shift as it goes from rest to focused to errored", async 
         pillY: pill.y,
         helperHeight: Math.round(helper.height),
         pillHeight: Math.round(pill.height),
-        // 22 label zone + 48 pill + 8 gap + 18 helper. If a reserved slot
+        // 24 label zone + 48 pill + 8 gap + 18 helper. If a reserved slot
         // collapses when it has nothing to show, this is what changes.
         compositeHeight: Math.round(composite.height),
         submitY: button.y,
@@ -75,10 +75,10 @@ test("a field does not shift as it goes from rest to focused to errored", async 
   expect(focused).toEqual(rest);
   expect(errored).toEqual(rest);
 
-  // §8 (v2.5): 48h field inside a composite that is 22 + 48 + 8 + 18. The zone
-  // grew by 2 with the label's step from ui-caption 12/16 to ui-label 13/18.
+  // §8 (v2.12): 48h field inside a composite that is 24 + 48 + 8 + 18. The zone
+  // is 18 of ui-label line plus the gap above the field, and that gap went 4 → 6.
   expect(rest.pillHeight).toBe(48);
-  expect(rest.compositeHeight).toBe(96);
+  expect(rest.compositeHeight).toBe(98);
 
   // The helper slot holds its 18h line before it has anything to say, which is
   // what "reserved" means and what keeps the button still above.
@@ -560,5 +560,65 @@ test.describe("resend cooldown", () => {
     // down in its own label rather than merely apologising.
     await expect(resend).toHaveCount(0);
     await expect(demo.getByRole("button", { name: /Send a new code \(\d:\d\d\)/ })).toBeDisabled();
+  });
+});
+
+/**
+ * §8 (v2.12) — the leading icon takes the field's state colour.
+ *
+ * Computed colour, not a class list. The rule is `:has()` and `:focus-within`
+ * on the pill painting a child, and the failure it has to catch is the rule
+ * matching nothing at all — which leaves every icon its resting grey and looks
+ * exactly like a passing class-name test. The four states are read together so
+ * one of them silently falling back is visible against the other three.
+ */
+test.describe("field state reaches the leading icon", () => {
+  // §2 tokens, resolved: --prime, --danger, --n-secondary, --n-disabled.
+  const PRIME = "rgb(33, 184, 220)";
+  const DANGER = "rgb(255, 114, 118)";
+  const SECONDARY = "rgb(157, 163, 176)";
+  const DISABLED = "rgb(77, 81, 89)";
+
+  test("rest, focus, error and disabled each reach it", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/dev/primitives");
+    await page.evaluate(() => document.fonts.ready);
+
+    const demo = page.locator("section").filter({
+      has: page.getByRole("heading", { name: "Field state, all the way to the icon" }),
+    });
+
+    const read = () =>
+      demo.evaluate((section) => {
+        const fields = [...section.querySelectorAll(".field")];
+        const leading = (index: number) =>
+          getComputedStyle(fields[index]!.querySelector(".field-icon-leading")!).color;
+        // The pill is [leading, input, trailing] — the trailing slot is
+        // decoration and must not follow the state.
+        const trailing = getComputedStyle(
+          fields[3]!.querySelector(".field-pill")!.lastElementChild!,
+        ).color;
+        return { rest: leading(0), error: leading(1), disabled: leading(2), trailing };
+      });
+
+    const atRest = await read();
+    expect(atRest.rest).toBe(SECONDARY);
+    expect(atRest.error).toBe(DANGER);
+    expect(atRest.disabled).toBe(DISABLED);
+    expect(atRest.trailing).toBe(SECONDARY);
+
+    // Focus is the one state that needs a pointer to reach. The colour
+    // transitions over --t-fast, and a computed value read mid-transition is
+    // the *interpolated* one — which on the first frame is still the resting
+    // grey, and reads as "the rule never matched".
+    await demo.locator(".field input").first().click();
+    await page.waitForTimeout(250);
+    const focused = await read();
+    expect(focused.rest).toBe(PRIME);
+
+    // And the other three are unmoved by one field taking focus.
+    expect(focused.error).toBe(DANGER);
+    expect(focused.disabled).toBe(DISABLED);
+    expect(focused.trailing).toBe(SECONDARY);
   });
 });

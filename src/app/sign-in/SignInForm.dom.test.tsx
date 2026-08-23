@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RESEND_COOLDOWN_MS } from "@/components/ui/useCooldown";
+import { OTP_EXPIRY_SECONDS } from "@/lib/auth/otp";
 
 const requestCode = vi.fn();
 const verifyCode = vi.fn();
@@ -351,5 +352,113 @@ describe("sign-in resend", () => {
 
     // Still cooling down, so nothing new was asked for.
     expect(requestCode).toHaveBeenCalledTimes(2);
+  });
+});
+
+/**
+ * §12 (v2.12) — the code step's two errors, at the only place that picks
+ * between them.
+ *
+ * `hasCodeExpired` is unit-tested as arithmetic. What this covers is the wiring
+ * that arithmetic hangs off: that the send clock is actually started, actually
+ * read, and that the same provider refusal produces different words depending
+ * on how long the code has been sitting there. The refusal is identical in both
+ * tests below — that is the point.
+ */
+describe("sign-in code errors", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
+    requestCode.mockReset();
+    verifyCode.mockReset();
+  });
+  afterEach(() => vi.useRealTimers());
+
+  const WRONG = "That code isn't right. Check it, or ask for a new one.";
+  const EXPIRED = "That code has expired. Ask for a new one.";
+
+  /** Reaches the code step and types a full six digits, which self-submits. */
+  async function enterCode() {
+    requestCode.mockResolvedValue({ status: "sent" });
+    const user = userEvent.setup();
+    render(<SignInForm />);
+
+    await user.type(screen.getByLabelText("Email"), "someone@example.com");
+    await user.click(screen.getByRole("button", { name: "Send code" }));
+    await screen.findByRole("heading", { name: "Enter your code" });
+    return user;
+  }
+
+  const submitCode = async (user: ReturnType<typeof userEvent.setup>) => {
+    const boxes = within(screen.getByRole("group")).getAllByRole("textbox");
+    await user.type(boxes[0]!, "482913");
+  };
+
+  /**
+   * The bug this closes: a mistyped digit was answered with the expiry line,
+   * which sends someone to their inbox to wait for a code already sitting in
+   * it. The provider says `otp_expired` for a wrong code — it is the name of
+   * its one refusal, not a finding about the code.
+   */
+  it("calls a code refused inside its window wrong, not expired", async () => {
+    const user = await enterCode();
+    verifyCode.mockResolvedValue({ status: "code-rejected" });
+
+    await submitCode(user);
+
+    expect(await screen.findByText(WRONG)).not.toBeNull();
+    expect(screen.queryByText(EXPIRED)).toBeNull();
+  });
+
+  it("calls the same refusal expired once the window has closed", async () => {
+    const user = await enterCode();
+    verifyCode.mockResolvedValue({ status: "code-rejected" });
+
+    // The page sat open past the code's ten minutes. Same refusal, different
+    // cause, and now different words.
+    await act(async () => {
+      vi.advanceTimersByTime(OTP_EXPIRY_SECONDS * 1000);
+    });
+    await submitCode(user);
+
+    expect(await screen.findByText(EXPIRED)).not.toBeNull();
+    expect(screen.queryByText(WRONG)).toBeNull();
+  });
+
+  /**
+   * A resend restarts the clock, so a code that arrives fresh is judged fresh
+   * even on a page that has been open far longer than one code's life.
+   */
+  it("restarts the window on a resend, so a fresh code is judged fresh", async () => {
+    const user = await enterCode();
+
+    // Past the first code's life, so the resend is live again and anything
+    // judged against the *first* send would read as expired.
+    await act(async () => {
+      vi.advanceTimersByTime(OTP_EXPIRY_SECONDS * 1000);
+    });
+
+    requestCode.mockResolvedValue({ status: "sent" });
+    await user.click(screen.getByRole("button", { name: "Send a new code" }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    verifyCode.mockResolvedValue({ status: "code-rejected" });
+    await submitCode(user);
+
+    expect(await screen.findByText(WRONG)).not.toBeNull();
+    expect(screen.queryByText(EXPIRED)).toBeNull();
+  });
+
+  // Neither of the two code errors: an outage is the server's, and says so.
+  it("does not dress an outage up as a bad code", async () => {
+    const user = await enterCode();
+    verifyCode.mockResolvedValue({ status: "unavailable" });
+
+    await submitCode(user);
+
+    expect(await screen.findByText("Sign-in is unavailable right now.")).not.toBeNull();
+    expect(screen.queryByText(WRONG)).toBeNull();
+    expect(screen.queryByText(EXPIRED)).toBeNull();
   });
 });

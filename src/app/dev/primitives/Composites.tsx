@@ -26,6 +26,7 @@ import { Tabs } from "@/components/ui/Tabs";
 import { ToastProvider, useToast } from "@/components/ui/Toast";
 import { Toggle } from "@/components/ui/Toggle";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { MailIcon, SearchIcon } from "@/components/ui/icons";
 import { AVATAR_SIZES, SKELETON_SHAPES, TOAST_TONES } from "@/components/ui/variants";
 import {
   VALIDATION_MIN_LENGTH,
@@ -207,7 +208,7 @@ function ResendDemo() {
       <div className="flex flex-col items-center">
         <Button
           type="button"
-          variant="ghost"
+          variant="neutral"
           size="sm"
           disabled={cooldown.active}
           onClick={() => {
@@ -299,6 +300,32 @@ function Composites() {
             value={null}
             onValueChange={() => {}}
             disabled
+          />
+        </div>
+      </Section>
+
+      <Section label="Field state, all the way to the icon">
+        {/* §8 (v2.12): the leading icon takes the field's state colour. Four
+            fields, four states, so the rule is checkable at a glance — and so a
+            regression in one state cannot hide behind the other three. */}
+        <p className="type-ui-footnote text-n-secondary">
+          The leading icon is part of the field&apos;s state, not decoration beside it: prime on
+          focus, danger on error, secondary at rest, disabled when disabled. Click into the first
+          one to see it take the focus colour. The trailing slot stays neutral throughout.
+        </p>
+        <div className="grid gap-[24px] sm:grid-cols-2">
+          <Input label="Rest — and focus, if you click it" leadingIcon={<MailIcon />} />
+          <Input
+            label="Error"
+            invalid
+            helper="Something about this value."
+            leadingIcon={<MailIcon />}
+          />
+          <Input label="Disabled" disabled leadingIcon={<MailIcon />} />
+          <Input
+            label="Trailing stays neutral"
+            leadingIcon={<MailIcon />}
+            trailingIcon={<SearchIcon />}
           />
         </div>
       </Section>

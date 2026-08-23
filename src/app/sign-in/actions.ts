@@ -41,7 +41,7 @@ export async function requestCode(email: string): Promise<RequestCodeResult> {
 }
 
 export async function verifyCode(email: string, code: string): Promise<VerifyCodeResult> {
-  if (!isValidEmail(email) || !isValidOtp(code)) return { status: "invalid-code" };
+  if (!isValidEmail(email) || !isValidOtp(code)) return { status: "malformed" };
 
   const supabase = await createClient();
   const { error } = await supabase.auth.verifyOtp({
@@ -51,9 +51,11 @@ export async function verifyCode(email: string, code: string): Promise<VerifyCod
   });
 
   const classified = classifyAuthError(error);
-  if (classified === "expired") return { status: "expired" };
-  if (classified === "invalid-code") return { status: "invalid-code" };
   if (classified === "rate-limited") return { status: "rate-limited" };
+  // Wrong or expired arrives as one answer, and is passed on as one. Which of
+  // the two it was is decided against our own send clock, at the call site that
+  // knows when the code went out.
+  if (classified === "code-rejected") return { status: "code-rejected" };
   if (classified) return { status: "unavailable" };
 
   return { status: "verified" };

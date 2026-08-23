@@ -35,7 +35,10 @@ export const en = {
     codeLabel: "Six-digit code",
     codeSubtitle: "The code works for about ten minutes.",
     codeIncomplete: "That's not six digits yet.",
-    codeRejected: "That code didn't work. Check it, or ask for a new one.",
+    // §12 (v2.12): the code step carries two distinct errors, never one
+    // standing in for the other. A wrong code told it expired sends someone to
+    // their inbox for a code that was already there.
+    codeRejected: "That code isn't right. Check it, or ask for a new one.",
     codeExpired: "That code has expired. Ask for a new one.",
     resend: "Send a new code",
     /**

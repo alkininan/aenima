@@ -616,10 +616,12 @@
  *
  * Both positions are derived from the field's own geometry, never guessed:
  *
- *   label zone   22 = ui-label line 18 + the 4 gap §8 puts above the field
+ *   label zone   24 = ui-label line 18 + the 6 gap §8 puts above the field
  *   floated      top of the zone, ui-label 13/18
- *   at rest      where the value sits — 22 (zone) + (48 − 22) / 2 = 35 down,
- *                ui-input 17/22, vertically centred in the 48h pill
+ *   at rest      where the value sits — 24 (zone) + (48 − 22) / 2 = 37 down,
+ *                ui-input 17/22, vertically centred in the 48h pill. The 22 in
+ *                that sum is the at-rest line height, not the zone: the two
+ *                were the same number until §8 (v2.12) gave the zone its 6.
  *
  * The zone is always reserved, so floating shifts nothing. §8 animates
  * translateY *and size* — and only those two, which is what fixes the
@@ -629,8 +631,8 @@
 @layer components {
   .field {
     position: relative;
-    /* §8 (v2.5): the label zone is always reserved, now 22. */
-    padding-top: 22px;
+    /* §8 (v2.12): the label zone is always reserved, now 24. */
+    padding-top: 24px;
   }
 
   /* §8 (v2.8): the fill is --surface-1 with --sheen over it, beneath the top
@@ -639,6 +641,40 @@
    * per §4). The background-color arrives from `bg-surface-1` on the element. */
   .field-pill {
     background-image: var(--sheen);
+  }
+
+  /**
+   * §8 (v2.12): the leading icon takes the field's state colour. The icon is
+   * part of the field's state, not decoration beside it — a field that signals
+   * only at its border makes the person hunt for what changed.
+   *
+   * Kept here rather than in Tailwind variants because the colour is decided by
+   * the *pill's* state and painted on a child: `:has()` and `:focus-within` on
+   * the parent are the whole mechanism. The order below is the cascade doing
+   * the precedence work — invalid, then focus, then disabled — which is the
+   * order the border already resolves in, so icon and border never disagree
+   * about which state is showing.
+   */
+  .field-icon-leading {
+    color: var(--n-secondary);
+    transition: color var(--t-fast) var(--ease);
+  }
+
+  .field-pill:has(.field-input[aria-invalid]) .field-icon-leading {
+    color: var(--danger);
+  }
+
+  /* Focus outranks error, the same way `focus-within:border-prime` outranks
+   * `border-danger` on the pill: what you are touching is what you are told
+   * about. Equal specificity to the rule above, so source order decides. */
+  .field-pill:focus-within .field-icon-leading {
+    color: var(--prime);
+  }
+
+  /* Highest specificity of the four, and rightly: a disabled field cannot be
+   * focused, and it must not keep shouting an error it will not let you fix. */
+  .field-pill:has(.field-input:disabled) .field-icon-leading {
+    color: var(--n-disabled);
   }
 
   /* §8 exemptions — Search and the chat composer are labelled by context, so
@@ -656,7 +692,7 @@
     left: 0;
     right: 0;
     padding-inline: 8px;
-    /* The zone is 22h and reserved; a label that wrapped would break that. */
+    /* The zone is 24h and reserved; a label that wrapped would break that. */
     white-space: nowrap;
     margin: 0;
     color: var(--n-secondary);
@@ -683,8 +719,9 @@
      * as well as vertically. The value's x is 1 + 16 — the pill's own border
      * plus its padding — and the label is absolute to the composite, outside
      * that border, so the border is part of the offset: 17 - 8 of zone padding
-     * is 9. §8 (v2.10): the border counts, it is not a rounding error. */
-    transform: translate(var(--field-label-rest-x, 9px), 35px);
+     * is 9. §8 (v2.10): the border counts, it is not a rounding error. The 37
+     * is the 24 zone plus (48 − 22) / 2, the at-rest line centred in the pill. */
+    transform: translate(var(--field-label-rest-x, 9px), 37px);
     font-size: 17px;
     font-weight: 400;
     line-height: 22px;

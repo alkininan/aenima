@@ -4,6 +4,7 @@ import {
   OTP_EXPIRY_SECONDS,
   OTP_LENGTH,
   classifyAuthError,
+  hasCodeExpired,
   isValidEmail,
   isValidOtp,
   normalizeEmail,
@@ -35,6 +36,37 @@ describe("OTP shape", () => {
     expect(normalizeOtp("123 456")).toBe("123456");
     expect(normalizeOtp("123-456")).toBe("123456");
     expect(isValidOtp("123 456")).toBe(true);
+  });
+});
+
+/**
+ * §12 (v2.12): wrong and expired are two errors and the provider hands back
+ * one, so the split is made here — against the clock we started when we sent
+ * the code, which is the one piece of information the refusal does not carry.
+ */
+describe("telling a stale code from a wrong one", () => {
+  const sentAt = 1_700_000_000_000;
+
+  it("calls a code inside its window wrong, not expired", () => {
+    expect(hasCodeExpired(sentAt, sentAt)).toBe(false);
+    expect(hasCodeExpired(sentAt, sentAt + 1000)).toBe(false);
+    // A second short of the full ten minutes is still a live code.
+    expect(hasCodeExpired(sentAt, sentAt + OTP_EXPIRY_SECONDS * 1000 - 1000)).toBe(false);
+  });
+
+  it("calls a code past its window expired", () => {
+    expect(hasCodeExpired(sentAt, sentAt + OTP_EXPIRY_SECONDS * 1000)).toBe(true);
+    expect(hasCodeExpired(sentAt, sentAt + 60 * 60 * 1000)).toBe(true);
+  });
+
+  /**
+   * The boundary goes to expired. Our clock and the provider's are not the same
+   * clock, and at the edge "ask for a new one" is the advice that works whether
+   * the code had a second left or none.
+   */
+  it("gives the boundary itself to expiry", () => {
+    expect(hasCodeExpired(sentAt, sentAt + OTP_EXPIRY_SECONDS * 1000 - 1)).toBe(false);
+    expect(hasCodeExpired(sentAt, sentAt + OTP_EXPIRY_SECONDS * 1000)).toBe(true);
   });
 });
 
@@ -78,13 +110,35 @@ describe("no account enumeration", () => {
   it("recognises rate limiting, which is safe to surface", () => {
     expect(classifyAuthError({ status: 429 })).toBe("rate-limited");
     expect(classifyAuthError({ code: "over_email_send_rate_limit" })).toBe("rate-limited");
+    expect(classifyAuthError({ code: "over_request_rate_limit" })).toBe("rate-limited");
     expect(classifyAuthError({ message: "email rate limit exceeded" })).toBe("rate-limited");
   });
 
-  it("separates an expired code from a wrong one", () => {
-    expect(classifyAuthError({ code: "otp_expired" })).toBe("expired");
-    expect(classifyAuthError({ message: "Token has expired or is invalid" })).toBe("expired");
-    expect(classifyAuthError({ code: "invalid_credentials" })).toBe("invalid-code");
+  /**
+   * `otp_disabled` is email OTP switched off for the project — ours to fix, not
+   * the person's. It used to classify as a bad code, which asks someone to
+   * re-check digits against a door that is bolted.
+   */
+  it("calls a disabled provider an outage, not a bad code", () => {
+    expect(classifyAuthError({ code: "otp_disabled" })).toBe("unavailable");
+  });
+
+  /**
+   * §12 (v2.12). The provider does not separate a wrong code from a stale one,
+   * and this used to pretend it did: `otp_expired` was read as expiry, so a
+   * mistyped digit was answered with "that code has expired" and sent people to
+   * their inbox for a code already sitting in it.
+   *
+   * The message Supabase sends is the giveaway and it is asserted here in full
+   * — "Token has expired or is invalid" is one string covering both causes, on
+   * purpose, because a verify endpoint that distinguished them would be an
+   * oracle for which codes exist. So the classifier reports the one answer it
+   * was actually given.
+   */
+  it("reports a refused code as one answer, because that is what it gets", () => {
+    expect(classifyAuthError({ code: "otp_expired" })).toBe("code-rejected");
+    expect(classifyAuthError({ message: "Token has expired or is invalid" })).toBe("code-rejected");
+    expect(classifyAuthError({ code: "invalid_credentials" })).toBe("code-rejected");
   });
 
   it("says nothing at all when there was no error", () => {

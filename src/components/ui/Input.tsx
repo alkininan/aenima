@@ -6,6 +6,7 @@ import {
   INPUT_CONTROL_CLASSES,
   INPUT_ICON_SLOT_CLASSES,
   INPUT_LABEL_CLASSES,
+  INPUT_LEADING_ICON_CLASSES,
   inputCompositeClasses,
   inputFieldClasses,
   inputHelperClasses,
@@ -57,7 +58,7 @@ type InputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "size"> & {
 /**
  * Pill field with its floating label and state line (design-spec.md §8, v2.5).
  *
- * 48h field · label zone 22h above it, always reserved · helper line 18h below,
+ * 48h field · label zone 24h above it, always reserved · helper line 18h below,
  * reserved by default. Nothing in the composite changes height between states,
  * which is the whole point: focusing a field or failing validation must not
  * move the page.
@@ -115,7 +116,7 @@ export function Input({
     >
       <div className="relative">
         <div className={inputFieldClasses({ invalid, disabled, className: fieldClassName })}>
-          {leadingIcon ? <span className={INPUT_ICON_SLOT_CLASSES}>{leadingIcon}</span> : null}
+          {leadingIcon ? <span className={INPUT_LEADING_ICON_CLASSES}>{leadingIcon}</span> : null}
           <input
             id={inputId}
             disabled={disabled}

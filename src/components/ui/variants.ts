@@ -187,7 +187,7 @@ export function inputFieldClasses({
 /**
  * The composite wrapper — §8's always-reserved label zone lives here.
  *
- * `field` carries the 22h zone and the positioning context the label floats
+ * `field` carries the 24h zone and the positioning context the label floats
  * in; `field-unlabelled` is the §8 exemption for Search and the chat composer,
  * which are labelled by context and reserve nothing.
  */
@@ -232,8 +232,21 @@ export const INPUT_CONTROL_CLASSES =
 export const INPUT_LABEL_CLASSES = "field-label";
 
 /** §8 icon slots are 24 square, leading and trailing. */
-export const INPUT_ICON_SLOT_CLASSES =
-  "inline-flex size-[24px] shrink-0 items-center justify-center text-n-secondary [&_svg]:size-full";
+const INPUT_ICON_SLOT_BASE =
+  "inline-flex size-[24px] shrink-0 items-center justify-center [&_svg]:size-full";
+
+/** The trailing slot is decoration: one colour, whatever the field is doing. */
+export const INPUT_ICON_SLOT_CLASSES = `${INPUT_ICON_SLOT_BASE} text-n-secondary`;
+
+/**
+ * §8 (v2.12): the leading icon takes the field's state colour — prime on focus,
+ * danger on error, secondary otherwise, disabled when disabled.
+ *
+ * No colour utility here, deliberately. The state is the *pill's*, so the rule
+ * that reads it lives in globals.css; a `text-n-secondary` on this element
+ * would sit in Tailwind's utilities layer and win against it in every state.
+ */
+export const INPUT_LEADING_ICON_CLASSES = `${INPUT_ICON_SLOT_BASE} field-icon-leading`;
 
 /**
  * §8 (v2.3): the helper line speaks only in states — error, warning, success.

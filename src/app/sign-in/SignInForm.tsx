@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition, type FormEvent } from "react";
+import { useRef, useState, useTransition, type FormEvent } from "react";
 
 import { AeMark } from "@/components/AeMark";
 import { cx } from "@/lib/cx";
@@ -13,7 +13,7 @@ import { ArrowLeftIcon, MailIcon } from "@/components/ui/icons";
 import { OTP_BOX_COUNT, inputHelperClasses } from "@/components/ui/variants";
 import { useCooldown, formatCountdown } from "@/components/ui/useCooldown";
 import { useFieldValidation } from "@/components/ui/useFieldValidation";
-import { isValidEmail, isValidOtp } from "@/lib/auth/otp";
+import { hasCodeExpired, isValidEmail, isValidOtp } from "@/lib/auth/otp";
 import { enabledProviders } from "@/lib/auth/providers";
 import { getDictionary } from "@/i18n";
 
@@ -63,6 +63,17 @@ export function SignInForm() {
   const [resendError, setResendError] = useState<string | null>(null);
   const resendCooldown = useCooldown();
 
+  /**
+   * When the code on screen went out, in epoch ms.
+   *
+   * §12 (v2.12) needs the code step's two errors kept apart, and the provider
+   * will not keep them apart for us: a wrong code and a stale one come back as
+   * the same refusal. This is the missing half — we know when we sent it, so we
+   * know whether the window has closed. A ref rather than state because nothing
+   * renders from it; it is read once, inside the handler that got the refusal.
+   */
+  const codeSentAt = useRef<number | null>(null);
+
   // Only email is on today; Google and Apple are declared-but-disabled, so this
   // renders one control and no dead buttons.
   const providers = enabledProviders();
@@ -102,6 +113,7 @@ export function SignInForm() {
       setCodeError(null);
       setResendError(null);
       setNotice(t.signIn.codeSentTo(email));
+      codeSentAt.current = Date.now();
       /**
        * §8 (v2.11): the clock starts with the send, not with the control. This
        * code is the one that just went out, so the step opens already counting
@@ -130,14 +142,30 @@ export function SignInForm() {
         return;
       }
 
+      if (result.status === "rate-limited") {
+        setCodeError(t.signIn.rateLimited);
+        return;
+      }
+      if (result.status === "unavailable") {
+        setCodeError(t.signIn.unavailable);
+        return;
+      }
+
+      /**
+       * §12 (v2.12): wrong and expired are two errors, and the provider hands
+       * back one. The send clock is what tells them apart — inside the window
+       * the code is still good, so a refusal means the digits were wrong.
+       *
+       * With no recorded send (which should not happen: the step is only
+       * reachable through one) the wrong-code line is the safer of the two.
+       * "Check it" costs a glance; "it expired" costs a trip to the inbox for a
+       * code that is already sitting there.
+       */
+      const sentAt = codeSentAt.current;
       setCodeError(
-        result.status === "expired"
+        sentAt !== null && hasCodeExpired(sentAt, Date.now())
           ? t.signIn.codeExpired
-          : result.status === "rate-limited"
-            ? t.signIn.rateLimited
-            : result.status === "unavailable"
-              ? t.signIn.unavailable
-              : t.signIn.codeRejected,
+          : t.signIn.codeRejected,
       );
     });
   };
@@ -169,6 +197,7 @@ export function SignInForm() {
       if (result.status === "sent") {
         setCode("");
         setCodeError(null);
+        codeSentAt.current = Date.now();
         return;
       }
 
@@ -292,7 +321,11 @@ export function SignInForm() {
           <div className="flex flex-col items-center">
             <Button
               type="button"
-              variant="ghost"
+              // §8 (v2.12): neutral, the same variant as back. They are the same
+              // tier of chrome on one step and read as one family — and ghost
+              // vanishes exactly when a disabled, counting-down tertiary has the
+              // most to say.
+              variant="neutral"
               size="sm"
               disabled={pending || resendCooldown.active}
               onClick={resend}
