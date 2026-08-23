@@ -95,6 +95,36 @@ export default function PrimitivesPage() {
         </div>
       </Section>
 
+      {/* §2 (v2.8): the deepened ramp and the two materials. The ramp is the
+          thing that needs eyeballing — the steps have to stay distinguishable
+          from each other at the new depth, and --surface-1 has to lift off the
+          base rather than sink into it. */}
+      <Section label="Surfaces & materials">
+        <Row label="ramp">
+          {[
+            ["--bg-base", "bg-bg-base"],
+            ["--surface-1", "bg-surface-1"],
+            ["--surface-3", "bg-surface-3"],
+            ["--surface-2", "bg-surface-2"],
+          ].map(([token, fill]) => (
+            <div
+              key={token}
+              className={`flex h-[64px] w-[128px] items-end rounded-md border border-glass-border p-[8px] ${fill}`}
+            >
+              <span className="type-mono-micro text-n-secondary">{token}</span>
+            </div>
+          ))}
+        </Row>
+        <Row label="materials">
+          <div className="control-gloss flex h-[64px] w-[128px] items-end rounded-md p-[8px]">
+            <span className="type-mono-micro text-bg-base">--grad-primary</span>
+          </div>
+          <div className="field-pill flex h-[64px] w-[128px] items-end rounded-md border border-glass-border bg-surface-1 p-[8px]">
+            <span className="type-mono-micro text-n-secondary">--sheen</span>
+          </div>
+        </Row>
+      </Section>
+
       <Section label="Button">
         {BUTTON_VARIANTS.map((variant) => (
           <div key={variant} className="flex flex-col gap-[12px]">

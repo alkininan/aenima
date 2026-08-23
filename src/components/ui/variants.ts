@@ -46,8 +46,11 @@ const BUTTON_SIZE_CLASSES: Record<ButtonSize, string> = {
 };
 
 const BUTTON_VARIANT_CLASSES: Record<ButtonVariant, string> = {
-  // §8: --prime fill, label #0E0F11 (= --bg-base), inset edge highlight at 24% white.
-  primary: "control-edge-strong bg-prime text-bg-base",
+  // §8 (v2.8): --grad-primary fill, label #08090C (= --bg-base), 1px
+  // --edge-highlight top specular. `control-gloss` carries the gradient, the
+  // one-pass hover sweep and the darkening press — the gloss is the primary's
+  // alone, so no other variant gets it.
+  primary: "control-edge-strong control-gloss text-bg-base",
   // §8: --prime-soft fill, --prime label.
   soft: "control-edge-none bg-prime-soft text-prime",
   // §8: --surface-2 fill, --n-primary label. Chrome that stays visible without

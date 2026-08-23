@@ -1,4 +1,4 @@
-# aenima — Design Specification v2.7 (web)
+# aenima — Design Specification v2.8 (web)
 
 <!-- Full rewrite for direct vibe-coding: every value explicit, no Figma step assumed. Supersedes v1.x.
 v2.0: aesthetic consolidated as "liquid-glass instrument, retro terminal heart, tactile controls." Aqua promoted to the single primary accent (Brand blue #246BFD retired to the hero gradient only). JetBrains Mono promoted to a first-class UI role for data readouts. Tactile press physics, glass edge highlights, and dot-grid texture added. Token set minimized. All 17 open proposals (form controls, elevation, z-ladder, scrollbars, selection, borders, font loading, charts, degraded pages, validation, sidebar, keyboard) folded in as law.
@@ -8,7 +8,8 @@ v2.3: form-language revision from first real use of the sign-in flow. Field heig
 v2.4: OTP responsiveness, found when build ticket T0.5 measured the group at 375 — 6×52 + 5×16 overflows a phone. The group steps down below 768 (§8), and the auth flow is named as the exception to "read-only mobile web" (§4). OTP's visible label row retires with the other static labels (§8).
 v2.5: second form-language pass from real use of the sign-in flow. The step header replaces the action row and steps left-align end to end, OTP excepted (§8); the floated label gets its own token, ui-label (§3, §8); fields carry one text only — format-hint placeholders abolished (§8); focus splits pointer from keyboard, killing the double stroke on mouse (§6, §7, §8); validation flags slow and clears fast, never under 3 characters (§8); `--n-placeholder` dimmed to #5C6069 (§2); Iconoir named as the icon set (§8).
 v2.6: three corrections found while implementing v2.5. The focus split names input-modality tracking as its mechanism — `:focus-visible` cannot provide it, because browsers match it on a clicked text input and so reproduce the double stroke the split removes (§6, §7, §8). The floated label sits at the field's text inset rather than a hardcoded 16, so a leading icon moves label and value together (§8). The step header's title joins the OTP group as a named exception to step left-alignment (§8).
-v2.7: auth-step alignment revision from production use. The Æ mark centers above every step, a step with no back button centers its title and subtitle beneath it, and a step with a back button keeps the header grammar with a visible back — which needs a fill that is not an accent, so `--surface-2` chrome becomes the **neutral** button variant (§8). The floated label hugs the field's left edge at 8 inside a label zone padded 8, rather than tracking the text inset, so a leading icon moves the value alone (§8). The OTP step's subtitle drops its "if there's an account" hedge (§12): sign-in creates the account, so every valid address receives a code and the conditional described a branch that does not exist. -->
+v2.7: auth-step alignment revision from production use. The Æ mark centers above every step, a step with no back button centers its title and subtitle beneath it, and a step with a back button keeps the header grammar with a visible back — which needs a fill that is not an accent, so `--surface-2` chrome becomes the **neutral** button variant (§8). The floated label hugs the field's left edge at 8 inside a label zone padded 8, rather than tracking the text inset, so a leading icon moves the value alone (§8). The OTP step's subtitle drops its "if there's an account" hedge (§12): sign-in creates the account, so every valid address receives a code and the conditional described a branch that does not exist.
+v2.8: deep ramp and aero materials. The background deepens to #08090C with every derived token re-based and the base→surface-1 gap widened so fields lift, and §13's contrast numbers are re-measured on the new ramp (§2, §13). The primary button becomes the gloss surface carrying the hero's blue as light inside `--grad-primary`, with a one-pass specular sweep on hover — its bottom stop lands at #17A9CE rather than `--prime-deep`, which would have put the button's own fill below AA under a dark label (§2, §7, §8). Fields gain `--sheen` as a material, with blur still reserved for genuine layer overlap (§8). Press physics gain a 0.985 squish and a spring release on `--ease-spring` (§6, §7). -->
 
 ## 0. Design language
 
@@ -55,20 +56,26 @@ Dark-only. Every accent has two tones: **fill** (surface color; label sits on it
 ```css
 :root {
   /* surfaces */
-  --bg-base: #0E0F11;            /* app background */
-  --bg-scrim: rgba(14,15,17,.80);/* modal scrim (Base-Soft) */
-  --surface-1: #202228;          /* cards, inputs, composer, table rows */
-  --surface-2: #333740;          /* nested fills, meter tracks, hover-on-1, skeletons */
-  --surface-3: #2A2F39;          /* hover on nested cards, pressed rows */
+  /* The ramp is deepened for OLED-safe depth — never #000, which smears on
+     OLED and halates against light type. The base→surface-1 gap is widened
+     deliberately so fields lift off the page instead of sitting in it. Every
+     AA-required pair is re-verified ≥4.5 at these values, accents read ≥5.1 as
+     text on every surface, and dark labels on accent fills clear 7 under the
+     glyphs. */
+  --bg-base: #08090C;            /* app background */
+  --bg-scrim: rgba(8,9,12,.80);  /* modal scrim (Base-Soft) */
+  --surface-1: #15171C;          /* cards, inputs, composer, table rows */
+  --surface-2: #282C34;          /* nested fills, meter tracks, hover-on-1, skeletons */
+  --surface-3: #1F232B;          /* hover on nested cards, pressed rows */
   /* glass */
-  --glass-fill: rgba(34,38,46,.80);      /* glass panels; pair with blur */
+  --glass-fill: rgba(31,35,43,.80);      /* glass panels; pair with blur */
   --glass-border: rgba(77,81,89,.64);    /* 1px border on glass + cards */
   --glass-blur: 24px;
   --press-overlay: rgba(255,255,255,.08);
   --hover-overlay: rgba(255,255,255,.04);
-  --edge-highlight: rgba(255,255,255,.14); /* 1px inner top specular line */
-  --scrim-top: linear-gradient(180deg, rgba(14,15,17,.72), rgba(14,15,17,.24), rgba(14,15,17,0));
-  --scrim-bottom: linear-gradient(0deg, rgba(14,15,17,.72), rgba(14,15,17,.24), rgba(14,15,17,0));
+  --edge-highlight: rgba(255,255,255,.16); /* 1px inner top specular line */
+  --scrim-top: linear-gradient(180deg, rgba(8,9,12,.72), rgba(8,9,12,.24), rgba(8,9,12,0));
+  --scrim-bottom: linear-gradient(0deg, rgba(8,9,12,.72), rgba(8,9,12,.24), rgba(8,9,12,0));
   /* neutrals (text/icons) */
   --n-primary: #E0E5EB;   /* default text */
   --n-secondary: #9DA3B0; /* secondary text, labels, inactive icons */
@@ -88,6 +95,16 @@ Dark-only. Every accent has two tones: **fill** (surface color; label sits on it
   --success: #22C55E;  --success-deep: #12813C;  --success-soft: rgba(34,197,94,.12);
   --warning: #EBA92F;                             --warning-soft: rgba(235,169,47,.12);
   --danger: #FF7276;   --danger-deep: #D93A3F;   --danger-soft: rgba(255,114,118,.12);
+  /* materials */
+  --grad-primary: linear-gradient(180deg, #4393F7 0%, #21B8DC 52%, #17A9CE 100%);
+    /* the hero's blue, admitted into product only as light inside this
+       gradient — never as a flat fill. The bottom stop stops at #17A9CE rather
+       than --prime-deep so the #08090C label clears 7 under the glyphs and
+       6.4 across the whole fill; --prime-deep needs a light label (see above)
+       and would put the button's own fill below AA. */
+  --sheen: linear-gradient(180deg, rgba(255,255,255,.03), transparent 40%);
+    /* material sheen on field fills */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* release overshoot */
   /* hero gradient — marketing surfaces + 100%-meter shimmer only */
   --hero-gradient: linear-gradient(90deg, #172EE1, #692BEA 21%, #4393F7 69%, #0AC0FF);
 }
@@ -97,7 +114,7 @@ Dark-only. Every accent has two tones: **fill** (surface color; label sits on it
 
 | Meaning | Token |
 |---|---|
-| Primary action fill | `--prime` fill, label #0E0F11 (8.2:1) |
+| Primary action fill | `--grad-primary`, label #08090C (≥7 under the glyphs) |
 | Links, active nav, selected, focus ring, meter fill, freshness dot | `--prime` |
 | Anything agent-drafted, pre-confirmation | `--agent` / `--agent-soft` |
 | Passed checks, handover-ready, meter at 100, diff additions | `--success` (soft bg for diffs) |
@@ -189,11 +206,11 @@ No-`backdrop-filter` fallback: solid #1B1E24, keep border + edge.
 ```
 
 - Hover/overlay/press-release: `--t-fast`. Panels/drawers: `--t-med`. Modals/meter width: `--t-slow`.
-- **Press physics (the retro click — applies to all buttons, chips-with-actions, toggle, checkbox):** on `:active`, instantly (0ms in): `transform: translateY(1px)`, edge highlight off, `box-shadow: inset 0 2px 4px rgba(0,0,0,.32)`. On release: spring back over `--t-fast` with `--ease`. The press must feel immediate; only the release animates.
+- **Press physics (the retro click — applies to all buttons, chips-with-actions, toggle, checkbox):** on `:active`, instantly (0ms in): `transform: translateY(1px) scale(0.985)`, edge highlight off, `box-shadow: inset 0 2px 4px rgba(0,0,0,.32)`. On release: spring back over `--t-med` with `--ease-spring`, which overshoots about 1% before settling. The press must feel immediate; only the release animates.
 - **Focus-visible** (keyboard only): `outline: 2px solid var(--prime); outline-offset: 2px;` plus `box-shadow: var(--prime-glow)` — the aero glow lives on focus and on live dots, nowhere else. Pointer focus is not keyboard focus: clicking into a field swaps its border to `--prime` and nothing more. Ring and glow are keyboard affordances. The mechanism is input-modality tracking, not `:focus-visible` — browsers deliberately match `:focus-visible` on a clicked text input, since it is about to take keystrokes, so gating the ring on it reproduces the double stroke this rule removes. Modality is recorded on `<html>` by an inlined script and defaults to keyboard: an autofocused field with no visible focus is worse than a ring on load. `:focus-visible` remains correct for buttons and links, where a click does not match it.
 - Meter fill animates width `--t-slow`; 100% triggers a one-time 600ms `--hero-gradient` shimmer sweep.
 - Skeleton shimmer: `--surface-2` base, moving highlight rgba(255,255,255,.04), 1.2s linear loop. Geometry: a 200%-wide linear-gradient (transparent → highlight → transparent) traversing the element left to right, one pass per loop.
-- `prefers-reduced-motion`: kill shimmer, press-translate (keep the inner-shadow state change), meter animation, lift, and the floating-label slide (§8 — the label snaps between positions).
+- `prefers-reduced-motion`: kill shimmer, press-translate and press-squish and the primary's hover sweep (keep the inner-shadow state change — it alone carries the press), meter animation, lift, and the floating-label slide (§8 — the label snaps between positions).
 
 ---
 
@@ -201,8 +218,8 @@ No-`backdrop-filter` fallback: solid #1B1E24, keep border + edge.
 
 | State | Treatment |
 |---|---|
-| Hover | `--hover-overlay` + cursor pointer; on glass, border brightens to rgba(120,126,136,.72) |
-| Active/pressed | press physics above + `--press-overlay` |
+| Hover | `--hover-overlay` + cursor pointer; on glass, border brightens to rgba(120,126,136,.72); primary adds a one-pass sweep (§8) |
+| Active/pressed | press physics above + `--press-overlay` — squish 0.985 + spring release |
 | Focus-visible | prime ring + glow (keyboard only — pointer focus changes the border alone, per §6) |
 | Selected | `--prime-soft` fill, `--n-primary` text |
 | Disabled | `--n-disabled` text/icon, fills at 40% opacity, no hover, cursor default, edge highlight off |
@@ -216,7 +233,7 @@ No-`backdrop-filter` fallback: solid #1B1E24, keep border + edge.
 Confirmed dimensions come from Sociera v2.0's real components (Figma node introspection); web-only components follow the same grammar.
 
 **Buttons (pill).** Sizes: **sm** 28h, pad 4/10, gap 4, icon 18, ui-button-sm · **md** 34h, pad 7/14, gap 4, icon 20, ui-button · **lg** 48h, pad 12/20, gap 4, icon 24, ui-button. All `--r-pill`. Variants:
-- **Primary:** `--prime` fill, label #0E0F11, inset edge highlight at 24% white. The light-fill/dark-label pairing is deliberate retro grammar.
+- **Primary:** `--grad-primary` fill, label #08090C, 1px `--edge-highlight` top specular. The light-fill/dark-label pairing is deliberate retro grammar. Hover lightens with `--hover-overlay` and runs a single left-to-right specular sweep — rgba(255,255,255,.06), 700ms, `--ease`, one pass per hover-in, none under `prefers-reduced-motion`. Press darkens the gradient one step and applies the §6 press physics. **The gloss is the primary's alone:** danger and every other variant stay flat.
 - **Soft:** `--prime-soft` fill, `--prime` label.
 - **Neutral:** `--surface-2` fill, `--n-primary` label. For chrome that must stay visible without reading as an accent.
 - **Secondary:** transparent, 1px `--glass-border`, `--n-primary` label; hover brightens border.
@@ -224,7 +241,7 @@ Confirmed dimensions come from Sociera v2.0's real components (Figma node intros
 - **Danger:** `--danger-deep` fill, white label; destructive actions always get a confirm step.
 States: hover overlay · press physics · loading (spinner replaces label, width locked) · disabled. **Icon buttons:** 28/34/48 square, same radius/padding grammar (pad ≈ quarter of box), same variants.
 
-**Inputs.** Field 48h, `--r-pill`, `--surface-1` fill, 1px `--glass-border`, pad 16 horizontal (height wins: the value centres vertically, per the §8 option-row rule), icon slots 24 leading/trailing, gap 8, ui-input text. 48 aligns fields with the lg button, so a field and its submit sit at one height. Focus: pointer → `--prime` border only; keyboard modality (§6) → border + ring + glow. Error: `--danger` border. Disabled: 40% opacity.
+**Inputs.** Field 48h, `--r-pill`, `--surface-1` fill overlaid with `--sheen` beneath the top specular, 1px `--glass-border`, pad 16 horizontal (height wins: the value centres vertically, per the §8 option-row rule), icon slots 24 leading/trailing, gap 8, ui-input text. 48 aligns fields with the lg button, so a field and its submit sit at one height. Focus: pointer → `--prime` border only; keyboard modality (§6) → border + ring + glow. Error: `--danger` border. Disabled: 40% opacity. **No `backdrop-filter` on a field:** the sheen is a material, not a layer, and blur is reserved for genuine layer overlap — dock, modals, topbars, toasts (§4).
 **Floating label.** The label is a real `<label>`, always in the DOM, never a placeholder. At rest (empty, unfocused) it renders inside the field where the value will sit — ui-input size, `--n-secondary` (AA), not placeholder tone. On focus or once filled, it floats to the label zone above the field: ui-label (§3), `--n-secondary`, 4 above the field, left-aligned 8 from the field's left edge, in a label zone with 8 side padding — the label hugs the container edge regardless of leading icons; only the value moves for an icon. The float animates translateY + size over `--t-fast` `--ease`; `prefers-reduced-motion` snaps it. The label zone (22h = 18 line + 4 gap) is **always reserved**, so floating never shifts layout. A field shows one text, ever: its label. Format-hint placeholders are abolished — after the label floats, the field is empty with a caret. Nothing swaps, nothing appears. **Exempt from the floating label:** Search (the leading icon names it; placeholder "Search" allowed at rest) and the chat composer (the dock names it) — both are labelled by context, not by a `<label>` row. `--n-placeholder` exists only for these two.
 **Helper line speaks only in states.** The helper slot (ui-footnote, 8 below the field) carries validation outcomes exclusively — error `--danger`, warning `--warning`, success `--success` — never instructions; instructional copy lives in the subtitle slot (§4). Forms **reserve one helper line** (18h) under any field that can produce a state, so an error appearing never shifts layout. **Validation timing — flag slow, clear fast.** A field never errors while empty or under 3 characters, including on blur: leaving an untouched field is not a mistake. While typing, validation waits for a 1.5s pause; blur validates immediately once the field carries ≥3 characters; on submit, everything validates and the first error is scrolled to. The moment input becomes valid, the error clears instantly — flagging waits, clearing never does.
 **Autofill paint.** Browser autofill (Chrome's yellow/white flash) is overridden as law, not left to chance: `input:-webkit-autofill { -webkit-box-shadow: inset 0 0 0 1000px var(--surface-1); -webkit-text-fill-color: var(--n-primary); caret-color: var(--prime); transition: background-color 9999s; }` — the field must look identical filled by hand or by the browser.
@@ -299,7 +316,7 @@ Sentence case everywhere including buttons. No exclamation marks. Calm vocabular
 
 ## 13. Accessibility
 
-- AA on Base/Surface-1 for `--n-primary` (13.9:1) and `--n-secondary` (7.4:1); `--prime` text 8.2:1; `--agent` 7.1:1; `--warning` 9.4:1; `--danger` 7.2:1. **Placeholder and Disabled fail AA by design** — never information-carrying.
+- On Base, `--n-primary` 15.7:1 and `--n-secondary` 7.9:1; `--prime` text 8.5:1; `--agent` 7.4:1; `--warning` 9.7:1; `--danger` 7.5:1. Re-measured on the v2.8 ramp, where the deeper base lifts every one of them. Read against the worst surface in the ramp rather than Base, the same six are 11.1 · 5.5 · 6.0 · 5.2 · 6.8 · 5.3 — all clear AA, and the accents clear 5.1. **Placeholder and Disabled fail AA by design** — never information-carrying.
 - Accent text/icons always use bright tones; deep tones are fills with labels on them.
 - Meters always pair color with the numeric value; gap states carry text labels, not color alone.
 - Focus-visible on everything; full keyboard paths (list → item → chat → sign); `prefers-reduced-motion` per §6; minimum text on glass verified against the busiest backdrop.
@@ -319,4 +336,4 @@ No light mode · no RTL (EN/TR/NL are LTR) · no sound (tactility is visual) · 
 
 ---
 
-*v2.7 — complete and closed: no open items. Changes cut new versions of this document.*
+*v2.8 — complete and closed: no open items. Changes cut new versions of this document.*

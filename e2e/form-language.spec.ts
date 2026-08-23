@@ -374,3 +374,127 @@ test.describe("step layout", () => {
    * back beside a title block that left-aligns to itself rather than centering
    * — is pinned in SignInForm.dom.test.tsx. */
 });
+
+/**
+ * §2/§6/§8 (v2.8) — the aero materials, checked where they actually resolve.
+ *
+ * Every assertion here reads a computed value rather than a class list. A
+ * gradient that never reaches the element, a sheen shadowed by a later
+ * background rule, or a squish that reflows its neighbours all look identical
+ * to a class-name test and identical to each other in a snapshot.
+ */
+test.describe("aero materials", () => {
+  for (const width of [1440, 768, 375] as const) {
+    test(`the primary carries the gloss gradient at ${width}`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/sign-in");
+      await page.evaluate(() => document.fonts.ready);
+
+      const primary = await page.evaluate(() => {
+        const button = document.querySelector('button[type="submit"]')!;
+        const s = getComputedStyle(button);
+        return { image: s.backgroundImage, color: s.color };
+      });
+
+      // §8 (v2.8): --grad-primary, resolved. The three stops are the hero blue,
+      // --prime, and the #17A9CE floor that keeps the dark label above AA.
+      expect(primary.image).toContain("linear-gradient");
+      expect(primary.image).toContain("rgb(67, 147, 247)");
+      expect(primary.image).toContain("rgb(33, 184, 220)");
+      expect(primary.image).toContain("rgb(23, 169, 206)");
+      // Label #08090C — the new --bg-base.
+      expect(primary.color).toBe("rgb(8, 9, 12)");
+    });
+
+    test(`fields carry the sheen and no blur at ${width}`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/sign-in");
+
+      const field = await page.evaluate(() => {
+        const s = getComputedStyle(document.querySelector(".field-pill")!);
+        return {
+          image: s.backgroundImage,
+          color: s.backgroundColor,
+          filter: s.backdropFilter,
+        };
+      });
+
+      // §8 (v2.8): --surface-1 with --sheen over it.
+      expect(field.color).toBe("rgb(21, 23, 28)");
+      expect(field.image).toContain("linear-gradient");
+      expect(field.image).toContain("rgba(255, 255, 255, 0.03)");
+      // Blur is for genuine layer overlap only — never a field.
+      expect(["none", ""]).toContain(field.filter);
+    });
+  }
+
+  test("the gloss is the primary's alone", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/dev/primitives");
+
+    const painted = await page.evaluate(() => {
+      const buttons = [...document.querySelectorAll("button")];
+      const gradient = (b: Element) => getComputedStyle(b).backgroundImage.includes("gradient");
+      return {
+        // Every non-primary variant carries `control-edge-none`; primary is the
+        // only one with `control-gloss`. Labels cannot identify them — the
+        // preview renders primaries reading "leading", "loading", "full width".
+        leaks: buttons
+          .filter((b) => b.classList.contains("control-edge-none") && gradient(b))
+          .map((b) => b.className),
+        glossed: buttons.filter((b) => b.classList.contains("control-gloss") && gradient(b)).length,
+      };
+    });
+
+    // Danger and every other variant stay flat.
+    expect(painted.leaks).toEqual([]);
+    // And the page really does render glossed primaries, or the line above is
+    // asserting nothing.
+    expect(painted.glossed).toBeGreaterThan(0);
+  });
+
+  test("the press squish moves nothing around it", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/sign-in");
+    await page.evaluate(() => document.fonts.ready);
+
+    const submit = page.getByRole("button", { name: "Send code" });
+
+    /* The squish is a transform, so it must not participate in layout at all.
+     * What would betray a regression is a neighbour moving — the field above or
+     * the button's own reserved space — which is what these read. */
+    const neighbours = () =>
+      page.evaluate(() => {
+        const field = document.querySelector(".field")!.getBoundingClientRect();
+        const button = document.querySelector('button[type="submit"]')!;
+        const box = button.getBoundingClientRect();
+        return {
+          fieldY: Math.round(field.y),
+          fieldHeight: Math.round(field.height),
+          // The offset box ignores transforms; the client rect does not. Layout
+          // is the first, so that is what must hold still.
+          buttonOffsetTop: (button as HTMLElement).offsetTop,
+          buttonOffsetHeight: (button as HTMLElement).offsetHeight,
+          boxHeight: Math.round(box.height),
+        };
+      });
+
+    const rest = await neighbours();
+
+    await page.mouse.move(0, 0);
+    const box = await submit.boundingBox();
+    await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+    await page.mouse.down();
+    const pressed = await neighbours();
+
+    // §6 (v2.8): translateY(1px) scale(0.985) — a paint, never a reflow.
+    expect(pressed.fieldY).toBe(rest.fieldY);
+    expect(pressed.fieldHeight).toBe(rest.fieldHeight);
+    expect(pressed.buttonOffsetTop).toBe(rest.buttonOffsetTop);
+    expect(pressed.buttonOffsetHeight).toBe(rest.buttonOffsetHeight);
+    // And the transform really is applied, or the test above proves nothing.
+    expect(pressed.boxHeight).toBeLessThan(rest.boxHeight);
+
+    await page.mouse.up();
+  });
+});

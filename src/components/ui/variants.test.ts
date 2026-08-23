@@ -29,7 +29,7 @@ const has = (classes: string, ...expected: string[]) => {
 describe("buttonClasses", () => {
   it("defaults to md + primary", () => {
     const classes = buttonClasses();
-    expect(has(classes, "h-[34px]", "type-ui-button", "bg-prime", "text-bg-base")).toBe(true);
+    expect(has(classes, "h-[34px]", "type-ui-button", "control-gloss", "text-bg-base")).toBe(true);
   });
 
   // design-spec.md §8: sm 28h pad 4/10 gap 4 icon 18 · md 34h pad 7/14 gap 4
@@ -44,7 +44,7 @@ describe("buttonClasses", () => {
   });
 
   it.each([
-    ["primary", ["bg-prime", "text-bg-base", "control-edge-strong"]],
+    ["primary", ["control-gloss", "text-bg-base", "control-edge-strong"]],
     ["soft", ["bg-prime-soft", "text-prime"]],
     ["neutral", ["bg-surface-2", "text-n-primary"]],
     ["secondary", ["border", "border-glass-border", "bg-transparent", "text-n-primary"]],
@@ -84,7 +84,8 @@ describe("buttonClasses", () => {
   // variant fill and is not restyled as disabled.
   it("blocks the press while loading without borrowing disabled styling", () => {
     const loading = buttonClasses({ loading: true });
-    expect(has(loading, "pointer-events-none", "bg-prime")).toBe(true);
+    // §8 (v2.8): the variant fill it keeps is the gloss gradient.
+    expect(has(loading, "pointer-events-none", "control-gloss")).toBe(true);
     expect(buttonClasses()).not.toContain("pointer-events-none");
   });
 
