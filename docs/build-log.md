@@ -9,22 +9,18 @@
 **Phase:** 1 — the spine · phase 0 (foundation) complete
 **Next ticket:** T1.2 — bucket assignment (your move / at risk / flowing)
 **Repo:** github.com/alkininan/aenima
-**Deployed:** no
+**Deployed:** yes — **aeni.ma** on Vercel
 
-`docs/design-spec.md` is **v2.5**, complete and closed. v2.3 was the form-language
-revision — 48h fields, floating labels, state-only helper lines, the subtitle slot,
-autofill paint, the multi-step action row. v2.4 added the OTP's two sizes (≥768 52/r27/
-gap 16 · <768 44/r22/gap 8), retired its visible label row, and named **the auth flow as
-the exception to "read-only mobile web" (§4)**: it must be fully usable at 375, because an
-invited member signs in on whatever they are holding. v2.5 is the second form-language
-pass — the step header replaces the action row and steps left-align (OTP excepted), the
-floated label gets its own `ui-label` token, fields carry one text only, focus splits
-pointer from keyboard, validation flags slow and clears fast, `--n-placeholder` dims to
-#5C6069, and Iconoir is named as the icon set. v2.6 closes the three things T0.6 found
-while implementing v2.5: the focus split's mechanism is input-modality tracking, not
-`:focus-visible`; the floated label sits at the field's text inset rather than a hardcoded
-16, so a leading icon moves label and value together; and the step header's title joins
-the OTP group as a named exception to step left-alignment. Code matches.
+`docs/design-spec.md` is **v2.12**, complete and closed, and the code matches.
+
+The form language was settled over two runs against real use of the sign-in flow. v2.3–v2.6:
+48h fields, floating labels bound at every moment, an always-reserved label zone and helper
+line, the subtitle slot, the step header, one-text fields, the focus split, flag-slow
+validation. v2.7–v2.12: centred step chrome and the **neutral** button variant; the deep ramp
+and aero materials (#08090C base, `--grad-primary`, field sheen, press squish); derived values
+pinned and the brand hexes reconciled; the resend cooldown, and a helper line carrying only its
+own field's errors; field state reaching the leading icon, a 24h label zone, and one variant
+for all step chrome.
 
 ## Stack
 
@@ -66,6 +62,16 @@ T0.6 — second form-language pass onto design spec v2.5: Iconoir replaces the h
   glyphs with `icons.tsx` as the single import point, step header, `ui-label`, one-text
   fields, the focus split, flag-slow validation, dimmed placeholder — `e078857`; the spec
   revision itself is `ceb5789`. Its three findings closed as design spec v2.6 — `a609532`.
+
+Design spec v2.7–v2.12 — the form language finished against real use of the deployed flow:
+  step alignment and the neutral variant `6ce8522`; the deep ramp and aero materials `ad7f718`;
+  the derived press value and the brand hexes `ffe8e3c`; the resend cooldown, the 1px label
+  offset and the step title's type `e80dee9`; the cooldown starting at the first send `1726709`;
+  field state to the leading icon, the 24h label zone, one step-chrome variant, and the
+  wrong-code/expired split `75d9b21`. `/dev` gated on the build mode — `f9ef16b`.
+Deploy — Vercel, live at **aeni.ma**. Resend sends the OTP mail as `auth@aeni.ma`. First run
+  verified end to end for a non-Gmail address. Checked in production: `/sign-in` 200, `/app`
+  redirects to it, `/dev/primitives` 404s.
 
 ## Decisions made during the build
 
@@ -158,6 +164,26 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
   **Regenerate after every migration**; the clients are parameterised with them, so drift and typos
   both surface as `pnpm typecheck` failures rather than runtime nulls.
 
+- **Supabase answers a wrong OTP and an expired one with the same error** — `otp_expired`,
+  message "Token has expired or is invalid": one reply covering both, so that verifying is not an
+  oracle for which codes exist. Reading that code's *name* as a finding is how every mistyped
+  digit was answered with the expiry line and sent someone to their inbox for a code already in
+  it. There is no second code to map to, so the split is made against **our own send clock**
+  (`hasCodeExpired`) — the one fact the refusal does not carry.
+- **`otp_disabled` is an outage, not a bad code.** It is email OTP switched off for the project;
+  telling someone to re-check their digits sends them round a loop that cannot close.
+- **Fake only the timers the code under test reads.** `vi.useFakeTimers()` also fakes `setTimeout`
+  and `requestAnimationFrame`, which userEvent and RTL's `waitFor` both wait on, so faking them
+  hangs every interaction test with no useful error. `toFake: ["setInterval", "clearInterval",
+  "Date"]` is what the cooldown reads and leaves the harness on real time.
+- **An assertion that documents a discrepancy protects it.** `otp.test.ts` pinned "Token has
+  expired or is invalid" → expired, and the layout e2e pinned the label sitting 1px off its
+  value — both green, both describing a bug in a comment rather than forbidding it. Pin the rule
+  (`toBe(valueFromEdge)`), not the pair of numbers that currently satisfy it.
+- **Verify a fix by breaking it.** Every law added in v2.10–v2.12 was checked by reverting the
+  implementation and confirming the new assertion — and only that assertion — went red. A CSS
+  rule that matches nothing and a mapping that never fires both pass a green suite otherwise.
+
 ## Open questions
 
 1. Seed content still owed: TR formality register per product, the ~80-term universal loanword
@@ -172,6 +198,17 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
    a human confirm them. If an agent ever needs to log one unattended, this needs the same
    `actor_kind` shape `activity` and `artifact_version` carry.
 
+4. **OTP expiry drift — verify on any change to the dashboard setting.** `OTP_EXPIRY_SECONDS`
+   mirrors Supabase Auth → Email → OTP Expiration by hand. Change one without the other and the
+   wrong-code/expired strings silently disagree with reality. No test can catch it — verify on
+   any change to that dashboard setting. **A build-time check was investigated and is not
+   possible with this project's credentials:** `/auth/v1/settings` does not carry the value (the
+   service-role key returns a byte-identical response), the value lives in GoTrue's environment
+   rather than in Postgres, and the Management API endpoint that does expose `mailer_otp_exp`
+   (`api.supabase.com/v1/projects/{ref}/config/auth`) requires an account-scoped personal access
+   token — one that can modify every project on the account. Putting that in the Vercel build
+   env to read one integer is the trade, if this ever needs automating.
+
 ## Accounts and keys needed
 
 - [x] Supabase project (URL, anon key, service role key)
@@ -180,8 +217,9 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
 - [ ] Figma personal access token
 - [ ] Google Cloud OAuth client (Google sign-in, Drive watch) — deferred, not blocking
 - [ ] Apple sign-in credentials — deferred, not blocking
-- [ ] Vercel project — not yet
-- [x] Resend — arrived at T0.4 as the Supabase SMTP sender for the OTP mail, not phase 6
+- [x] Vercel project — deployed, **aeni.ma**
+- [x] Resend — the Supabase SMTP sender for the OTP mail since T0.4, now sending as
+      `auth@aeni.ma` on the verified domain. Not phase 6.
 
 Supabase MCP is connected from the repo's `.mcp.json`, read-only. Playwright MCP is
 configured in local Claude Code settings only, so it does not travel with the repo.
