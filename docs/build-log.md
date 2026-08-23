@@ -209,6 +209,15 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
    token — one that can modify every project on the account. Putting that in the Vercel build
    env to read one integer is the trade, if this ever needs automating.
 
+5. **`src/db/database.types.ts` was hand-edited — regenerate and diff.** T1.2 added `item.key` and
+   `product.key_prefix` to that file by hand, because the Supabase MCP server was not connected in
+   that session and there is no second route to the generator on this machine. Both follow
+   `artifact_version.version_no` exactly — required on Row and Insert, optional on Update, which is
+   the shape the generator gives a NOT NULL column with no default. **Regenerate when MCP
+   reconnects and diff the result: a clean diff retires this note and the one in the file's
+   header.** A dirty one means the hand-written shape was wrong, and the typed client has been
+   lying about a column ever since.
+
 ## Accounts and keys needed
 
 - [x] Supabase project (URL, anon key, service role key)

@@ -1,7 +1,8 @@
-# aenima — Product Specification v1.1
+# aenima — Product Specification v1.2
 
 <!-- Master document. Versioned in aenima's own ledger once the platform exists; until then, this file is the source of truth.
-v1.1: Linear removed from v1 scope (tasks push to Notion only; Linear moves to fast-follow). Notion promoted to a full intake source: comments, hand-created tasks, hand-written docs, property changes. Tickets land in an aenima-managed Development backlog database per product. Notion comments are read-only ingest in v1. Agent visual attribution and chat-as-command-palette aligned with design spec v2.0. -->
+v1.1: Linear removed from v1 scope (tasks push to Notion only; Linear moves to fast-follow). Notion promoted to a full intake source: comments, hand-created tasks, hand-written docs, property changes. Tickets land in an aenima-managed Development backlog database per product. Notion comments are read-only ingest in v1. Agent visual attribution and chat-as-command-palette aligned with design spec v2.0.
+v1.2: Appendix A's baselines are defined as elapsed wall-clock time in a stage, resolving an effort/elapsed ambiguity build ticket T1.2 hit when it tried to compare them against something (§3, Appendix A). aenima observes when things happen and never how long anyone concentrated, so an effort baseline is unmeasurable by construction. The hour-scale cells are effort estimates and are therefore not baselines at all: Discover carries no seed for any type, and no item is ever at-risk on time for sitting there. -->
 
 ## 0. What aenima is
 
@@ -71,6 +72,7 @@ Four stages, Double Diamond–derived, renamed so "Develop" is never confused wi
 - Backward movement is legal and unceremonious: an artifact change that drops a score is just a score drop, logged with a reason when a human supplies one.
 - **Dual-track bridge.** Upstream work (discover, product, design) flows kanban-style with due dates. Development runs its own sprints. Aenima does not impose either; it bridges the seam. Each product carries an optional dev-sprint cadence field ("sprints start Mondays, 2 weeks"). With it set, aenima computes the **ready buffer**: "sprint planning Monday — 2 items handover-ready, ~4 needed." Without it, the buffer simply doesn't show.
 - Baselines: each type × stage has a seeded "typical time" (solo scale ≈ 60%, multi-team ≈ 140% of team scale). Shown as quiet info ("items like this usually take about 2 weeks here"), never as deadlines. After ~8 completed items of a type, the workspace's own medians silently replace the seeds and the label becomes "based on your history." Idle-dimming and park thresholds read from this same table.
+- **A baseline measures elapsed wall-clock time in a stage — the upper bound of Appendix A's range.** aenima observes when things happen and cannot observe how long anyone concentrated, so an effort baseline would be unmeasurable by construction: nothing in the system could ever compare a value against it. The upper bound rather than the midpoint, because a baseline exists to decide when something has taken *too* long, and flagging an item inside its own normal range would make "at risk" mean "in progress". **A stage with no seeded cell has no baseline, and an item there is never at-risk on time** — that is the honest answer to "is this taking too long" when nothing says how long it should take.
 
 ---
 
@@ -389,6 +391,8 @@ Decided in v1.1: tickets land in an aenima-managed Development backlog database 
 | Spike | — | — | — | — | — | its own timebox |
 
 Labels read "items like this usually take about …". Tenant medians replace seeds after ~8 completed items per type.
+
+**These are elapsed wall-clock durations** (§3), and two consequences follow from the table above. The **hour-scale cells are effort estimates, not baselines**: "~1 focused hour" is how long writing a brief takes someone, not how long a brief may sit, and spent as elapsed time it would mark an item at risk ninety minutes after it was created — against §1's "welcoming, never alarming". So **Discover carries no baseline for any type**, and no item is ever at-risk on time for sitting in Discover. The **day-scale cells are used as elapsed seeds and are knowingly loose**: several were also written as focused time, so they run short as wall-clock, which is a wrong magnitude rather than a wrong kind of quantity. §19 item 3 — confirming these numbers — stands, and tenant medians retire the whole question per type once there is history to compute one from.
 
 ## B. Feature interview bank (question → critic test, condensed)
 

@@ -20,8 +20,8 @@ import type { Stage } from "@/lib/stage";
  *
  * Four decisions taken to get from the appendix to this:
  *
- * 1. **The upper bound of each range.** "2–4 focused days" becomes 4. A
- *    baseline exists here to decide when something has taken *too* long, and
+ * 1. **The upper bound of each range**, per §3. "2–4 days" becomes 4. A
+ *    baseline exists to decide when something has taken *too* long, and
  *    flagging an item at the bottom of its own normal range would make At risk
  *    mean "in progress".
  *
@@ -38,19 +38,19 @@ import type { Stage } from "@/lib/stage";
  *    a stage the appendix declines to estimate would invent a deadline, and §3 is
  *    explicit that baselines are "quiet info … never as deadlines".
  *
- * 4. **The hour-scale cells are not used at all.** Appendix A gives Feature and
- *    Experiment "~1 focused hour" for the brief. §13 compares its baselines to
- *    *time-in-stage*, which is elapsed wall-clock, and an hour of focused
- *    writing is not an elapsed-time budget for a stage: taken literally it
- *    marks an item at risk ninety minutes after someone creates it, which
- *    contradicts §1's "welcoming, never alarming" and §3's own "never as
- *    deadlines". The day-scale cells are kept as elapsed approximations —
- *    imperfect for the same reason, since "2–4 focused days" is also effort
- *    rather than elapsed, but wrong by a factor rather than by a category.
- *    Discover therefore has no baseline for any type, and no item is ever
- *    at-risk on time for sitting in Discover. Raised as an open question:
- *    Appendix A measures effort and §13 spends it as elapsed time, and only one
- *    of those can be right.
+ * 4. **The hour-scale cells are not used at all**, per §3 and Appendix A's own
+ *    note. "~1 focused hour" is how long writing a brief takes someone, not how
+ *    long a brief may sit; spent as elapsed time it marks an item at risk ninety
+ *    minutes after it is created. So Discover has no baseline for any type, and
+ *    no item is ever at-risk on time for sitting there. The day-scale cells are
+ *    used as elapsed seeds and are knowingly loose — several were written as
+ *    focused time too, so they run short as wall-clock, which is a wrong
+ *    magnitude rather than a wrong kind of quantity.
+ *
+ * The effort-versus-elapsed question this table used to raise is settled:
+ * product spec v1.2 defines a baseline as elapsed wall-clock, because aenima
+ * observes when things happen and never how long anyone concentrated — an
+ * effort baseline is unmeasurable by construction.
  */
 
 type ItemType = Database["public"]["Enums"]["item_type"];
@@ -71,9 +71,8 @@ export const STALE_MULTIPLIER = 1.5;
  * for a stage (the appendix's "—"), and no type has one for `handed_over`.
  */
 export const STAGE_BASELINES: Partial<Record<ItemType, Partial<Record<Stage, number>>>> = {
-  // Brief ~1 focused hour — see note 4, not an elapsed budget, so no Discover
-  // entry. Define 2–4 focused days · Design 3–7 days, tech spec 1–2 days → the
-  // longer of the two, 7.
+  // Brief ~1 focused hour — effort, not an elapsed budget, so no Discover entry.
+  // Define 2–4 days · Design 3–7 days, tech spec 1–2 days → the longer, 7.
   feature: { define: 4 * DAY, design: 7 * DAY },
   // No brief. Define 1–2 days · Design 2–3 days, tech spec conditional.
   enhancement: { define: 2 * DAY, design: 3 * DAY },

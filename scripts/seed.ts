@@ -20,7 +20,7 @@
 import { randomUUID } from "node:crypto";
 
 import { createClient } from "@supabase/supabase-js";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import { createDbClient } from "../src/db/client";
 import {
@@ -38,6 +38,9 @@ import {
 
 const WORKSPACE_NAME = "Seed workspace";
 const OWNER_EMAIL = "seed-owner@aenima.test";
+
+/** The seed's first product. Named, because two of them exist. */
+const PRIMARY_PRODUCT_SLUG = "sociera";
 
 /**
  * §4's seven types, and §3's three derivable stages spread across them.
@@ -122,6 +125,33 @@ const SECOND_PRODUCT_ITEMS = [
   },
 ] as const;
 
+/**
+ * §13's At risk bucket, given something to hold.
+ *
+ * Without this the seed demonstrates two buckets out of three: its one open
+ * Must gap is a day old on an item in Design, which is Your move, and nothing is
+ * stale. So this is an item deliberately arranged to be at risk and nothing
+ * else.
+ *
+ * **It carries no artifacts, and that is the whole trick.** An open Must gap on
+ * an item at Define or later is Your move — a decision waiting on a person, and
+ * Your move outranks At risk. In Discover the same gap is not yet anyone's move,
+ * so what remains is §13's other clause: "a handover-blocking gap older than 5
+ * days". Nine days puts it comfortably past, without sitting on the boundary the
+ * unit tests already own.
+ *
+ * An invite-by-link surface is where §4's safety layer applies, so a blocking
+ * safety gap is what this item would really have.
+ */
+const AT_RISK_ITEM = {
+  type: "feature",
+  title: "Invite teammates by link",
+  flowIntent: "value",
+  checkId: "SF-2",
+  evidence: "Anyone holding the link can join — no bound on who, and no way to revoke one.",
+  gapAgeDays: 9,
+} as const;
+
 /** §5: one gap in each disposition, so every branch has something to render. */
 const GAPS = [
   {
@@ -146,6 +176,74 @@ const GAPS = [
       "Excluded: the digest has no interpersonal surface, so the safety layer is off.",
   },
 ] as const;
+
+type Db = ReturnType<typeof createDbClient>["db"];
+
+/**
+ * Inserts `AT_RISK_ITEM` into a workspace unless it is already there, and
+ * reports whether it did anything.
+ *
+ * Idempotent on the item's title within the workspace rather than on a
+ * generated id, because the id is new on every run and the title is what makes
+ * this item the one it is. Runs on a fresh seed and on an existing one, so an
+ * environment seeded before this item existed still ends up with it.
+ *
+ * No artifacts and no owner: the item stays in Discover, which is what makes its
+ * blocking gap read as At risk rather than Your move, and an open gap carries no
+ * resolver stamp.
+ */
+async function ensureAtRiskItem(db: Db, workspaceId: string): Promise<boolean> {
+  const present = await db
+    .select({ id: item.id })
+    .from(item)
+    .where(and(eq(item.workspaceId, workspaceId), eq(item.title, AT_RISK_ITEM.title)))
+    .limit(1);
+
+  if (present.length > 0) return false;
+
+  // By slug, not by "the first row". Both products are inserted in one
+  // statement, so they share a `created_at` to the microsecond and ordering by
+  // it is a tie Postgres breaks however it likes — which would put this item
+  // under a different product, and under a different key, in two environments
+  // seeded from the same script.
+  const [product_] = await db
+    .select({ id: product.id })
+    .from(product)
+    .where(and(eq(product.workspaceId, workspaceId), eq(product.slug, PRIMARY_PRODUCT_SLUG)))
+    .limit(1);
+
+  if (!product_) return false;
+
+  const itemId = randomUUID();
+  await db.insert(item).values({
+    id: itemId,
+    workspaceId,
+    productId: product_.id,
+    // §2: unlinked from any opportunity, which is advisory and never a block.
+    opportunityId: null,
+    type: AT_RISK_ITEM.type,
+    // Assigned by `app.assign_item_key()`; overwritten whatever is passed.
+    key: "",
+    title: AT_RISK_ITEM.title,
+    flowIntent: AT_RISK_ITEM.flowIntent,
+  });
+
+  const raisedAt = new Date(Date.now() - AT_RISK_ITEM.gapAgeDays * 24 * 60 * 60 * 1000);
+  await db.insert(gap).values({
+    workspaceId,
+    itemId,
+    checkId: AT_RISK_ITEM.checkId,
+    tag: "must",
+    disposition: "open",
+    evidence: AT_RISK_ITEM.evidence,
+    // Backdated deliberately: the age is the whole point of this row, and
+    // `created_at` defaults to now, which would put it in Flowing.
+    createdAt: raisedAt,
+    updatedAt: raisedAt,
+  });
+
+  return true;
+}
 
 async function main() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -172,7 +270,16 @@ async function main() {
       .limit(1);
 
     if (existing.length > 0) {
-      console.log(`seed: "${WORKSPACE_NAME}" already exists (${existing[0]?.id}). Nothing to do.`);
+      const id = existing[0]!.id;
+      // Top up rather than stop dead. The at-risk item arrived after the first
+      // seeds ran, and a workspace that already exists would otherwise never get
+      // it — which would leave every established environment demonstrating two
+      // buckets out of three. It inserts itself once and is a no-op after that.
+      const added = await ensureAtRiskItem(db, id);
+      console.log(
+        `seed: "${WORKSPACE_NAME}" already exists (${id}). ` +
+          (added ? `Added "${AT_RISK_ITEM.title}".` : "Nothing to do."),
+      );
       return;
     }
 
@@ -208,7 +315,7 @@ async function main() {
         id: productId,
         workspaceId,
         name: "Sociera",
-        slug: "sociera",
+        slug: PRIMARY_PRODUCT_SLUG,
         // The `soc` in `soc-12`. Explicit rather than derived from the slug —
         // see the column's own note in the schema.
         keyPrefix: "soc",
@@ -363,6 +470,8 @@ async function main() {
 
     // §2: every mutating action writes an activity row. The seed writes human
     // rows as the seeded Owner rather than inventing a third actor kind.
+    await ensureAtRiskItem(db, workspaceId);
+
     await db.insert(activity).values({
       workspaceId,
       productId,
