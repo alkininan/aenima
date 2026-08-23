@@ -11,8 +11,6 @@ Drizzle ORM · Vitest + Playwright · Vercel
 ## Commands
 ```
 dev        pnpm dev
-build      pnpm build                # next build
-start      pnpm start                # serve the production build
 test       pnpm test                 # vitest, whole suite
 test one   pnpm test <path>
 e2e        pnpm e2e                  # playwright
@@ -39,6 +37,8 @@ Only what differs from framework defaults:
 - Every mutating action writes an `activity` row with actor (human or agent), timestamp, trigger.
 - All user-facing strings go through `src/i18n/*` in EN/TR/NL. No bare strings in JSX.
 - Store timestamps in UTC; render in the workspace timezone.
+- An input that cannot yet be observed is typed `never`, not `boolean` — see `src/lib/stage.ts`.
+  A boolean claims "observable, currently false", which is a different claim and a false one.
 
 ## Prohibitions
 - Never extend scope beyond the ticket.

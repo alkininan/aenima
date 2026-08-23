@@ -85,9 +85,7 @@ T1.2 — the §13 list surface at /app: three buckets, pipeline strip, 56h item 
 _(when a ticket's report-back raises a question and you answer it, record the answer here.
 If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in the repo.)_
 
-- `build` and `start` stay in `package.json` and in CLAUDE.md's Commands block.
 - `exactOptionalPropertyTypes` and `noUncheckedIndexedAccess` on deliberately.
-- Prettier `printWidth` 100.
 - Font faces declared in `@theme static`, not `:root` — Tailwind tree-shakes unused theme vars,
   so `static` is load-bearing.
 - `next/font/google` accepted as self-hosted per design spec v2.1 §3; DM Sans preloaded alongside
