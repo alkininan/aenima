@@ -192,7 +192,10 @@ export function ItemRow({
         </span>
       </span>
 
-      <ItemRowMenu itemKey={item.key} label={t.list.itemMenu(item.title)} t={t} />
+      {/* The label is formatted here and passed as a string: the menu is a
+          client component, and the dictionary that formats it cannot cross the
+          boundary. */}
+      <ItemRowMenu itemKey={item.key} label={t.list.itemMenu(item.title)} />
     </div>
   );
 }

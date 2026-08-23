@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { IconButton } from "@/components/ui/IconButton";
 import { Menu } from "@/components/ui/Menu";
 import { OverflowIcon } from "@/components/ui/icons";
-import type { Dictionary } from "@/i18n";
+import { getDictionary } from "@/i18n";
 import { itemHref } from "@/lib/routes";
 
 /**
@@ -20,16 +20,16 @@ import { itemHref } from "@/lib/routes";
  * gaps, log a decision — are mutations that do not exist yet, and a menu full of
  * disabled rows would be worse than a short one. Open and copy-key both work
  * today, which is the whole test of whether an entry belongs here.
+ *
+ * **It reads its own copy rather than being handed a dictionary.** The
+ * dictionary carries formatter functions, and a function cannot cross the
+ * server/client boundary — React has no way to serialize one, so passing `t`
+ * from a Server Component throws at request time. A client component imports
+ * `getDictionary` the way `SignInForm` does; anything it needs *interpolated*
+ * arrives as an already-formatted string, like `label` below.
  */
-export function ItemRowMenu({
-  itemKey,
-  label,
-  t,
-}: {
-  itemKey: string;
-  label: string;
-  t: Dictionary;
-}) {
+export function ItemRowMenu({ itemKey, label }: { itemKey: string; label: string }) {
+  const t = getDictionary();
   const router = useRouter();
 
   return (

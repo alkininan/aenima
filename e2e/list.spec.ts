@@ -189,3 +189,43 @@ test.describe("at 1440", () => {
     }
   });
 });
+
+/**
+ * The server/client boundary — the topology `/app` has, and the one the rest of
+ * this file does not.
+ *
+ * Every other test here drives `/dev/primitives`, which previews the same
+ * components from a client root: `Composites` carries `"use client"`, so nothing
+ * below it ever crosses into a client component. `/app` is the opposite — the
+ * page, the sidebar and the row are Server Components handing props to two
+ * client islands — and that difference shipped a production 500 that every gate
+ * passed: unit tests render client components directly, this file drove the
+ * client-rooted preview, and `/app` itself is behind auth.
+ *
+ * `/dev/list` renders the fixture from a Server Component so the boundary
+ * actually exists. Its job is to fail. Verified by reintroducing the defect: the
+ * page 500s and `/dev/primitives` stays green, which is the hole exactly.
+ *
+ * A non-serializable prop is a render-time throw rather than a build-time error
+ * — `next build` passed with the bug in place, because `/app` is dynamic and is
+ * never prerendered — so a page that renders is the only instrument that works.
+ */
+test.describe("the server/client boundary", () => {
+  test("renders the list from a Server Component without a serialization error", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+
+    const response = await page.goto("/dev/list");
+
+    // The whole assertion. A function reaching a client component throws while
+    // rendering, so the status is what tells you, and the message never makes it
+    // to the page in production.
+    expect(response?.status()).toBe(200);
+
+    // And it really rendered the tree, rather than an empty shell that would
+    // pass the line above while proving nothing.
+    await expect(page.getByTestId("item-row").first()).toBeVisible();
+    await expect(page.getByRole("button", { name: /Actions for/ }).first()).toBeVisible();
+  });
+});

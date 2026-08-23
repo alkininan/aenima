@@ -213,6 +213,48 @@ test.describe("focus split", () => {
     expect(paint.glow).toBe("on");
   });
 
+  /**
+   * §6: the autofocused field gets a border and nothing else.
+   *
+   * The modality starts absent rather than on `keyboard`. An autofocused field
+   * already carries a caret — that is the affordance — so a ring around it is a
+   * second stroke on a field nobody has touched, which is the double stroke this
+   * split removes, arriving on load instead of on a click. Sign-in autofocuses,
+   * so this is the first thing anyone sees.
+   */
+  test("an autofocused field gets the border alone, with no ring on arrival", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/sign-in");
+    await page.evaluate(() => document.fonts.ready);
+    await page.waitForTimeout(250);
+
+    // Nothing has been touched, so nothing has been decided.
+    expect(
+      await page.evaluate(() => document.documentElement.getAttribute("data-focus-modality")),
+    ).toBeNull();
+
+    await expect(page.locator('input[name="email"]')).toBeFocused();
+    const paint = await focusPaint(page);
+    expect(paint.border).toBe(PRIME);
+    expect(paint.ring).toBe("none");
+    expect(paint.glow).toBe("off");
+  });
+
+  // And the first Tab brings it back — the field must not be permanently
+  // ringless just because the page focused it first.
+  test("the ring arrives on the first focus key", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/sign-in");
+    await page.evaluate(() => document.fonts.ready);
+
+    await page.keyboard.press("Tab");
+    await page.waitForTimeout(250);
+
+    expect(
+      await page.evaluate(() => document.documentElement.getAttribute("data-focus-modality")),
+    ).toBe("keyboard");
+  });
+
   test("typing after a click does not summon the ring mid-word", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/sign-in");

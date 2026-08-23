@@ -44,7 +44,9 @@ export function Sidebar({ t, products }: { t: Dictionary; products: readonly Swi
         <span className="type-ui-headline text-n-primary">{t.common.appName}</span>
       </Link>
 
-      <ProductSwitcher products={products} t={t} />
+      {/* No dictionary: it holds formatter functions, which cannot be
+          serialized across the boundary. The switcher reads its own. */}
+      <ProductSwitcher products={products} />
 
       <nav aria-label={t.nav.list} className="flex flex-col gap-[2px]">
         {NAV.map((entry) => {

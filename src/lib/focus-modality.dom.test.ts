@@ -21,9 +21,22 @@ describe("focus modality", () => {
     runScript();
   });
 
-  // §6 (v2.5): a field may be autofocused before anyone has touched anything,
-  // and a focused field with no affordance is worse than an unasked-for ring.
-  it("starts on the keyboard, before any input has happened", () => {
+  /**
+   * §6: no modality until a device has actually been used.
+   *
+   * The ring is gated on `[data-focus-modality="keyboard"]`, so an absent
+   * attribute means no ring — which is the point. Sign-in autofocuses its field,
+   * and an autofocused field already carries a caret; ringing it too is the
+   * double stroke the split exists to remove, just moved to the load path.
+   */
+  it("sets no modality at all before anything has happened", () => {
+    expect(modality()).toBeNull();
+  });
+
+  // And the ring arrives on the first Tab, which is the first moment there is
+  // anything true to say about which device is in use.
+  it("starts on the keyboard at the first focus key", () => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab" }));
     expect(modality()).toBe("keyboard");
   });
 

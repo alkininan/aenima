@@ -1,11 +1,7 @@
 import type { Metadata } from "next";
 import { DM_Sans, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 
-import {
-  DEFAULT_FOCUS_MODALITY,
-  FOCUS_MODALITY_ATTRIBUTE,
-  FOCUS_MODALITY_SCRIPT,
-} from "@/lib/focus-modality";
+import { FOCUS_MODALITY_SCRIPT } from "@/lib/focus-modality";
 
 import "./globals.css";
 
@@ -63,15 +59,29 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      // §6 (v2.5): the default modality is rendered, not left to the script to
-      // add. Setting it client-side only would mismatch the server's HTML on
-      // hydration, and it keeps the keyboard ring working with JS disabled.
-      {...{ [FOCUS_MODALITY_ATTRIBUTE]: DEFAULT_FOCUS_MODALITY }}
+      /**
+       * §6: the focus-modality script writes `data-focus-modality` onto this
+       * element, and it can do so before React hydrates — a Tab pressed on a
+       * still-loading page lands in exactly that window. The server renders no
+       * such attribute, because there is no modality until a device has been
+       * used, so React finds one it did not write and warns that a tree
+       * hydrated with attributes it cannot patch up.
+       *
+       * This is the case `suppressHydrationWarning` exists for: an element
+       * deliberately mutated by an inline script before hydration. It applies to
+       * this element only, one level deep, so nothing inside the app loses the
+       * warning where it would mean something.
+       */
+      suppressHydrationWarning
       className={`${spaceGrotesk.variable} ${dmSans.variable} ${jetBrainsMono.variable} h-full antialiased`}
     >
       <head>
-        {/* §6 (v2.5): the focus split needs to know which device moved focus,
-            and it has to know before the first paint — sign-in autofocuses. */}
+        {/* §6: the focus split needs to know which device moved focus. The
+            attribute starts absent — an autofocused field already has a caret,
+            so a ring around it is the double stroke the split removes — and the
+            script writes it on the first pointer or focus key. Still inlined in
+            the head so the listeners are attached before anyone can beat them
+            to it. */}
         <script dangerouslySetInnerHTML={{ __html: FOCUS_MODALITY_SCRIPT }} />
       </head>
       <body className="flex min-h-full flex-col">{children}</body>

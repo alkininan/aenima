@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Avatar } from "@/components/ui/Avatar";
 import { Menu } from "@/components/ui/Menu";
 import { ChevronDownIcon } from "@/components/ui/icons";
-import type { Dictionary } from "@/i18n";
+import { getDictionary } from "@/i18n";
 import { LIST_PARAMS, listHref } from "@/lib/routes";
 
 export type SwitcherProduct = { slug: string; name: string };
@@ -21,14 +21,13 @@ export type SwitcherProduct = { slug: string; name: string };
  * A client island because a menu is focus management and arrow-key movement.
  * What it writes is a URL, though, so the filtered list is still rendered on the
  * server, is shareable, and comes back with the browser's back button.
+ *
+ * **It reads its own copy rather than being handed a dictionary** — see
+ * `ItemRowMenu` for why: the dictionary holds formatter functions, and a
+ * function cannot be serialized across the server/client boundary.
  */
-export function ProductSwitcher({
-  products,
-  t,
-}: {
-  products: readonly SwitcherProduct[];
-  t: Dictionary;
-}) {
+export function ProductSwitcher({ products }: { products: readonly SwitcherProduct[] }) {
+  const t = getDictionary();
   const router = useRouter();
   /**
    * Read here rather than passed down, because the sidebar is a layout and a
