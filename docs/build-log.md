@@ -7,11 +7,12 @@
 ## Current state
 
 **Phase:** 1 — the spine · phase 0 (foundation) complete
-**Next ticket:** T1.2 — bucket assignment (your move / at risk / flowing)
+**Next ticket:** T1.3 — item page shell: content + chat dock + meter
 **Repo:** github.com/alkininan/aenima
 **Deployed:** yes — **aeni.ma** on Vercel
 
-`docs/design-spec.md` is **v2.12**, complete and closed, and the code matches.
+`docs/design-spec.md` is **v2.12** and `docs/product-spec.md` is **v1.2**, both complete and
+closed, and the code matches.
 
 The form language was settled over two runs against real use of the sign-in flow. v2.3–v2.6:
 48h fields, floating labels bound at every moment, an always-reserved label zone and helper
@@ -72,6 +73,12 @@ Design spec v2.7–v2.12 — the form language finished against real use of the 
 Deploy — Vercel, live at **aeni.ma**. Resend sends the OTP mail as `auth@aeni.ma`. First run
   verified end to end for a non-Gmail address. Checked in production: `/sign-in` 200, `/app`
   redirects to it, `/dev/primitives` 404s.
+
+T1.2 — the §13 list surface at /app: three buckets, pipeline strip, 56h item row, over T1.1's
+  query layer and real `deriveStage`. Item keys (`soc-12`) by trigger, migration `0005`. Pure
+  `buckets.ts` and `baselines.ts`; `Meter` as a new primitive, hollow everywhere until scoring
+  exists — `1d87402`. The effort/elapsed ambiguity it surfaced closed as product spec v1.2, with
+  the seed extended so all three buckets have something in them — `a615cc1`.
 
 ## Decisions made during the build
 
@@ -184,6 +191,34 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
   implementation and confirming the new assertion — and only that assertion — went red. A CSS
   rule that matches nothing and a mapping that never fires both pass a green suite otherwise.
 
+- **`/app` is workspace-wide; the product switcher filters it in place.** §13's buckets are a
+  priority queue — "anything awaiting a human" — so a list that stopped at a product boundary would
+  answer "what should I do next in Sociera" rather than "what should I do next", and a Must gap in
+  the other product would stay invisible until someone went looking for it. The switcher narrows
+  what is already there rather than navigating away, which is also why "all products" is a real
+  default rather than an absence. `/p/<slug>` stays reserved for a product's own page.
+- **An item's key comes from `product.key_prefix`, not from its slug.** `soc-12` is what people say
+  out loud, so it has to survive a product being renamed — a slug does not. The separate column is
+  also what makes keys unique per workspace safely: `sociera` and `social` both derive `soc`, and a
+  derived prefix would make the second product's first item fail to insert, at runtime, with a
+  constraint error. Prefixes are unique per workspace for the same reason.
+- **Keys are assigned by the database and never by the client**, like `artifact_version.version_no`
+  — `app.assign_item_key()` overwrites whatever an insert supplies, and the unique index is the
+  backstop for the MAX+1 race. A client that can choose an identifier can collide with one.
+- **Baselines are elapsed wall-clock, upper bound of the range** (product spec v1.2 §3). aenima
+  observes when things happen and never how long anyone concentrated, so an effort baseline is
+  unmeasurable by construction — nothing in the system could compare a value against it. A stage
+  with no seeded cell has **no** baseline, and an item there is never at-risk on time: that is the
+  honest answer to "is this taking too long" when nothing says how long it should take. Hour-scale
+  cells are effort estimates, so Discover has no baseline for any type.
+- **An input that cannot yet exist is typed `never`, never faked with a boolean.** `stage.ts` set
+  this with `signedPacket` and `buckets.ts` follows it for §13's sign-offs, triage, walkthroughs and
+  score regression. A `boolean` would say "observable, currently false", which is a different claim
+  and a false one — and it invites a caller to pass `false` as though that were an answer about a
+  ceremony that cannot happen. `never` makes the branch unreachable to the compiler while leaving
+  the rule visible in the file, so switching one on is a type change rather than a rule someone has
+  to remember to come back and write.
+
 ## Open questions
 
 1. Seed content still owed: TR formality register per product, the ~80-term universal loanword
@@ -217,6 +252,22 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
    reconnects and diff the result: a clean diff retires this note and the one in the file's
    header.** A dirty one means the hand-written shape was wrong, and the typed client has been
    lying about a column ever since.
+
+6. **What T1.2 left on the list surface, and where each goes.** The "Park?" chip renders and does
+   nothing — park is a mutation plus an activity row plus §13's undo toast, so it lands with the
+   negotiation moves in **Phase 2**; it renders now because adding it later would shift every idle
+   row's layout after the fact. Arrow-key walking of list rows (§11) is unwired, and
+   `src/lib/roving.ts` is already there for whoever does it — **T1.3 or a later pass**. The row's
+   freshness is *last activity*, not *scored at*: §8's dot and §10's "scored 6 h ago — retrying"
+   both want a scoring clock, which arrives in **Phase 2**.
+7. **The list read is unpaginated, deliberately — revisit when a workspace gets large.** The buckets
+   are a ranking over the whole workspace, so there is no page of rows that could be bucketed
+   correctly: you cannot tell that an item belongs at the top of Your move from a slice of the
+   table. The read is bounded by workspace size and nothing else. **When that stops being
+   acceptable the fix is a cap plus a visible "and N more", never a bare `LIMIT`** — silently
+   truncating the bucket §13 puts "always on top" is the failure nobody would notice. Also worth
+   confirming this project's PostgREST `db-max-rows` before it bites: if it is set, the platform
+   truncates the result and says so only in a response header.
 
 ## Accounts and keys needed
 
