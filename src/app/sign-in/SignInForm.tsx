@@ -100,7 +100,15 @@ export function SignInForm() {
       emailField.clear();
       setCode("");
       setCodeError(null);
+      setResendError(null);
       setNotice(t.signIn.codeSentTo(email));
+      /**
+       * §8 (v2.11): the clock starts with the send, not with the control. This
+       * code is the one that just went out, so the step opens already counting
+       * down — the provider's window belongs to the address, and a resend that
+       * was live on arrival handed over a tap that could only be refused.
+       */
+      resendCooldown.start();
       setStep("code");
     });
   };
@@ -140,8 +148,9 @@ export function SignInForm() {
     setCodeError(null);
     setServerError(null);
     setResendError(null);
-    // The cooldown deliberately survives: it tracks the provider's window, and
-    // that window does not reset because someone stepped back and forward.
+    // The cooldown deliberately survives the step change: it tracks the
+    // provider's window, and that window does not close because someone stepped
+    // back. Coming forward sends a new code, which starts a new one.
   };
 
   /**
@@ -151,6 +160,7 @@ export function SignInForm() {
    */
   const resend = () => {
     setResendError(null);
+    // A press is a send, so it starts the window like any other.
     resendCooldown.start();
 
     startTransition(async () => {

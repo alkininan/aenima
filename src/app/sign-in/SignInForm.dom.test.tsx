@@ -1,6 +1,8 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { RESEND_COOLDOWN_MS } from "@/components/ui/useCooldown";
 
 const requestCode = vi.fn();
 const verifyCode = vi.fn();
@@ -133,7 +135,9 @@ describe("sign-in step header", () => {
   it("keeps the resend beneath the primary", async () => {
     await reachCodeStep();
 
-    const resend = screen.getByRole("button", { name: "Send a new code" });
+    // §8 (v2.11): it opens counting down, so the label carries a clock and an
+    // exact name would not match it. Where it sits is what this test is about.
+    const resend = screen.getByRole("button", { name: /Send a new code/ });
     expect(resend.parentElement).not.toBe(primary().parentElement);
   });
 });
@@ -174,21 +178,103 @@ describe("sign-in field language", () => {
 });
 
 /**
- * §8 (v2.10) resend cooldown, and where its failures are allowed to land.
+ * §8 (v2.11) resend cooldown — when the window opens, and where a failure
+ * inside it is allowed to land.
  *
- * The clock itself is proven in `useCooldown.dom.test.ts` on fake timers. What
- * only the form can show is the wiring: which state a failed resend writes to,
- * and which control ends up wearing it.
+ * The clock itself is proven in `useCooldown.dom.test.ts`. What only the form
+ * can show is the wiring: when the window starts, which state a failed resend
+ * writes to, and which control ends up wearing it.
+ *
+ * Fake timers throughout, because the resend is no longer live on arrival —
+ * §8 starts its window with the code that got us here, so a test that wants to
+ * press the control has to run that window out first. Only `setInterval` and
+ * `Date` are faked, which is exactly what the hook reads: faking `setTimeout`
+ * as well would stall userEvent and RTL, both of which wait on real ones.
  */
 describe("sign-in resend", () => {
   beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
     requestCode.mockReset();
     verifyCode.mockReset();
   });
+  afterEach(() => vi.useRealTimers());
 
   const otpGroup = () => screen.getByRole("group");
   /** The composite is label / group / helper — §8 reserves the helper line. */
   const otpHelper = () => otpGroup().parentElement!.lastElementChild!;
+
+  const resting = () =>
+    screen.queryByRole("button", { name: "Send a new code" }) as HTMLButtonElement | null;
+  const cooling = () =>
+    screen.queryByRole("button", {
+      name: /^Send a new code \(\d:\d\d\)$/,
+    }) as HTMLButtonElement | null;
+
+  /** Reaches the code step, which is also where the window opens. */
+  async function arrive() {
+    requestCode.mockResolvedValue({ status: "sent" });
+    const user = userEvent.setup();
+    render(<SignInForm />);
+
+    await user.type(screen.getByLabelText("Email"), "someone@example.com");
+    await user.click(screen.getByRole("button", { name: "Send code" }));
+    await screen.findByRole("heading", { name: "Enter your code" });
+    return user;
+  }
+
+  /** Runs a window out, so the control is pressable again. */
+  const runOut = async (ms = RESEND_COOLDOWN_MS) => {
+    await act(async () => {
+      vi.advanceTimersByTime(ms);
+    });
+  };
+
+  /**
+   * §8 (v2.11), and the bug it closes. The provider's clock starts with the
+   * code that reached this step, so a resend that was live on arrival could
+   * only ever be refused — one tap, one error, for a control the product had
+   * left enabled.
+   */
+  it("opens the code step already counting down", async () => {
+    await arrive();
+
+    expect(resting()).toBeNull();
+    expect(cooling()).not.toBeNull();
+    expect(cooling()!.disabled).toBe(true);
+    // The whole window is still ahead: none of it has been spent.
+    expect(cooling()!.textContent).toBe("Send a new code (1:00)");
+  });
+
+  // The window opens the control, it does not simply close it.
+  it("returns to its normal label once the window is out", async () => {
+    await arrive();
+    await runOut();
+
+    expect(cooling()).toBeNull();
+    expect(resting()).not.toBeNull();
+    expect(resting()!.disabled).toBe(false);
+  });
+
+  /**
+   * §8 (v2.11): the window survives a step back — `back` does not close it,
+   * because stepping back does not close the provider's. Coming forward sends a
+   * new code, so the step opens on a *new* window rather than the remains of
+   * the old one.
+   */
+  it("opens a fresh window on the way forward, not the remains of the old one", async () => {
+    const user = await arrive();
+
+    await runOut(30_000);
+    expect(cooling()!.textContent).toBe("Send a new code (0:30)");
+
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    await user.click(screen.getByRole("button", { name: "Send code" }));
+    await screen.findByRole("heading", { name: "Enter your code" });
+
+    // A second code went out, so the clock is that code's, not the first's.
+    expect(cooling()!.textContent).toBe("Send a new code (1:00)");
+    expect(requestCode).toHaveBeenCalledTimes(2);
+  });
 
   /**
    * §8 (v2.10): a field's helper line carries only errors about that field's
@@ -197,12 +283,13 @@ describe("sign-in resend", () => {
    * boxes red for something the person entering the code had not done.
    */
   it("puts a resend failure on the resend, never on the OTP field", async () => {
-    const user = await reachCodeStep();
+    const user = await arrive();
+    await runOut();
     requestCode.mockResolvedValue({ status: "rate-limited" });
 
-    await user.click(screen.getByRole("button", { name: "Send a new code" }));
+    await user.click(resting()!);
 
-    // §12 (v2.10): states the cause, does not scold.
+    // §12: states the cause, does not scold.
     const message = await screen.findByRole("status");
     expect(message.textContent).toBe(
       "Too many requests. Wait a moment before asking for another code.",
@@ -215,17 +302,16 @@ describe("sign-in resend", () => {
     expect(boxes.some((box) => box.hasAttribute("aria-describedby"))).toBe(false);
   });
 
-  // §8 (v2.10): the cooldown starts on the press, not on the reply — the gap
-  // between them is exactly where a second tap would land.
-  it("disables the resend at the tap and counts down in its own label", async () => {
-    const user = await reachCodeStep();
+  // A press is a send, so it opens a window of its own.
+  it("counts down again from a resend", async () => {
+    const user = await arrive();
+    await runOut();
     requestCode.mockResolvedValue({ status: "sent" });
 
-    await user.click(screen.getByRole("button", { name: "Send a new code" }));
+    await user.click(resting()!);
 
-    expect(screen.queryByRole("button", { name: "Send a new code" })).toBeNull();
-    const cooling = screen.getByRole("button", { name: /^Send a new code \(\d:\d\d\)$/ });
-    expect((cooling as HTMLButtonElement).disabled).toBe(true);
+    expect(resting()).toBeNull();
+    expect(cooling()!.disabled).toBe(true);
   });
 
   /**
@@ -234,32 +320,34 @@ describe("sign-in resend", () => {
    * code went.
    */
   it("says nothing on a resend that works", async () => {
-    const user = await reachCodeStep();
+    const user = await arrive();
+    await runOut();
     requestCode.mockResolvedValue({ status: "sent" });
 
-    await user.click(screen.getByRole("button", { name: "Send a new code" }));
+    await user.click(resting()!);
 
     expect(screen.queryByRole("status")).toBeNull();
     expect(otpHelper().textContent).toBe("");
   });
 
   /**
-   * §8 (v2.10): the cooldown is the mechanism, not advice. The second tap that
-   * used to hit the provider's rate limit does not reach it at all now — which
-   * is the whole reason the failure stopped needing somewhere to land.
+   * §8: the cooldown is the mechanism, not advice. The second tap that used to
+   * hit the provider's rate limit does not reach it at all now — which is the
+   * whole reason the failure stopped needing somewhere to land.
    */
   it("refuses the second tap inside the window", async () => {
-    const user = await reachCodeStep();
+    const user = await arrive();
+    await runOut();
     requestCode.mockResolvedValue({ status: "rate-limited" });
 
     // One call so far: the code request that reached this step.
     expect(requestCode).toHaveBeenCalledTimes(1);
 
-    await user.click(screen.getByRole("button", { name: "Send a new code" }));
+    await user.click(resting()!);
     await screen.findByRole("status");
     expect(requestCode).toHaveBeenCalledTimes(2);
 
-    await user.click(screen.getByRole("button", { name: /Send a new code \(/ }));
+    await user.click(cooling()!);
 
     // Still cooling down, so nothing new was asked for.
     expect(requestCode).toHaveBeenCalledTimes(2);
