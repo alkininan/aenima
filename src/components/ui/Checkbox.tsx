@@ -18,7 +18,7 @@ type CheckboxProps = Omit<InputHTMLAttributes<HTMLInputElement>, "type"> & {
 
 /**
  * Checkbox (design-spec.md §8) — 20×20, radius 6, `--prime` fill with a
- * `#0E0F11` tick when checked, press physics, whole row clickable.
+ * `--bg-base` tick when checked, press physics, whole row clickable.
  *
  * The native input stays in the DOM and keeps every browser behaviour that
  * comes with it (labelling, form participation, space to toggle); the visible

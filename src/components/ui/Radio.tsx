@@ -18,7 +18,7 @@ type RadioProps = Omit<InputHTMLAttributes<HTMLInputElement>, "type"> & {
 
 /**
  * Radio (design-spec.md §8) — the checkbox grammar as a circle, with an 8px
- * `#0E0F11` dot when checked.
+ * `--bg-base` dot when checked.
  *
  * Arrow-key movement inside a group is the browser's: native radios sharing a
  * `name` already walk with the arrow keys §11 asks for, and re-implementing it

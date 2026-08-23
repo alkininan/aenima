@@ -348,7 +348,7 @@ describe("spinnerClasses", () => {
     expect(has(spinnerClasses(), "size-[20px]", "text-prime")).toBe(true);
   });
 
-  // §8: --prime, or #0E0F11 on prime fills; `inherit` takes the label's colour.
+  // §8: --prime, or --bg-base on prime fills; `inherit` takes the label's colour.
   it.each([
     ["prime", "text-prime"],
     ["on-prime", "text-bg-base"],

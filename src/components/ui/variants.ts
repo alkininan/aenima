@@ -46,7 +46,7 @@ const BUTTON_SIZE_CLASSES: Record<ButtonSize, string> = {
 };
 
 const BUTTON_VARIANT_CLASSES: Record<ButtonVariant, string> = {
-  // §8 (v2.8): --grad-primary fill, label #08090C (= --bg-base), 1px
+  // §8 (v2.8): --grad-primary fill, label --bg-base, 1px
   // --edge-highlight top specular. `control-gloss` carries the gradient, the
   // one-pass hover sweep and the darkening press — the gloss is the primary's
   // alone, so no other variant gets it.
@@ -323,7 +323,7 @@ export function chipClasses({
 
 /** §8: ring 16/20/24. */
 export type SpinnerSize = 16 | 20 | 24;
-/** §8: --prime, or #0E0F11 (= --bg-base) when it sits on a prime fill. */
+/** §8: --prime, or --bg-base when it sits on a prime fill. */
 export type SpinnerTone = "prime" | "on-prime" | "inherit";
 
 export const SPINNER_SIZES: readonly SpinnerSize[] = [16, 20, 24];
@@ -494,7 +494,7 @@ export type CheckKind = "checkbox" | "radio";
 export const CHECK_ROW_CLASSES = "group control-host inline-flex items-center gap-[10px]";
 
 // §8: 20×20; checkbox radius 6, radio a circle. Unchecked --surface-1 +
-// --glass-border; checked --prime fill with a #0E0F11 (= --bg-base) mark.
+// --glass-border; checked --prime fill with a --bg-base mark.
 const CHECK_BOX_BASE =
   "control control-edge-none flex size-[20px] shrink-0 items-center justify-center " +
   "border bg-surface-1 text-bg-base border-glass-border " +
@@ -514,7 +514,7 @@ export function checkBoxClasses(kind: CheckKind = "checkbox", className?: string
 export const CHECK_LABEL_CLASSES =
   "type-ui-body text-n-primary group-has-[:disabled]:text-n-disabled";
 
-// The radio's inner dot. §8 says "#0E0F11 dot" without a diameter; 8px is the
+// The radio's inner dot. §8 names the tone but no diameter; 8px is the
 // system's one dot size, confirmed on the ticket.
 export const RADIO_DOT_CLASSES =
   "size-[8px] rounded-pill bg-bg-base opacity-0 group-has-[:checked]:opacity-100";

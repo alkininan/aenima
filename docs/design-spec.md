@@ -1,4 +1,4 @@
-# aenima — Design Specification v2.8 (web)
+# aenima — Design Specification v2.9 (web)
 
 <!-- Full rewrite for direct vibe-coding: every value explicit, no Figma step assumed. Supersedes v1.x.
 v2.0: aesthetic consolidated as "liquid-glass instrument, retro terminal heart, tactile controls." Aqua promoted to the single primary accent (Brand blue #246BFD retired to the hero gradient only). JetBrains Mono promoted to a first-class UI role for data readouts. Tactile press physics, glass edge highlights, and dot-grid texture added. Token set minimized. All 17 open proposals (form controls, elevation, z-ladder, scrollbars, selection, borders, font loading, charts, degraded pages, validation, sidebar, keyboard) folded in as law.
@@ -9,7 +9,8 @@ v2.4: OTP responsiveness, found when build ticket T0.5 measured the group at 375
 v2.5: second form-language pass from real use of the sign-in flow. The step header replaces the action row and steps left-align end to end, OTP excepted (§8); the floated label gets its own token, ui-label (§3, §8); fields carry one text only — format-hint placeholders abolished (§8); focus splits pointer from keyboard, killing the double stroke on mouse (§6, §7, §8); validation flags slow and clears fast, never under 3 characters (§8); `--n-placeholder` dimmed to #5C6069 (§2); Iconoir named as the icon set (§8).
 v2.6: three corrections found while implementing v2.5. The focus split names input-modality tracking as its mechanism — `:focus-visible` cannot provide it, because browsers match it on a clicked text input and so reproduce the double stroke the split removes (§6, §7, §8). The floated label sits at the field's text inset rather than a hardcoded 16, so a leading icon moves label and value together (§8). The step header's title joins the OTP group as a named exception to step left-alignment (§8).
 v2.7: auth-step alignment revision from production use. The Æ mark centers above every step, a step with no back button centers its title and subtitle beneath it, and a step with a back button keeps the header grammar with a visible back — which needs a fill that is not an accent, so `--surface-2` chrome becomes the **neutral** button variant (§8). The floated label hugs the field's left edge at 8 inside a label zone padded 8, rather than tracking the text inset, so a leading icon moves the value alone (§8). The OTP step's subtitle drops its "if there's an account" hedge (§12): sign-in creates the account, so every valid address receives a code and the conditional described a branch that does not exist.
-v2.8: deep ramp and aero materials. The background deepens to #08090C with every derived token re-based and the base→surface-1 gap widened so fields lift, and §13's contrast numbers are re-measured on the new ramp (§2, §13). The primary button becomes the gloss surface carrying the hero's blue as light inside `--grad-primary`, with a one-pass specular sweep on hover — its bottom stop lands at #17A9CE rather than `--prime-deep`, which would have put the button's own fill below AA under a dark label (§2, §7, §8). Fields gain `--sheen` as a material, with blur still reserved for genuine layer overlap (§8). Press physics gain a 0.985 squish and a spring release on `--ease-spring` (§6, §7). -->
+v2.8: deep ramp and aero materials. The background deepens to #08090C with every derived token re-based and the base→surface-1 gap widened so fields lift, and §13's contrast numbers are re-measured on the new ramp (§2, §13). The primary button becomes the gloss surface carrying the hero's blue as light inside `--grad-primary`, with a one-pass specular sweep on hover — its bottom stop lands at #17A9CE rather than `--prime-deep`, which would have put the button's own fill below AA under a dark label (§2, §7, §8). Fields gain `--sheen` as a material, with blur still reserved for genuine layer overlap (§8). Press physics gain a 0.985 squish and a spring release on `--ease-spring` (§6, §7).
+v2.9: two values the v2.8 implementation had to derive become law, and the brand hexes are reconciled with the new base. The gloss press is pinned as a 12% `--bg-base` tint replacing `--press-overlay`, because white on a lit surface reads as a highlight rather than a press (§6). Every #0E0F11 that meant *the product's own ground* — the avatar square (§1), the checkbox and radio mark and the spinner on prime fills (§8), the touch-icon square and `theme-color` (§15) — becomes `var(--bg-base)`, since that equality quietly stopped holding when the ramp deepened and the code had already followed the token. The one #0E0F11 that stays is §1's mark on light surfaces: that is brand ink, not the app background. -->
 
 ## 0. Design language
 
@@ -39,9 +40,9 @@ Laws (override any component default):
 
 The identity is the **Æ ligature** — two letters fused into one glyph, which is what the product does to spec and design.
 
-**Working logo (flat Æ).** `ae-mark.svg` (vectorized, final). Geometric monogram: uniform stroke ≈ cap-height ÷ 8, gently rounded A apex, flat vertical arm terminals, equal-length E arms, the A's right side shared with the E's spine. Default rendering **#E0E5EB on dark**; #FFFFFF for emphasis; #0E0F11 on light surfaces. In product the mark renders via `currentColor` — the SVG's baked-in fill is overridden so tokens decide, and the component never carries a hardcoded hex. Always flat, one color — never gradients, never effects on the working mark.
+**Working logo (flat Æ).** `ae-mark.svg` (vectorized, final). Geometric monogram: uniform stroke ≈ cap-height ÷ 8, gently rounded A apex, flat vertical arm terminals, equal-length E arms, the A's right side shared with the E's spine. Default rendering **#E0E5EB on dark**; #FFFFFF for emphasis; #0E0F11 on light surfaces — that last value is brand ink for a light background, not a reference to the app background, and it does not follow `--bg-base`. In product the mark renders via `currentColor` — the SVG's baked-in fill is overridden so tokens decide, and the component never carries a hardcoded hex. Always flat, one color — never gradients, never effects on the working mark.
 
-**Sizes.** Sidebar 24px · favicon 16px (`ae-favicon.svg` — heavier variant: stroke ≈ cap-height ÷ 6, slightly shorter middle arm) · avatar: mark centered in a #0E0F11 rounded square, corner radius 22% of the square · packet and doc headers 32px. Clearspace ≥ one stroke-width on all sides. Minimum 14px.
+**Sizes.** Sidebar 24px · favicon 16px (`ae-favicon.svg` — heavier variant: stroke ≈ cap-height ÷ 6, slightly shorter middle arm) · avatar: mark centered in a `var(--bg-base)` rounded square, corner radius 22% of the square — the avatar is the mark on the product's own ground, so it follows the ramp rather than pinning a hex that goes stale the next time the ramp moves · packet and doc headers 32px. Clearspace ≥ one stroke-width on all sides. Minimum 14px.
 
 **Wordmark.** `aenima`, lowercase, DM Sans SemiBold, tracking 0, to the right of the mark at cap height, gap = one stroke-width. `AENIMA` extended caps = marketing/merch retro lockup only, never product chrome.
 
@@ -206,7 +207,7 @@ No-`backdrop-filter` fallback: solid #1B1E24, keep border + edge.
 ```
 
 - Hover/overlay/press-release: `--t-fast`. Panels/drawers: `--t-med`. Modals/meter width: `--t-slow`.
-- **Press physics (the retro click — applies to all buttons, chips-with-actions, toggle, checkbox):** on `:active`, instantly (0ms in): `transform: translateY(1px) scale(0.985)`, edge highlight off, `box-shadow: inset 0 2px 4px rgba(0,0,0,.32)`. On release: spring back over `--t-med` with `--ease-spring`, which overshoots about 1% before settling. The press must feel immediate; only the release animates.
+- **Press physics (the retro click — applies to all buttons, chips-with-actions, toggle, checkbox):** on `:active`, instantly (0ms in): `transform: translateY(1px) scale(0.985)`, edge highlight off, `box-shadow: inset 0 2px 4px rgba(0,0,0,.32)`. On release: spring back over `--t-med` with `--ease-spring`, which overshoots about 1% before settling. The press must feel immediate; only the release animates. **The gloss press darkens rather than lightens:** `color-mix(in srgb, var(--bg-base) 12%, transparent)` replaces `--press-overlay` on the primary, because a white overlay on a lit surface reads as a highlight, not a press.
 - **Focus-visible** (keyboard only): `outline: 2px solid var(--prime); outline-offset: 2px;` plus `box-shadow: var(--prime-glow)` — the aero glow lives on focus and on live dots, nowhere else. Pointer focus is not keyboard focus: clicking into a field swaps its border to `--prime` and nothing more. Ring and glow are keyboard affordances. The mechanism is input-modality tracking, not `:focus-visible` — browsers deliberately match `:focus-visible` on a clicked text input, since it is about to take keystrokes, so gating the ring on it reproduces the double stroke this rule removes. Modality is recorded on `<html>` by an inlined script and defaults to keyboard: an autofocused field with no visible focus is worse than a ring on load. `:focus-visible` remains correct for buttons and links, where a click does not match it.
 - Meter fill animates width `--t-slow`; 100% triggers a one-time 600ms `--hero-gradient` shimmer sweep.
 - Skeleton shimmer: `--surface-2` base, moving highlight rgba(255,255,255,.04), 1.2s linear loop. Geometry: a 200%-wide linear-gradient (transparent → highlight → transparent) traversing the element left to right, one pass per loop.
@@ -251,7 +252,7 @@ States: hover overlay · press physics · loading (spinner replaces label, width
 
 **Select/dropdown.** Trigger = pill field with trailing chevron (20) — it inherits the full input grammar, 48h and floating label included. Panel: `--surface-1`, radius 12, dropdown shadow, 6px padding; options 36h, ui-body, pad 12 horizontal, radius 8; hover `--surface-3`; selected `--prime-soft` + check icon 16. **Height wins:** 36 comes from §4 density and governs the whole system; the label centres within it rather than adding vertical padding. Opens below (above if <320px space), 8 from the trigger; max-height 320 with inner scroll; type-to-jump.
 
-**Checkbox & radio.** 20×20; checkbox radius 6, radio circle. Unchecked: `--surface-1` fill + `--glass-border`. Checked: `--prime` fill, #0E0F11 check/dot — the radio dot is 8. Press physics apply. Label ui-body, gap 10, whole row clickable.
+**Checkbox & radio.** 20×20; checkbox radius 6, radio circle. Unchecked: `--surface-1` fill + `--glass-border`. Checked: `--prime` fill, `var(--bg-base)` check/dot — the radio dot is 8. Press physics apply. Label ui-body, gap 10, whole row clickable.
 
 **Toggle.** 56×28, `--r-pill`, 2px inset, thumb 24 circle. Off: `--surface-2` track, `--n-secondary` thumb. On: `--prime` track, `--n-white` thumb. Track/thumb transition `--t-fast`.
 
@@ -263,7 +264,7 @@ States: hover overlay · press physics · loading (spinner replaces label, width
 
 **Tooltip.** `--surface-2`, radius 8, ui-caption, pad 6/10, max-width 240, no arrow, 500ms show delay, instant hide, z 600.
 
-**Spinner.** Ring 16/20/24, 2px stroke, `--prime` (or #0E0F11 on prime fills), 800ms linear rotation. Element-level only.
+**Spinner.** Ring 16/20/24, 2px stroke, `--prime` (or `var(--bg-base)` on prime fills), 800ms linear rotation. Element-level only.
 
 **Menus (context/overflow).** Panel `--surface-1`, radius 12, dropdown shadow, 6px pad; rows 36h ui-body; destructive rows `--danger` text; section titles mono-micro `--n-secondary`; separators 1px `--glass-border`.
 
@@ -328,7 +329,7 @@ Clients don't support blur, webfonts, or reliable dark mode — this is the one 
 
 ## 15. Brand asset export set
 
-From `ae-mark.svg` / `ae-favicon.svg`: favicon.ico (16/32/48, heavy variant) · apple-touch-icon 180 (mark on #0E0F11 square r22%) · PWA 192 + 512 + maskable (mark at 60% safe area) · `theme-color` #0E0F11 · OG/social 1200×630: glass Æ on Base with dot grid — the one sanctioned product-adjacent use of the hero render.
+From `ae-mark.svg` / `ae-favicon.svg`: favicon.ico (16/32/48, heavy variant) · apple-touch-icon 180 (mark on a `var(--bg-base)` square r22%) · PWA 192 + 512 + maskable (mark at 60% safe area) · `theme-color` = `--bg-base` · OG/social 1200×630: glass Æ on Base with dot grid — the one sanctioned product-adjacent use of the hero render.
 
 ## 16. Non-goals (decided, not oversights)
 
@@ -336,4 +337,4 @@ No light mode · no RTL (EN/TR/NL are LTR) · no sound (tactility is visual) · 
 
 ---
 
-*v2.8 — complete and closed: no open items. Changes cut new versions of this document.*
+*v2.9 — complete and closed: no open items. Changes cut new versions of this document.*

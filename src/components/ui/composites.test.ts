@@ -142,7 +142,7 @@ describe("panelRowClasses", () => {
 
 describe("checkBoxClasses", () => {
   // §8: 20×20; checkbox radius 6, radio circle; unchecked --surface-1 +
-  // --glass-border; checked --prime fill with a #0E0F11 mark.
+  // --glass-border; checked --prime fill with a --bg-base mark.
   it("builds the 20px box", () => {
     expect(
       has(checkBoxClasses(), "size-[20px]", "bg-surface-1", "border-glass-border", "text-bg-base"),
