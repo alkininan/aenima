@@ -209,6 +209,9 @@ async function main() {
         workspaceId,
         name: "Sociera",
         slug: "sociera",
+        // The `soc` in `soc-12`. Explicit rather than derived from the slug —
+        // see the column's own note in the schema.
+        keyPrefix: "soc",
         deciderUserId: ownerId,
       },
       {
@@ -216,6 +219,7 @@ async function main() {
         workspaceId,
         name: "Aurenza",
         slug: "aurenza",
+        keyPrefix: "aur",
         deciderUserId: ownerId,
       },
     ]);
@@ -273,6 +277,10 @@ async function main() {
         productId: targetProductId,
         opportunityId: targetOpportunityId,
         type: entry.type,
+        // Assigned by `app.assign_item_key()`; Drizzle needs the column
+        // present. Whatever is passed here is overwritten unconditionally —
+        // that is the rule, and src/db/item-key.db.test.ts is where it is held.
+        key: "",
         title: entry.title,
         flowIntent: entry.flowIntent,
       });

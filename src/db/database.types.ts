@@ -6,6 +6,13 @@
  * route is the Supabase MCP server's `generate_typescript_types` against the
  * project the migration was just applied to.
  *
+ * T1.2 note: `item.key` and `product.key_prefix` were added here **by hand**,
+ * because the Supabase MCP server was not connected in that session and there is
+ * no second route to the generator on this machine. They follow
+ * `artifact_version.version_no` exactly — required on Row and Insert, optional on
+ * Update — which is the shape the generator gives a NOT NULL column with no
+ * default. Regenerate at the next opportunity and this note goes with it.
+ *
  * This file is what makes `src/db/queries/*` typed rather than typed-looking:
  * the clients in `src/lib/supabase/` are parameterised with `Database`, so a
  * column that does not exist is a `pnpm typecheck` failure instead of a runtime
@@ -294,6 +301,7 @@ export type Database = {
           created_at: string;
           flow_intent: Database["public"]["Enums"]["flow_intent"] | null;
           id: string;
+          key: string;
           opportunity_id: string | null;
           product_id: string;
           title: string;
@@ -305,6 +313,7 @@ export type Database = {
           created_at?: string;
           flow_intent?: Database["public"]["Enums"]["flow_intent"] | null;
           id?: string;
+          key: string;
           opportunity_id?: string | null;
           product_id: string;
           title: string;
@@ -316,6 +325,7 @@ export type Database = {
           created_at?: string;
           flow_intent?: Database["public"]["Enums"]["flow_intent"] | null;
           id?: string;
+          key?: string;
           opportunity_id?: string | null;
           product_id?: string;
           title?: string;
@@ -468,6 +478,7 @@ export type Database = {
           created_at: string;
           decider_user_id: string | null;
           id: string;
+          key_prefix: string;
           name: string;
           slug: string;
           updated_at: string;
@@ -477,6 +488,7 @@ export type Database = {
           created_at?: string;
           decider_user_id?: string | null;
           id?: string;
+          key_prefix: string;
           name: string;
           slug: string;
           updated_at?: string;
@@ -486,6 +498,7 @@ export type Database = {
           created_at?: string;
           decider_user_id?: string | null;
           id?: string;
+          key_prefix?: string;
           name?: string;
           slug?: string;
           updated_at?: string;

@@ -39,6 +39,20 @@ export type Stage = (typeof STAGES)[number];
 export type ArtifactPresence = {
   kind: ArtifactKind;
   versionCount: number;
+  /**
+   * When this artifact was first authored *into* — its earliest version's
+   * `created_at`, not the artifact row's.
+   *
+   * An artifact row is identity only, so its own timestamp records when someone
+   * opened an empty container, which starts no clock. Null when `versionCount`
+   * is 0: the same fact `versionCount` already states, said again because the
+   * two are read by different callers and neither should have to infer the
+   * other.
+   *
+   * Optional so that `deriveStage`'s existing callers — which care only whether
+   * content exists — are unaffected.
+   */
+  firstVersionAt?: string | null;
 };
 
 export type StageInput = {
@@ -89,4 +103,60 @@ export function deriveStage(input: StageInput): Stage {
   // §3: "no PRD → Discover". Also where an item with no artifacts at all sits,
   // which is every item on the day it is created.
   return "discover";
+}
+
+/**
+ * The artifact whose first authored version starts each stage's clock.
+ *
+ * Partial rather than complete, and deliberately so: Discover is entered by
+ * existing, and `handed_over` is unreachable while `signedPacket` is `never`.
+ * Both absences are the same absences `deriveStage` describes. Spelling them as
+ * a missing key rather than a runtime `default:` means the packet table arriving
+ * is a type error here, not a silent fallthrough.
+ */
+const STAGE_ENTRY_ARTIFACT: Partial<Record<Stage, ArtifactKind>> = {
+  design: "design_package",
+  define: "prd",
+};
+
+export type StageEntryInput = StageInput & {
+  /** The item's own `created_at`. Discover has no other beginning. */
+  createdAt: string;
+};
+
+/**
+ * When the item entered the stage it is in now — §13's "time-in-stage past
+ * ~1.5x the learned baseline", which needs a start and has no column to read one
+ * from, because there is no stage column to hang one off.
+ *
+ * The nearest honest instant is when the artifact that *decides* the current
+ * stage was first authored into. That timestamp is stable: `artifact_version` is
+ * append-only in three layers and §11's rollback is a new version rather than an
+ * edit, so an artifact's earliest version never moves once written.
+ *
+ * It lives here rather than in the query layer for `deriveStage`'s own reasons
+ * (above): the mapping from stage to deciding artifact is the same derivation
+ * rule, and putting it in a query file would make it testable only through a
+ * mocked PostgREST builder.
+ *
+ * One thing it cannot see. Deleting a `design_package` demotes an item to
+ * Define, and this then reports the PRD's first version — possibly months back —
+ * as the entry, so the item lands in At risk on staleness the moment it is
+ * demoted. That is the price of not storing what we refuse to store. It is rare
+ * (only Owner and Product can delete an artifact at all) and it is cheaper than
+ * a stage column, which would have to be kept true by everything that writes.
+ */
+export function deriveStageEntry(input: StageEntryInput): string {
+  const kind = STAGE_ENTRY_ARTIFACT[deriveStage(input)];
+  if (!kind) return input.createdAt;
+
+  const deciding = input.artifacts.find(
+    (artifact) => artifact.kind === kind && artifact.versionCount > 0,
+  );
+
+  // `deriveStage` returning this stage means that artifact has content, so the
+  // fallback is unreachable rather than defensive. It is here because a missing
+  // timestamp must not become an age of zero — or, worse, an age of *now*, which
+  // would put the item at the top of At risk for being new.
+  return deciding?.firstVersionAt ?? input.createdAt;
 }

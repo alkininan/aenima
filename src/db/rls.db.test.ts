@@ -115,8 +115,8 @@ async function seedTwoWorkspaces(tx: Tx) {
              values (${workspaceId}, ${user}, 'owner', true)`;
 
     const [product] = await tx<{ id: string }[]>`
-      insert into product (workspace_id, name, slug)
-      values (${workspaceId}, ${name}, ${slug}) returning id`;
+      insert into product (workspace_id, name, slug, key_prefix)
+      values (${workspaceId}, ${name}, ${slug}, substring(${slug} from 1 for 3)) returning id`;
 
     const [item] = await tx<{ id: string }[]>`
       insert into item (workspace_id, product_id, type, title)
@@ -193,8 +193,8 @@ describe.skipIf(OFFLINE)("RLS — product isolation is a security boundary", () 
       await actAs(tx, USER_A);
 
       await expect(
-        tx`insert into product (workspace_id, name, slug)
-           values (${made.b!.workspace}, 'Trespass', 'trespass')`,
+        tx`insert into product (workspace_id, name, slug, key_prefix)
+           values (${made.b!.workspace}, 'Trespass', 'trespass', 'tre')`,
       ).rejects.toThrow(/row-level security/i);
     });
   });

@@ -54,6 +54,78 @@ export const en = {
     rateLimited: "Too many requests. Wait a moment before asking for another code.",
     unavailable: "Sign-in is unavailable right now.",
   },
+  /** §4 sidebar nav. Keys match `NavEntry.label` in src/lib/routes.ts. */
+  nav: {
+    list: "List",
+    triage: "Triage",
+    analytics: "Analytics",
+    settings: "Settings",
+    /** Appended to an unbuilt destination's accessible name, never painted. */
+    notYet: "not built yet",
+  },
+  /** §13's three buckets. mono-micro headers, so §3 uppercases them in CSS. */
+  buckets: {
+    your_move: "Your move",
+    at_risk: "At risk",
+    flowing: "Flowing",
+  },
+  /** §3's four stages, as the pipeline strip and the meters name them. */
+  stages: {
+    discover: "Discover",
+    define: "Define",
+    design: "Design",
+    handed_over: "Handed over",
+  },
+  /** §4's seven item types, for the row's outline badge. */
+  itemTypes: {
+    feature: "Feature",
+    enhancement: "Enhancement",
+    technical: "Technical",
+    content: "Content",
+    experiment: "Experiment",
+    fix: "Fix",
+    spike: "Spike",
+  },
+  list: {
+    title: "Your work",
+    /** §4 subtitle slot — instructional copy lives here and only here. */
+    subtitle: "Sorted by what needs you, not by when it was made.",
+    /** §8: the strip's leading label, before the per-stage segments. */
+    allStages: "All",
+    /** §8 gap chips overflow at two: "+3". */
+    moreGaps: (count: number) => `+${count}`,
+    /** §8's idle row. Park itself is a later ticket; the chip renders regardless. */
+    park: "Park?",
+    /** §8 item row: the overflow menu's accessible name. */
+    itemMenu: (title: string) => `Actions for ${title}`,
+    openItem: "Open",
+    copyKey: "Copy key",
+    /**
+     * §10: meters render hollow with this line until an AI key exists — "never
+     * zeros, never red". ui-footnote, per §10.
+     */
+    noScoring: "Connect AI to activate scoring",
+    /** §8 empty states: "Nothing needs you right now," never "No data". */
+    emptyTitle: "Nothing needs you right now",
+    emptyAction: "Add an item",
+    /**
+     * A filter that matches nothing is a different situation from an empty
+     * workspace — one is "you have no work", the other is "not here". §8 gives
+     * each one line and one action.
+     */
+    emptyFilteredTitle: "Nothing here with those filters",
+    emptyFilteredAction: "Clear filters",
+    /** §8 row: mono-readout freshness beside the dot. */
+    freshness: (relative: string) => `updated ${relative}`,
+  },
+  /** Relative time for the row's mono-readout. §12: calm, never exact-to-the-second. */
+  relativeTime: {
+    justNow: "just now",
+    minutes: (n: number) => `${n}m ago`,
+    hours: (n: number) => `${n}h ago`,
+    days: (n: number) => `${n}d ago`,
+    weeks: (n: number) => `${n}w ago`,
+  },
   workspace: {
     // First run: §16 defers real onboarding, so the workspace gets a plain name.
     defaultName: "My workspace",

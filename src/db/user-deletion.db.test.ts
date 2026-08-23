@@ -72,8 +72,8 @@ async function userWhoHasActed(tx: Tx) {
            values (${workspace}, ${USER}, 'owner', true)`;
 
   const [product] = await tx<{ id: string }[]>`
-    insert into product (workspace_id, name, slug, decider_user_id)
-    values (${workspace}, 'Deletion', 'deletion', ${USER}) returning id`;
+    insert into product (workspace_id, name, slug, key_prefix, decider_user_id)
+    values (${workspace}, 'Deletion', 'deletion', 'del', ${USER}) returning id`;
 
   const [item] = await tx<{ id: string }[]>`
     insert into item (workspace_id, product_id, type, title)

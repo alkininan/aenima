@@ -16,7 +16,20 @@
  * Size comes from the slot, never from here: the slot classes set the SVG's
  * width and height in CSS, which beats Iconoir's 24×24 attributes.
  */
-import { ArrowLeft, Check, Mail, NavArrowDown, NavArrowRight, Plus, Search } from "iconoir-react";
+import {
+  ArrowLeft,
+  Check,
+  GraphUp,
+  List,
+  Mail,
+  MoreHoriz,
+  NavArrowDown,
+  NavArrowRight,
+  Plus,
+  Reports,
+  Search,
+  Settings,
+} from "iconoir-react";
 
 type IconProps = { className?: string };
 
@@ -59,4 +72,34 @@ export function PlusIcon({ className }: IconProps) {
 
 export function ChevronRightIcon({ className }: IconProps) {
   return <NavArrowRight className={className} aria-hidden="true" focusable="false" />;
+}
+
+/* §4 sidebar nav, at 20. One glyph per destination in `src/lib/routes.ts`. */
+
+/** §13's list surface — the three buckets. */
+export function ListIcon({ className }: IconProps) {
+  return <List className={className} aria-hidden="true" focusable="false" />;
+}
+
+/** §10's intake triage inbox. */
+export function TriageIcon({ className }: IconProps) {
+  return <Reports className={className} aria-hidden="true" focusable="false" />;
+}
+
+/** §15's analytics views. */
+export function AnalyticsIcon({ className }: IconProps) {
+  return <GraphUp className={className} aria-hidden="true" focusable="false" />;
+}
+
+export function SettingsIcon({ className }: IconProps) {
+  return <Settings className={className} aria-hidden="true" focusable="false" />;
+}
+
+/**
+ * §8's item row overflow. Horizontal rather than vertical: the row is a
+ * horizontal arrangement and the menu sits at its end, so the dots read as a
+ * continuation of the row rather than as a column of their own.
+ */
+export function OverflowIcon({ className }: IconProps) {
+  return <MoreHoriz className={className} aria-hidden="true" focusable="false" />;
 }

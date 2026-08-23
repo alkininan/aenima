@@ -279,11 +279,11 @@ export function inputHelperClasses(tone?: InputHelperTone | undefined, reserved 
 /* Chip — §8 "Chips & badges"                                                 */
 /* -------------------------------------------------------------------------- */
 
-export type ChipVariant = "base" | "type-badge" | "gap";
+export type ChipVariant = "base" | "soft" | "type-badge" | "gap";
 /** §8 gap chips: open Must · open Should · accepted · excluded. */
 export type ChipGapTone = "must" | "should" | "accepted" | "excluded";
 
-export const CHIP_VARIANTS: readonly ChipVariant[] = ["base", "type-badge", "gap"];
+export const CHIP_VARIANTS: readonly ChipVariant[] = ["base", "soft", "type-badge", "gap"];
 export const CHIP_GAP_TONES: readonly ChipGapTone[] = ["must", "should", "accepted", "excluded"];
 
 // §8: chip 24h, --r-pill, --surface-2 fill, ui-caption. Padding and gap are not
@@ -294,6 +294,10 @@ const CHIP_BASE =
 
 const CHIP_VARIANT_CLASSES: Record<ChipVariant, string> = {
   base: "bg-surface-2 text-n-primary",
+  // §8's idle row carries a "Park?" chip in the Soft tone — the same
+  // --prime-soft fill and --prime label §8 gives the Soft *button*, so the two
+  // read as one tier rather than two accents that happen to sit near each other.
+  soft: "bg-prime-soft text-prime",
   // §8: types are informative, never colourful — outline chip, --glass-border,
   // --n-secondary.
   "type-badge": "border border-glass-border bg-transparent text-n-secondary",
@@ -857,6 +861,44 @@ export function otpBoxClasses({
     // §8 (v2.5) focus split: the border swaps on any focus. The ring and the
     // glow are the keyboard path's, and live in globals.css with the field's.
     !invalid && "focus:border-prime",
+    className,
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Meter — §8 "Readiness meter"                                               */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * §8: "Row micro-meter 4h per active stage; item-page meter 8h + mono-readout
+ * percentage." Two sizes, and only two.
+ */
+export type MeterSize = 4 | 8;
+
+export const METER_SIZES: readonly MeterSize[] = [4, 8];
+
+// §8: track --surface-2, fill --prime, --r-pill.
+const METER_TRACK_BASE = "block w-full overflow-hidden rounded-pill bg-surface-2";
+
+const METER_TRACK_SIZE_CLASSES: Record<MeterSize, string> = {
+  4: "h-[4px]",
+  8: "h-[8px]",
+};
+
+export function meterTrackClasses(size: MeterSize = 4, className?: string): string {
+  return cx(METER_TRACK_BASE, METER_TRACK_SIZE_CLASSES[size], className);
+}
+
+/**
+ * The fill. §8 switches it to `--success` at 100 with all Musts passed; nothing
+ * can reach that until scoring exists, so that branch is not written here —
+ * this paints `--prime`, and Phase 2 adds the rest alongside the check results
+ * that would justify it.
+ */
+export function meterFillClasses(className?: string): string {
+  return cx(
+    "block h-full rounded-pill bg-prime",
+    "transition-[width] duration-[var(--t-slow)] ease-brand",
     className,
   );
 }

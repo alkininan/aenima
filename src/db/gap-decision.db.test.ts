@@ -93,8 +93,8 @@ async function seedTwoWorkspaces(tx: Tx) {
              values (${workspace}, ${user}, 'owner', true)`;
 
     const [product] = await tx<{ id: string }[]>`
-      insert into product (workspace_id, name, slug)
-      values (${workspace}, ${name}, ${slug}) returning id`;
+      insert into product (workspace_id, name, slug, key_prefix)
+      values (${workspace}, ${name}, ${slug}, substring(${slug} from 1 for 3)) returning id`;
 
     const [item] = await tx<{ id: string }[]>`
       insert into item (workspace_id, product_id, type, title, flow_intent)

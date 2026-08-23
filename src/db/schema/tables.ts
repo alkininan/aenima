@@ -102,12 +102,26 @@ export const product = pgTable(
       .references(() => workspace.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     slug: text("slug").notNull(),
+    /**
+     * The prefix every one of this product's item keys carries — `soc` in
+     * `soc-12`.
+     *
+     * Its own column rather than the first few letters of `slug`, because two
+     * products can slug to the same prefix (`sociera` and `social` both give
+     * `soc`) and item keys are unique per workspace. Deriving would make the
+     * second product's first item fail to insert. Separate from `slug` for a
+     * second reason: renaming a product changes its slug, and a key that has
+     * been pasted into a ticket or said out loud must not change with it.
+     */
+    keyPrefix: text("key_prefix").notNull(),
     /** §14: each product names a Decider; null falls back to the Owner. */
     deciderUserId: authUsersId("decider_user_id"),
     ...timestamps,
   },
   (t) => [
     unique("product_workspace_slug").on(t.workspaceId, t.slug),
+    // Keys are unique per workspace, so their prefixes must be too.
+    unique("product_workspace_key_prefix").on(t.workspaceId, t.keyPrefix),
     // Anchor for the composite foreign keys below.
     unique("product_workspace_id").on(t.workspaceId, t.id),
     index("product_workspace_idx").on(t.workspaceId),
@@ -179,11 +193,23 @@ export const item = pgTable(
      * unclassified item is not a "value" item.
      */
     flowIntent: flowIntent("flow_intent"),
+    /**
+     * What people call this item out loud — `soc-12`. The product's key prefix
+     * plus a per-product counter.
+     *
+     * Assigned by `app.assign_item_key()` on insert and never by the client,
+     * the same discipline as `artifact_version.version_no`: a client that could
+     * choose could collide, and a key is a name rather than a preference. The
+     * unique constraint below is the backstop against the concurrent-insert
+     * race that a MAX+1 counter leaves open.
+     */
+    key: text("key").notNull(),
     title: text("title").notNull(),
     ...timestamps,
   },
   (t) => [
     unique("item_workspace_id").on(t.workspaceId, t.id),
+    unique("item_workspace_key").on(t.workspaceId, t.key),
     foreignKey({
       columns: [t.workspaceId, t.productId],
       foreignColumns: [product.workspaceId, product.id],

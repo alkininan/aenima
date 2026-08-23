@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { STAGES, deriveStage, type ArtifactPresence, type Stage } from "@/lib/stage";
+import {
+  STAGES,
+  deriveStage,
+  deriveStageEntry,
+  type ArtifactPresence,
+  type Stage,
+} from "@/lib/stage";
 
 /** An artifact that has actually been authored into. */
 const authored = (kind: ArtifactPresence["kind"], versionCount = 1): ArtifactPresence => ({
@@ -129,5 +135,92 @@ describe("handover is unreachable until the packet table exists", () => {
   it("still names handover in the stage list, because §3 does", () => {
     expect(STAGES).toContain("handed_over");
     expect(STAGES).toHaveLength(4);
+  });
+});
+
+/**
+ * §13's clock, for the stage that has no column to start one from.
+ *
+ * Every case below turns on the difference between an artifact *row* and an
+ * artifact with *content*: the row is identity, and identity starts nothing.
+ */
+describe("deriveStageEntry", () => {
+  const CREATED = "2026-01-01T00:00:00+00:00";
+  const PRD_V1 = "2026-03-01T00:00:00+00:00";
+  const DESIGN_V1 = "2026-05-01T00:00:00+00:00";
+
+  // Discover is entered by existing — there is no artifact to date it from.
+  it("dates a Discover item from the item itself", () => {
+    expect(deriveStageEntry({ artifacts: [], createdAt: CREATED })).toBe(CREATED);
+  });
+
+  it("dates Define from the PRD's first version, not the item", () => {
+    const entry = deriveStageEntry({
+      artifacts: [{ kind: "prd", versionCount: 2, firstVersionAt: PRD_V1 }],
+      createdAt: CREATED,
+    });
+
+    expect(entry).toBe(PRD_V1);
+  });
+
+  /**
+   * The item is in Design, so the Design clock is the one that runs. Reading
+   * the PRD's date here would age the item by everything that happened before
+   * it moved on — which is exactly the demotion case the function documents,
+   * and must not be the ordinary case.
+   */
+  it("dates Design from the design package, ignoring the older PRD", () => {
+    const entry = deriveStageEntry({
+      artifacts: [
+        { kind: "prd", versionCount: 3, firstVersionAt: PRD_V1 },
+        { kind: "design_package", versionCount: 1, firstVersionAt: DESIGN_V1 },
+      ],
+      createdAt: CREATED,
+    });
+
+    expect(entry).toBe(DESIGN_V1);
+  });
+
+  /**
+   * An artifact row with no versions leaves the item in Discover (see
+   * `deriveStage`), so its clock is the item's — and it must not be the empty
+   * container's own timestamp, which nothing here is even given.
+   */
+  it("ignores an artifact nobody has authored into", () => {
+    const entry = deriveStageEntry({
+      artifacts: [{ kind: "prd", versionCount: 0, firstVersionAt: null }],
+      createdAt: CREATED,
+    });
+
+    expect(entry).toBe(CREATED);
+  });
+
+  // Only `prd` and `design_package` decide a stage. A brief or a tech spec can
+  // carry any amount of content without starting a clock.
+  it("is unmoved by artifacts that decide no stage", () => {
+    const entry = deriveStageEntry({
+      artifacts: [
+        { kind: "brief", versionCount: 4, firstVersionAt: "2026-02-01T00:00:00+00:00" },
+        { kind: "tech_spec", versionCount: 2, firstVersionAt: "2026-02-15T00:00:00+00:00" },
+      ],
+      createdAt: CREATED,
+    });
+
+    expect(entry).toBe(CREATED);
+  });
+
+  /**
+   * The unreachable fallback, reached the only way a test can reach it: a
+   * deciding artifact with content but no timestamp. A missing date must not
+   * become an age of zero, which would be an item that just entered its stage —
+   * the opposite of what a null there suggests.
+   */
+  it("falls back to the item rather than inventing a fresh clock", () => {
+    const entry = deriveStageEntry({
+      artifacts: [{ kind: "prd", versionCount: 1, firstVersionAt: null }],
+      createdAt: CREATED,
+    });
+
+    expect(entry).toBe(CREATED);
   });
 });

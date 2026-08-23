@@ -16,6 +16,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/Input";
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
+import { Meter } from "@/components/ui/Meter";
 import { Modal } from "@/components/ui/Modal";
 import { OtpInput } from "@/components/ui/OtpInput";
 import { Radio } from "@/components/ui/Radio";
@@ -36,6 +37,10 @@ import {
 import { formatCountdown, useCooldown } from "@/components/ui/useCooldown";
 import { inputHelperClasses } from "@/components/ui/variants";
 import { getDictionary } from "@/i18n";
+
+import { BucketSection } from "@/app/app/BucketSection";
+import type { ItemRowData } from "@/app/app/ItemRow";
+import { PipelineStrip } from "@/app/app/PipelineStrip";
 
 function Section({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -195,6 +200,66 @@ function ValidationDemo() {
  * beside it stay clean. Product copy rather than state names here, because the
  * string itself is half of what is being demonstrated.
  */
+/** §10's line, hoisted so every preview meter carries the same one. */
+const METER_EMPTY = "Connect AI to activate scoring";
+
+/** A fixed clock, so the freshness readouts do not change between runs. */
+const LIST_NOW = Date.UTC(2026, 7, 23, 12, 0, 0);
+const DAY = 24 * 60 * 60 * 1000;
+
+const LIST_T = getDictionary();
+
+/**
+ * One row per case the §8 geometry has to survive: both accents, no accent, an
+ * idle row, and more gap chips than the two that fit.
+ */
+const LIST_FIXTURE: ItemRowData[] = [
+  {
+    key: "soc-12",
+    title: "Weekly digest email",
+    type: "feature",
+    stage: "design",
+    bucket: "your_move",
+    gaps: [
+      { id: "g1", checkId: "MN-2", tag: "must" },
+      { id: "g2", checkId: "MN-7", tag: "should" },
+      { id: "g3", checkId: "MN-9", tag: "should" },
+    ],
+    lastActivityAt: LIST_NOW - 2 * DAY,
+    idle: false,
+  },
+  {
+    key: "soc-4",
+    title: "Rewrite the empty states",
+    type: "content",
+    stage: "define",
+    bucket: "at_risk",
+    gaps: [{ id: "g4", checkId: "CN-1", tag: "must" }],
+    lastActivityAt: LIST_NOW - 9 * DAY,
+    idle: false,
+  },
+  {
+    key: "aur-1",
+    title: "Shared reading lists",
+    type: "feature",
+    stage: "define",
+    bucket: "flowing",
+    gaps: [],
+    lastActivityAt: LIST_NOW - 3 * 60 * 60 * 1000,
+    idle: false,
+  },
+  {
+    key: "soc-7",
+    title: "Can we diff Figma frames by node id?",
+    type: "spike",
+    stage: "discover",
+    bucket: "flowing",
+    gaps: [],
+    lastActivityAt: LIST_NOW - 40 * DAY,
+    idle: true,
+  },
+];
+
 function ResendDemo() {
   const t = getDictionary();
   const [code, setCode] = useState("");
@@ -357,6 +422,56 @@ function Composites() {
             onValueChange={() => {}}
           />
           <OtpInput label="Disabled" disabled value="4829" onValueChange={() => {}} />
+        </div>
+      </Section>
+
+      <Section label="Readiness meter">
+        {/* §8: track --surface-2, fill --prime, --r-pill; 4h on a row, 8h on the
+            item page. §10: with no AI key the meter is a hollow track and never
+            a zero — which is every meter in the product today. */}
+        <p className="type-ui-footnote text-n-secondary">
+          The hollow track is not 0% — §10 forbids drawing an unscored artifact as a zero, because a
+          0% bar claims it was measured and failed. Everything in the product renders hollow until
+          Phase 2 wires scoring; the filled ones below exist only to show the size.
+        </p>
+        <div className="grid max-w-[420px] gap-[16px]">
+          <Meter score={null} size={4} label="Row, no score" emptyLabel={METER_EMPTY} />
+          <Meter score={null} size={8} label="Item page, no score" emptyLabel={METER_EMPTY} />
+          <Meter score={42} size={4} label="Row at 42" emptyLabel={METER_EMPTY} />
+          <Meter score={78} size={8} label="Item page at 78" emptyLabel={METER_EMPTY} />
+        </div>
+      </Section>
+
+      <Section label="List surface">
+        {/* §13's three buckets over a fixture, so the row's geometry can be
+            measured in a browser: /app is behind the proxy and Playwright cannot
+            complete an emailed code. These are the real components — the page
+            differs only in where the data comes from. */}
+        <p className="type-ui-footnote text-n-secondary">
+          Real rows, fixed data. Every bucket, both accents, an idle row at .60, a row with more
+          gaps than fit, and hollow meters throughout.
+        </p>
+        <div className="flex flex-col gap-[16px]">
+          <PipelineStrip
+            counts={[
+              { stage: "discover", count: 2 },
+              { stage: "define", count: 3 },
+              { stage: "design", count: 1 },
+            ]}
+            active="define"
+            product={undefined}
+            total={6}
+            t={LIST_T}
+          />
+          {(["your_move", "at_risk", "flowing"] as const).map((bucket) => (
+            <BucketSection
+              key={bucket}
+              bucket={bucket}
+              items={LIST_FIXTURE.filter((row) => row.bucket === bucket)}
+              t={LIST_T}
+              now={LIST_NOW}
+            />
+          ))}
         </div>
       </Section>
 
