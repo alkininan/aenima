@@ -28,6 +28,19 @@ import { LIST_COUNTS, LIST_FIXTURE, LIST_NOW } from "../list-fixture";
  * fixture, no client wrapper — and its whole job is to fail when a value that
  * cannot cross the boundary is passed across it.
  */
+/**
+ * Dynamic, like `/app`, and for the same reason it is dynamic there.
+ *
+ * `ProductSwitcher` reads `useSearchParams()`, which a statically prerendered
+ * page cannot do without a Suspense boundary — `/app` never hits this because it
+ * reads cookies and is therefore dynamic already. Without this the page builds
+ * only because `devOnly()` 404s it first, which means the gate would be hiding a
+ * broken page rather than a working one. Mirroring `/app`'s rendering mode is
+ * also the point of the page: a preview on the other side of a boundary from the
+ * surface it previews is what let the last one through.
+ */
+export const dynamic = "force-dynamic";
+
 export default function DevListPage() {
   devOnly();
 

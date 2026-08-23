@@ -217,6 +217,25 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
   the rule visible in the file, so switching one on is a type change rather than a rule someone has
   to remember to come back and write.
 
+- **A preview must render on the same side of the RSC boundary as the surface it previews.** A
+  client-rooted preview cannot catch a Server→Client serialization error, because inside it there is
+  no boundary to cross. That is how the i18n dictionary's formatter functions reached production:
+  `/dev/primitives` carries `"use client"`, so `ItemRow → ItemRowMenu` was client-to-client there and
+  server-to-client on `/app`, and only the second one throws. Every gate passed —
+  unit tests render client components directly, the browser tests drove the client-rooted preview,
+  and `/app` is behind auth. **`/dev/list` exists for exactly this**: the same fixture rendered from
+  a Server Component, `force-dynamic` so its rendering mode matches `/app`'s too. Note that
+  `next build` is no help here — a non-serializable prop throws at render, and a dynamic route is
+  never prerendered.
+- **Client components read their own copy; they are never handed the dictionary.** `getDictionary()`
+  returns formatter functions, and a function cannot cross the boundary. Anything needing
+  interpolation crosses as an already-formatted string.
+- **`/dev` is gated on the build mode, and `e2e/production.spec.ts` is what proves the gate is
+  wired.** It runs against a real `next build` on its own port, because the gate is inert under
+  `next dev` — every other browser test depends on it being inert. A unit test covers `devOnly()`
+  in isolation; only an HTTP status from the build that would ship covers the segment being
+  attached to it.
+
 ## Open questions
 
 1. Seed content still owed: TR formality register per product, the ~80-term universal loanword
