@@ -178,6 +178,75 @@ const GAPS = [
 ] as const;
 
 type Db = ReturnType<typeof createDbClient>["db"];
+/**
+ * Only the sliver of the admin client this needs.
+ *
+ * Structural rather than `ReturnType<typeof createClient>`, which resolves to a
+ * differently-parameterised `SupabaseClient` than the one `main` builds and does
+ * not match it under `exactOptionalPropertyTypes`. Naming the two fields that
+ * are actually read is both assignable and a more honest signature: this helper
+ * looks up one user and touches nothing else.
+ */
+type AdminAuth = {
+  auth: {
+    admin: {
+      listUsers: () => Promise<{ data: { users: { id: string; email?: string }[] } | null }>;
+    };
+  };
+};
+
+/**
+ * Development convenience: put your own account inside the seed workspace.
+ *
+ * The seed's owner is `seed-owner@aenima.test`, an account nobody can sign in
+ * as, so a developer signing in with their real address lands in a workspace of
+ * their own and sees none of this. Setting `DEV_SEED_EMAIL` to that address adds
+ * it to the seed workspace as an Owner, and RLS does the rest.
+ *
+ * Three things keep it out of anywhere it does not belong:
+ *
+ * 1. It does nothing unless `DEV_SEED_EMAIL` is set.
+ * 2. It refuses to run under `NODE_ENV=production`.
+ * 3. **It can only ever add a member to the workspace the seed itself made.**
+ *    That is the structural half, and the one worth relying on: the id it is
+ *    handed comes from the seed's own workspace lookup, so there is no argument
+ *    it could be given that would grant anyone access to a real one.
+ *
+ * It never throws. A missing account, a mistyped address, an auth API that is
+ * having a bad day — none of those are reasons for `pnpm db:seed` to fail, so
+ * every path returns null and the seed carries on.
+ */
+async function ensureDevMember(
+  db: Db,
+  auth: AdminAuth,
+  workspaceId: string,
+): Promise<string | null> {
+  if (process.env.NODE_ENV === "production") return null;
+
+  const email = process.env.DEV_SEED_EMAIL?.trim();
+  if (!email) return null;
+
+  try {
+    const { data } = await auth.auth.admin.listUsers();
+    const user = data?.users.find(
+      (candidate) => candidate.email?.toLowerCase() === email.toLowerCase(),
+    );
+    // No such account is a normal outcome — the address may simply not have
+    // signed in yet — so it is silence rather than an error.
+    if (!user) return null;
+
+    await db
+      .insert(membership)
+      .values({ workspaceId, userId: user.id, role: "owner", allProducts: true })
+      // Second run, same person: the unique on (workspace_id, user_id) makes
+      // this a no-op rather than a failure.
+      .onConflictDoNothing();
+
+    return email;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Inserts `AT_RISK_ITEM` into a workspace unless it is already there, and
@@ -276,10 +345,12 @@ async function main() {
       // it — which would leave every established environment demonstrating two
       // buckets out of three. It inserts itself once and is a no-op after that.
       const added = await ensureAtRiskItem(db, id);
+      const joined = await ensureDevMember(db, auth, id);
       console.log(
         `seed: "${WORKSPACE_NAME}" already exists (${id}). ` +
           (added ? `Added "${AT_RISK_ITEM.title}".` : "Nothing to do."),
       );
+      if (joined) console.log(`seed: ${joined} is an Owner of "${WORKSPACE_NAME}".`);
       return;
     }
 
@@ -468,10 +539,11 @@ async function main() {
       },
     ]);
 
+    await ensureAtRiskItem(db, workspaceId);
+    const joined = await ensureDevMember(db, auth, workspaceId);
+
     // §2: every mutating action writes an activity row. The seed writes human
     // rows as the seeded Owner rather than inventing a third actor kind.
-    await ensureAtRiskItem(db, workspaceId);
-
     await db.insert(activity).values({
       workspaceId,
       productId,
@@ -488,6 +560,7 @@ async function main() {
       `seed: created "${WORKSPACE_NAME}" (${workspaceId}) — 2 products, 3 opportunities, ` +
         `${ITEMS.length + SECOND_PRODUCT_ITEMS.length} items, ${GAPS.length} gaps, 2 decisions.`,
     );
+    if (joined) console.log(`seed: ${joined} is an Owner of "${WORKSPACE_NAME}".`);
   } finally {
     await sql.end();
   }

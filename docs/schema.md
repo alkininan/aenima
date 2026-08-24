@@ -245,12 +245,46 @@ invariant 1.
 and `decision` tables, `item.flow_intent`, their RLS policies, and `activity`'s
 two parent FKs corrected to `RESTRICT`.
 
+`drizzle/0005_item_keys.sql` — hand-written: `product.key_prefix` and `item.key`,
+backfilled, plus `app.assign_item_key()`. Keys come from the database and never
+from the client, exactly as `version_no` does.
+
 ```
 pnpm db:generate   # diff the schema files into a new migration
 pnpm db:migrate    # apply pending migrations to DATABASE_URL
 pnpm db:baseline   # once per environment: record migrations already applied by hand
-pnpm db:seed       # one workspace, two products, three opportunities, nine items
+pnpm db:seed       # one workspace, two products, three opportunities, ten items
 ```
+
+The seed is **idempotent**: it finds the workspace by name and stops, and the
+steps that arrived after the first seeds ran top up an existing workspace rather
+than needing a fresh one.
+
+### Seeing the seed as yourself — `DEV_SEED_EMAIL`
+
+The seed's Owner is `seed-owner@aenima.test`, an account nobody can sign in as.
+Sign in with your own address and you get a workspace of your own and see none of
+this. Setting `DEV_SEED_EMAIL` adds that account to the seed workspace as an
+Owner, after which RLS shows you everything in it:
+
+```
+DEV_SEED_EMAIL=you@example.com pnpm db:seed
+```
+
+It does nothing unless the variable is set, does nothing under
+`NODE_ENV=production`, and does nothing if no account has that address — all
+three are silent, and none of them fails the seed. **It can only ever add a
+member to the workspace the seed itself created**, which is the part worth
+relying on: there is no input that would grant anyone access to a real
+workspace.
+
+**One caveat, and it bites on any machine where you signed in before seeding.**
+`getCurrentWorkspace()` takes the *oldest* workspace you are a member of, and
+there is no workspace switcher yet (§13's surface is per-workspace). If signing
+in created a workspace for you before the seed workspace existed, membership
+alone will not change what `/app` shows — you will still land in your own, empty
+one. Delete that empty workspace and the seed workspace becomes the oldest you
+can see.
 
 **Never `drizzle-kit push` here.** The policies above are not expressible in the
 schema DSL, so push cannot see them in `src/db/schema/*` and plans to
