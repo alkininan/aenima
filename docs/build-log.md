@@ -307,6 +307,27 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
    opportunity's **title as plain text**, no href: it fixes the thing that mattered (an item that
    shows its product but not its opportunity hides why it exists) and needs no migration.
 
+10. **§4's data/compliance layer has no checks to encode.** Check 18 "triggers compliance layer"
+    and §4 turns "privacy checks on" for personal data or an auth surface — but §7.2 never
+    enumerates them, so T2.1 could encode the safety layer and not this one. **The compliance
+    layer arrives with the checks it contains**, and until §7 lists them there is nothing to
+    transcribe. `src/packs/types.ts` already holds the shape; it needs content, not code.
+
+11. **The seed's `gap.check_id` values reference no rubric.** `MN-2`, `MN-7`, `SF-1` and `CN-1` in
+    `scripts/seed.ts` predate any pack and are *requirement*-ID-shaped — the IDs a PRD gives its own
+    stories (§7.4: "MN-4 defines a disabled condition on this screen") — not rubric check IDs like
+    `prd-10`. They were left alone in T2.1: rewriting them would have been authorship inside a
+    transcription ticket. **T2.3 is the first ticket that makes a gap out of a real check** and has
+    to reconcile the two, either by reseeding against `feature-prd` or by deciding that
+    `gap.check_id` holds both kinds and saying which is which.
+
+12. **A pack is keyed by artifact kind, not by item type.** §7.2 is the *Feature* PRD rubric, and §4
+    gives each of the seven types its own "rubric weight centre" — an Enhancement's lean PRD is
+    scored on what must not change, a Fix's on its regression guard. So `prd` will eventually need
+    more than one pack. The pack id carries the distinction today (`feature-prd`) and
+    `SkillPack.artifactKind` does not; whoever writes the second PRD rubric decides whether
+    selection keys on item type or stays a plain id lookup.
+
 ## Accounts and keys needed
 
 - [x] Supabase project (URL, anon key, service role key)
