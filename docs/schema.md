@@ -280,11 +280,25 @@ workspace.
 
 **One caveat, and it bites on any machine where you signed in before seeding.**
 `getCurrentWorkspace()` takes the *oldest* workspace you are a member of, and
-there is no workspace switcher yet (§13's surface is per-workspace). If signing
-in created a workspace for you before the seed workspace existed, membership
-alone will not change what `/app` shows — you will still land in your own, empty
-one. Delete that empty workspace and the seed workspace becomes the oldest you
-can see.
+there is no workspace switcher yet — which workspace a member of several lands
+in has no deliberate answer yet (build log, open question 8). If signing in
+created a workspace for you before the seed workspace existed, membership alone
+will not change what `/app` shows: you will still land in your own, empty one.
+
+**Deleting that workspace does not work, by design.** `activity_workspace_fk` is
+`RESTRICT` and `activity` refuses DELETE beneath it, so a workspace that has ever
+recorded anything cannot be removed — which is the ledger being load-bearing
+rather than a bug. Drop *your membership* of it instead. The workspace and its
+history stay; you simply stop being able to see it, and the seed workspace
+becomes the oldest you can:
+
+```sql
+delete from membership m using auth.users u
+ where m.user_id = u.id and u.email = 'you@example.com'
+   and m.workspace_id = '<the workspace you want out of>';
+```
+
+Reversible: re-insert the row with `role = 'owner'` and `all_products = true`.
 
 **Never `drizzle-kit push` here.** The policies above are not expressible in the
 schema DSL, so push cannot see them in `src/db/schema/*` and plans to

@@ -286,6 +286,18 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
    confirming this project's PostgREST `db-max-rows` before it bites: if it is set, the platform
    truncates the result and says so only in a response header.
 
+8. **Which workspace a member lands in is arbitrary — decide at Phase 6.**
+   `getCurrentWorkspace()` takes the *oldest* workspace the caller belongs to, and no spec section
+   says how a member of several should land in one. That is not a rule, it is the first row of an
+   unordered set with an `order by created_at` bolted on to make it deterministic.
+   **Multi-workspace membership is real** — §14's invited member can belong to two teams — so this
+   needs a deliberate answer: a stored last-active workspace, an explicit switcher in the §4
+   sidebar beside the product one, or workspace-scoped URLs. Deferred to **Phase 6** with onboarding
+   and roles, which is where the invite path and the role matrix get built and where the question
+   stops being hypothetical. `docs/schema.md`'s `DEV_SEED_EMAIL` caveat points here: it is the same
+   arbitrariness, felt first by developers because signing in before seeding leaves your own empty
+   workspace older than the seed's.
+
 ## Accounts and keys needed
 
 - [x] Supabase project (URL, anon key, service role key)
