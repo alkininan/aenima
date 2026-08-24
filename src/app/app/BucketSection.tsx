@@ -1,7 +1,26 @@
 import type { Dictionary } from "@/i18n";
 import type { Bucket } from "@/lib/buckets";
+import { cx } from "@/lib/cx";
 
 import { ItemRow, type ItemRowData } from "./ItemRow";
+
+/**
+ * §8: 2px bucket accent — `--prime` your-move, `--warning` at-risk, none
+ * flowing.
+ *
+ * It belongs to the group rather than the row (v2.15), and it can: a bucket is
+ * homogeneous by construction, since `assignBucket` returns exactly one bucket
+ * per item and this section renders only the items in it. One unbroken edge
+ * down eight rows is a list; eight two-pixel marks is eight objects.
+ *
+ * Flowing's stays transparent rather than absent, so every group is inset by
+ * the same 2 and the titles line up across buckets.
+ */
+const BUCKET_ACCENT: Record<Bucket, string> = {
+  your_move: "border-l-prime",
+  at_risk: "border-l-warning",
+  flowing: "border-l-transparent",
+};
 
 /**
  * One of §13's three buckets, with its mono-micro header.
@@ -42,9 +61,24 @@ export function BucketSection({
         </span>
       </h2>
 
-      <div className="flex flex-col gap-[4px]">
+      {/* §8 (v2.15): one continuous surface, hairline-divided.
+          
+          `gap-[1px]` on a `--bg-base` background is the hairline — the page
+          showing through a one-pixel gap rather than a border painted on top of
+          the fill. That way a row's hover can cover its whole height without
+          eating the divider, and the first and last rows need no special case
+          beyond the group's own corners.
+          
+          `overflow-hidden` is what makes the square-cornered rows inherit the
+          group's rounded ends: the corners are clipped rather than drawn. */}
+      <div
+        className={cx(
+          "flex flex-col gap-[1px] overflow-hidden rounded-sm border-l-[2px] bg-bg-base",
+          BUCKET_ACCENT[bucket],
+        )}
+      >
         {items.map((item) => (
-          <ItemRow key={item.key} item={item} t={t} now={now} />
+          <ItemRow key={item.key} item={item} t={t} now={now} className="bg-surface-1" />
         ))}
       </div>
     </section>

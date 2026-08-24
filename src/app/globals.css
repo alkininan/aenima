@@ -267,7 +267,7 @@
 
   .type-ui-button {
     font-weight: 600;
-    font-size: 17px;
+    font-size: 15px;
     line-height: 20px;
   }
 
@@ -285,8 +285,8 @@
 
   .type-ui-button-sm {
     font-weight: 600;
-    font-size: 15px;
-    line-height: 20px;
+    font-size: 13px;
+    line-height: 18px;
   }
 
   .type-ui-body {

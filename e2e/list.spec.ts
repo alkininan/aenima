@@ -21,6 +21,8 @@ import { expect, test } from "@playwright/test";
 // §2 tokens, resolved.
 const PRIME = "rgb(33, 184, 220)";
 const WARNING = "rgb(235, 169, 47)";
+const SURFACE_1 = "rgb(21, 23, 28)";
+const BG_BASE = "rgb(8, 9, 12)";
 
 const listSection = (page: import("@playwright/test").Page) =>
   page.locator("section").filter({ has: page.getByRole("heading", { name: "List surface" }) });
@@ -56,25 +58,37 @@ for (const width of [1440, 768, 375] as const) {
      * §8: "2px bucket accent (`--prime` your-move / `--warning` at-risk / none
      * flowing)", and §4 reserves 2px for meaning.
      *
-     * Flowing's border is transparent rather than absent, so every row is the
-     * same width and the titles line up — asserting the *width* is 2 on all
-     * three is what catches someone "simplifying" that away.
+     * §8 (v2.15) puts it on the *group*, unbroken, rather than restarting on
+     * every row — so it is read from the row's container. Flowing's stays
+     * transparent rather than absent, so every group is inset by the same 2 and
+     * the titles line up across buckets; asserting the width is 2 on all three
+     * is what catches someone "simplifying" that away.
      */
-    test("the bucket accent is 2px, and its colour says which bucket", async ({ page }) => {
+    test("one 2px accent runs down each group, and its colour says which bucket", async ({
+      page,
+    }) => {
       const accents = await listSection(page)
         .getByTestId("item-row")
-        .evaluateAll((nodes) =>
-          nodes.map((node) => {
-            const style = getComputedStyle(node);
+        .evaluateAll((nodes) => {
+          const groups = new Map<Element, string | null>();
+          for (const node of nodes)
+            groups.set(node.parentElement!, node.getAttribute("data-bucket"));
+          return [...groups].map(([group, bucket]) => {
+            const style = getComputedStyle(group);
             return {
-              bucket: node.getAttribute("data-bucket"),
+              bucket,
+              rows: group.children.length,
               width: style.borderLeftWidth,
               color: style.borderLeftColor,
+              // The rows themselves must carry none of it, or the accent is
+              // still per-row and merely looks continuous.
+              rowBorders: [...group.children].map((row) => getComputedStyle(row).borderLeftWidth),
             };
-          }),
-        );
+          });
+        });
 
       expect(accents.every((accent) => accent.width === "2px")).toBe(true);
+      expect(accents.every((accent) => accent.rowBorders.every((w) => w === "0px"))).toBe(true);
 
       expect(accents.find((accent) => accent.bucket === "your_move")?.color).toBe(PRIME);
       expect(accents.find((accent) => accent.bucket === "at_risk")?.color).toBe(WARNING);
@@ -83,34 +97,73 @@ for (const width of [1440, 768, 375] as const) {
     });
 
     /**
-     * §10, and the reason `Meter` takes `number | null` rather than a number:
-     * "meters render hollow tracks + 'connect AI to activate scoring' — never
-     * zeros, never red". Nothing is scored until Phase 2, so a filled meter on
-     * this surface would be asserting a score that does not exist, and a 0% one
-     * would be asserting a failure.
+     * §8 (v2.15): rows are a continuous ledger, not detached cards — flush on
+     * one `--surface-1` surface, divided by 1px `--bg-base` hairlines.
      *
-     * A zero-width fill is invisible, so counting fills is what distinguishes
-     * "hollow" from "rendered at zero" — the two look identical.
+     * Measured as geometry rather than as classes, because "one list" and
+     * "eight cards" differ by a few pixels of gap and a radius: what this
+     * catches is a `gap-[4px]` or a `rounded-sm` creeping back onto the row,
+     * either of which turns the ledger back into a stack.
      */
-    test("no meter on a row renders a fill, at zero width or any other", async ({ page }) => {
+    test("rows in a bucket share one surface, hairline-divided", async ({ page }) => {
+      const measured = await listSection(page)
+        .getByTestId("item-row")
+        .evaluateAll((nodes) => {
+          // The largest group, because a divider needs two rows to exist —
+          // Your move and At risk each hold one in this fixture.
+          const groups = [...new Set(nodes.map((node) => node.parentElement!))];
+          const group = groups.reduce((widest, candidate) =>
+            candidate.children.length > widest.children.length ? candidate : widest,
+          );
+          const rows = [...group.children];
+          const boxes = rows.map((row) => row.getBoundingClientRect());
+          return {
+            rows: rows.length,
+            // Every row paints the surface; the gap between them shows the page.
+            fills: rows.map((row) => getComputedStyle(row).backgroundColor),
+            groupFill: getComputedStyle(group).backgroundColor,
+            // Each row's own corners are square — the group's are not.
+            rowRadii: rows.map((row) => getComputedStyle(row).borderTopLeftRadius),
+            groupRadius: getComputedStyle(group).borderTopLeftRadius,
+            gaps: boxes.slice(1).map((box, i) => Math.round(box.top - boxes[i]!.bottom)),
+          };
+        });
+
+      expect(measured.rows).toBeGreaterThan(1);
+      // A hairline, not a gutter. 4 would be the old detached-card spacing.
+      expect(measured.gaps.every((gap) => gap === 1)).toBe(true);
+      // --surface-1 on the rows, --bg-base showing through between them.
+      expect(measured.fills.every((fill) => fill === SURFACE_1)).toBe(true);
+      expect(measured.groupFill).toBe(BG_BASE);
+      // The group is rounded; the rows are square and let it clip them.
+      expect(measured.groupRadius).toBe("16px");
+      expect(measured.rowRadii.every((radius) => radius === "0px")).toBe(true);
+    });
+
+    /**
+     * §8/§10 (v2.15): a row renders **no meters at all** without scores.
+     *
+     * §10's hollow track is right on the item page, where "connect AI to
+     * activate scoring" stands beside it and says what the emptiness means. On
+     * a list row that line does not fit, so the track becomes an unlabelled stub
+     * repeated once per row — noise that explains nothing. The space goes to the
+     * content instead, and the meters come back when the scores do.
+     *
+     * Absence is the assertion, so it is made against the roles a meter would
+     * take in either state: a hollow one is an `img`, a scored one a
+     * `progressbar`, and neither may be here.
+     */
+    test("a row renders no meter at all while nothing is scored", async ({ page }) => {
       const meters = await listSection(page)
         .getByTestId("item-row")
-        .evaluateAll((nodes) =>
-          nodes.flatMap((node) =>
-            [...node.querySelectorAll('[role="progressbar"], [role="img"]')].map((meter) => ({
-              role: meter.getAttribute("role"),
-              children: meter.children.length,
-              value: meter.getAttribute("aria-valuenow"),
-            })),
-          ),
+        .evaluateAll(
+          (nodes) =>
+            nodes.flatMap((node) => [
+              ...node.querySelectorAll('[role="progressbar"], [role="img"]'),
+            ]).length,
         );
 
-      expect(meters.length).toBeGreaterThan(0);
-      // Hollow: an image with a text alternative, not a progressbar pinned at 0
-      // — which is what a screen reader would otherwise announce.
-      expect(meters.every((meter) => meter.role === "img")).toBe(true);
-      expect(meters.every((meter) => meter.children === 0)).toBe(true);
-      expect(meters.every((meter) => meter.value === null)).toBe(true);
+      expect(meters).toBe(0);
     });
 
     // §8: "gap chips (max 2 + overflow)". The fixture's first row has three.

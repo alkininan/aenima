@@ -1,13 +1,12 @@
 import Link from "next/link";
 
 import { Chip } from "@/components/ui/Chip";
-import { Meter } from "@/components/ui/Meter";
 import type { Dictionary } from "@/i18n";
 import type { Bucket } from "@/lib/buckets";
 import { cx } from "@/lib/cx";
 import { relativeTime } from "@/lib/relative-time";
 import { itemHref } from "@/lib/routes";
-import { STAGES, type Stage } from "@/lib/stage";
+import type { Stage } from "@/lib/stage";
 
 import { ItemRowMenu } from "./ItemRowMenu";
 
@@ -39,47 +38,26 @@ export type ItemRowData = {
   idle: boolean;
 };
 
-/** §8: 2px bucket accent — prime your-move, warning at-risk, none flowing. */
-const BUCKET_ACCENT: Record<Bucket, string> = {
-  your_move: "border-l-prime",
-  at_risk: "border-l-warning",
-  // §8 gives Flowing no accent. The 2px border still exists so every row is the
-  // same width and the titles line up — it is simply transparent.
-  flowing: "border-l-transparent",
-};
-
 /** §8: "gap chips (max 2 + overflow)". */
 const VISIBLE_GAPS = 2;
 
 /**
- * §8's "micro-meters per active stage".
- *
- * Active is read as every stage the item has reached, Discover through its
- * current one — so a Define item shows two tracks and a Design item three. §8
- * does not define the word; this is the reading that makes the row show
- * progress rather than a single bar that means nothing on its own.
- *
- * `handed_over` is excluded: §3 archives it out of active views, so it is never
- * a stage an item is showing progress *through*.
- */
-function activeStages(stage: Stage): Stage[] {
-  const reached = STAGES.indexOf(stage);
-  return STAGES.filter(
-    (candidate, index) => index <= reached && candidate !== "handed_over",
-  ) as Stage[];
-}
-
-/**
- * §8 item row: 56h · 2px bucket accent → name ui-headline + type badge →
- * micro-meters → gap chips (max 2 + overflow) → freshness dot + mono-readout
- * timestamp → overflow menu.
+ * §8 item row: 56h · name ui-headline + type → gap chips (max 2 + overflow) →
+ * freshness dot + mono-readout timestamp → overflow menu.
  *
  * A Server Component: the only interactive part is the overflow menu, which is
  * its own client island. The whole row is a link to the item, so the key is
  * what someone copies out of the address bar.
  *
- * **Every meter is hollow.** Nothing is scored until Phase 2, and §10 forbids
- * rendering that as zero — see `Meter`.
+ * **The row draws no surface, no radius and no accent of its own** (§8, v2.15).
+ * Rows are a continuous ledger rather than detached cards, so the fill, the
+ * corners and the bucket accent all belong to the group — see `BucketSection`.
+ * A row that painted its own would be a card again the moment someone rendered
+ * one on its own.
+ *
+ * **No meters** (§8/§10, v2.15). Nothing is scored until Phase 2, and a hollow
+ * track on a row is an unlabelled stub repeated once per row: §10's line that
+ * explains it only fits on the item page. The meters come back with the scores.
  */
 export function ItemRow({
   item,
@@ -109,10 +87,14 @@ export function ItemRow({
         // §4 density: list rows 56. The height is fixed rather than minimum —
         // a row that grew with its content would break the rhythm the whole
         // list is read by.
-        "group relative flex h-[56px] items-center gap-[12px] rounded-sm border-l-[2px]",
-        "bg-surface-1 pr-[12px] pl-[14px] transition-colors duration-[var(--t-fast)] ease-brand",
+        //
+        // §8 (v2.15): no fill, no radius, no accent. The group owns all three;
+        // a hairline above every row but the first is what divides them, and
+        // `--bg-base` showing through the gap is the divider rather than a
+        // border drawn on top of a surface.
+        "group relative flex h-[56px] items-center gap-[12px]",
+        "px-[12px] transition-colors duration-[var(--t-fast)] ease-brand",
         "hover:bg-surface-3",
-        BUCKET_ACCENT[item.bucket],
         // §8: idle items dim to .60. §1's sixth law — idle work dims, it never
         // turns red.
         item.idle && "opacity-60",
@@ -133,29 +115,15 @@ export function ItemRow({
         </span>
       </Link>
 
-      {/* §8: types are informative, never colourful — the outline badge.
+      {/* §8 (v2.15): the type, without a container. A bordered chip in a row
+          means a gap; type is taxonomy, and outlining it makes a permanent
+          label compete with the one urgent thing on the row. mono-micro is §3's
+          eyebrow, which is what a taxonomy label is.
 
-          The responsive display lives on this wrapper rather than on the chip:
-          `cx` concatenates classes and does not resolve Tailwind conflicts, so a
-          `hidden` on the chip would fight the `inline-flex` in its own base and
-          be settled by CSS source order instead of by intent. Below sm the badge
-          gives its width to the title, which is the part worth reading on a
-          phone. */}
-      <span className="hidden shrink-0 sm:inline-flex">
-        <Chip variant="type-badge">{t.itemTypes[item.type]}</Chip>
-      </span>
-
-      {/* §8: one 4h micro-meter per active stage. Hollow, all of them. */}
-      <span className="hidden w-[96px] shrink-0 items-center gap-[4px] md:flex">
-        {activeStages(item.stage).map((stage) => (
-          <Meter
-            key={stage}
-            score={null}
-            size={4}
-            label={t.stages[stage]}
-            emptyLabel={t.list.noScoring}
-          />
-        ))}
+          Below sm it gives its width to the title, which is the part worth
+          reading on a phone. */}
+      <span className="type-mono-micro hidden shrink-0 text-n-secondary sm:inline">
+        {t.itemTypes[item.type]}
       </span>
 
       {/* §8: gap chips, max 2 + overflow. Musts first — a Should behind a Must

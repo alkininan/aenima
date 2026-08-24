@@ -29,11 +29,13 @@ type MeterProps = {
  * Track `--surface-2`, fill `--prime`, `--r-pill`. Two sizes: the 4h row
  * micro-meter and the 8h item-page meter.
  *
- * **The hollow state is the point of this component right now.** Nothing in the
- * product is scored until Phase 2, so every meter on the list surface arrives
- * with `score: null` and renders as an empty track. §10 is explicit that this
- * must never be shown as a zero and never as red — an unscored artifact has not
- * failed anything, and a 0% bar says it has.
+ * **The hollow state belongs to the item page, and only there** (§8/§10,
+ * v2.15). An unscored meter is a track with "connect AI to activate scoring"
+ * beside it — the line is what makes the emptiness mean something. A list row
+ * has no room for the line, so it renders no meters at all rather than a stub
+ * repeated once per row; see `ItemRow`. What §10 forbids everywhere is showing
+ * an unscored artifact as a zero: it has not failed anything, and a 0% bar says
+ * it has.
  *
  * Accessibility follows the same distinction. With a score it is a
  * `progressbar` carrying its value; without one there is no value to carry, so

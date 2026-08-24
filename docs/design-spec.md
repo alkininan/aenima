@@ -1,4 +1,4 @@
-# aenima — Design Specification v2.14 (web)
+# aenima — Design Specification v2.15 (web)
 
 <!-- Full rewrite for direct vibe-coding: every value explicit, no Figma step assumed. Supersedes v1.x.
 v2.0: aesthetic consolidated as "liquid-glass instrument, retro terminal heart, tactile controls." Aqua promoted to the single primary accent (Brand blue #246BFD retired to the hero gradient only). JetBrains Mono promoted to a first-class UI role for data readouts. Tactile press physics, glass edge highlights, and dot-grid texture added. Token set minimized. All 17 open proposals (form controls, elevation, z-ladder, scrollbars, selection, borders, font loading, charts, degraded pages, validation, sidebar, keyboard) folded in as law.
@@ -15,7 +15,8 @@ v2.10: two values the v2.8 implementation derived become law, and the resend get
 v2.11: the resend cooldown starts at the first send, not the first resend (§8). "After each use" was wrong about whose clock it is — the provider's window belongs to the address, not to the control — so a code step opened with its resend live and handed over exactly the rate-limited tap the cooldown exists to prevent. Arriving at a code step means a code has just gone out, so the resend now opens already counting down.
 v2.12: field state reaches the leading icon, the label zone gains breathing room, and step chrome unifies on one variant (§8, §12). The floated label sits 6 above the field rather than 4, so the zone is 24h (§8). The leading icon takes the field's state colour: a field that signals only at its border makes the user hunt for what changed (§8). Back and the tertiary action are the same tier of chrome on one step, so both are Neutral — ghost vanishes precisely when a disabled, counting-down tertiary has the most to say (§8). The code step's two errors are named as distinct (§12); the wrong-code string was reaching nobody, because Supabase answers a wrong code and a stale one with one error and the mapping read that as expiry.
 v2.13: button labels move to SemiBold, and the focus modality no longer defaults to keyboard (§3, §6). ui-button and ui-button-sm were calibrated as Medium before the primary carried a dark label on a light gloss fill, and dark-on-light reads lighter than light-on-dark at the same weight; SemiBold also puts a button label at ui-headline's weight, which is what a row's title and its action should share. The modality starts unset because a field the page focused already carries a caret — ringing it as well reproduced, on load, the double stroke §6 removes from the mouse path.
-v2.14: the sidebar gains a bottom account slot, and nested rounded surfaces get a radius rule (§4, §5, §8). The sidebar is three zones — lockup, nav, account pinned to the bottom — because identity is something you check and change rather than navigate between, and the top-left belongs to what moves you around; the product switcher stays at the top, since it filters the list rather than naming the person. An inner surface flush inside a rounded container takes the container's radius minus its padding, which corrects the select and menu panel's option rows from 8 to 6 (§8): 8 inside a 12 corner with 6 of padding is 2 more than the space allows, and it is the outer corner that visibly breaks. -->
+v2.14: the sidebar gains a bottom account slot, and nested rounded surfaces get a radius rule (§4, §5, §8). The sidebar is three zones — lockup, nav, account pinned to the bottom — because identity is something you check and change rather than navigate between, and the top-left belongs to what moves you around; the product switcher stays at the top, since it filters the list rather than naming the person. An inner surface flush inside a rounded container takes the container's radius minus its padding, which corrects the select and menu panel's option rows from 8 to 6 (§8): 8 inside a 12 corner with 6 of padding is 2 more than the space allows, and it is the outer corner that visibly breaks.
+v2.15: the item row becomes a continuous ledger rather than a stack of detached cards, and three things stop competing with the one urgent element on it (§0, §3, §8, §10). Glass is pinned to the navigation layer as a law — repeated down a list it reads as translucent rectangles rather than as one surface (§0). Button labels step down to 15/20 and 13/18: a label is a control, not content, and 17 belongs to input values and row titles (§3). Rows sit flush on one `--surface-1` with 1px `--bg-base` hairlines and one unbroken accent down the group (§8). The type badge loses its container on the row, because a bordered chip there already means a gap (§8). Row micro-meters wait for scoring rather than rendering as unlabelled stubs — §10's hollow track keeps its meaning on the item page, where the line explaining it stands beside it (§8, §10). -->
 
 ## 0. Design language
 
@@ -38,6 +39,7 @@ Laws (override any component default):
 7. **Dim, don't disable.** Idle/parked items render at reduced opacity, fully interactive.
 8. **One term per concept** in copy; sentence case; no exclamation marks.
 9. **Texture is rationed.** The dot grid appears only on decorative surfaces (login, empty states, hero) — never behind working content.
+10. **Glass is the navigation layer, never the content layer.** Panels, modals, sticky bars, toasts and the pipeline strip float above content and carry the glass recipe (§5); lists, rows, cards and anything scrollable do not. Glass on content muddies hierarchy — repeated across a list it reads as a stack of translucent rectangles rather than as one surface — and the hierarchy it was reached for has to come from spacing, typography and density instead.
 
 ---
 
@@ -156,10 +158,10 @@ Root 16px. Space Grotesk styles: letter-spacing −1%. Full Latin Extended: TR/N
 | display-md | Space Grotesk Medium | 18/24 | Card titles, item names |
 | display-num | Space Grotesk Bold | 18/22 | Big emphasized numbers (ready buffer, scores in headers) |
 | ui-headline | DM Sans SemiBold | 17/22 | Item row titles, doc headings |
-| ui-button | DM Sans SemiBold | 17/20 | Large/medium button labels |
+| ui-button | DM Sans SemiBold | 15/20 | Large/medium button labels |
 | ui-input | DM Sans Regular | 17/22 | Inputs, composer |
 | ui-subhead | DM Sans SemiBold | 15/22 | Group labels, table headers, tabs |
-| ui-button-sm | DM Sans SemiBold | 15/20 | Small buttons, action chips |
+| ui-button-sm | DM Sans SemiBold | 13/18 | Small buttons, action chips |
 | ui-body | DM Sans Regular | 15/22 | Default prose: chat, docs, evidence |
 | ui-footnote | DM Sans Regular | 13/18 | Helper text, validation messages |
 | ui-label | DM Sans Medium | 13/18 | Floated field labels |
@@ -168,6 +170,8 @@ Root 16px. Space Grotesk styles: letter-spacing −1%. Full Latin Extended: TR/N
 | mono-readout | JetBrains Mono Medium | 12/16, tabular-nums | Timestamps, meter %, counts, IDs, versions |
 | mono-micro | JetBrains Mono SemiBold | 10/14, +8%, UPPERCASE | Eyebrows: bucket headers, stage labels, section tags |
 | special-otp | DM Sans Bold | 22/24 | Login code boxes |
+
+**A button label is a control, not content, and controls sit one step below content in the ramp.** 17 is reserved for what a person reads or wrote — input values (ui-input) and row titles (ui-headline) — so pairing a button's label to its field's value makes a full-width primary read as a heading.
 
 Rules: max reading measure 68ch (doc reader). Links `--prime`, underline on hover only. All numerals in data contexts use `font-variant-numeric: tabular-nums`. The mono-micro eyebrow replaces v1's DM Sans eyebrow — the terminal label is the retro signature, use it wherever a tiny section label appears.
 
@@ -263,7 +267,7 @@ States: hover overlay · press physics · loading (spinner replaces label, width
 
 **Toggle.** 56×28, `--r-pill`, 2px inset, thumb 24 circle. Off: `--surface-2` track, `--n-secondary` thumb. On: `--prime` track, `--n-white` thumb. Track/thumb transition `--t-fast`.
 
-**Chips & badges.** Chip 24h, pad 4/10, gap 4, `--r-pill`, `--surface-2` fill, ui-caption; interactive chips get hover + press. (The vertical padding is derived, not free: ui-caption's 16px line box plus 4 above and below is exactly the 24 height; the 10 horizontal matches the sm button.) Type badge (Feature, Enhancement, Technical, Content, Experiment, Fix, Spike): outline chip, `--glass-border`, `--n-secondary` — types are informative, never colorful. Gap chips: open Must = `--warning-soft` bg + `--warning` text · open Should = `--surface-2` + `--n-secondary` · accepted = `--surface-2` + `--n-secondary` + accepter name · excluded = transparent + `--n-disabled` outline. Count badges: display-num in a `--surface-2` pill. **File chip:** chip + file-type icon 16 + name (middle-truncate) + size in mono-readout.
+**Chips & badges.** Chip 24h, pad 4/10, gap 4, `--r-pill`, `--surface-2` fill, ui-caption; interactive chips get hover + press. (The vertical padding is derived, not free: ui-caption's 16px line box plus 4 above and below is exactly the 24 height; the 10 horizontal matches the sm button.) Type badge (Feature, Enhancement, Technical, Content, Experiment, Fix, Spike): outline chip, `--glass-border`, `--n-secondary` — types are informative, never colorful. **Not on the item row**, where the type drops its container so the only outlined thing in a row is a gap (§8 Item row). Gap chips: open Must = `--warning-soft` bg + `--warning` text · open Should = `--surface-2` + `--n-secondary` · accepted = `--surface-2` + `--n-secondary` + accepter name · excluded = transparent + `--n-disabled` outline. Count badges: display-num in a `--surface-2` pill. **File chip:** chip + file-type icon 16 + name (middle-truncate) + size in mono-readout.
 
 **Icons.** The set is Iconoir — hairline line icons on a 24 grid, matching the instrument aesthetic; stroke inherits `currentColor`. Sizes follow the component that carries them (§8 buttons: 18/20/24). One library, no mixing: an icon Iconoir lacks is drawn in its grammar and kept in `icons.tsx`, never imported from a second set. Brand marks are exempt: no icon set ships third-party logos, so a brand glyph is hand-drawn in `icons.tsx` and carries a comment naming the brand — the only sanctioned non-Iconoir glyphs. Decorative icons carry `aria-hidden`; meaningful ones a label.
 
@@ -283,11 +287,15 @@ States: hover overlay · press physics · loading (spinner replaces label, width
 
 **Tables (analytics).** Header ui-subhead `--n-secondary` on `--bg-base`; rows 44h `--surface-1` separated by 1px `--bg-base`; numerals mono-readout; row hover `--surface-3`; sortable headers get 12px chevron.
 
-**Readiness meter.** Track `--surface-2`, fill `--prime`, `--r-pill`. Row micro-meter 4h per active stage; item-page meter 8h + mono-readout percentage; click expands per-check list (evidence quotes ui-body on `--surface-1` cards, check IDs mono-readout). All Musts passed / 100: fill switches `--success` + one-time hero shimmer.
+**Readiness meter.** Track `--surface-2`, fill `--prime`, `--r-pill`. Row micro-meter 4h per active stage — **but a row renders no meters at all until the workspace has scores**; item-page meter 8h + mono-readout percentage; click expands per-check list (evidence quotes ui-body on `--surface-1` cards, check IDs mono-readout). All Musts passed / 100: fill switches `--success` + one-time hero shimmer.
 
 **Pipeline strip.** Glass bar; segment per stage: mono-micro stage label + display-num count; segments filter; active `--prime-soft`.
 
-**Item row.** 56h: 2px bucket accent (`--prime` your-move / `--warning` at-risk / none flowing) → item name ui-headline + type badge → micro-meters → gap chips (max 2 + overflow) → freshness dot + mono-readout timestamp → overflow menu. Idle: opacity .60 + trailing Soft chip "Park?" (one tap, undo toast). Parked list renders at .40.
+**Item row.** 56h: 2px bucket accent (`--prime` your-move / `--warning` at-risk / none flowing) → item name ui-headline + type → micro-meters → gap chips (max 2 + overflow) → freshness dot + mono-readout timestamp → overflow menu. Idle: opacity .60 + trailing Soft chip "Park?" (one tap, undo toast). Parked list renders at .40.
+
+**Rows are a continuous ledger, not detached cards.** Within a bucket they sit flush on one `--surface-1` surface, divided by 1px `--bg-base` hairlines, with `--r-sm` applied to the *group* — top corners on the first row, bottom on the last, square between. The 2px accent runs unbroken down the group's left edge rather than restarting per row, which it can because a bucket is homogeneous by construction. Detached rounded rows read as separate objects that happen to be adjacent; the hairline is what makes eight entries one list. (This is the same construction §8 gives analytics tables, and for the same reason.)
+
+**The type renders without a container** — plain mono-micro in `--n-secondary`, no outline. A bordered chip in a row must mean something, and what it means there is a gap. Type is taxonomy: it never changes and never needs action, so giving it the same outline as an open Must gap makes the one urgent element on the row compete with a permanent label.
 
 **Cards.** Per §5. **Agent-proposal card:** `--agent-soft` tint + 2px `--agent` left border + confirm/undo; on confirm, violet drops and the card settles to a plain `--surface-1` card (`--t-med` transition — the moment of "human accepted" is visible). Triage card: source icon + extract quote ui-body + proposed destination + confirm/redirect.
 
@@ -309,7 +317,7 @@ Series order: `--prime` #21B8DC · `--agent` #A78BFF · `--success` #22C55E · `
 
 ## 10. System states & degraded pages
 
-- **No AI key:** meters render hollow tracks + "connect AI to activate scoring" (ui-footnote) — never zeros, never red.
+- **No AI key:** meters render hollow tracks + "connect AI to activate scoring" (ui-footnote) — never zeros, never red. **That is the item page, where the line stands beside the track and says what the emptiness means.** A list row has no room for the line, so the hollow track there is an unlabelled stub repeated once per row — noise that explains nothing. **Row micro-meters do not render at all without a key**; the space goes to the content, and the meters appear when the scores do.
 - **Provider outage / retry:** freshness shows `--warning` dot + mono-readout "scored 6 h ago — retrying"; no banners.
 - **404/500/offline:** empty-state pattern on dot grid, Æ mark 32, one line, one action ("back to dashboard" / "retry"). 500 may show a mono-readout incident id.
 - Full-page loads: skeleton screens mirroring the target layout; never a centered spinner page.
@@ -344,4 +352,4 @@ No light mode · no RTL (EN/TR/NL are LTR) · no sound (tactility is visual) · 
 
 ---
 
-*v2.14 — complete and closed: no open items. Changes cut new versions of this document.*
+*v2.15 — complete and closed: no open items. Changes cut new versions of this document.*
