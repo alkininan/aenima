@@ -136,6 +136,12 @@ export const en = {
     activity: "Activity",
     /** §3's derived stage, labelled so nobody reads it as a settable field. */
     stageLabel: "Stage",
+    /**
+     * §2 lineage: the opportunity an item came out of, which is the thing that
+     * explains why it exists. Plain text for now — `/o/<key>` cannot be built
+     * because opportunities have no key column (build log, open question 9).
+     */
+    opportunity: "Opportunity",
     /** §8: the 8h meter's own name, for the screen reader. */
     readiness: "Readiness",
     /**

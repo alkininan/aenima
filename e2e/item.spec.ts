@@ -119,6 +119,32 @@ test.describe("at 1440", () => {
     await expect(page.getByText("'nearby' — same venue, or within 100 m?")).toBeVisible();
   });
 
+  /**
+   * §2 lineage: the opportunity is the thing that explains why an item exists,
+   * so an item that shows its product but not its opportunity hides it.
+   *
+   * **Text, not a link.** `/o/<key>` is reserved and unbuildable — opportunities
+   * have no key column — and a link that navigates nowhere is worse than none.
+   * The assertion is that the title is on the page *and* that nothing around it
+   * is an anchor, because "add a link later" is exactly the change that would
+   * otherwise slip in untested.
+   */
+  test("shows the opportunity as text, with no link to a page that does not exist", async ({
+    page,
+  }) => {
+    // Exact: the fixture's brief opens with the same sentence, which is what a
+    // real one would do — an item's opportunity is usually restated in its
+    // artifacts, so a loose matcher finds two things here and would find two on
+    // real data as well.
+    const lineage = page.getByText("People miss what changed while they were away", {
+      exact: true,
+    });
+
+    await expect(lineage).toBeVisible();
+    expect(await lineage.evaluate((node) => node.closest("a") !== null)).toBe(false);
+    await expect(page.locator('main a[href^="/o/"]')).toHaveCount(0);
+  });
+
   // §0 law 4: anything the machine did is visibly the machine's.
   test("renders an agent actor in --agent", async ({ page }) => {
     const colour = await page

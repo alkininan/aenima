@@ -298,6 +298,15 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
    arbitrariness, felt first by developers because signing in before seeding leaves your own empty
    workspace older than the seed's.
 
+9. **Opportunities have no key column, so `/o/<key>` cannot be built.** `opportunity` carries `id`,
+   `workspace_id`, `product_id`, `title` and `summary` — nothing to put in a URL a person can say.
+   **When the opportunity page ships, mirror `item.key`:** a `key_prefix` counter assigned by
+   trigger, the same discipline as `artifact_version.version_no`. **Not a uuid route.**
+   `src/lib/routes.ts` keeps its segments short for one stated reason — "`/i/soc-12` is a URL a
+   person can read out" — and `/o/6f3c…` defeats it entirely. Until then the item header shows the
+   opportunity's **title as plain text**, no href: it fixes the thing that mattered (an item that
+   shows its product but not its opportunity hides why it exists) and needs no migration.
+
 ## Accounts and keys needed
 
 - [x] Supabase project (URL, anon key, service role key)

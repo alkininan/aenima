@@ -83,6 +83,7 @@ export default async function ItemPage({ params }: PageProps<"/i/[key]">) {
               type: item.type,
               stage: item.stage,
               productName: item.productName,
+              opportunityTitle: item.opportunityTitle,
             }}
             t={t}
           />

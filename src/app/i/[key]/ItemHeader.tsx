@@ -8,6 +8,8 @@ export type ItemHeaderData = {
   type: keyof Dictionary["itemTypes"];
   stage: Stage;
   productName: string;
+  /** §2 lineage. Null when the item is unlinked, which is legal and common. */
+  opportunityTitle: string | null;
 };
 
 /**
@@ -31,6 +33,26 @@ export function ItemHeader({ item, t }: { item: ItemHeaderData; t: Dictionary })
       <div className="flex flex-col gap-[8px]">
         <span className="type-mono-readout text-n-secondary">{item.key}</span>
         <h1 className="type-display-xl text-n-primary">{item.title}</h1>
+
+        {/* §2 lineage, in §4's subtitle slot: ui-body, --n-secondary, one line,
+            truncating rather than wrapping. The opportunity is the thing that
+            explains why this item exists, so it sits directly under the title
+            rather than among the taxonomy below it.
+
+            Plain text, not a link. `/o/<key>` is reserved but unbuildable —
+            opportunities have no key column, and routing one by uuid would
+            defeat the reason routes.ts keeps segments short (build log, open
+            question 9).
+
+            Absent when the item is unlinked. §2 makes that legal — "an item may
+            be unlinked from any opportunity … never a block" — so there is
+            nothing to report and nothing is said. */}
+        {item.opportunityTitle === null ? null : (
+          <p className="flex items-baseline gap-[8px]">
+            <span className="type-mono-micro shrink-0 text-n-secondary">{t.item.opportunity}</span>
+            <span className="type-ui-body truncate text-n-secondary">{item.opportunityTitle}</span>
+          </p>
+        )}
 
         {/* Taxonomy, product and derived stage — the three things that place an
             item without describing it. mono-micro is §3's eyebrow. */}

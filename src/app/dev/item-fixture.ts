@@ -31,6 +31,7 @@ export const ITEM_HEADER: ItemHeaderData = {
   type: "feature",
   stage: "design",
   productName: "Sociera",
+  opportunityTitle: "People miss what changed while they were away",
 };
 
 export const ITEM_ARTIFACTS: ArtifactView[] = [

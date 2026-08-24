@@ -441,6 +441,15 @@ export type ItemPageDetail = {
   type: ItemType;
   flowIntent: FlowIntent | null;
   opportunityId: string | null;
+  /**
+   * §2 lineage: the opportunity this item came out of, which is the thing that
+   * explains why it exists.
+   *
+   * Null is a real state rather than a hole in the data — §2: "an item may be
+   * **unlinked** from any opportunity; that shows as a small advisory gap, never
+   * a block."
+   */
+  opportunityTitle: string | null;
   productName: string;
   productSlug: string;
   createdAt: string;
@@ -471,6 +480,7 @@ export type ItemPageDetail = {
 const ITEM_PAGE_TREE = `id, key, title, type, flow_intent, opportunity_id,
    created_at, updated_at,
    product(name, slug),
+   opportunity(title),
    artifact(kind, artifact_version(version_no, created_at, content)),
    gap(id, check_id, tag, disposition, evidence,
        resolved_by_user_id, resolved_at, resolution_note, created_at),
@@ -561,6 +571,7 @@ export async function getItemByKey(
     opportunityId: data.opportunity_id,
     productName: data.product?.name ?? "",
     productSlug: data.product?.slug ?? "",
+    opportunityTitle: data.opportunity?.title ?? null,
     createdAt: data.created_at,
     updatedAt: data.updated_at,
     artifacts,
