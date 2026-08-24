@@ -331,6 +331,11 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
     `SkillPack.artifactKind` does not; whoever writes the second PRD rubric decides whether
     selection keys on item type or stays a plain id lookup.
 
+## On the horizon
+
+- Phase 2 gains a scorer eval harness — a golden set of artifacts with known planted gaps,
+  measuring the scorer's precision against them before meters are trusted.
+
 ## Accounts and keys needed
 
 - [x] Supabase project (URL, anon key, service role key)
