@@ -1,8 +1,9 @@
-# aenima — Product Specification v1.2
+# aenima — Product Specification v1.3
 
 <!-- Master document. Versioned in aenima's own ledger once the platform exists; until then, this file is the source of truth.
 v1.1: Linear removed from v1 scope (tasks push to Notion only; Linear moves to fast-follow). Notion promoted to a full intake source: comments, hand-created tasks, hand-written docs, property changes. Tickets land in an aenima-managed Development backlog database per product. Notion comments are read-only ingest in v1. Agent visual attribution and chat-as-command-palette aligned with design spec v2.0.
-v1.2: Appendix A's baselines are defined as elapsed wall-clock time in a stage, resolving an effort/elapsed ambiguity build ticket T1.2 hit when it tried to compare them against something (§3, Appendix A). aenima observes when things happen and never how long anyone concentrated, so an effort baseline is unmeasurable by construction. The hour-scale cells are effort estimates and are therefore not baselines at all: Discover carries no seed for any type, and no item is ever at-risk on time for sitting there. -->
+v1.2: Appendix A's baselines are defined as elapsed wall-clock time in a stage, resolving an effort/elapsed ambiguity build ticket T1.2 hit when it tried to compare them against something (§3, Appendix A). aenima observes when things happen and never how long anyone concentrated, so an effort baseline is unmeasurable by construction. The hour-scale cells are effort estimates and are therefore not baselines at all: Discover carries no seed for any type, and no item is ever at-risk on time for sitting there.
+v1.3: §7.2's base rubric is stated as 19 checks summing to 100, with safety named as a conditional layer outside it rather than a twentieth base check — the table's own arithmetic already said so, since rows 1–19 carry exactly 100 points and exactly 9 Musts. The three conditional checks (15, 16, 20) are marked as such in an Applies column, check 15's restriction having been stated only in prose, and rubric check ids are distinguished from the requirement IDs inside a PRD (§7.2, §4). -->
 
 ## 0. What aenima is
 
@@ -162,32 +163,34 @@ Killed briefs record why and feed the graveyard; their evidence stays on the opp
 
 ### 7.2 PRD (Define) — the master rubric
 
-20 checks, 100 points, 9 Musts. Notations enforced invisibly by the author: **Given/When/Then** for user-story acceptance criteria (what QA tests), **EARS** ("WHEN [condition] THE SYSTEM SHALL [behavior]") for system behavior. Style law: 2–4 pages; any check satisfiable in one unambiguous line gets one line. Header data (status, people, dates, changelog) is generated, never written.
+The base rubric is 19 checks, 100 points, 9 Musts; check 20 (safety) is a conditional layer per §4, scored outside the base and entering the denominator only when its condition holds — which is why the base sums to 100 without it. Notations enforced invisibly by the author: **Given/When/Then** for user-story acceptance criteria (what QA tests), **EARS** ("WHEN [condition] THE SYSTEM SHALL [behavior]") for system behavior. Style law: 2–4 pages; any check satisfiable in one unambiguous line gets one line. Header data (status, people, dates, changelog) is generated, never written.
 
-| # | Check | Tag | Pts |
-|---|---|---|---|
-| 1 | Problem written without the solution hidden inside it | Should | 5 |
-| 2 | Points to an opportunity | Should | 3 |
-| 3 | Audience defined behaviorally (could filter a user database) | Should | 4 |
-| 4 | Evidence attached | Should | 2 |
-| 5 | Assumptions + how we'd notice they're wrong | Should | 3 |
-| 6 | Hypothesis: "We believe [change] → [outcome], measured by [metric]" | Must | 6 |
-| 7 | Metric has baseline + target (or an instrumentation plan if new) | Should | 4 |
-| 8 | Kill/rollback line ("if blocks rise 20%, we pull it") | Should | 4 |
-| 9 | Every story has a stable requirement ID | Must | 6 |
-| 10 | Every story has testable GWT acceptance criteria | Must | 10 |
-| 11 | Explicit out-of-scope list | Must | 5 |
-| 12 | Side effects: other flows, emails, notifications, systems, teams this touches | Should | 4 |
-| 13 | Ship scope: platforms, locales, audience | Should | 4 |
-| 14 | Per story: what the user sees on failure (EARS) | Must | 8 |
-| 15 | Empty / first-use states (list-rendering surfaces only) | Must | 6 |
-| 16 | Permission-denied, offline, degraded behavior (conditional) | Must | 6 |
-| 17 | Every user action has a named tracking event per convention; the hypothesis metric is computable from them | Must | 8 |
-| 18 | Data footprint declared, personal data flagged (triggers compliance layer) | Should | 4 |
-| 19 | Misreading sweep: no sentence two developers could read two ways | Must | 8 |
-| 20 | Safety (conditional, user-to-user/location features): misuse against a person + protections | Must | 5* |
+| # | Check | Tag | Pts | Applies |
+|---|---|---|---|---|
+| 1 | Problem written without the solution hidden inside it | Should | 5 | — |
+| 2 | Points to an opportunity | Should | 3 | — |
+| 3 | Audience defined behaviorally (could filter a user database) | Should | 4 | — |
+| 4 | Evidence attached | Should | 2 | — |
+| 5 | Assumptions + how we'd notice they're wrong | Should | 3 | — |
+| 6 | Hypothesis: "We believe [change] → [outcome], measured by [metric]" | Must | 6 | — |
+| 7 | Metric has baseline + target (or an instrumentation plan if new) | Should | 4 | — |
+| 8 | Kill/rollback line ("if blocks rise 20%, we pull it") | Should | 4 | — |
+| 9 | Every story has a stable requirement ID | Must | 6 | — |
+| 10 | Every story has testable GWT acceptance criteria | Must | 10 | — |
+| 11 | Explicit out-of-scope list | Must | 5 | — |
+| 12 | Side effects: other flows, emails, notifications, systems, teams this touches | Should | 4 | — |
+| 13 | Ship scope: platforms, locales, audience | Should | 4 | — |
+| 14 | Per story: what the user sees on failure (EARS) | Must | 8 | — |
+| 15 | Empty / first-use states (list-rendering surfaces only) | Must | 6 | list-rendering surfaces |
+| 16 | Permission-denied, offline, degraded behavior (conditional) | Must | 6 | network- or permission-dependent surfaces |
+| 17 | Every user action has a named tracking event per convention; the hypothesis metric is computable from them | Must | 8 | — |
+| 18 | Data footprint declared, personal data flagged (triggers compliance layer) | Should | 4 | — |
+| 19 | Misreading sweep: no sentence two developers could read two ways | Must | 8 | — |
+| 20 | Safety (conditional, user-to-user/location features): misuse against a person + protections | Must | 5* | layer — user-to-user visibility, interaction, or location |
 
-*Enters via applicability; denominator renormalizes. Section D carries the showstopper discipline: the critic probes showstopper classes (interruption mid-action, concurrency, stale data, unverified accounts, locale text overflow); everything below that threshold is legal to resolve as an accepted gap.
+*Enters via applicability; denominator renormalizes. **Applies** names the condition under which a check counts; — means it always does. The two directions are not symmetric: checks 15 and 16 *leave* the denominator when their condition does not hold, and check 20 *enters* it when its does, because a conditional check belongs to this rubric and a conditional layer floats above all of them (§4). Section D carries the showstopper discipline: the critic probes showstopper classes (interruption mid-action, concurrency, stale data, unverified accounts, locale text overflow); everything below that threshold is legal to resolve as an accepted gap.
+
+Check ids are `prd-1` … `prd-19`, numbered as in the table, plus `prd-20`, which the safety layer carries rather than the base. These are **rubric check ids**, and they are a different id space from the **requirement IDs** a PRD gives its own stories (`MN-2`, `SF-1`) — those are the author's labels for their own requirements, and check 9 is what makes them stable. The two are never mixed: a gap names a check id, a story names a requirement id, and a failure's evidence cites the requirement id as the place the gap lives (§5's "MN-2: 'nearby' — same venue, or within 100 m?" is check 19 failing *at* MN-2).
 
 ### 7.3 Tech spec (Design stage, engineering-owned)
 

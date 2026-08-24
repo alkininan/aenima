@@ -313,13 +313,16 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
     layer arrives with the checks it contains**, and until §7 lists them there is nothing to
     transcribe. `src/packs/types.ts` already holds the shape; it needs content, not code.
 
-11. **The seed's `gap.check_id` values reference no rubric.** `MN-2`, `MN-7`, `SF-1` and `CN-1` in
-    `scripts/seed.ts` predate any pack and are *requirement*-ID-shaped — the IDs a PRD gives its own
-    stories (§7.4: "MN-4 defines a disabled condition on this screen") — not rubric check IDs like
-    `prd-10`. They were left alone in T2.1: rewriting them would have been authorship inside a
-    transcription ticket. **T2.3 is the first ticket that makes a gap out of a real check** and has
-    to reconcile the two, either by reseeding against `feature-prd` or by deciding that
-    `gap.check_id` holds both kinds and saying which is which.
+11. **The seed writes `gap.check_id` values that match no rubric check.** `MN-2`, `MN-7`, `SF-1` and
+    `CN-1` in `scripts/seed.ts` predate any pack and are *requirement*-ID-shaped — the IDs a PRD
+    gives its own stories — not rubric check ids like `prd-10`. Product spec v1.3 made the two id
+    spaces explicit in §7.2: a gap names a check id, a story names a requirement id, and evidence
+    may cite the requirement id as the place the gap lives. **Harmless while nothing resolves a
+    check id against a pack, and it must be corrected before T2.3 scores real artifacts** — after
+    that, a seeded gap names a check that does not exist, and the surface that expands a meter into
+    its checks has nothing to expand into. They were left alone in T2.1 because rewriting them
+    would have been authorship inside a transcription ticket. The fix is a reseed against
+    `feature-prd`, unless T2.3 decides `gap.check_id` holds both kinds and says which is which.
 
 12. **A pack is keyed by artifact kind, not by item type.** §7.2 is the *Feature* PRD rubric, and §4
     gives each of the seven types its own "rubric weight centre" — an Enhancement's lean PRD is
