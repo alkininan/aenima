@@ -118,6 +118,61 @@ export const en = {
     /** §8 row: mono-readout freshness beside the dot. */
     freshness: (relative: string) => `updated ${relative}`,
   },
+  /** §7's five artifact packs, named as §7 names them. */
+  artifactKinds: {
+    brief: "Opportunity Brief",
+    prd: "PRD",
+    tech_spec: "Tech spec",
+    design_package: "Design package",
+    backlog: "Backlog refinement",
+  },
+  item: {
+    backToList: "Back to the list",
+    /** §8's section headings on the item page. mono-micro, so §3 uppercases them. */
+    artifacts: "Artifacts",
+    content: "Content",
+    gaps: "Gaps",
+    decisions: "Decisions",
+    activity: "Activity",
+    /** §3's derived stage, labelled so nobody reads it as a settable field. */
+    stageLabel: "Stage",
+    /** §8: the 8h meter's own name, for the screen reader. */
+    readiness: "Readiness",
+    /**
+     * §12: empty is the ordinary case here — most items own nothing yet — so it
+     * reads as normal rather than as absence. Never "missing", never "none".
+     */
+    noArtifacts: "Nothing here yet. Artifacts appear as they are written.",
+    noContent: "Nothing written yet.",
+    noGaps: "No gaps yet. They appear when scoring runs.",
+    noDecisions: "No decisions logged yet.",
+    noActivity: "Nothing has happened to this item yet.",
+    /** §7: how much history an artifact has, and when it last moved. */
+    versionCount: (n: number) => (n === 1 ? "1 version" : `${n} versions`),
+    /** §5's three dispositions, as §5 names the moves that produce them. */
+    gapOpen: "Open",
+    gapAccepted: "Accepted",
+    gapExcluded: "Excluded",
+    /** §5's two tags. Only a Must blocks handover; a Should is advisory. */
+    gapMust: "Must",
+    gapShould: "Should",
+    /**
+     * §5: "converts it to an accepted gap stamped with the accepter's name."
+     * The name is what the schema cannot give us yet — see src/lib/actor.ts.
+     */
+    settledBy: (actor: string) => `${actor} accepted this`,
+    excludedBy: (actor: string) => `${actor} excluded this`,
+    decidedBy: (actor: string) => `${actor} decided`,
+    /** §11: a correction is a new decision that names the one it replaces. */
+    supersededBy: "Superseded",
+    supersedes: "Replaces an earlier decision",
+    /**
+     * The three things an actor can be. A uuid is not a name, so anyone who is
+     * not the reader is "someone" — build log open question 2 owns the rest.
+     */
+    actorSelf: "You",
+    actorOther: "Someone",
+  },
   /** Relative time for the row's mono-readout. §12: calm, never exact-to-the-second. */
   relativeTime: {
     justNow: "just now",

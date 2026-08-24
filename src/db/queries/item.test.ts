@@ -7,6 +7,12 @@ const calls = vi.hoisted(() => ({
   from: [] as string[],
   select: [] as string[],
   eq: [] as [string, unknown][],
+  /** `order()` used to discard its arguments, so "newest first" could not be
+   *  asserted at all. A feed's direction is the whole of its meaning. */
+  order: [] as [string, boolean | undefined][],
+  /** Likewise `limit()`: an unbounded ledger read is a slow page nobody sees
+   *  coming, and the cap is what a test has to be able to see. */
+  limit: [] as number[],
   rows: [] as unknown[],
   single: null as unknown,
 }));
@@ -27,7 +33,12 @@ vi.mock("@/lib/supabase/server", () => {
       calls.eq.push([column, value]);
       return builder;
     },
-    order() {
+    order(column: string, options?: { ascending?: boolean }) {
+      calls.order.push([column, options?.ascending]);
+      return builder;
+    },
+    limit(count: number) {
+      calls.limit.push(count);
       return builder;
     },
     maybeSingle() {
@@ -48,7 +59,12 @@ vi.mock("@/lib/supabase/server", () => {
   };
 });
 
-import { getItem, listItemsForProduct, listItemsForWorkspace } from "@/db/queries/item";
+import {
+  getItem,
+  getItemByKey,
+  listItemsForProduct,
+  listItemsForWorkspace,
+} from "@/db/queries/item";
 
 const WORKSPACE = "11111111-1111-4000-8000-000000000001";
 const PRODUCT = "22222222-2222-4000-8000-000000000002";
@@ -82,6 +98,8 @@ describe("listItemsForProduct", () => {
     calls.from = [];
     calls.select = [];
     calls.eq = [];
+    calls.order = [];
+    calls.limit = [];
     calls.rows = [];
     calls.single = null;
   });
@@ -157,6 +175,8 @@ describe("getItem", () => {
     calls.from = [];
     calls.select = [];
     calls.eq = [];
+    calls.order = [];
+    calls.limit = [];
     calls.single = null;
   });
 
@@ -228,6 +248,8 @@ describe("listItemsForWorkspace", () => {
     calls.from = [];
     calls.select = [];
     calls.eq = [];
+    calls.order = [];
+    calls.limit = [];
     calls.rows = [];
     calls.single = null;
   });
@@ -410,5 +432,160 @@ describe("listItemsForWorkspace", () => {
     expect(item?.key).toBe("soc-12");
     expect(item?.productSlug).toBe("sociera");
     expect(item?.productName).toBe("Sociera");
+  });
+});
+
+/**
+ * The item page's read — `/i/<key>`, keyed by the name people say out loud.
+ *
+ * The two assertions that matter are about what it *cannot* tell apart. A key
+ * that does not exist and a key in a workspace the caller cannot see must
+ * produce the same nothing, because RLS makes them the same fact and the page
+ * renders one 404 for both.
+ */
+describe("getItemByKey", () => {
+  beforeEach(() => {
+    calls.from = [];
+    calls.select = [];
+    calls.eq = [];
+    calls.order = [];
+    calls.limit = [];
+    calls.single = null;
+  });
+
+  /** A row shaped the way PostgREST returns the item-page tree. */
+  const pageRow = (
+    key: string,
+    artifacts: { kind: string; versions: { no: number; at: string; content: unknown }[] }[] = [],
+    gaps: unknown[] = [],
+    decisions: unknown[] = [],
+  ) => ({
+    id: `id-${key}`,
+    key,
+    title: `Item ${key}`,
+    type: "feature",
+    flow_intent: null,
+    opportunity_id: null,
+    created_at: "2026-01-01T00:00:00+00:00",
+    updated_at: "2026-01-02T00:00:00+00:00",
+    product: { name: "Sociera", slug: "sociera" },
+    artifact: artifacts.map((a) => ({
+      kind: a.kind,
+      artifact_version: a.versions.map((v) => ({
+        version_no: v.no,
+        created_at: v.at,
+        content: v.content,
+      })),
+    })),
+    gap: gaps,
+    decision: decisions,
+  });
+
+  it("filters on the workspace and the key, in one request", async () => {
+    calls.single = pageRow("soc-12");
+
+    await getItemByKey(WORKSPACE, "soc-12");
+
+    expect(calls.from).toEqual(["item"]);
+    expect(calls.eq).toContainEqual(["workspace_id", WORKSPACE]);
+    expect(calls.eq).toContainEqual(["key", "soc-12"]);
+  });
+
+  // A key nobody owns.
+  it("returns null for a key that does not exist", async () => {
+    calls.single = null;
+    expect(await getItemByKey(WORKSPACE, "soc-999")).toBeNull();
+  });
+
+  /**
+   * The one that matters. A key belonging to another workspace is filtered out
+   * by `workspace_id` and by RLS, so PostgREST returns no row — byte for byte
+   * the same answer as a key that never existed. The page therefore cannot leak
+   * which it was, because nothing distinguishable reaches it.
+   */
+  it("returns the same null for a key in another workspace", async () => {
+    calls.single = null;
+    const missing = await getItemByKey(WORKSPACE, "soc-999");
+
+    calls.single = null;
+    const someoneElses = await getItemByKey(WORKSPACE, "aur-1");
+
+    expect(missing).toBe(someoneElses);
+    expect(someoneElses).toBeNull();
+  });
+
+  // §5's history is the point of the page, so the read asks for every
+  // disposition rather than the open ones the list narrows to.
+  it("asks for gaps in every disposition, unlike the list", async () => {
+    await getItemByKey(WORKSPACE, "soc-12");
+
+    const [selection] = calls.select;
+    expect(selection).toContain("disposition");
+    // The list read narrows with `.eq("gap.disposition", "open")`; this must not.
+    expect(calls.eq.map(([column]) => column)).not.toContain("gap.disposition");
+  });
+
+  /**
+   * Version rows arrive in no defined order — PostgREST emits no ORDER BY for
+   * an embed unless asked — so the newest is scanned for. This row would pass
+   * either way if it were sorted, and fails if the code takes the last element.
+   */
+  it("takes the highest version number as current, whatever order they arrive in", async () => {
+    calls.single = pageRow("soc-12", [
+      {
+        kind: "prd",
+        versions: [
+          { no: 2, at: "2026-02-02T00:00:00+00:00", content: { body: "second" } },
+          { no: 3, at: "2026-02-03T00:00:00+00:00", content: { body: "newest" } },
+          { no: 1, at: "2026-02-01T00:00:00+00:00", content: { body: "first" } },
+        ],
+      },
+    ]);
+
+    const item = await getItemByKey(WORKSPACE, "soc-12");
+    const prd = item?.artifacts.find((artifact) => artifact.kind === "prd");
+
+    expect(prd?.versionCount).toBe(3);
+    expect(prd?.currentVersionNo).toBe(3);
+    expect(prd?.currentBody).toBe("newest");
+    expect(prd?.newestAt).toBe("2026-02-03T00:00:00+00:00");
+  });
+
+  /**
+   * `content` is jsonb, so its shape is whatever was written. Anything this
+   * cannot read becomes null — which renders as "nothing here yet", a true
+   * statement — rather than `[object Object]` or a crash.
+   */
+  it("reads only the content shape it knows, and null for anything else", async () => {
+    calls.single = pageRow("soc-12", [
+      {
+        kind: "prd",
+        versions: [{ no: 1, at: "2026-02-01T00:00:00+00:00", content: { body: 42 } }],
+      },
+      { kind: "brief", versions: [{ no: 1, at: "2026-02-01T00:00:00+00:00", content: null }] },
+      // An artifact nobody authored into. Real, and not hidden.
+      { kind: "backlog", versions: [] },
+    ]);
+
+    const item = await getItemByKey(WORKSPACE, "soc-12");
+    const body = (kind: string) =>
+      item?.artifacts.find((artifact) => artifact.kind === kind)?.currentBody;
+
+    expect(body("prd")).toBeNull();
+    expect(body("brief")).toBeNull();
+    expect(body("backlog")).toBeNull();
+    expect(item?.artifacts.find((a) => a.kind === "backlog")?.versionCount).toBe(0);
+  });
+
+  // The layer returns a stage; it never asks the database for one.
+  it("derives the stage and asks for none", async () => {
+    calls.single = pageRow("soc-12", [
+      { kind: "prd", versions: [{ no: 1, at: "2026-02-01T00:00:00+00:00", content: {} }] },
+    ]);
+
+    const item = await getItemByKey(WORKSPACE, "soc-12");
+
+    expect(item?.stage).toBe("define");
+    expect(calls.select.join(" ")).not.toContain("stage");
   });
 });

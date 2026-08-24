@@ -34,12 +34,12 @@ test.describe("a production build", () => {
   });
 
   /**
-   * The one these exist for. Both `/dev` pages are 200 under `next dev` — the
+   * The one these exist for. Every `/dev` page is 200 under `next dev` — the
    * rest of the suite drives them — so a 404 here is the gate working, and a 200
    * would mean the previews are live on the internet.
    */
   test("refuses every /dev page", async ({ request }) => {
-    for (const path of ["/dev/primitives", "/dev/list"]) {
+    for (const path of ["/dev/primitives", "/dev/list", "/dev/item"]) {
       expect((await request.get(path, { maxRedirects: 0 })).status()).toBe(404);
     }
   });

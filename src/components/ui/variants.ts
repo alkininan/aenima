@@ -914,3 +914,73 @@ export function meterFillClasses(className?: string): string {
     className,
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/* Card — §5 "Cards"                                                          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * §5: "`--surface-1`, `--r-sm`, padding 16–20, optional `--glass-border`; cards
+ * also carry the inset edge highlight at 10% (`rgba(255,255,255,.10)`) — quieter
+ * than glass."
+ *
+ * The 10% edge is the whole reason this is a class rather than three utilities
+ * at each call site: it is the one value in the recipe that appears nowhere else
+ * in the system, and §0 law 5 makes the specular line the signature. Glass
+ * carries `--edge-highlight` at 16%; a card is the same gesture, quieter.
+ *
+ * §5 gives padding as a range, so the two ends are both offered: 16 for a dense
+ * card in a list of them, 20 for one carrying a paragraph. 20 also matches §4's
+ * overlay interior, which is what a card most resembles.
+ */
+export type CardPadding = 16 | 20;
+
+export const CARD_PADDINGS: readonly CardPadding[] = [16, 20];
+
+const CARD_BASE = "rounded-sm bg-surface-1 shadow-[inset_0_1px_0_rgba(255,255,255,.10)]";
+
+const CARD_PADDING_CLASSES: Record<CardPadding, string> = {
+  16: "p-[16px]",
+  20: "p-[20px]",
+};
+
+export type CardClassOptions = {
+  padding?: CardPadding | undefined;
+  /** §5: the border is optional — on for a card that must separate from a card. */
+  bordered?: boolean | undefined;
+  className?: string | undefined;
+};
+
+export function cardClasses({
+  padding = 16,
+  bordered = false,
+  className,
+}: CardClassOptions = {}): string {
+  return cx(
+    CARD_BASE,
+    CARD_PADDING_CLASSES[padding],
+    bordered && "border border-glass-border",
+    className,
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Doc reader — §8 "Doc reader"                                               */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * §8: "68ch, ui-body; headings display-md; requirement IDs as mono-readout
+ * chips; EARS/GWT in mono-code on `--surface-1` blocks radius 8".
+ *
+ * The measure is the component's job and the reason it exists — 68ch is a
+ * reading constraint, and every surface that renders a document owes it.
+ */
+export const DOC_READER_CLASSES =
+  "flex max-w-[68ch] flex-col gap-[16px] type-ui-body text-n-primary";
+
+/** §8: headings inside a document are display-md. */
+export const DOC_READER_HEADING_CLASSES = "type-display-md text-n-primary";
+
+/** §8: EARS/GWT blocks are mono-code on `--surface-1` at radius 8. */
+export const DOC_READER_CODE_CLASSES =
+  "block overflow-x-auto rounded-xs bg-surface-1 p-[16px] type-mono-code text-n-primary";

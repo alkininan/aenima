@@ -15,6 +15,8 @@ import { Chip } from "@/components/ui/Chip";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/Input";
+import { Card } from "@/components/ui/Card";
+import { DocReader } from "@/components/ui/DocReader";
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
 import { Meter } from "@/components/ui/Meter";
 import { Modal } from "@/components/ui/Modal";
@@ -366,6 +368,44 @@ function Composites() {
           />
           <OtpInput label="Disabled" disabled value="4829" onValueChange={() => {}} />
         </div>
+      </Section>
+
+      <Section label="Card">
+        {/* §5: --surface-1, --r-sm, padding 16–20, optional --glass-border, and
+            the inset edge highlight at 10% — quieter than glass's 16%. §0 law 10
+            keeps glass off content, so a card never floats. */}
+        <p className="type-ui-footnote text-n-secondary">
+          The specular edge is the part worth looking at: §0 law 5 makes it the signature, and a
+          card carries it at 10% where glass carries 16%. Padding is §5&apos;s two ends — 16 for a
+          card among cards, 20 for one carrying prose.
+        </p>
+        <div className="grid gap-[16px] sm:grid-cols-2">
+          <Card>
+            <p className="type-ui-body text-n-primary">Padding 16, no border.</p>
+          </Card>
+          <Card padding={20} bordered>
+            <p className="type-ui-body text-n-primary">Padding 20, with the optional border.</p>
+          </Card>
+        </div>
+      </Section>
+
+      <Section label="Doc reader">
+        {/* §8: 68ch, ui-body. Headings and EARS/GWT blocks wait for content
+            that carries them — today an artifact version holds `{ body }`. */}
+        <p className="type-ui-footnote text-n-secondary">
+          The measure is the point: 68ch, so a line does not lose the reader between one and the
+          next. Blank lines separate paragraphs, which is the only structure a plain body carries.
+        </p>
+        <Card padding={20}>
+          <DocReader
+            body={
+              "People miss what changed while they were away, and come back to a wall of " +
+              "notifications they cannot triage. This paragraph is deliberately long enough to " +
+              "reach the measure and wrap, which is the whole thing being demonstrated.\n\n" +
+              "A second paragraph, to show the separation."
+            }
+          />
+        </Card>
       </Section>
 
       <Section label="Readiness meter">

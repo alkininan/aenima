@@ -22,6 +22,15 @@ describe("isPublicPath", () => {
     expect(isPublicPath(path)).toBe(false);
   });
 
+  /**
+   * The item page is behind the wall like everything else. It is worth its own
+   * case because `/i` is one letter long and sits next to no other prefix — the
+   * kind of route that gets added to a list of exceptions by accident.
+   */
+  it.each(["/i", "/i/soc-12", "/i/soc-999"])("protects %s", (path) => {
+    expect(isPublicPath(path)).toBe(false);
+  });
+
   // "/sign-in-somewhere-else" is not "/sign-in": prefix matching has to respect
   // the segment boundary or a crafted path walks straight past the check.
   it("matches whole segments, not string prefixes", () => {

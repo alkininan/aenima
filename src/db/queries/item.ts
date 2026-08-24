@@ -401,3 +401,188 @@ export async function listItemsForWorkspace(workspaceId: string): Promise<ItemLi
 
   return { readAt, items };
 }
+
+/* -------------------------------------------------------------------------- */
+/* The item page — §2's whole object, readable                                */
+/* -------------------------------------------------------------------------- */
+
+/** One artifact, with its current version's body and the shape of its history. */
+export type ArtifactDetail = {
+  kind: ArtifactPresence["kind"];
+  versionCount: number;
+  /** ISO-8601. When the newest version landed; null when there are none. */
+  newestAt: string | null;
+  /** The newest version's number, or null when nothing has been authored. */
+  currentVersionNo: number | null;
+  /**
+   * The newest version's body.
+   *
+   * Null covers two different situations that the page renders the same way:
+   * an artifact nobody has authored into, and content whose shape this does not
+   * know how to read. Both mean "nothing to show here", and neither is an error.
+   */
+  currentBody: string | null;
+};
+
+export type ItemPageDetail = {
+  /**
+   * When this read happened, in epoch ms.
+   *
+   * The clock travels with the data for the reason `ItemList.readAt` does:
+   * everything rendered from it is a claim about two instants — "12 days ago",
+   * "3 versions" — and they have to be judged against the moment the rows were
+   * true. One clock per read also means two timestamps a millisecond apart
+   * cannot round to different words on the same page.
+   */
+  readAt: number;
+  id: string;
+  key: string;
+  title: string;
+  type: ItemType;
+  flowIntent: FlowIntent | null;
+  opportunityId: string | null;
+  productName: string;
+  productSlug: string;
+  createdAt: string;
+  updatedAt: string;
+  /** Derived, never stored. See src/lib/stage.ts. */
+  stage: Stage;
+  artifacts: ArtifactDetail[];
+  /** Every disposition — §5's history is the point of this page. */
+  gaps: GapDetail[];
+  decisions: DecisionDetail[];
+};
+
+/**
+ * What the item page reads. Two things differ from `ITEM_TREE`:
+ *
+ * `artifact_version(version_no, created_at, content)` — the page is the one
+ * surface where a version's *body* belongs, so it is selected here and nowhere
+ * else. It fetches every version's content when only the newest renders, which
+ * is a real cost paid for a real simplification: the count, the newest
+ * timestamp and the current body all fall out of one array. Versions per item
+ * are few. If that stops being true, the replacement is an aggregate or an
+ * ordered `limit(1)` embed — not a second request.
+ *
+ * `gap(...)` in every disposition, unlike the list read. §5's negotiation
+ * history is what an item page is for, and §1 law 7 makes an accepted gap a
+ * debt someone named — hiding it would delete the name.
+ */
+const ITEM_PAGE_TREE = `id, key, title, type, flow_intent, opportunity_id,
+   created_at, updated_at,
+   product(name, slug),
+   artifact(kind, artifact_version(version_no, created_at, content)),
+   gap(id, check_id, tag, disposition, evidence,
+       resolved_by_user_id, resolved_at, resolution_note, created_at),
+   decision(id, statement, reason, decided_by_user_id, decided_at, supersedes_id)`;
+
+type ContentRow = { version_no: number; created_at: string; content: unknown };
+
+/**
+ * The body out of a version's jsonb, or null when this cannot read it.
+ *
+ * Content is `jsonb`, so its shape is whatever was written. Today the only
+ * writer is the seed and the only shape is `{ body: string }`; Phase 3's
+ * authoring engine owns what it becomes. So this reads the one shape it knows
+ * and returns null for anything else rather than guessing — an unreadable
+ * artifact renders as "nothing here yet", which is true, instead of as a crash
+ * or as `[object Object]`.
+ */
+function readBody(content: unknown): string | null {
+  if (typeof content !== "object" || content === null) return null;
+  const body = (content as { body?: unknown }).body;
+  return typeof body === "string" && body.length > 0 ? body : null;
+}
+
+/** The newest version of one artifact, plus what its history looks like. */
+function toArtifactDetail(
+  kind: ArtifactPresence["kind"],
+  rows: ContentRow[] | null,
+): ArtifactDetail {
+  const versions = rows ?? [];
+
+  // Scanned rather than indexed into: PostgREST orders an embed only when
+  // asked, so "the newest" is found rather than assumed to be last.
+  let newest: ContentRow | null = null;
+  for (const version of versions) {
+    if (newest === null || version.version_no > newest.version_no) newest = version;
+  }
+
+  return {
+    kind,
+    versionCount: versions.length,
+    newestAt: newest?.created_at ?? null,
+    currentVersionNo: newest?.version_no ?? null,
+    currentBody: newest ? readBody(newest.content) : null,
+  };
+}
+
+/**
+ * One item by the key people say out loud — `soc-12` — and everything it owns.
+ *
+ * **Returns null for a key that does not exist and for a key in a workspace the
+ * caller cannot see, and those are deliberately the same answer.** The filter
+ * below names `workspace_id`, and RLS narrows the same read again as the user,
+ * so a key belonging to someone else produces no row exactly as a key belonging
+ * to nobody does. The caller renders a 404 for both: telling the two apart
+ * would answer "does this key exist somewhere?", which is not a question a
+ * stranger gets to ask.
+ *
+ * One request, however many artifacts, versions, gaps and decisions come back.
+ */
+export async function getItemByKey(
+  workspaceId: string,
+  key: string,
+): Promise<ItemPageDetail | null> {
+  const supabase = await createClient();
+  const readAt = Date.now();
+
+  const { data, error } = await supabase
+    .from("item")
+    .select(ITEM_PAGE_TREE)
+    .eq("workspace_id", workspaceId)
+    .eq("key", key)
+    .maybeSingle();
+
+  if (error) throw new Error(`Could not read item: ${error.message}`);
+  if (!data) return null;
+
+  const artifacts = (data.artifact ?? []).map((entry) =>
+    toArtifactDetail(entry.kind, entry.artifact_version as ContentRow[] | null),
+  );
+
+  return {
+    readAt,
+    id: data.id,
+    key: data.key,
+    title: data.title,
+    type: data.type,
+    flowIntent: data.flow_intent,
+    opportunityId: data.opportunity_id,
+    productName: data.product?.name ?? "",
+    productSlug: data.product?.slug ?? "",
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+    artifacts,
+    // `deriveStage` reads presence, which `ArtifactDetail` satisfies structurally.
+    stage: deriveStage({ artifacts }),
+    gaps: (data.gap ?? []).map((gap) => ({
+      id: gap.id,
+      checkId: gap.check_id,
+      tag: gap.tag,
+      disposition: gap.disposition,
+      evidence: gap.evidence,
+      resolvedByUserId: gap.resolved_by_user_id,
+      resolvedAt: gap.resolved_at,
+      resolutionNote: gap.resolution_note,
+    })),
+    decisions: (data.decision ?? []).map((decision) => ({
+      id: decision.id,
+      statement: decision.statement,
+      reason: decision.reason,
+      decidedByUserId: decision.decided_by_user_id,
+      decidedAt: decision.decided_at,
+      supersedesId: decision.supersedes_id,
+    })),
+  };
+}
