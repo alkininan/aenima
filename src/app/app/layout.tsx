@@ -43,7 +43,7 @@ export default async function AppLayout({ children }: LayoutProps<"/app">) {
 
   return (
     <div className="flex min-h-dvh">
-      <Sidebar t={t} products={products} />
+      <Sidebar t={t} products={products} email={user.email} />
       <div className="min-w-0 flex-1">{children}</div>
     </div>
   );

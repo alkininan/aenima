@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { CSSProperties } from "react";
 
 import type { Dictionary } from "@/i18n";
 import { cx } from "@/lib/cx";
@@ -55,8 +56,16 @@ export function PipelineStrip({
       aria-current={isActive ? "true" : undefined}
       className={cx(
         "control control-edge-none flex min-w-0 flex-1 flex-col items-start gap-[2px]",
-        "rounded-xs px-[12px] py-[8px] text-left",
-        // §8: active --prime-soft. §7's hover overlay comes from `.control`.
+        // §5's nested rule: a surface flush inside a rounded container takes the
+        // container's radius minus its padding. The strip is --r-md with 4 of
+        // padding, so a segment is r16 — written as the subtraction so it
+        // follows the bar rather than needing to be remembered. --r-sm happens
+        // to equal it today; using that token would be a coincidence that
+        // survives until --r-md moves.
+        "rounded-[calc(var(--r-md)-var(--strip-pad))] px-[12px] py-[8px] text-left",
+        // §8: active --prime-soft. §7's hover overlay comes from `.control`,
+        // and it paints on every segment, so every segment carries the radius —
+        // not only the one with a background right now.
         isActive ? "bg-prime-soft" : "bg-transparent",
       )}
     >
@@ -77,7 +86,10 @@ export function PipelineStrip({
       aria-label={t.list.title}
       // §5's glass recipe, via the shared class: fill + blur + border + the
       // mandatory specular edge.
-      className="glass flex items-stretch gap-[4px] rounded-md p-[4px]"
+      // The padding is a custom property because each segment's radius is
+      // derived from it (§5's nested rule, above). One number, one place.
+      style={{ "--strip-pad": "4px" } as CSSProperties}
+      className="glass flex items-stretch gap-[4px] rounded-md p-[var(--strip-pad)]"
     >
       {segment("all", t.list.allStages, total, listHref(current, { stage: null }), active === null)}
       {PIPELINE_STAGES.map((stage) => {

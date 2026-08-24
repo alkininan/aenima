@@ -21,6 +21,7 @@ import {
   Check,
   GraphUp,
   List,
+  LogOut,
   Mail,
   MoreHoriz,
   NavArrowDown,
@@ -102,4 +103,9 @@ export function SettingsIcon({ className }: IconProps) {
  */
 export function OverflowIcon({ className }: IconProps) {
   return <MoreHoriz className={className} aria-hidden="true" focusable="false" />;
+}
+
+/** §4's account slot: the one thing you can do to an identity today. */
+export function SignOutIcon({ className }: IconProps) {
+  return <LogOut className={className} aria-hidden="true" focusable="false" />;
 }

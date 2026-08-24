@@ -50,7 +50,11 @@ export default function DevListPage() {
     <div className="flex min-h-dvh">
       {/* The other half of the boundary: Sidebar is a Server Component and
           ProductSwitcher is a client one. */}
-      <Sidebar t={t} products={[{ slug: "sociera", name: "Sociera" }]} />
+      <Sidebar
+        t={t}
+        products={[{ slug: "sociera", name: "Sociera" }]}
+        email="someone@example.com"
+      />
 
       <main className="mx-auto flex w-full max-w-[1200px] flex-col gap-[24px] px-[24px] py-[32px]">
         <PipelineStrip counts={LIST_COUNTS} active="define" product={undefined} total={6} t={t} />

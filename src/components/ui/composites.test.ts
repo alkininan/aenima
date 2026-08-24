@@ -101,11 +101,28 @@ describe("panelClasses", () => {
 });
 
 describe("panelRowClasses", () => {
-  // §8: options 36h, ui-body, pad …/12, radius 8; hover --surface-3.
+  // §8: options 36h, ui-body, pad …/12; hover --surface-3.
   it("builds the 36h row", () => {
     const classes = panelRowClasses();
-    expect(has(classes, "h-[36px]", "type-ui-body", "px-[12px]", "rounded-xs")).toBe(true);
+    expect(has(classes, "h-[36px]", "type-ui-body", "px-[12px]")).toBe(true);
     expect(classes).toContain("hover:bg-surface-3");
+  });
+
+  /**
+   * §5's nested rule (v2.14): a surface flush inside a rounded container takes
+   * the container's radius minus its padding. `.panel` is 12 with 6 of padding,
+   * so a row is r6 — and it is written as the subtraction rather than as a
+   * token, so the row follows the panel instead of having to be remembered.
+   *
+   * The value this replaced was `rounded-xs` (8), which is 2 more than the space
+   * allows. What an oversized inner radius damages is the *outer* corner, so the
+   * symptom never appears on the element carrying the mistake.
+   */
+  it("derives its radius from the panel rather than taking a token", () => {
+    const classes = panelRowClasses();
+
+    expect(classes).toContain("rounded-[calc(var(--r-panel)-var(--panel-pad))]");
+    expect(classes).not.toContain("rounded-xs");
   });
 
   // §7 selected: --prime-soft fill, --n-primary text.

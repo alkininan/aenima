@@ -525,11 +525,17 @@
 
   /* §8 select and menu panels: --surface-1, radius 12, dropdown shadow, 6 pad.
    * 12 is the one radius §5 names without giving it a token. */
+  /* §8: panel radius 12, 6px padding. Both are published as custom properties
+   * because §5's nested rule makes a row's radius a function of them — see
+   * `PANEL_ROW_BASE`. Keeping the two numbers in one place is what stops a row
+   * from overflowing the corner the next time the panel is retuned. */
   .panel {
+    --r-panel: 12px;
+    --panel-pad: 6px;
     background-color: var(--surface-1);
-    border-radius: 12px;
+    border-radius: var(--r-panel);
     box-shadow: var(--shadow-dropdown);
-    padding: 6px;
+    padding: var(--panel-pad);
   }
 
   /* §2 dot grid: 2px dot on a 16px pitch over Base. */

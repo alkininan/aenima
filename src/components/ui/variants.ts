@@ -436,9 +436,15 @@ export function panelClasses({ placement = "below", className }: PanelClassOptio
 // + check 16. Ruled on the T0.3 ticket: 36h wins, horizontal padding is 12, and
 // the vertical is centring rather than a declared value (ui-body's 22px line box
 // plus 8 above and below would be 38, not 36).
+// §5's nested rule: an inner surface flush inside a rounded container takes the
+// container's radius minus its padding. `.panel` is radius 12 with 6 padding, so
+// a row is r6 — written as the subtraction rather than as 6, because the number
+// is a consequence of the panel's geometry and has to move when that does. The
+// old `rounded-xs` (8) was 2 more than the space allows, and what it broke was
+// the panel's corner rather than its own.
 const PANEL_ROW_BASE =
-  "flex h-[36px] w-full items-center gap-[8px] rounded-xs px-[12px] type-ui-body " +
-  "text-left transition-colors duration-[var(--t-fast)] ease-brand";
+  "flex h-[36px] w-full items-center gap-[8px] rounded-[calc(var(--r-panel)-var(--panel-pad))] " +
+  "px-[12px] type-ui-body text-left transition-colors duration-[var(--t-fast)] ease-brand";
 
 export type PanelRowClassOptions = {
   /** Keyboard cursor. §8 gives no separate treatment, so it reuses hover. */

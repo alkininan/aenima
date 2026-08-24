@@ -163,6 +163,43 @@ test.describe("at 1440", () => {
   });
 
   /**
+   * §5's nested rule: an inner surface flush inside a rounded container takes
+   * the container's radius minus the container's padding, never its own token.
+   * The strip is `--r-md` (20) with 4 of padding, so a segment is r16.
+   *
+   * Read as a computed value, because the failure this catches is someone
+   * reaching for `--r-pill` — which is what a segment *looks* like it wants —
+   * and 999px inside a 20px corner is exactly the overflow the rule forbids. A
+   * class-name assertion would pass on `rounded-pill` and a screenshot would
+   * need someone to notice a 4px corner.
+   */
+  test("the strip's segments take the derived radius, not the pill token", async ({ page }) => {
+    const strip = listSection(page).locator("nav").first();
+
+    const measured = await strip.evaluate((node) => {
+      const bar = getComputedStyle(node);
+      const padding = parseFloat(bar.paddingLeft);
+      return {
+        barRadius: parseFloat(bar.borderTopLeftRadius),
+        padding,
+        segments: [...node.querySelectorAll("a")].map((segment) =>
+          parseFloat(getComputedStyle(segment).borderTopLeftRadius),
+        ),
+      };
+    });
+
+    // The derivation, not the number: if --r-md or the padding moves, this
+    // still says what the rule says.
+    const derived = measured.barRadius - measured.padding;
+    expect(derived).toBe(16);
+    expect(measured.segments.length).toBeGreaterThan(0);
+    expect(measured.segments.every((radius) => radius === derived)).toBe(true);
+
+    // And emphatically not the pill token, which is the mistake worth naming.
+    expect(measured.segments.every((radius) => radius < measured.barRadius)).toBe(true);
+  });
+
+  /**
    * §8: the strip's active segment is `--prime-soft`. Read as a computed
    * background, because "which segment is active" is the one thing a filter
    * strip has to communicate and a class-name test cannot see it.
