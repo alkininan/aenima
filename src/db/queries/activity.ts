@@ -78,7 +78,13 @@ export async function listItemActivity(
     .eq("workspace_id", workspaceId)
     .eq("subject_table", "item")
     .eq("subject_id", itemId)
-    .order("occurred_at", { ascending: false })
+    // `nullsFirst: false` matches `activity_subject_idx`, which Drizzle's
+    // `.desc()` builds as DESC NULLS LAST. A bare `desc` means NULLS FIRST in
+    // Postgres, and an ordering the index cannot supply is a sort the planner
+    // has to do itself — invisible at this size, and the whole reason the index
+    // was added. `occurred_at` is NOT NULL, so the two orderings return the same
+    // rows either way; only the plan differs.
+    .order("occurred_at", { ascending: false, nullsFirst: false })
     .limit(ACTIVITY_PAGE_SIZE);
 
   if (error) throw new Error(`Could not read activity: ${error.message}`);

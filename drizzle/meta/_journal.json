@@ -43,6 +43,13 @@
       "when": 1787331923705,
       "tag": "0005_item_keys",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787331923706,
+      "tag": "0006_activity_subject_index",
+      "breakpoints": true
     }
   ]
 }

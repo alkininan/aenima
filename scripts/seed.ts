@@ -152,6 +152,45 @@ const AT_RISK_ITEM = {
   gapAgeDays: 9,
 } as const;
 
+/**
+ * §2's ledger, on a few items — so the item page's feed shows something on real
+ * data rather than only in the /dev fixture.
+ *
+ * Keyed by item title, which is what makes this idempotent: the ids are new on
+ * every run and the titles are what identify these items.
+ *
+ * **One row per item is an agent's**, which is the point of including them: §0
+ * law 4 puts agent attribution in violet, and until something in the ledger was
+ * written by a machine that treatment could only be seen in a fixture.
+ */
+const ITEM_ACTIVITY = [
+  {
+    title: "Weekly digest email",
+    rows: [
+      { action: "item.created", actor: "human", daysAgo: 20, trigger: "user" },
+      { action: "artifact.version.added", actor: "human", daysAgo: 6, trigger: "user" },
+      { action: "gap.raised", actor: "agent", daysAgo: 2, trigger: "agent" },
+    ],
+  },
+  {
+    title: "Invite teammates by link",
+    rows: [
+      { action: "item.created", actor: "human", daysAgo: 11, trigger: "user" },
+      { action: "gap.raised", actor: "agent", daysAgo: 9, trigger: "agent" },
+    ],
+  },
+  {
+    title: "Shared reading lists",
+    rows: [
+      { action: "item.created", actor: "human", daysAgo: 14, trigger: "user" },
+      { action: "artifact.version.added", actor: "human", daysAgo: 1, trigger: "user" },
+    ],
+  },
+] as const;
+
+/** The agent that writes the ledger's machine rows. §5 pins the scorer per workspace. */
+const SEED_AGENT = "scorer";
+
 /** §5: one gap in each disposition, so every branch has something to render. */
 const GAPS = [
   {
@@ -216,6 +255,63 @@ type AdminAuth = {
  * having a bad day — none of those are reasons for `pnpm db:seed` to fail, so
  * every path returns null and the seed carries on.
  */
+/**
+ * Writes `ITEM_ACTIVITY` for any of its items that has no ledger rows yet, and
+ * reports how many rows it added.
+ *
+ * Idempotent per item rather than per workspace: an item that already has a
+ * feed is skipped, so a second run adds nothing and an item added later still
+ * gets one. `activity` is append-only — INSERT is the only thing anyone can do
+ * to it — so "already there" has to be checked rather than overwritten.
+ */
+async function ensureItemActivity(db: Db, workspaceId: string, ownerId: string): Promise<number> {
+  let written = 0;
+
+  for (const spec of ITEM_ACTIVITY) {
+    const [target] = await db
+      .select({ id: item.id, productId: item.productId })
+      .from(item)
+      .where(and(eq(item.workspaceId, workspaceId), eq(item.title, spec.title)))
+      .limit(1);
+
+    if (!target) continue;
+
+    const existing = await db
+      .select({ id: activity.id })
+      .from(activity)
+      .where(
+        and(
+          eq(activity.workspaceId, workspaceId),
+          eq(activity.subjectTable, "item"),
+          eq(activity.subjectId, target.id),
+        ),
+      )
+      .limit(1);
+
+    if (existing.length > 0) continue;
+
+    for (const row of spec.rows) {
+      const agent = row.actor === "agent";
+      await db.insert(activity).values({
+        workspaceId,
+        productId: target.productId,
+        actorKind: row.actor,
+        // The `activity_actor_shape` check wants exactly one of these per row.
+        actorUserId: agent ? null : ownerId,
+        actorAgent: agent ? SEED_AGENT : null,
+        action: row.action,
+        triggerSource: row.trigger,
+        subjectTable: "item",
+        subjectId: target.id,
+        occurredAt: new Date(Date.now() - row.daysAgo * 24 * 60 * 60 * 1000),
+      });
+      written += 1;
+    }
+  }
+
+  return written;
+}
+
 async function ensureDevMember(
   db: Db,
   auth: AdminAuth,
@@ -345,11 +441,20 @@ async function main() {
       // it — which would leave every established environment demonstrating two
       // buckets out of three. It inserts itself once and is a no-op after that.
       const added = await ensureAtRiskItem(db, id);
+      // The ledger rows are the seeded Owner's, which is who this workspace's
+      // history belongs to — the dev member joins as a reader, not as an author.
+      const [owner] = await db
+        .select({ userId: membership.userId })
+        .from(membership)
+        .where(and(eq(membership.workspaceId, id), eq(membership.role, "owner")))
+        .limit(1);
+      const ledgerRows = owner ? await ensureItemActivity(db, id, owner.userId) : 0;
       const joined = await ensureDevMember(db, auth, id);
       console.log(
         `seed: "${WORKSPACE_NAME}" already exists (${id}). ` +
           (added ? `Added "${AT_RISK_ITEM.title}".` : "Nothing to do."),
       );
+      if (ledgerRows > 0) console.log(`seed: wrote ${ledgerRows} item activity rows.`);
       if (joined) console.log(`seed: ${joined} is an Owner of "${WORKSPACE_NAME}".`);
       return;
     }
@@ -540,6 +645,7 @@ async function main() {
     ]);
 
     await ensureAtRiskItem(db, workspaceId);
+    await ensureItemActivity(db, workspaceId, ownerId);
     const joined = await ensureDevMember(db, auth, workspaceId);
 
     // §2: every mutating action writes an activity row. The seed writes human

@@ -7,7 +7,7 @@ const calls = vi.hoisted(() => ({
   from: [] as string[],
   select: [] as string[],
   eq: [] as [string, unknown][],
-  order: [] as [string, boolean | undefined][],
+  order: [] as [string, boolean | undefined, boolean | undefined][],
   limit: [] as number[],
   rows: [] as unknown[],
 }));
@@ -23,8 +23,8 @@ vi.mock("@/lib/supabase/server", () => {
       calls.eq.push([column, value]);
       return builder;
     },
-    order(column: string, options?: { ascending?: boolean }) {
-      calls.order.push([column, options?.ascending]);
+    order(column: string, options?: { ascending?: boolean; nullsFirst?: boolean }) {
+      calls.order.push([column, options?.ascending, options?.nullsFirst]);
       return builder;
     },
     limit(count: number) {
@@ -90,11 +90,19 @@ describe("listItemActivity", () => {
     expect(calls.eq).toContainEqual(["subject_table", "item"]);
   });
 
-  // §2's ledger is read newest first — a feed's direction is the whole of its
-  // meaning, and the harness had to learn to record this to assert it.
-  it("orders newest first", async () => {
+  /**
+   * §2's ledger is read newest first — a feed's direction is the whole of its
+   * meaning, and the harness had to learn to record this to assert it.
+   *
+   * `nullsFirst: false` is asserted too, and it is not decoration: it matches
+   * `activity_subject_idx`, so the index supplies the ordering instead of the
+   * planner sorting. A bare `desc` means NULLS FIRST, which the index cannot
+   * answer — and the resulting sort would be invisible until the ledger was
+   * large enough for it to hurt.
+   */
+  it("orders newest first, in the direction the index can answer", async () => {
     await listItemActivity(WORKSPACE, ITEM);
-    expect(calls.order).toContainEqual(["occurred_at", false]);
+    expect(calls.order).toContainEqual(["occurred_at", false, false]);
   });
 
   /**

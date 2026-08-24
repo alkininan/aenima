@@ -333,6 +333,21 @@ export const activity = pgTable(
       name: "activity_product_fk",
     }).onDelete("set null"),
     index("activity_workspace_time_idx").on(t.workspaceId, t.occurredAt.desc()),
+    /**
+     * One subject's ledger, which is what an item page reads.
+     *
+     * The workspace-and-time index above answers "what happened here lately"
+     * and nothing else: a feed for one item filtered on `subject_table` and
+     * `subject_id` scans every row in the workspace and throws almost all of
+     * them away. `occurred_at` is the trailing column so the newest-first order
+     * comes out of the index rather than out of a sort.
+     */
+    index("activity_subject_idx").on(
+      t.workspaceId,
+      t.subjectTable,
+      t.subjectId,
+      t.occurredAt.desc(),
+    ),
     check(
       "activity_actor_shape",
       sql`(${t.actorKind} = 'human' and ${t.actorUserId} is not null and ${t.actorAgent} is null)
