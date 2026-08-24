@@ -32,15 +32,38 @@ describe("buttonClasses", () => {
     expect(has(classes, "h-[34px]", "type-ui-button", "control-gloss", "text-bg-base")).toBe(true);
   });
 
-  // design-spec.md §8: sm 28h pad 4/10 gap 4 icon 18 · md 34h pad 7/14 gap 4
-  // icon 20 · lg 48h pad 12/20 gap 4 icon 24.
+  // design-spec.md §8: sm 28h pad 5/10 gap 4 icon 18 · md 34h pad 7/14 gap 4
+  // icon 20 · lg 48h pad 14/20 gap 4 icon 24.
   it.each([
-    ["sm", "h-[28px]", "px-[10px]", "py-[4px]", "[--control-icon:18px]", "type-ui-button-sm"],
+    ["sm", "h-[28px]", "px-[10px]", "py-[5px]", "[--control-icon:18px]", "type-ui-button-sm"],
     ["md", "h-[34px]", "px-[14px]", "py-[7px]", "[--control-icon:20px]", "type-ui-button"],
-    ["lg", "h-[48px]", "px-[20px]", "py-[12px]", "[--control-icon:24px]", "type-ui-button"],
+    ["lg", "h-[48px]", "px-[20px]", "py-[14px]", "[--control-icon:24px]", "type-ui-button"],
   ] as const)("sizes %s to the spec box", (size, ...expected) => {
     const classes = buttonClasses({ size });
     expect(has(classes, ...expected, "gap-[4px]", "rounded-pill")).toBe(true);
+  });
+
+  /**
+   * §8: height governs and the vertical padding derives from it — (height minus
+   * the label's line box) ÷ 2, with ui-button-sm at 13/18 and ui-button at
+   * 15/20.
+   *
+   * Asserted as the arithmetic rather than as three more numbers, because the
+   * numbers are what drift: v2.15 moved the label sizes and left two of the
+   * three paddings describing a box that no longer existed. Height wins at
+   * render, so the drift is invisible until someone "corrects" a height to match
+   * a stale padding — which is the one direction this must never be read in.
+   */
+  it.each([
+    ["sm", 28, 18],
+    ["md", 34, 20],
+    ["lg", 48, 20],
+  ] as const)("derives %s's vertical padding from its height", (size, height, lineBox) => {
+    const padding = (height - lineBox) / 2;
+
+    expect(Number.isInteger(padding)).toBe(true);
+    expect(buttonClasses({ size })).toContain(`py-[${padding}px]`);
+    expect(buttonClasses({ size })).toContain(`h-[${height}px]`);
   });
 
   it.each([

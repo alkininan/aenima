@@ -38,11 +38,17 @@ const BUTTON_BASE =
   "control inline-flex shrink-0 items-center justify-center rounded-pill " +
   "whitespace-nowrap [&_svg]:size-[var(--control-icon)] [&_svg]:shrink-0";
 
-// sm 28h pad 4/10 gap 4 icon 18 · md 34h pad 7/14 gap 4 icon 20 · lg 48h pad 12/20 gap 4 icon 24
+// sm 28h pad 5/10 gap 4 icon 18 · md 34h pad 7/14 gap 4 icon 20 · lg 48h pad 14/20 gap 4 icon 24
+//
+// §8: height governs and the vertical padding derives from it — (height minus
+// the label's line box) ÷ 2. ui-button-sm is 13/18 and ui-button 15/20, so the
+// three come out 5, 7 and 14. The height is what a control is; the padding is
+// what falls out of it, and a stale padding must never be the thing a height is
+// "corrected" to match.
 const BUTTON_SIZE_CLASSES: Record<ButtonSize, string> = {
-  sm: "h-[28px] gap-[4px] px-[10px] py-[4px] type-ui-button-sm [--control-icon:18px]",
+  sm: "h-[28px] gap-[4px] px-[10px] py-[5px] type-ui-button-sm [--control-icon:18px]",
   md: "h-[34px] gap-[4px] px-[14px] py-[7px] type-ui-button [--control-icon:20px]",
-  lg: "h-[48px] gap-[4px] px-[20px] py-[12px] type-ui-button [--control-icon:24px]",
+  lg: "h-[48px] gap-[4px] px-[20px] py-[14px] type-ui-button [--control-icon:24px]",
 };
 
 const BUTTON_VARIANT_CLASSES: Record<ButtonVariant, string> = {

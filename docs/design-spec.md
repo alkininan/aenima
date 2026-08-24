@@ -242,7 +242,7 @@ No-`backdrop-filter` fallback: solid #1B1E24, keep border + edge.
 
 Confirmed dimensions come from Sociera v2.0's real components (Figma node introspection); web-only components follow the same grammar.
 
-**Buttons (pill).** Sizes: **sm** 28h, pad 4/10, gap 4, icon 18, ui-button-sm · **md** 34h, pad 7/14, gap 4, icon 20, ui-button · **lg** 48h, pad 12/20, gap 4, icon 24, ui-button. All `--r-pill`. Variants:
+**Buttons (pill).** Sizes: **sm** 28h, pad 5/10, gap 4, icon 18, ui-button-sm · **md** 34h, pad 7/14, gap 4, icon 20, ui-button · **lg** 48h, pad 14/20, gap 4, icon 24, ui-button. All `--r-pill`. **Height governs and the vertical padding derives from it**, per the option-row rule — each is (height − the label's line box) ÷ 2, so 28 − 18 gives 5, 34 − 20 gives 7, 48 − 20 gives 14. Retune a size by moving the height and recomputing the padding, never by moving the height to match a padding that has gone stale. Variants:
 - **Primary:** `--grad-primary` fill, label #08090C, 1px `--edge-highlight` top specular. The light-fill/dark-label pairing is deliberate retro grammar. Hover lightens with `--hover-overlay` and runs a single left-to-right specular sweep — rgba(255,255,255,.06), 700ms, `--ease`, one pass per hover-in, none under `prefers-reduced-motion`. Press darkens the gradient one step and applies the §6 press physics. **The gloss is the primary's alone:** danger and every other variant stay flat.
 - **Soft:** `--prime-soft` fill, `--prime` label.
 - **Neutral:** `--surface-2` fill, `--n-primary` label. For chrome that must stay visible without reading as an accent.
