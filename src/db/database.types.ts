@@ -6,6 +6,13 @@
  * route is the Supabase MCP server's `generate_typescript_types` against the
  * project the migration was just applied to.
  *
+ * T2.2 note: `ai_usage`, `workspace_ai_credential` and the three `ai_*` enums
+ * were added here **by hand** as well, for the same reason and following the
+ * same shapes. `vault_secret_id` is typed here because Drizzle owns the column;
+ * the request path cannot select it — `authenticated` holds no grant on it (see
+ * `drizzle/0007_ai_layer.sql`), so a query that names it fails at run time even
+ * though it typechecks. That gap is the one thing this file cannot express.
+ *
  * T1.2 note: `item.key` and `product.key_prefix` were added here **by hand**,
  * because the Supabase MCP server was not connected in that session and there is
  * no second route to the generator on this machine. They follow
@@ -82,6 +89,87 @@ export type Database = {
           },
           {
             foreignKeyName: "activity_workspace_fk";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspace";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      ai_usage: {
+        Row: {
+          actor_agent: string | null;
+          actor_kind: Database["public"]["Enums"]["actor_kind"];
+          actor_user_id: string | null;
+          cache_read_tokens: number;
+          cache_write_tokens: number;
+          escalated_from: Database["public"]["Enums"]["ai_tier"] | null;
+          id: string;
+          latency_ms: number;
+          model: string;
+          occurred_at: string;
+          outcome: Database["public"]["Enums"]["ai_outcome"];
+          output_tokens: number;
+          product_id: string | null;
+          provider: Database["public"]["Enums"]["ai_provider"];
+          purpose: string;
+          rate_card: string;
+          tier: Database["public"]["Enums"]["ai_tier"];
+          uncached_input_tokens: number;
+          workspace_id: string;
+        };
+        Insert: {
+          actor_agent?: string | null;
+          actor_kind: Database["public"]["Enums"]["actor_kind"];
+          actor_user_id?: string | null;
+          cache_read_tokens: number;
+          cache_write_tokens: number;
+          escalated_from?: Database["public"]["Enums"]["ai_tier"] | null;
+          id?: string;
+          latency_ms: number;
+          model: string;
+          occurred_at?: string;
+          outcome: Database["public"]["Enums"]["ai_outcome"];
+          output_tokens: number;
+          product_id?: string | null;
+          provider: Database["public"]["Enums"]["ai_provider"];
+          purpose: string;
+          rate_card: string;
+          tier: Database["public"]["Enums"]["ai_tier"];
+          uncached_input_tokens: number;
+          workspace_id: string;
+        };
+        Update: {
+          actor_agent?: string | null;
+          actor_kind?: Database["public"]["Enums"]["actor_kind"];
+          actor_user_id?: string | null;
+          cache_read_tokens?: number;
+          cache_write_tokens?: number;
+          escalated_from?: Database["public"]["Enums"]["ai_tier"] | null;
+          id?: string;
+          latency_ms?: number;
+          model?: string;
+          occurred_at?: string;
+          outcome?: Database["public"]["Enums"]["ai_outcome"];
+          output_tokens?: number;
+          product_id?: string | null;
+          provider?: Database["public"]["Enums"]["ai_provider"];
+          purpose?: string;
+          rate_card?: string;
+          tier?: Database["public"]["Enums"]["ai_tier"];
+          uncached_input_tokens?: number;
+          workspace_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "ai_usage_product_fk";
+            columns: ["workspace_id", "product_id"];
+            isOneToOne: false;
+            referencedRelation: "product";
+            referencedColumns: ["workspace_id", "id"];
+          },
+          {
+            foreignKeyName: "ai_usage_workspace_id_workspace_id_fk";
             columns: ["workspace_id"];
             isOneToOne: false;
             referencedRelation: "workspace";
@@ -541,6 +629,47 @@ export type Database = {
         };
         Relationships: [];
       };
+      workspace_ai_credential: {
+        Row: {
+          created_at: string;
+          created_by_user_id: string | null;
+          key_hint: string;
+          provider: Database["public"]["Enums"]["ai_provider"];
+          scorer_model: string;
+          updated_at: string;
+          vault_secret_id: string;
+          workspace_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          created_by_user_id?: string | null;
+          key_hint: string;
+          provider: Database["public"]["Enums"]["ai_provider"];
+          scorer_model: string;
+          updated_at?: string;
+          vault_secret_id: string;
+          workspace_id: string;
+        };
+        Update: {
+          created_at?: string;
+          created_by_user_id?: string | null;
+          key_hint?: string;
+          provider?: Database["public"]["Enums"]["ai_provider"];
+          scorer_model?: string;
+          updated_at?: string;
+          vault_secret_id?: string;
+          workspace_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "workspace_ai_credential_workspace_id_workspace_id_fk";
+            columns: ["workspace_id"];
+            isOneToOne: true;
+            referencedRelation: "workspace";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -567,6 +696,9 @@ export type Database = {
     Enums: {
       activity_trigger: "user" | "agent" | "schedule" | "webhook" | "sync";
       actor_kind: "human" | "agent";
+      ai_outcome: "ok" | "schema_invalid" | "refused" | "unavailable" | "rate_limited" | "rejected";
+      ai_provider: "anthropic" | "openai";
+      ai_tier: "routine" | "analysis" | "generation";
       artifact_kind: "brief" | "prd" | "tech_spec" | "design_package" | "backlog";
       flow_intent: "value" | "quality" | "risk" | "debt";
       gap_disposition: "open" | "accepted" | "excluded";
@@ -681,6 +813,9 @@ export const Constants = {
     Enums: {
       activity_trigger: ["user", "agent", "schedule", "webhook", "sync"],
       actor_kind: ["human", "agent"],
+      ai_outcome: ["ok", "schema_invalid", "refused", "unavailable", "rate_limited", "rejected"],
+      ai_provider: ["anthropic", "openai"],
+      ai_tier: ["routine", "analysis", "generation"],
       artifact_kind: ["brief", "prd", "tech_spec", "design_package", "backlog"],
       flow_intent: ["value", "quality", "risk", "debt"],
       gap_disposition: ["open", "accepted", "excluded"],

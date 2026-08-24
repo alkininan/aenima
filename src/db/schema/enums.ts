@@ -66,3 +66,36 @@ export const gapTag = pgEnum("gap_tag", ["must", "should"]);
  * asking the guard to make an exception.
  */
 export const gapDisposition = pgEnum("gap_disposition", ["open", "accepted", "excluded"]);
+
+/**
+ * product-spec.md §12 — the certified providers. "One provider is active at a
+ * time; the Owner holds the key, pays the bill." A real enum because the set is
+ * closed by certification: a provider is only usable once the golden set has
+ * been run against it, which is a decision, not a string a workspace types.
+ */
+export const aiProvider = pgEnum("ai_provider", ["anthropic", "openai"]);
+
+/**
+ * §12's three intra-provider tiers: routine (intake classification,
+ * applicability, translation) on the cheap model, analysis (scoring, evidence
+ * extraction) on mid, generation (drafts, questions, patches) on top. "No
+ * cross-provider juggling" — the tier names a rung within one provider, never a
+ * provider.
+ */
+export const aiTier = pgEnum("ai_tier", ["routine", "analysis", "generation"]);
+
+/**
+ * How a call ended. `ok` and five ways not to.
+ *
+ * On the ledger rather than derived from the token counts because a failed call
+ * still costs tokens sometimes and costs none other times, and "no tokens" is
+ * not the same claim as "the provider refused".
+ */
+export const aiOutcome = pgEnum("ai_outcome", [
+  "ok",
+  "schema_invalid",
+  "refused",
+  "unavailable",
+  "rate_limited",
+  "rejected",
+]);

@@ -12,19 +12,23 @@
     "db:migrate": "drizzle-kit migrate",
     "db:baseline": "tsx --env-file=.env.local scripts/db-baseline.ts",
     "db:seed": "tsx --conditions=react-server --env-file=.env.local scripts/seed.ts",
+    "ai:smoke": "tsx --conditions=react-server --env-file=.env.local scripts/ai-smoke.ts",
     "lint": "eslint . && prettier --check .",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.120.0",
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.112.3",
     "drizzle-orm": "^0.45.2",
     "iconoir-react": "^7.12.1",
     "next": "16.3.1",
+    "openai": "^7.5.0",
     "postgres": "^3.4.9",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "server-only": "^0.0.1"
+    "server-only": "^0.0.1",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

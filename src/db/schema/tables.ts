@@ -17,6 +17,9 @@ import { sql } from "drizzle-orm";
 import {
   actorKind,
   activityTrigger,
+  aiOutcome,
+  aiProvider,
+  aiTier,
   artifactKind,
   flowIntent,
   gapDisposition,
@@ -487,5 +490,132 @@ export const decision = pgTable(
     check("decision_statement_len", sql`length(btrim(${t.statement})) between 1 and 2000`),
     check("decision_reason_len", sql`length(btrim(${t.reason})) between 1 and 2000`),
     check("decision_not_self", sql`${t.supersedesId} is distinct from ${t.id}`),
+  ],
+);
+
+/**
+ * product-spec.md §12 — the workspace's AI credential and the model §5 pins.
+ *
+ * **The key itself is not here.** It lives in Supabase Vault, and this row
+ * holds `vault_secret_id`, a pointer that is worthless without a grant on the
+ * `vault` schema — which `authenticated` and `anon` do not have, on this
+ * project or on any Supabase project by default. That grant table is the real
+ * boundary: a signed-in member cannot read a key through PostgREST even if
+ * every policy we wrote were wrong. The policies in `drizzle/0007_ai_layer.sql`
+ * are the second wall (Owner-only, per §14) and the column grant is the third,
+ * so `vault_secret_id` is unreadable even to the Owner through the request path.
+ *
+ * One row per workspace, because §12 has one provider active at a time.
+ *
+ * `scorer_model` is §5's pin — "the scoring model is pinned per workspace and
+ * never juggled for cost". Set when the key is set, and changed only when the
+ * provider changes, which §5 says triggers a re-baseline. It is a column rather
+ * than a lookup for exactly that reason: a pin that recomputed itself from the
+ * tier map would move the day the map moved.
+ */
+export const workspaceAiCredential = pgTable(
+  "workspace_ai_credential",
+  {
+    workspaceId: uuid("workspace_id")
+      .primaryKey()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    provider: aiProvider("provider").notNull(),
+    /** `vault.secrets.id`. Never selected by anything that can reach a browser. */
+    vaultSecretId: uuid("vault_secret_id").notNull(),
+    /** Last four characters. The only part of a key anyone is ever shown. */
+    keyHint: text("key_hint").notNull(),
+    scorerModel: text("scorer_model").notNull(),
+    /**
+     * A recorded fact, not a foreign key — migration 0003's rule for the
+     * ledger, and it holds here for the same reason: who set the key stays
+     * answerable after the account is deleted.
+     */
+    createdByUserId: authUsersId("created_by_user_id"),
+    ...timestamps,
+  },
+  (t) => [
+    check("workspace_ai_credential_hint_len", sql`length(${t.keyHint}) between 2 and 8`),
+    check(
+      "workspace_ai_credential_model_len",
+      sql`length(btrim(${t.scorerModel})) between 1 and 120`,
+    ),
+  ],
+);
+
+/**
+ * product-spec.md §12 and §15 — the usage meter: "spend per tier and per
+ * member", plus the escalation-to-mid rate, which §15 calls "the quality
+ * early-warning light" rather than a cost statistic.
+ *
+ * The fourth append-only ledger, enforced the same three ways as
+ * `artifact_version` and `activity`: no UPDATE or DELETE policy, an explicit
+ * REVOKE, and a trigger. A meter that could be edited would be a meter nobody
+ * could invoice from.
+ *
+ * The actor columns are `activity`'s, with its check: a nightly sweep is an
+ * agent action asserted positively, not a human row with a null user.
+ *
+ * **Token counts, not money.** Four counts, exactly as the providers report
+ * them once the adapter has normalized them, plus the id of the rate card in
+ * force at the time. Spend is that multiplication, done in code — §12's own
+ * code node law, since "counting and arithmetic each have exactly one correct
+ * answer" — and history stays stable because a price change means a new card
+ * id, never an edit to an old one.
+ */
+export const aiUsage = pgTable(
+  "ai_usage",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    /** Null for workspace-level work that belongs to no product. */
+    productId: uuid("product_id"),
+    actorKind: actorKind("actor_kind").notNull(),
+    actorUserId: authUsersId("actor_user_id"),
+    actorAgent: text("actor_agent"),
+    provider: aiProvider("provider").notNull(),
+    model: text("model").notNull(),
+    tier: aiTier("tier").notNull(),
+    /** What the call was for. §12 routes on the tier; the meter reports on this. */
+    purpose: text("purpose").notNull(),
+    uncachedInputTokens: integer("uncached_input_tokens").notNull(),
+    cacheReadTokens: integer("cache_read_tokens").notNull(),
+    cacheWriteTokens: integer("cache_write_tokens").notNull(),
+    outputTokens: integer("output_tokens").notNull(),
+    /**
+     * The tier this call started on, when §12's one schema retry moved it. Null
+     * on every call that did not escalate, so the rate §15 wants is a count of
+     * non-nulls over a count of routine calls — arithmetic, in code.
+     */
+    escalatedFrom: aiTier("escalated_from"),
+    outcome: aiOutcome("outcome").notNull(),
+    latencyMs: integer("latency_ms").notNull(),
+    /** Which price list was in force. Cards are immutable; see `src/lib/ai/pricing.ts`. */
+    rateCard: text("rate_card").notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.workspaceId, t.productId],
+      foreignColumns: [product.workspaceId, product.id],
+      name: "ai_usage_product_fk",
+    }).onDelete("set null"),
+    // The meter's own read: one workspace, newest first.
+    index("ai_usage_workspace_time_idx").on(t.workspaceId, t.occurredAt.desc()),
+    // §12's per-member attribution, and §15's per-tier spend.
+    index("ai_usage_member_idx").on(t.workspaceId, t.actorUserId, t.occurredAt.desc()),
+    index("ai_usage_tier_idx").on(t.workspaceId, t.tier, t.occurredAt.desc()),
+    check(
+      "ai_usage_actor_shape",
+      sql`(${t.actorKind} = 'human' and ${t.actorUserId} is not null and ${t.actorAgent} is null)
+       or (${t.actorKind} = 'agent' and ${t.actorAgent} is not null and ${t.actorUserId} is null)`,
+    ),
+    check(
+      "ai_usage_tokens_nonneg",
+      sql`${t.uncachedInputTokens} >= 0 and ${t.cacheReadTokens} >= 0
+      and ${t.cacheWriteTokens} >= 0 and ${t.outputTokens} >= 0 and ${t.latencyMs} >= 0`,
+    ),
+    check("ai_usage_purpose_len", sql`length(btrim(${t.purpose})) between 1 and 60`),
   ],
 );

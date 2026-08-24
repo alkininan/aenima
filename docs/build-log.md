@@ -7,7 +7,7 @@
 ## Current state
 
 **Phase:** 2 — the scoring engine · phases 0 (foundation) and 1 (the spine) complete
-**Next ticket:** T2.2 — AI provider abstraction: BYO key, three tiers, pinned scorer, usage metering
+**Next ticket:** T2.3 — scoring run: artifact → checks → evidence, cached per artifact version
 **Repo:** github.com/alkininan/aenima
 **Deployed:** yes — **aeni.ma** on Vercel
 
@@ -109,6 +109,14 @@ T2.1 — the skill-pack format and the Feature PRD rubric as data: §7.2's check
   than a base check, check 15 is conditional too, and the seed's `gap.check_id` values were left
   for T2.3. The arithmetic behind the second was already in the table — rows 1–19 carry exactly
   100 points and exactly 9 Musts — and §7.2 now says so, as product spec v1.3 — `a30ab13`.
+
+T2.2 — the AI provider abstraction: one seam every AI call goes through, both providers behind it,
+  three tiers per §12, schema-validated output with §12's single escalation, and the usage meter.
+  Keys are workspace-held in Supabase Vault with the public row holding only a pointer, a hint and
+  §5's pinned scorer model; migration `0007`. Model IDs, structured-output shapes, caching
+  semantics and prices were read off each provider's live documentation on 2026-08-24 rather than
+  recalled.
+
 
 ## Decisions made during the build
 
@@ -247,6 +255,47 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
   the rule visible in the file, so switching one on is a type change rather than a rule someone has
   to remember to come back and write.
 
+- **Every zod schema sent to a provider uses `.nullable()`, never `.optional()`.** OpenAI's strict
+  structured-output mode requires `additionalProperties: false` **and every property listed in
+  `required`** — an optional field is rejected by the API, not by us, and not until a real call is
+  made. So absent is spelled `null`. This lands before the first schema that needed it: T2.3's
+  `CheckResult` union is the first, and discovering the rule there would have meant rewriting a
+  schema rather than writing it correctly. `src/lib/ai/call.test.ts` asserts that
+  `z.toJSONSchema()` still produces the strict shape, since that is a zod behaviour we depend on
+  and do not control.
+- **The scorer's pin is enforced by a missing parameter, not by a rule.** §5 says the scoring model
+  is "pinned per workspace and never juggled for cost", so `runScorer` takes no tier, reads its
+  model from `workspace_ai_credential.scorer_model`, and does not call the escalating code path at
+  all. There is no function anywhere that accepts a pinned model plus a fallback. A comment saying
+  "do not route this for cost" would be a rule someone could follow wrongly; an argument that does
+  not exist cannot be passed.
+- **The AI key lives in Supabase Vault, and the public row holds a pointer.** `authenticated` and
+  `anon` hold no privilege on the `vault` schema — that is Supabase's own grant, not ours — so a
+  signed-in member cannot read a key through PostgREST even if every policy we wrote were wrong.
+  Owner-only RLS is the second wall and a column-level grant hiding `vault_secret_id` is the third.
+  The alternative considered was app-level AES-GCM with a master key in the Vercel env, which would
+  additionally survive a database dump; it was not chosen because `SUPABASE_SERVICE_ROLE_KEY` and
+  `DATABASE_URL` already live in that same env, so the separation is thin, and it would cost us key
+  management, rotation and a crypto path we own.
+- **Spend is arithmetic over stored token counts, never a stored number.** Each `ai_usage` row keeps
+  the four token counts the provider reported plus the id of the rate card in force. §12's own code
+  node law puts the multiplication in code, and the card id is what keeps history stable: **a price
+  change means a new card id, never an edit to an existing one**, so re-pricing tomorrow cannot
+  rewrite what last month cost.
+- **Haiku 4.5 will not cache a prompt below 4,096 tokens, and we accept that rather than route
+  around it.** The minimum is per model — Opus 5 is 512, Sonnet 5 is 1,024, Haiku 4.5 is 4,096 —
+  and a prompt below it is processed **without caching and without an error**, which is exactly how
+  a cache-hit rate of zero on the routine tier looks like a bug. It is not one. Caching is an
+  optimization and no correctness depends on it; moving routine work to a larger model to earn a
+  cache hit would pay more to save less. The rubric prefix will grow — the `feature-prd` pack is
+  already 19 checks of prose — so this may resolve itself.
+  https://platform.claude.com/docs/en/build-with-claude/prompt-caching
+- **A provider outage is not this layer's problem to solve, only to name.** §5 has a failed run
+  queue silently while "the timestamp does the honest work", so `AiFailure` carries `retryable` and
+  stops there. **The queue's shape is a `next_attempt_at` on the scoring-run row T2.3 owns** — the
+  run is simply not written, and the item keeps showing "scored 6 h ago". **The scheduler belongs
+  with §5's other re-scoring machinery** — the webhook, the debounce and the nightly sweep — which
+  is **Phase 4**. Building one here would have meant a cron with nothing to run.
 - **A preview must render on the same side of the RSC boundary as the surface it previews.** A
   client-rooted preview cannot catch a Server→Client serialization error, because inside it there is
   no boundary to cross. That is how the i18n dictionary's formatter functions reached production:
@@ -360,6 +409,18 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
     more than one pack. The pack id carries the distinction today (`feature-prd`) and
     `SkillPack.artifactKind` does not; whoever writes the second PRD rubric decides whether
     selection keys on item type or stays a plain id lookup.
+
+13. **Rate cards go stale silently, and no check can be written against a price page.** Each card in
+    `src/lib/ai/pricing.ts` carries its source URL and the date it was read, so verifying one is a
+    fetch rather than an investigation — but nothing detects that a published price moved, and a
+    wrong rate makes §12's optional Owner-set spend cap a cap that does not hold. **A price change
+    means a new card id and a new entry, never an edit to an existing one**, because old rows are
+    priced at the card they name. Re-read both pages when either provider announces pricing changes,
+    and at every provider certification pass. One ambiguity found while writing the cards and
+    resolved in favour of the published table: OpenAI's `gpt-5.6-terra` model page says cached input
+    is "unchanged" above the 272k long-context threshold, while the pricing table lists an explicit
+    long-context cached rate of exactly 2× the short one — consistent across all three models, and
+    consistent with the stated "2x input" multiplier, so the table was taken as authoritative.
 
 ## On the horizon
 

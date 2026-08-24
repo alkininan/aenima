@@ -23,6 +23,8 @@ import { createClient } from "@supabase/supabase-js";
 import { and, eq } from "drizzle-orm";
 
 import { createDbClient } from "../src/db/client";
+import { setWorkspaceCredential } from "../src/db/queries/ai-credential";
+import type { ProviderId } from "../src/lib/ai/types";
 import {
   activity,
   artifact,
@@ -410,6 +412,61 @@ async function ensureAtRiskItem(db: Db, workspaceId: string): Promise<boolean> {
   return true;
 }
 
+/**
+ * Development convenience: put a real AI key on the seed workspace.
+ *
+ * The same shape as `DEV_SEED_EMAIL` above, and for the same reason — **the
+ * code path is the real one and the env var only supplies the value.** This
+ * calls `setWorkspaceCredential`, which is the function an Owner's settings
+ * screen will call: the secret goes to Vault, the row gets a pointer and a
+ * hint, and §5's scorer is pinned. Nothing here is a seed-only shortcut, so a
+ * bug in the real path is a bug in the seed too, which is the point.
+ *
+ * Anthropic wins when both are set: §12 has one provider active at a time, and
+ * Claude is the one certified first.
+ *
+ * Three things keep it out of anywhere it does not belong:
+ *
+ * 1. It does nothing unless a `DEV_*_API_KEY` is set.
+ * 2. It refuses to run under `NODE_ENV=production`.
+ * 3. It can only ever touch the workspace the seed itself made, because the id
+ *    comes from the seed's own lookup.
+ *
+ * It never throws. A key the provider rejects is a problem for the first real
+ * call, not a reason for `pnpm db:seed` to fail.
+ */
+async function ensureWorkspaceCredential(
+  workspaceId: string,
+  ownerId: string,
+): Promise<string | null> {
+  if (process.env.NODE_ENV === "production") return null;
+
+  const anthropic = process.env.DEV_ANTHROPIC_API_KEY?.trim();
+  const openai = process.env.DEV_OPENAI_API_KEY?.trim();
+
+  const pick: { provider: ProviderId; apiKey: string } | null = anthropic
+    ? { provider: "anthropic", apiKey: anthropic }
+    : openai
+      ? { provider: "openai", apiKey: openai }
+      : null;
+
+  if (!pick) return null;
+
+  try {
+    const credential = await setWorkspaceCredential({
+      workspaceId,
+      provider: pick.provider,
+      apiKey: pick.apiKey,
+      setByUserId: ownerId,
+    });
+    // The hint, never the key — the same four characters the settings screen
+    // would show.
+    return `${credential.provider} (…${credential.keyHint}), scorer pinned to ${credential.scorerModel}`;
+  } catch {
+    return null;
+  }
+}
+
 async function main() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -450,12 +507,14 @@ async function main() {
         .limit(1);
       const ledgerRows = owner ? await ensureItemActivity(db, id, owner.userId) : 0;
       const joined = await ensureDevMember(db, auth, id);
+      const credential = owner ? await ensureWorkspaceCredential(id, owner.userId) : null;
       console.log(
         `seed: "${WORKSPACE_NAME}" already exists (${id}). ` +
           (added ? `Added "${AT_RISK_ITEM.title}".` : "Nothing to do."),
       );
       if (ledgerRows > 0) console.log(`seed: wrote ${ledgerRows} item activity rows.`);
       if (joined) console.log(`seed: ${joined} is an Owner of "${WORKSPACE_NAME}".`);
+      if (credential) console.log(`seed: AI key set — ${credential}.`);
       return;
     }
 
@@ -647,6 +706,7 @@ async function main() {
     await ensureAtRiskItem(db, workspaceId);
     await ensureItemActivity(db, workspaceId, ownerId);
     const joined = await ensureDevMember(db, auth, workspaceId);
+    const credential = await ensureWorkspaceCredential(workspaceId, ownerId);
 
     // §2: every mutating action writes an activity row. The seed writes human
     // rows as the seeded Owner rather than inventing a third actor kind.
@@ -667,6 +727,7 @@ async function main() {
         `${ITEMS.length + SECOND_PRODUCT_ITEMS.length} items, ${GAPS.length} gaps, 2 decisions.`,
     );
     if (joined) console.log(`seed: ${joined} is an Owner of "${WORKSPACE_NAME}".`);
+    if (credential) console.log(`seed: AI key set — ${credential}.`);
   } finally {
     await sql.end();
   }

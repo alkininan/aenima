@@ -1,0 +1,179 @@
+import { describe, expect, it, vi } from "vitest";
+
+// Both adapters are `server-only` — an AI call from a Client Component has to
+// be a build error, per the ticket's own rule. The repo's established way to
+// exercise such a module in a node test is to stub the marker, as
+// `src/db/queries/item.test.ts` does.
+vi.mock("server-only", () => ({}));
+
+import * as anthropic from "@/lib/ai/anthropic";
+import * as openai from "@/lib/ai/openai";
+import { ANTHROPIC_MODELS, OPENAI_MODELS } from "@/lib/ai/router";
+import type { ResolvedRequest } from "@/lib/ai/types";
+
+/**
+ * What each adapter absorbs, asserted on the request it builds and the usage it
+ * reads — no network, because none of this is about the network.
+ *
+ * The interesting property is that two providers which disagree about
+ * structured outputs, caching and token accounting produce the same four
+ * numbers and the same guarantees at the seam. Where they differ, the
+ * difference stops inside these two files.
+ */
+
+const request: ResolvedRequest = {
+  model: "test-model",
+  purpose: "score",
+  context: "the rubric, which repeats",
+  input: "the artifact, which does not",
+  jsonSchema: { type: "object", additionalProperties: false, properties: {}, required: [] },
+  maxTokens: 512,
+};
+
+describe("the Claude request", () => {
+  const body = anthropic.anthropicBody(request);
+
+  // §12 wants caching structured in from day one. The breakpoint goes on the
+  // last stable block, and everything variable lives after it — a breakpoint on
+  // a block that changes per call never matches a prefix hash, so the cache is
+  // written and never read.
+  it("caches the stable prefix and nothing that changes", () => {
+    expect(body.system[0]).toMatchObject({
+      type: "text",
+      text: "the rubric, which repeats",
+      cache_control: { type: "ephemeral" },
+    });
+    expect(body.messages[0]).toMatchObject({
+      role: "user",
+      content: "the artifact, which does not",
+    });
+    expect(JSON.stringify(body.messages)).not.toContain("cache_control");
+  });
+
+  it("asks for structured output through output_config", () => {
+    expect(body.output_config.format.type).toBe("json_schema");
+    expect(body.output_config.format.schema).toBe(request.jsonSchema);
+    // The deprecated parameter is not present under any spelling.
+    expect(JSON.stringify(body)).not.toContain("output_format");
+  });
+});
+
+describe("the OpenAI request", () => {
+  const body = openai.openaiBody(request);
+
+  // There is no breakpoint to place here — caching is automatic — so ordering
+  // is the whole strategy, and it has to be right.
+  it("puts static content first and variable content last", () => {
+    expect(body.input.map((message) => message.role)).toEqual(["system", "user"]);
+    expect(body.input[0]?.content).toBe("the rubric, which repeats");
+    expect(body.input[1]?.content).toBe("the artifact, which does not");
+  });
+
+  it("sends a cache key shared by requests with the same prefix", () => {
+    expect(body.prompt_cache_key).toBe("aenima:score");
+  });
+
+  it("asks for strict structured output through text.format", () => {
+    expect(body.text.format).toMatchObject({ type: "json_schema", strict: true });
+    expect(body.text.format.schema).toBe(request.jsonSchema);
+  });
+});
+
+/**
+ * The accounting difference, which is the one most likely to go unnoticed:
+ * Anthropic's `input_tokens` excludes what came from cache, OpenAI's includes
+ * it. Given the same real call, both must produce the same four numbers.
+ */
+describe("token accounting", () => {
+  it("normalizes Anthropic's shape without subtracting", () => {
+    expect(
+      anthropic.readUsage({
+        input_tokens: 120,
+        cache_read_input_tokens: 900,
+        cache_creation_input_tokens: 40,
+        output_tokens: 60,
+      }),
+    ).toEqual({
+      uncachedInputTokens: 120,
+      cacheReadTokens: 900,
+      cacheWriteTokens: 40,
+      outputTokens: 60,
+    });
+  });
+
+  it("normalizes OpenAI's shape by subtracting the cached share", () => {
+    expect(
+      openai.readUsage({
+        // 1020 total, of which 900 were cached — the same call as above.
+        input_tokens: 1020,
+        input_tokens_details: { cached_tokens: 900 },
+        output_tokens: 60,
+      }),
+    ).toEqual({
+      uncachedInputTokens: 120,
+      cacheReadTokens: 900,
+      // Automatic caching has no write charge. Zero because it is zero.
+      cacheWriteTokens: 0,
+      outputTokens: 60,
+    });
+  });
+
+  it("treats a missing usage block as zero rather than NaN", () => {
+    expect(anthropic.readUsage({})).toEqual({
+      uncachedInputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 0,
+    });
+    expect(openai.readUsage({})).toEqual({
+      uncachedInputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 0,
+    });
+  });
+
+  it("never reports negative input, whatever the provider says", () => {
+    const usage = openai.readUsage({
+      input_tokens: 10,
+      input_tokens_details: { cached_tokens: 99 },
+    });
+    expect(usage.uncachedInputTokens).toBe(0);
+  });
+});
+
+describe("error classification", () => {
+  // A plain Error — a socket that closed, a DNS failure — is not an SDK error
+  // and has no status. It is still an outage from where the caller stands.
+  it("treats an error with no status as an outage, on both providers", () => {
+    for (const classify of [anthropic.classifyError, openai.classifyError]) {
+      const failure = classify(new Error("socket hang up"));
+      expect(failure.kind).toBe("unavailable");
+      expect(failure.retryable).toBe(true);
+    }
+  });
+
+  it("says retryable for outages and rate limits, and not for the rest", () => {
+    expect(anthropic.classifyError(new Error("boom")).retryable).toBe(true);
+  });
+});
+
+describe("what the adapters agree on", () => {
+  it("maps §12's three tiers to a model each, with no overlap", () => {
+    for (const map of [ANTHROPIC_MODELS, OPENAI_MODELS]) {
+      const models = [map.routine, map.analysis, map.generation];
+      expect(new Set(models).size).toBe(3);
+      expect(models.every((model) => model.length > 0)).toBe(true);
+    }
+  });
+
+  // Not a routing rule — a documented fact that makes a zero cache-hit rate on
+  // the routine tier an explanation rather than a bug report.
+  it("records Haiku's cache minimum as the largest of the three", () => {
+    const minimums = anthropic.CACHE_MINIMUM_TOKENS;
+    expect(minimums[ANTHROPIC_MODELS.routine]).toBe(4096);
+    expect(minimums[ANTHROPIC_MODELS.analysis]).toBe(1024);
+    expect(minimums[ANTHROPIC_MODELS.generation]).toBe(512);
+    expect(openai.CACHE_MINIMUM_TOKENS).toBe(1024);
+  });
+});
