@@ -6,12 +6,12 @@
 
 ## Current state
 
-**Phase:** 1 — the spine · phase 0 (foundation) complete
-**Next ticket:** T1.3 — item page shell: content + chat dock + meter
+**Phase:** 2 — the scoring engine · phases 0 (foundation) and 1 (the spine) complete
+**Next ticket:** T2.2 — AI provider abstraction: BYO key, three tiers, pinned scorer, usage metering
 **Repo:** github.com/alkininan/aenima
 **Deployed:** yes — **aeni.ma** on Vercel
 
-`docs/design-spec.md` is **v2.12** and `docs/product-spec.md` is **v1.2**, both complete and
+`docs/design-spec.md` is **v2.15** and `docs/product-spec.md` is **v1.3**, both complete and
 closed, and the code matches.
 
 The form language was settled over two runs against real use of the sign-in flow. v2.3–v2.6:
@@ -22,6 +22,11 @@ and aero materials (#08090C base, `--grad-primary`, field sheen, press squish); 
 pinned and the brand hexes reconciled; the resend cooldown, and a helper line carrying only its
 own field's errors; field state reaching the leading icon, a 24h label zone, and one variant
 for all step chrome.
+
+v2.13–v2.15 came out of the first surfaces rather than the sign-in flow: SemiBold buttons, the
+sidebar's bottom account slot and a nested-radius rule, then the laws the list surface needed —
+glass is navigation and nothing else, buttons a step smaller again, the item row as a
+continuous ledger, the type label bare, and row meters waiting until scoring exists.
 
 ## Stack
 
@@ -79,6 +84,31 @@ T1.2 — the §13 list surface at /app: three buckets, pipeline strip, 56h item 
   `buckets.ts` and `baselines.ts`; `Meter` as a new primitive, hollow everywhere until scoring
   exists — `1d87402`. The effort/elapsed ambiguity it surfaced closed as product spec v1.2, with
   the seed extended so all three buckets have something in them — `a615cc1`.
+
+Production 500 fix — the RSC boundary: dictionary functions cannot cross from a Server Component
+  to a client one. Closed the hole that let it ship — `/dev/list` renders that boundary in a
+  Playwright run against a real `next build`, and the `/dev` gate is negative-checked. Sign-in's
+  focus modality starts unset — `55b10f5`.
+
+Design spec v2.13–v2.15 — SemiBold buttons and the production-build e2e `b1e9e22`; the sidebar's
+  bottom account slot and the nested-radius rule `b9fa68b`; glass as navigation only, buttons a
+  step smaller, the item row as a continuous ledger, the bare type label, and row meters waiting
+  for scoring `36a38e4`; the sm button's padding derived from its height `4f5443d`.
+
+T1.3 — the item page at `/i/<key>`: header, artifact list, activity ledger, chat dock, all
+  read-only over `getItemByKey` — `d09ba0b`. The ledger indexed by subject, migration `0006`, and
+  the seed writing item-level activity so the page has something to show — `4f66847`. The
+  opportunity an item came out of now renders in the header as plain text: `/o/<key>` is
+  unbuildable until opportunities have a key column, and a uuid route defeats the reason
+  `routes.ts` keeps segments short — `d96d70e`, open question 9.
+
+T2.1 — the skill-pack format and the Feature PRD rubric as data: §7.2's checks and Appendix B's
+  interview bank transcribed, applicability and denominator renormalization as pure functions,
+  §5's zero-sum budget enforced at load and throwing — `67f0c05`. Four things §7.2 left open were
+  decided on the ticket: check ids are its own row numbers, check 20 is a conditional layer rather
+  than a base check, check 15 is conditional too, and the seed's `gap.check_id` values were left
+  for T2.3. The arithmetic behind the second was already in the table — rows 1–19 carry exactly
+  100 points and exactly 9 Musts — and §7.2 now says so, as product spec v1.3 — `a30ab13`.
 
 ## Decisions made during the build
 
