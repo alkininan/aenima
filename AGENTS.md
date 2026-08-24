@@ -19,6 +19,9 @@ Read CLAUDE.md first — it is this repo's constitution and overrides everything
   practice on fast-moving topics rather than answering from memory.
 - A stopgap is legal only when it is recorded in the build log as an open question with a phase
   owner. An unrecorded stopgap is a bug.
+- Three failed corrections on the same fix means the ticket is wrong, not the code. The loop cannot see
+  the plan it came from — stop, say so, and ask for the ticket to be restated rather than attempting a
+  fourth time.
 
 <!-- BEGIN:nextjs-agent-rules -->
 

@@ -365,6 +365,10 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
 
 - Phase 2 gains a scorer eval harness — a golden set of artifacts with known planted gaps,
   measuring the scorer's precision against them before meters are trusted.
+- Phase 5, backlog refinement (§7.5): the slicing dimension is the decision that determines whether a
+  backlog is buildable. Slicing a PRD by document section produces stories that all touch the same code;
+  slicing by user-visible capability produces stories that can be built independently. §7.5 requires no
+  story too big and no requirement orphaned but names no axis — decide it when the ticket is written.
 
 ## Accounts and keys needed
 
