@@ -39,6 +39,7 @@ Only what differs from framework defaults:
 - Store timestamps in UTC; render in the workspace timezone.
 - An input that cannot yet be observed is typed `never`, not `boolean` — see `src/lib/stage.ts`.
   A boolean claims "observable, currently false", which is a different claim and a false one.
+- Every schema sent to a provider uses `.nullable()`, never `.optional()` — strict mode forbids optional.
 
 ## Prohibitions
 - Never extend scope beyond the ticket.
@@ -49,6 +50,7 @@ Only what differs from framework defaults:
   `drizzle/0001_policies.sql`, not in the schema DSL, so push does not know they
   exist and plans to `DROP POLICY … CASCADE` all of them — deleting the product
   isolation boundary. Migrations only: `db:generate` then `db:migrate`.
+- Never bind a secret into a query without scrubbing the error — postgres.js attaches the parameters to it.
 - Where the spec is silent: stop and list the question. Never assume.
 
 ## Done means
