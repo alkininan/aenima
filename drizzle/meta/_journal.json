@@ -57,6 +57,27 @@
       "when": 1787331923707,
       "tag": "0007_ai_layer",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1787331923708,
+      "tag": "0008_scoring_run",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1787331923709,
+      "tag": "0009_check_constraints_are_not_null",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1787331923710,
+      "tag": "0010_protocol_version",
+      "breakpoints": true
     }
   ]
 }

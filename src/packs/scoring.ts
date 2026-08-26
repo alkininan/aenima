@@ -1,4 +1,4 @@
-import type { CheckResult, RubricCheck, SkillPack } from "./types";
+import type { ApplicabilityCondition, CheckResult, RubricCheck, SkillPack } from "./types";
 
 /**
  * Applicability and renormalization — product-spec.md §4 and §5.
@@ -17,6 +17,37 @@ import type { CheckResult, RubricCheck, SkillPack } from "./types";
  * condition holds — the safety layer on anything with user-to-user visibility.
  * That is why the pack's own checks sum to 100 and a layer's do not.
  */
+
+/**
+ * Every distinct condition a pack can be asked about — §4's applicability
+ * engine, as the list of questions rather than the answers.
+ *
+ * A fact about the pack, not about any one run: the same list is what a scoring
+ * call asks the model to decide, what a pack review reads to see which
+ * judgements a rubric depends on, and what the next pack will need the moment
+ * it carries a condition of its own.
+ *
+ * Both directions are collected, because both are conditions the model answers:
+ * a check's own `appliesWhen` (which takes it *out* of the base) and a layer's
+ * (which brings its checks *in*). Deduplicated by id and returned in pack order
+ * — checks first, then layers — so a question list built from it is stable
+ * between runs. Two checks sharing a condition ask about it once.
+ */
+export function packConditions(pack: SkillPack): ApplicabilityCondition[] {
+  const byId = new Map<string, ApplicabilityCondition>();
+
+  const add = (condition: ApplicabilityCondition | undefined): void => {
+    if (condition && !byId.has(condition.id)) byId.set(condition.id, condition);
+  };
+
+  for (const check of pack.checks) add(check.appliesWhen);
+  for (const layer of pack.layers) {
+    add(layer.appliesWhen);
+    for (const check of layer.checks) add(check.appliesWhen);
+  }
+
+  return [...byId.values()];
+}
 
 /** Convenience for callers holding a list rather than a set. */
 export function conditionSet(conditionsMet: readonly string[]): ReadonlySet<string> {
@@ -55,6 +86,22 @@ export function applicableChecks(pack: SkillPack, conditionsMet: readonly string
 /** What the applicable checks are worth in total — §5's renormalized denominator. */
 export function denominatorFor(checks: readonly RubricCheck[]): number {
   return checks.reduce((total, check) => total + check.points, 0);
+}
+
+/**
+ * §5's 0–100. **The one place a score is divided.**
+ *
+ * Both callers need it and they need it from the same place: a fresh run
+ * divides what it just computed, and a stored run divides what it recorded.
+ * Two implementations of one formula is two things that can disagree, which is
+ * the reason the score is not a column in the first place.
+ *
+ * A denominator of zero belongs to a pack with no applicable checks, which is
+ * not a real pack; the guard exists so the arithmetic cannot produce `NaN` and
+ * hand it to a meter.
+ */
+export function percentageOf(earned: number, denominator: number): number {
+  return denominator === 0 ? 0 : (earned / denominator) * 100;
 }
 
 export type RunScore = {
@@ -96,9 +143,5 @@ export function scoreRun(
     0,
   );
 
-  return {
-    earned,
-    denominator,
-    score: denominator === 0 ? 0 : (earned / denominator) * 100,
-  };
+  return { earned, denominator, score: percentageOf(earned, denominator) };
 }

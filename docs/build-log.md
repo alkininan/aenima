@@ -7,7 +7,7 @@
 ## Current state
 
 **Phase:** 2 — the scoring engine · phases 0 (foundation) and 1 (the spine) complete
-**Next ticket:** T2.3 — scoring run: artifact → checks → evidence, cached per artifact version
+**Next ticket:** T2.4 — the meter and its expansion: a score that opens into its checks (§8, §13)
 **Repo:** github.com/alkininan/aenima
 **Deployed:** yes — **aeni.ma** on Vercel
 
@@ -121,6 +121,130 @@ T2.2 — the AI provider abstraction: one seam every AI call goes through, both 
   failed scoring call metered against the tier map's model rather than the pin, and an
   `AiRequest.purpose` wide enough to route a scoring call down a tier. Both were invisible while
   two values coincided.
+
+T2.3 — the scoring run: an artifact version and a pack in, per-check verdicts with quoted evidence
+  out, stored and reconciled into gaps. `scoring_run` and `scoring_check_result` are the fifth and
+  sixth append-only tables; §5's cache is the unique index on (artifact version, pack, pack
+  version), so re-scoring an unchanged version is a hit rather than a second opinion. One call per
+  run, applicability decided in the same pass and renormalized by T2.1's pure function, every
+  failure's quote verified against the artifact before anything is written, and a failed run
+  writing nothing at all. Migration `0008`, plus `0009` for two CHECK constraints that did not
+  hold. The seed gained a real PRD to score, and open question 11 is closed — `MN-2`, `MN-7`,
+  `SF-1` and `SF-2` were requirement ids naming no check, and are now `prd-19`, `prd-16` and
+  `prd-20` with the requirement id moved into the evidence where §7.2 puts it.
+  Verified end to end against Claude Sonnet 5 on the seeded PRD: **58.6 out of 100, 58 of 99
+  points**, six checks failed, every quote real, and a second run answering from the cache in
+  581ms without calling the provider. **That run predates the second review pass below**, which cut
+  a sentence from the protocol; re-scored against the shipped protocol the same document comes back
+  **66 of 99**, because `prd-19` was passing on the leak rather than on its own rubric prose. The
+  answer key still says 58 — it is labelled against what the rubric should find, not against what
+  the current prompt does find, and the gap between the two is the finding. See the second run
+  recorded beside the marking scheme.
+
+  A **second** fresh-context review, run against §5, §4, §1 and §12 after the first, returned four
+  more, all real and all fixed here:
+
+  1. **The fabrication guard normalized past typography.** `normalizeForQuote` opened with NFKC,
+     which is *compatibility* normalization — it rewrites characters into other characters. `10⁵`
+     folded to `105`, `m²` to `m2`, `½` to `1⁄2`, `№` to `No`, `Ⅳ` to `IV`. A model that retyped a
+     superscript as a digit had its quote verified against a number four orders of magnitude from
+     the one the PRD wrote. NFC now, and the five pairs are the test.
+  2. **`prd-19`'s standard was in the protocol.** "If two readings of a sentence are possible, give
+     both" is the misreading-sweep check — an 8-point Must — paraphrased into the run layer, where
+     it would have applied to every pack that ever ships. Cut.
+  3. **The cache key covered `PROTOCOL` and not the rest of the prompt.** `renderPack`,
+     `renderCheck` and `renderArtifact` shape what the model reads just as directly and nothing
+     versioned them. `PROTOCOL_VERSION` is now computed rather than typed.
+  4. **Nothing bounded a note or a quote before the column that refuses them.** An over-long answer
+     aborted the write transaction and threw past all four of `ScoreResult`'s failure shapes, after
+     the provider had been called and billed. Clipped at read time and recorded; the write returns
+     a typed failure.
+
+  Each fix negative-checked: defect reintroduced, named test observed failing, reverted.
+
+### The golden set's first labeled sample
+
+`scripts/seed-prd.ts` is a Feature PRD for a Sociera feature — Ghost mode, a per-venue
+invisibility toggle — written to be scored rather than to be good. It is seeded by
+`ensureScorableItem`, a top-up like the at-risk item's rather than a row in `ITEMS`: it arrived
+after the first seeds ran, and `pnpm db:seed && pnpm score:smoke` would otherwise do nothing on
+every environment that already exists. §12 builds the golden set "by
+mutation … so expected verdicts are known by construction"; this is one artifact carrying several
+planted defects at once. **The answer key lives here and not beside the document**, because the
+document is what a model reads.
+
+**The marking scheme.** Expected verdicts are known by construction, so a future run is graded
+against this table rather than against an impression. Three parts, and a run has to get all three
+right: the conditions, the verdicts, and the arithmetic they produce.
+
+**Conditions** (§4, answered in the same pass that scores):
+
+| Condition | Expected | Why, by construction |
+|---|---|---|
+| `list-rendering-surface` | **false** | The feature adds one control and one indicator. The document says so in Out of scope: "It renders no list of its own." |
+| `network-dependent-surface` | **true** | Location permission and offline both have EARS lines. |
+| `user-to-user-or-location` | **true** | Presence at a venue, visible to other members. |
+
+So `prd-15` renormalizes **out** (−6) and the safety layer's `prd-20` renormalizes **in** (+5).
+A denominator of **99** rather than 100 or 105 is one number proving both directions ran, and it
+is the first thing to check when a run looks wrong.
+
+**Verdicts.** Six planted failures, thirteen expected passes, one check not asked:
+
+| Check | Pts | Expected | The defect, or why it passes |
+|---|---|---|---|
+| `prd-1` | 5 | pass | Problem is observed behaviour — 213 reversed check-ins, 41 support conversations — with no solution embedded. |
+| `prd-2` | 3 | pass | "Opportunity: OPP-4, 'presence is all-or-nothing'." |
+| `prd-3` | 4 | pass | "checked into two or more venues in the last 30 days and have at least one blocked contact" — a filter you could run. |
+| `prd-4` | 2 | pass | Three typed signals, plus counter-evidence as a first-class slot. |
+| `prd-5` | 3 | **fail** | **Planted:** three assumptions, and no statement of how we would notice any of them being wrong. |
+| `prd-6` | 6 | pass | "We believe that … will reduce … measured by …", in the required form. |
+| `prd-7` | 4 | pass | Baseline 3.4%, target 2.0%, eight weeks. |
+| `prd-8` | 4 | **fail** | **Planted:** no kill or rollback line anywhere. An *absence* failure — there is nothing to quote, and a null quote is legal. |
+| `prd-9` | 6 | pass | GM-1 … GM-5, stable ids on every story. |
+| `prd-10` | 10 | **fail** | **Planted:** GM-4 is prose. The other four stories carry Given/When/Then. |
+| `prd-11` | 5 | pass | Four explicit out-of-scope lines. |
+| `prd-12` | 4 | pass | Four side effects, including the partner webhook and the digest. |
+| `prd-13` | 4 | pass | iOS and Android, EN/TR at launch and NL later, and why web is unaffected. |
+| `prd-14` | 8 | **fail** | **Planted:** GM-3 and GM-4 have no failure behaviour. GM-1, GM-2 and GM-5 do. |
+| `prd-15` | 6 | **not asked** | By construction — no list surface. It leaves the denominator. |
+| `prd-16` | 6 | pass | Permission denied, offline and degraded, all three in EARS. |
+| `prd-17` | 8 | **fail** | **Planted:** `GhostOn` and `ghost_mode_toggled` disagree on convention, there is no off event, and the hypothesis metric is not computable from either. |
+| `prd-18` | 4 | pass | One boolean and one venue id, both flagged personal, deleted with the check-in. |
+| `prd-19` | 8 | **fail** | **Planted** — see the two sentences below. |
+| `prd-20` | 5 | pass | Two named misuse routes with a protection for each. |
+
+**Arithmetic:** 100 − 6 (`prd-15` out) + 5 (`prd-20` in) = **99 available**. The six failures cost
+3 + 4 + 10 + 8 + 8 + 8 = **41**. Expected: **58 of 99, 58.6 / 100.**
+
+**The two ambiguous sentences, verbatim.** `prd-19` is the check that asks for no sentence two
+developers could read two ways, and this document contains two. The planted one, in GM-2:
+
+> WHEN the member leaves the venue THE SYSTEM SHALL turn ghost mode off.
+
+— "leaves" is a geofence exit, or a tap on check out, and the two build differently. The second,
+in the Safety section, went in **unnoticed while writing**:
+
+> that count is rounded to the nearest five whenever the difference would be inferable
+
+— "inferable" names no threshold and no method. The first real run failed `prd-19` on the second
+sentence, not the first. **A labeled sample is labeled against what the rubric should say, not
+against what we meant to plant**, so both are part of the answer: a run that quotes either has
+found the defect, and a run that quotes neither has missed it. The golden-set harness will need to
+accept a set of acceptable citations per check rather than one.
+
+**First real run, 2026-08-26, `feature-prd@1.0.0` on `claude-sonnet-5`:** 58 of 99, all three
+conditions as expected, all six planted failures found, every quote verbatim, no false positives
+among the thirteen passes. The full marking scheme was met.
+
+**Second real run, `feature-prd@1.0.0` on `claude-sonnet-5`, protocol fingerprint
+`1.1.0+602d20db`:** `prd-19` flipped from fail to pass when the "give both readings" sentence was
+cut from `PROTOCOL`. Score moved **58/99 → 66/99**, exactly `prd-19`'s 8 points; nothing else
+changed. The leak was carrying that check. **Open question:** is `prd-19`'s rubric prose too thin
+to find a subtle ambiguity unaided, or is GM-2's planted sentence too quiet to be found? §5's
+answer for a check that underperforms is **probes, not rewording** — the standard stays one line,
+the probe library behind it carries the specific traps. Do not tune from one sample; the golden-set
+harness decides.
 
 
 ## Decisions made during the build
@@ -342,6 +466,168 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
   in isolation; only an HTTP status from the build that would ship covers the segment being
   attached to it.
 
+- **A scoring run is stored as two append-only tables, and the score is not a column.**
+  `scoring_run` keeps `earned` and `denominator`; the score is `earned / denominator × 100`, which
+  is arithmetic over two stored facts and belongs in code by §12's own law. **`percentageOf` in
+  `src/packs/scoring.ts` is the only division in the product** — a fresh run divides what it just
+  computed and a cached one divides what it recorded, and two implementations of one formula is two
+  things that can disagree, which is the reason the score is not a column in the first place. It is the same refusal
+  `ai_usage` makes about money, for a related reason: a stored quotient is a second copy of a
+  derived fact, and two copies can disagree. §5's "stamps … the denominator that produced it" is
+  satisfied by storing the denominator.
+- **§5's cache is a unique index, not a lookup someone remembers to do.**
+  `(workspace_id, artifact_version_id, pack_id, pack_version, protocol_version)`. An artifact version is immutable,
+  so one version scored against one rubric version can only ever have produced one run — and the
+  database says so rather than the code path. **Provider and model are stamped but deliberately
+  not in the key**: §5 makes a model or rubric change trigger a *deliberate* re-baseline pass, and
+  a key that included the model would silently re-score a whole workspace the day a pin moved.
+  "Only checks whose artifact changed re-run" resolves at the artifact: a run scores one artifact
+  against one pack, so a new PRD version does not re-score the design package. Below the artifact
+  there is nothing finer to diff — §11's per-block hashes exist as a column, but blocks are not
+  modelled.
+- **`closed` is the fourth gap disposition, and the only one a machine may write.** §5 move 2 ends
+  "Pass → closed with the evidence linked" and the enum had nowhere to put it. `accepted` and
+  `excluded` stay human declarations carrying a name; `closed` claims nothing about the debt, it
+  says reality moved. A closed row therefore carries a time and no name, and *why* it closed is a
+  ledger fact — `gap.closed` with `reason: passed` or `no longer applicable`. **A check that
+  stopped applying closes its gap too**, because leaving it open would have §13 calling an item
+  "Your move" over a Must outside its own denominator. What §5's first negotiation move routes
+  through a human is an *argument* that a check does not apply; this is §4's engine answering in
+  the pass that scores.
+- **Extending an enum and using the new value cannot happen in one migration here.** Postgres
+  forbids using a value added by `ALTER TYPE … ADD VALUE` in the transaction that added it, and
+  `drizzle-kit migrate` runs **every pending migration inside one transaction**
+  (`drizzle-orm/pg-core/dialect.cjs` — `session.transaction(...)` wraps the whole loop). So
+  `ADD VALUE 'closed'` plus a CHECK naming `'closed'` works on a database where the migration
+  lands alone and fails on any fresh one — CI, and a new environment. `0008` creates a new type and
+  swaps the column instead. Its partial index has to be dropped and recreated around the swap:
+  `gap_open_idx` stores `disposition = 'open'` with the literal already bound to the old type.
+- **A CHECK constraint rejects a row only when its expression is FALSE.** NULL passes. So
+  `length(btrim(note)) > 0` forbids an empty note and *not* a null one, and both
+  `scoring_check_result_evidence_shape` and the inherited `gap_resolution_shape` accepted exactly
+  the row they were written to forbid — a failure with no reading, and a named debt with no reason.
+  Every arm now says `is not null` before it says `length(...) > 0`. Found by a test asserting the
+  first constraint rejects a null note and watching the insert succeed; 0004 wrote the second one
+  in 2026 and nobody noticed for five tickets.
+- **The scoring protocol is the run's; the rubric's prose is the pack's.** `src/lib/scoring/prompt.ts`
+  holds how to answer — binary verdicts, verbatim quotes, conditions asked apart from checks — and
+  contains no rubric content; `renderPack` renders the pack and nothing else. `assembleContext` is
+  asserted to be exactly `PROTOCOL + renderPack(pack)`. A protocol copied into each pack would let
+  two packs disagree about what "pass" means, which is worse than the coupling it avoids. The split
+  is also §12's cache split: the context is stable per pack version, the artifact is what changes.
+- **A test whose name promises what it cannot deliver is worse than no test.** Beside that equality
+  sat a substring sweep asserting no check's `prose` appeared inside `PROTOCOL`, named "carries no
+  rubric prose in the protocol half" — and it shipped green while the protocol carried `prd-19`'s
+  standard in different words. The weakness was known and written down as a limit when it shipped;
+  writing it down is not the same as it being harmless, because the *name* is what a reviewer reads
+  and the name claimed a guarantee. A test that catches a copy-paste should be called that, or it
+  should be replaced by one that holds. This one was replaced: `PROTOCOL_VERSION` pins a digest, so
+  any edit to what the scorer reads turns the suite red and has to be acknowledged in the diff. The
+  judgement about what a sentence is *about* stays a human's; what the test guarantees is that a
+  human is asked.
+- **Everything that reaches the model is versioned, and the version is computed rather than typed.**
+  Migration 0010 put the protocol in §5's cache key and stopped one layer short: `PROTOCOL` was
+  versioned, `renderCheck`, `renderPack` and `renderArtifact` were not, though the model reads their
+  output just as directly — editing `renderCheck` to stop printing a check's points would change
+  every verdict in the product and hit the cache on all of them. `PROTOCOL_VERSION` is now
+  `` `${PROTOCOL_RELEASE}+${digest}` ``: a semver a human reads, and sha-256 over a rendered
+  fixture pack plus `renderArtifact`'s output, truncated to 16 hex characters. The fixture is
+  synthetic on purpose — a real pack would fold rubric content into the number describing the layer
+  *above* the rubric, and a pack edit would then move both stamps. Discipline you can forget;
+  a digest moves whether anyone remembered or not.
+- **A quote is verified against the artifact before the run is written, and a fabricated one fails
+  the whole run.** §1 law 3 is evidence or nothing, and an invented quote is the one failure that
+  looks exactly like a real finding on the surface. Whitespace and typography are normalized —
+  a model rarely echoes the source's line width, and curly quotes survive a round trip
+  inconsistently — and **nothing else**: case is kept, because "MUST NOT" and "must not" are
+  different claims in a specification, and every word still has to match. A **null** quote is legal
+  and different from a missing one: some checks fail because something is absent, and there is
+  nothing to point at when the out-of-scope list does not exist.
+- **NFC, never NFKC.** The two differ by one letter and by what they *do*. Canonical normalization
+  composes accents — `e` + U+0301 and a precomposed `é` are the same letter, and which one arrives
+  depends on the keyboard that typed the artifact. *Compatibility* normalization rewrites characters
+  into other characters: under NFKC `10⁵` becomes `105`, `m²` becomes `m2`, `½` becomes `1⁄2`, `№`
+  becomes `No`, `Ⅳ` becomes `IV`. Reaching for the more thorough-sounding one put a paraphrase
+  detector one keystroke away from certifying `105` as a verbatim quote of `10⁵`. The five pairs are
+  pinned as tests, so the docstring's promise — "whitespace and typography, and nothing else" — is
+  an assertion rather than an intention.
+- **An over-long answer is compliance, not corruption.** `gap.evidence` caps at 2000 characters and
+  `scoring_check_result.quote` at 2000; nothing bounded a note or a quote before they got there, so
+  a model that answered at length aborted the write transaction on a CHECK — throwing away nineteen
+  other verdicts, and a provider call already billed, over the shape of one sentence. The parts are
+  clipped at read time to what the columns hold, the elision is marked where a reader sees it, and
+  the check ids go in the ledger so a shortened reading is a recorded fact. **The guard still runs on
+  the quote the model actually sent**, before any clipping: verifying a clipped quote would verify a
+  prefix, and a prefix of an invented sentence is still invented.
+- **Every failure a caller has already paid for gets a shape it can read.** `writeRun` is wrapped, so
+  a constraint violation or a dropped connection returns `reason: "write"` rather than throwing past
+  all four of `ScoreResult`'s cases — the transaction still rolled back, so §5's "a failed run writes
+  nothing" is untouched; this is only about how the caller hears it. No retry is queued, for the same
+  reason an off-schema answer queues none: the same verdicts written the same way fail the same way,
+  and §5's queue is for outages, not for bugs.
+- **Two provider limits shape the answer schema, and both were found by a real call.** The schema
+  that states the law best is an object keyed by check id — one required property per check, so a
+  skipped check is unrepresentable under OpenAI's strict mode. Anthropic refuses it twice: *"too
+  many parameters with union types … limit: 16"* (a nullable field is a union, and three per check
+  across twenty checks is sixty), and then *"the compiled grammar is too large"* (twenty checks ×
+  four properties is eighty properties for constrained decoding to compile). So **absent is spelled
+  `""` on the wire**, and **results are an array**. The completeness law moved out of the schema
+  and into `readAnswer`, which refuses a run whose results miss any applicable check — the rule is
+  unchanged and the wall is one layer further in. `minItems` would buy half of it back and is not
+  available: strict mode rejects a schema carrying keywords it does not support. The conditions
+  half stays a keyed object, where three properties cost nothing and the guarantee still holds.
+- **`max_tokens` is a budget for the model's reasoning, not just its answer.** Claude Sonnet 5
+  returns a `thinking` block by default; the seam drops it — a verdict is the answer and the
+  reasoning is not evidence — but the provider counts those tokens against the same ceiling. The
+  first real run spent ~4,100 tokens thinking and ~800 answering, and cut off mid-quote at a 4,900
+  ceiling sized to the JSON. **Truncated JSON reads as a flaky provider rather than as a ceiling**,
+  which is the expensive way to learn this. `maxTokensFor` is now 2,000 + 700 per check. A ceiling
+  is not a cost — nothing is billed for headroom — so the only thing a generous number buys is that
+  a long answer finishes.
+- **A failed run writes nothing, and only a retryable failure leaves a mark.**
+  `artifact.next_scoring_attempt_at` is that mark, on the artifact because a failed run has no row
+  to hang it off — which corrects what T2.2 recorded here. A non-retryable failure sets nothing at
+  all: §5 queues *outages*, and a pinned model that answered off-schema is a quality signal §15
+  already reads out of the `ai_usage` row the seam wrote. Retrying that on the same pinned model is
+  the cost-driven retry §5 forbids. **Phase 4 owns the scheduler** that reads the field, with the
+  webhook, the debounce and the nightly sweep.
+- **The whole write is one transaction** — run, verdicts, gap moves, ledger, and clearing the retry.
+  §5's "no partial gaps" is a `BEGIN` rather than a discipline: a run that inserted three gaps and
+  then failed would leave an item carrying debts no score explains, and the next run would find
+  them open and restate them forever.
+- **A run may only touch gaps in its own rubric's id space.** An item carries a PRD and a design
+  package, each scored by its own pack against its own check ids. Without the filter, scoring the
+  PRD would find no verdict for a design-pack gap and close it as no longer applicable.
+- **`packConditions` lives in `src/packs`, beside `applicableChecks`.** Which conditions a pack can
+  be asked about is a fact about the pack, not about a run — the scoring call asks them, a pack
+  review reads them, and the next pack will need the same list.
+- **The protocol is versioned and stamped, because it is half the prompt.** A verdict comes from
+  the rubric and from the protocol wrapped around it (`src/lib/scoring/prompt.ts`). The pack
+  versions the first; nothing versioned the second, so §5's "editing a rubric triggers a quiet
+  re-baseline pass so numbers never wobble without explanation" covered half of what decides a
+  score. `PROTOCOL_VERSION` is stamped on every run and is in the cache key, so an edit invalidates
+  stored runs the way a pack version does and the stale ones are findable afterwards. **Bump it on
+  any protocol edit that is not a typo**: the cost of bumping needlessly is one re-score, and the
+  cost of not bumping is two incomparable numbers with nothing to tell them apart.
+- **Law 7 is re-checked in the WHERE clause, not trusted from the read.** The reconciler decides
+  from a snapshot taken outside the transaction, so a human can accept a gap between the read and
+  the write; both gap updates therefore carry `and disposition = 'open'`. Before that, the evidence
+  update would silently rewrite an accepted gap — a machine editing a named person's debt — and the
+  close was stopped only by a constraint violation aborting the run, which is law 7 holding by
+  accident rather than by design. Where nothing changed, no ledger row is written: a `gap.restated`
+  entry for a gap that was not restated is the ledger saying something that did not happen.
+- **`::text::jsonb`, never a bare `::jsonb`, when binding JSON as a parameter.** A bare cast lets
+  the driver decide the parameter's type, and where it decides `jsonb` the JSON text is stored as a
+  jsonb **string** rather than parsed into an object. `jsonb_typeof` says `string`, `->>` returns
+  null for every key, and the value prints identically to the correct one — so a ledger written this
+  way answers null to every question §15 asks it, and nothing looks wrong. The double cast says
+  text first, which forces the parse. Found while writing the write-path tests, on a row that had
+  looked fine in every previous inspection.
+- **A cached run is re-sorted into pack order on the way out.** `check_id` sorts `prd-10` before
+  `prd-2`, so serving the stored rows in database order would make the same run read one way when
+  written and another when cached — and §8's meter expansion is a list a person compares against the
+  last run. The database cannot know a pack's order, so the read is deliberately unordered and
+  `run.ts` restores it from `applicableChecks`.
 - **A structural ticket does not close until a fresh context has reviewed it.** A new session,
   holding none of the writing context, reads the diff against the spec and reports findings —
   it changes nothing. T2.2's returned seven, of which two were real defects: a failed scoring
@@ -431,16 +717,13 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
     layer arrives with the checks it contains**, and until §7 lists them there is nothing to
     transcribe. `src/packs/types.ts` already holds the shape; it needs content, not code.
 
-11. **The seed writes `gap.check_id` values that match no rubric check.** `MN-2`, `MN-7`, `SF-1` and
-    `CN-1` in `scripts/seed.ts` predate any pack and are *requirement*-ID-shaped — the IDs a PRD
-    gives its own stories — not rubric check ids like `prd-10`. Product spec v1.3 made the two id
-    spaces explicit in §7.2: a gap names a check id, a story names a requirement id, and evidence
-    may cite the requirement id as the place the gap lives. **Harmless while nothing resolves a
-    check id against a pack, and it must be corrected before T2.3 scores real artifacts** — after
-    that, a seeded gap names a check that does not exist, and the surface that expands a meter into
-    its checks has nothing to expand into. They were left alone in T2.1 because rewriting them
-    would have been authorship inside a transcription ticket. The fix is a reseed against
-    `feature-prd`, unless T2.3 decides `gap.check_id` holds both kinds and says which is which.
+11. **~~The seed writes `gap.check_id` values that match no rubric check.~~ Closed by T2.3.** The
+    four gaps now name `prd-19`, `prd-16` and `prd-20`, and the requirement ids they used to hold
+    moved into the evidence, in §5's own format — a gap names a check, a story names a requirement,
+    and the evidence cites the requirement as the place the gap lives. The accepted gap's tag
+    changed from Should to Must with it: `prd-16` is a Must in the pack, and a seeded tag that
+    disagreed with the rubric would be the same class of lie one level down. They had predated any
+    pack and were left alone in T2.1 rather than rewritten inside a transcription ticket.
 
 12. **A pack is keyed by artifact kind, not by item type.** §7.2 is the *Feature* PRD rubric, and §4
     gives each of the seven types its own "rubric weight centre" — an Enhancement's lean PRD is
@@ -460,6 +743,29 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
     is "unchanged" above the 272k long-context threshold, while the pricing table lists an explicit
     long-context cached rate of exactly 2× the short one — consistent across all three models, and
     consistent with the stated "2x input" multiplier, so the table was taken as authoritative.
+
+14. **A gap closed as "no longer applicable" is a case T2.5's surface should show.** The machine
+    closing a gap because §4's condition stopped holding is correct and it is also the one closure
+    a person might disagree with — the safety layer turning off is a judgment about the artifact,
+    not an observation that a check now passes. The ledger records it (`gap.closed`, reason "no
+    longer applicable") and nothing surfaces it. **T2.5 owns the human-facing view**, where §5's
+    first negotiation move already lives: the place to say "the safety layer turned off on this
+    version — is that right?" is beside the move that argues applicability.
+
+15. **The re-baseline pass has no trigger yet.** §5: "Switching AI provider or editing a rubric
+    triggers a quiet re-baseline pass so numbers never wobble without explanation." Every run stamps
+    provider, model, pack id and pack version, so the stale runs are findable — a re-baseline is a
+    query plus a re-score of what it returns. Nothing runs it. **Phase 4**, with the scheduler that
+    reads `next_scoring_attempt_at`: both are "re-score this set of artifacts, quietly", and
+    building one without the other would be two halves of one sweep.
+
+16. **`scoring_check_result` stores `points`, which is a copy of pack data.** Deliberate — §5
+    versions rubrics like documents and a run has to stay readable against the rubric that produced
+    it, so a lookup would re-price last month's run through this month's rubric. It does mean a
+    pack whose points were edited *without* a version bump would leave a run whose stored points
+    disagree with the pack, and nothing detects that. `validatePack` enforces the zero-sum budget
+    but not that a change came with a version. **Worth a check when packs start syncing from a git
+    repo (§7)**, which is the point where an edit can arrive without a human bumping anything.
 
 ## On the horizon
 

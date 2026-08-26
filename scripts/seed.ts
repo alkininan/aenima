@@ -23,6 +23,7 @@ import { createClient } from "@supabase/supabase-js";
 import { and, eq } from "drizzle-orm";
 
 import { closeSharedDbClient, createDbClient } from "../src/db/client";
+import { GHOST_MODE_PRD } from "./seed-prd";
 import { setWorkspaceCredential } from "../src/db/queries/ai-credential";
 import type { ProviderId } from "../src/lib/ai/types";
 import {
@@ -111,6 +112,31 @@ const ITEMS = [
   },
 ] as const;
 
+/**
+ * The one item whose artifact is a real document rather than a placeholder —
+ * see `seed-prd.ts`, and the planted-defect list in docs/build-log.md.
+ *
+ * It exists because T2.3's scoring run needs something a rubric can actually be
+ * applied to: a placeholder body scores zero against nineteen checks, which
+ * proves the pipeline runs and nothing about whether it reads. `pnpm
+ * score:smoke` points here.
+ *
+ * Topped up rather than listed with the others, for the reason the at-risk item
+ * is: it arrived after the first seeds ran, and `pnpm db:seed && pnpm
+ * score:smoke` — which is what the smoke script tells you to run — would do
+ * nothing on every environment that already exists, this one and the deployed
+ * one included.
+ *
+ * It carries no seeded gaps, deliberately. A run against it starts from an item
+ * with no history, so what appears afterwards is what that run found.
+ */
+const SCORABLE_ITEM = {
+  type: "feature",
+  title: "Ghost mode",
+  flowIntent: "value",
+  opportunityTitle: "People miss what changed while they were away",
+} as const;
+
 /** A second product, so nothing can quietly assume one (§2's isolation unit). */
 const SECOND_PRODUCT_ITEMS = [
   {
@@ -149,8 +175,10 @@ const AT_RISK_ITEM = {
   type: "feature",
   title: "Invite teammates by link",
   flowIntent: "value",
-  checkId: "SF-2",
-  evidence: "Anyone holding the link can join — no bound on who, and no way to revoke one.",
+  checkId: "prd-20",
+  // No quote: this item carries no artifact, so there is nothing to quote from.
+  // §5's format drops the parts that are absent rather than inventing them.
+  evidence: "SF-2: anyone holding the link can join — no bound on who, and no way to revoke one.",
   gapAgeDays: 9,
 } as const;
 
@@ -193,26 +221,40 @@ const ITEM_ACTIVITY = [
 /** The agent that writes the ledger's machine rows. §5 pins the scorer per workspace. */
 const SEED_AGENT = "scorer";
 
-/** §5: one gap in each disposition, so every branch has something to render. */
+/**
+ * §5: one gap in each disposition, so every branch has something to render.
+ *
+ * **`check_id` names a rubric check, never a requirement id.** These four used
+ * to read `MN-2`, `MN-7` and `SF-1` — the ids a PRD gives its own stories —
+ * which named no check in any pack and left the meter with nothing to expand
+ * into (build-log open question 11, closed by T2.3). §7.2 keeps the two id
+ * spaces apart: a gap names a check, a story names a requirement, and a
+ * failure's evidence cites the requirement as the place the gap lives. The
+ * requirement ids therefore moved into the evidence, in §5's own format.
+ *
+ * The tags are the pack's, not chosen here: `prd-19` and `prd-20` are Musts and
+ * `prd-16` is a Must too — the Should on the accepted gap would contradict
+ * `feature-prd`, so it takes the pack's tag.
+ */
 const GAPS = [
   {
-    checkId: "MN-2",
+    checkId: "prd-19",
     tag: "must",
     disposition: "open",
-    evidence: "'nearby' — same venue, or within 100 m? Two readings possible.",
+    evidence: "MN-2: 'nearby' — same venue, or within 100 m? Two readings possible.",
   },
   {
-    checkId: "MN-7",
-    tag: "should",
+    checkId: "prd-16",
+    tag: "must",
     disposition: "accepted",
-    evidence: "No offline behaviour described for the digest list.",
+    evidence: "MN-7: no offline behaviour described for the digest list.",
     resolutionNote: "Accepted for V1 — the list is server-rendered and rarely opened offline.",
   },
   {
-    checkId: "SF-1",
+    checkId: "prd-20",
     tag: "must",
     disposition: "excluded",
-    evidence: "No user-to-user visibility on this surface.",
+    evidence: "SF-1: no user-to-user visibility on this surface.",
     resolutionNote:
       "Excluded: the digest has no interpersonal surface, so the safety layer is off.",
   },
@@ -413,6 +455,74 @@ async function ensureAtRiskItem(db: Db, workspaceId: string): Promise<boolean> {
 }
 
 /**
+ * The scorable item — one real PRD, one version, no gaps.
+ *
+ * Idempotent by title, like `ensureAtRiskItem`, and it looks up both parents the
+ * way that function learned to: **by slug and by title, never by "the first
+ * row"**. Rows inserted in one statement share a `created_at` to the
+ * microsecond, and ordering by it is a tie Postgres breaks however it likes.
+ */
+async function ensureScorableItem(db: Db, workspaceId: string): Promise<boolean> {
+  const present = await db
+    .select({ id: item.id })
+    .from(item)
+    .where(and(eq(item.workspaceId, workspaceId), eq(item.title, SCORABLE_ITEM.title)))
+    .limit(1);
+
+  if (present.length > 0) return false;
+
+  const [product_] = await db
+    .select({ id: product.id })
+    .from(product)
+    .where(and(eq(product.workspaceId, workspaceId), eq(product.slug, PRIMARY_PRODUCT_SLUG)))
+    .limit(1);
+
+  if (!product_) return false;
+
+  const [opportunity_] = await db
+    .select({ id: opportunity.id })
+    .from(opportunity)
+    .where(
+      and(
+        eq(opportunity.workspaceId, workspaceId),
+        eq(opportunity.title, SCORABLE_ITEM.opportunityTitle),
+      ),
+    )
+    .limit(1);
+
+  const itemId = randomUUID();
+  await db.insert(item).values({
+    id: itemId,
+    workspaceId,
+    productId: product_.id,
+    opportunityId: opportunity_?.id ?? null,
+    type: SCORABLE_ITEM.type,
+    // Assigned by `app.assign_item_key()`; overwritten whatever is passed.
+    key: "",
+    title: SCORABLE_ITEM.title,
+    flowIntent: SCORABLE_ITEM.flowIntent,
+  });
+
+  const artifactId = randomUUID();
+  await db.insert(artifact).values({ id: artifactId, workspaceId, itemId, kind: "prd" });
+
+  await db.insert(artifactVersion).values({
+    workspaceId,
+    artifactId,
+    // Assigned by trigger; Drizzle needs the column present.
+    versionNo: 1,
+    content: { body: GHOST_MODE_PRD },
+    contentHash: `${artifactId}-1`,
+    // §2's first-class agent: nobody typed this, and saying a human did would
+    // put a name on a document the repository wrote.
+    authoredByKind: "agent",
+    authoredByAgent: "seed",
+  });
+
+  return true;
+}
+
+/**
  * Development convenience: put a real AI key on the seed workspace.
  *
  * The same shape as `DEV_SEED_EMAIL` above, and for the same reason — **the
@@ -498,6 +608,7 @@ async function main() {
       // it — which would leave every established environment demonstrating two
       // buckets out of three. It inserts itself once and is a no-op after that.
       const added = await ensureAtRiskItem(db, id);
+      const scorable = await ensureScorableItem(db, id);
       // The ledger rows are the seeded Owner's, which is who this workspace's
       // history belongs to — the dev member joins as a reader, not as an author.
       const [owner] = await db
@@ -510,7 +621,14 @@ async function main() {
       const credential = owner ? await ensureWorkspaceCredential(id, owner.userId) : null;
       console.log(
         `seed: "${WORKSPACE_NAME}" already exists (${id}). ` +
-          (added ? `Added "${AT_RISK_ITEM.title}".` : "Nothing to do."),
+          (added || scorable
+            ? `Added ${[
+                ...(added ? [AT_RISK_ITEM.title] : []),
+                ...(scorable ? [SCORABLE_ITEM.title] : []),
+              ]
+                .map((title) => `"${title}"`)
+                .join(" and ")}.`
+            : "Nothing to do."),
       );
       if (ledgerRows > 0) console.log(`seed: wrote ${ledgerRows} item activity rows.`);
       if (joined) console.log(`seed: ${joined} is an Owner of "${WORKSPACE_NAME}".`);
@@ -704,6 +822,7 @@ async function main() {
     ]);
 
     await ensureAtRiskItem(db, workspaceId);
+    await ensureScorableItem(db, workspaceId);
     await ensureItemActivity(db, workspaceId, ownerId);
     const joined = await ensureDevMember(db, auth, workspaceId);
     const credential = await ensureWorkspaceCredential(workspaceId, ownerId);

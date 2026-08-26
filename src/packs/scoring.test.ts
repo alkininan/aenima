@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { featurePrdPack } from "@/packs/feature-prd";
-import { applicableChecks, denominatorFor, scoreRun } from "@/packs/scoring";
+import { applicableChecks, denominatorFor, packConditions, scoreRun } from "@/packs/scoring";
 import type { CheckResult, SkillPack } from "@/packs/types";
 
 const LIST = "list-rendering-surface";
@@ -126,5 +126,51 @@ describe("scoring a run", () => {
     };
     expect(denominatorFor(applicableChecks(gated, [LIST, NETWORK, SAFETY]))).toBe(100);
     expect(denominatorFor(applicableChecks(gated, [LIST, NETWORK, SAFETY, "also-this"]))).toBe(105);
+  });
+});
+
+/**
+ * §4's conditions as a list of questions — what a scoring call asks the model
+ * before any check is judged.
+ */
+describe("packConditions", () => {
+  it("collects both directions: a check's condition and a layer's", () => {
+    const ids = packConditions(featurePrdPack).map((condition) => condition.id);
+
+    // LIST and NETWORK take checks *out* of the base; SAFETY brings a layer's
+    // check *in*. A list that missed either direction would leave a condition
+    // nobody answers and a denominator renormalizing on a default.
+    expect(ids).toEqual([LIST, NETWORK, SAFETY]);
+  });
+
+  it("asks about a shared condition once", () => {
+    const pack: SkillPack = {
+      ...featurePrdPack,
+      checks: [
+        { id: "a", prose: "A", tag: "must", points: 50, appliesWhen: { id: "x", when: "X." } },
+        { id: "b", prose: "B", tag: "must", points: 50, appliesWhen: { id: "x", when: "X." } },
+      ],
+      layers: [],
+    };
+
+    expect(packConditions(pack).map((condition) => condition.id)).toEqual(["x"]);
+  });
+
+  it("carries the pack's own wording, which is what the model is shown", () => {
+    // §4 keeps `when` "in the spec's own words, so that the agent that evaluates
+    // it and the human who reviews the pack read the same sentence".
+    const safety = packConditions(featurePrdPack).find((condition) => condition.id === SAFETY);
+
+    expect(safety?.when).toBe(featurePrdPack.layers[0]!.appliesWhen.when);
+  });
+
+  it("is empty for a pack with no conditions at all", () => {
+    const pack: SkillPack = {
+      ...featurePrdPack,
+      checks: [{ id: "a", prose: "A", tag: "must", points: 100 }],
+      layers: [],
+    };
+
+    expect(packConditions(pack)).toEqual([]);
   });
 });

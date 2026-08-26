@@ -14,7 +14,8 @@ These four are load-bearing. Each is enforced by the database, not by
 convention — a rule that lives only in TypeScript gets broken by the first
 script that talks to Postgres directly.
 
-**1. `artifact_version`, `activity` and `decision` are append-only.**
+**1. `artifact_version`, `activity`, `decision`, `ai_usage`, `scoring_run` and
+`scoring_check_result` are append-only.**
 No UPDATE, no DELETE, ever. New content is a new row with an incrementing
 `version_no`. Three independent layers enforce it, because the first two have a
 hole the third closes:
@@ -159,6 +160,10 @@ assertion, never a null `user_id`.
 | `gap` | A failed check with the evidence it quoted. Mutable — §5's negotiation moves are transitions on it. |
 | `decision` | "Decision, reason, date, who" (§13). Append-only; corrections supersede. |
 | `activity` | The ledger: actor, timestamp, trigger, subject. Append-only. |
+| `workspace_ai_credential` | §12's key, as a pointer into Supabase Vault, plus §5's pinned scorer model. |
+| `ai_usage` | The meter: token counts and a rate-card id per call, never money. Append-only. |
+| `scoring_run` | One run: artifact version, rubric version, protocol version, provider, model, earned out of denominator. Append-only. |
+| `scoring_check_result` | One check's verdict inside a run, with the quote behind a failure. Append-only. |
 
 ### Enums
 
@@ -171,7 +176,10 @@ assertion, never a null `user_id`.
 | `activity_trigger` | user · agent · schedule · webhook · sync | §2 |
 | `flow_intent` | value · quality · risk · debt | §4, the Flow Framework tag |
 | `gap_tag` | must · should | §5, what each check is tagged |
-| `gap_disposition` | open · accepted · excluded | §5, the gap lifecycle |
+| `gap_disposition` | open · accepted · excluded · closed | §5, the gap lifecycle. `closed` is the only value a machine writes |
+| `ai_provider` | anthropic · openai | §12, the certified providers |
+| `ai_tier` | routine · analysis · generation | §12, the three intra-provider tiers |
+| `ai_outcome` | ok · schema_invalid · refused · unavailable · rate_limited · rejected | §12, how a call ended |
 
 `item_type` is a real Postgres enum rather than free text: "one of seven" is a
 constraint the database should be able to state.
@@ -211,6 +219,10 @@ driver underneath.
 | `gap` | member + visible | owner, product | owner, product | **none** |
 | `decision` | member + visible | owner, product | **never** | **never** |
 | `activity` | member + visible | owner, product, developer | **never** | **never** |
+| `workspace_ai_credential` | **owner only**, minus `vault_secret_id` | owner | owner | — |
+| `ai_usage` | **owner only** | **none** — written server-side | **never** | **never** |
+| `scoring_run` | member + visible | **none** — written server-side | **never** | **never** |
+| `scoring_check_result` | member + visible (through its run) | **none** — written server-side | **never** | **never** |
 
 Viewer appears in no write policy anywhere: §14 read-only means read-only.
 
@@ -249,11 +261,55 @@ two parent FKs corrected to `RESTRICT`.
 backfilled, plus `app.assign_item_key()`. Keys come from the database and never
 from the client, exactly as `version_no` does.
 
+`drizzle/0006_activity_subject_index.sql` — an index on
+`(workspace_id, subject_table, subject_id, occurred_at desc)`, so one item's feed
+comes out of an index rather than a workspace-wide scan.
+
+`drizzle/0007_ai_layer.sql` — hand-written: `workspace_ai_credential` and
+`ai_usage`, their RLS, and the column grant that hides `vault_secret_id` from
+the request path. The key itself is in Supabase Vault, not in this database's
+`public` schema.
+
+`drizzle/0008_scoring_run.sql` — hand-written: `scoring_run` and
+`scoring_check_result` (both append-only, both server-side-write-only),
+`artifact.next_scoring_attempt_at` for §5's queue, and `gap_disposition` gaining
+`closed`. The enum is **replaced rather than extended**: Postgres forbids using
+a value added by `ALTER TYPE … ADD VALUE` in the transaction that added it, and
+`drizzle-kit migrate` runs every pending migration inside one transaction — so
+adding the value and then writing a constraint that names it works on a database
+where this migration lands alone and fails on a fresh one.
+
+`drizzle/0009_check_constraints_are_not_null.sql` — two CHECK constraints that
+did not hold. A CHECK rejects a row only when its expression is **FALSE**, and
+`length(btrim(NULL)) > 0` is NULL, which passes. Both
+`scoring_check_result_evidence_shape` and the inherited `gap_resolution_shape`
+gain explicit `is not null` guards.
+
+`drizzle/0010_protocol_version.sql` — `scoring_run.protocol_version`, and the
+cache key gains it. The pack versions the rubric; this versions the protocol
+wrapped around it (`src/lib/scoring/prompt.ts`), which changes verdicts just as
+surely and was covered by nothing. The default is added and then dropped:
+`scoring_run` is append-only, so a backfill UPDATE would be refused by its own
+trigger, while `ADD COLUMN … NOT NULL DEFAULT` fills existing rows without
+firing one.
+
+The column holds `` `${release}+${digest}` `` — `1.1.0+602d20db225ee669`, semver
+build-metadata shape, 22 characters against the constraint's 40. The release is
+what a human reads and groups by (`where protocol_version like '1.1.0%'`); the
+digest is sha-256 over everything in `src/lib/scoring/prompt.ts` that reaches the
+model — `PROTOCOL`, and the output of `renderPack`, `renderCheck` and
+`renderArtifact`. It is computed rather than typed so that editing a renderer
+invalidates the cache whether or not anyone remembered to bump anything. No
+migration: the shape of a text column's contents is the application's business,
+and rows stamped with the old bare semver simply miss the cache and re-score,
+which is what a protocol change is for.
+
 ```
 pnpm db:generate   # diff the schema files into a new migration
 pnpm db:migrate    # apply pending migrations to DATABASE_URL
 pnpm db:baseline   # once per environment: record migrations already applied by hand
-pnpm db:seed       # one workspace, two products, three opportunities, ten items
+pnpm db:seed       # one workspace, two products, three opportunities, eleven items
+pnpm score:smoke   # score the seeded Ghost mode PRD with the workspace's key
 ```
 
 The seed is **idempotent**: it finds the workspace by name and stops, and the

@@ -237,6 +237,24 @@ export const artifact = pgTable(
     workspaceId: uuid("workspace_id").notNull(),
     itemId: uuid("item_id").notNull(),
     kind: artifactKind("kind").notNull(),
+    /**
+     * §5: "Provider outages queue scoring silently; the timestamp does the
+     * honest work." When a scoring run fails on a *retryable* provider failure
+     * this is when to try again, and null the rest of the time.
+     *
+     * It lives here rather than on `scoring_run` because a failed run writes no
+     * row at all — no partial score, no half-reconciled gaps — so there is
+     * nothing to hang it off. The artifact is the thing that gets re-scored, and
+     * §13's "scored 6 h ago — retrying" reads the last run's timestamp and this
+     * field, both without a join.
+     *
+     * A non-retryable failure never sets it: §5 queues outages, and a pinned
+     * model that answered off-schema is a quality signal §15 reads out of the
+     * `ai_usage` row the seam already wrote. **This ticket writes and clears the
+     * field; the scheduler that reads it is Phase 4** (§5's webhook, debounce
+     * and nightly sweep are one piece of machinery and belong together).
+     */
+    nextScoringAttemptAt: timestamp("next_scoring_attempt_at", { withTimezone: true }),
     createdAt: timestamps.createdAt,
   },
   (t) => [
@@ -281,6 +299,9 @@ export const artifactVersion = pgTable(
   },
   (t) => [
     unique("artifact_version_no").on(t.artifactId, t.versionNo),
+    // What a child references. Every foreign key in this schema is
+    // `(workspace_id, id)`, and `scoring_run` is the first table to point here.
+    unique("artifact_version_workspace_id").on(t.workspaceId, t.id),
     foreignKey({
       columns: [t.workspaceId, t.artifactId],
       foreignColumns: [artifact.workspaceId, artifact.id],
@@ -411,6 +432,9 @@ export const gap = pgTable(
     // An open gap carries no stamp; a resolved one carries all three parts of
     // it. The shape is a constraint rather than a convention, the same way the
     // actor shape is on `activity`.
+    // Four arms since T2.3. `closed` is the machine's: a time, no name, no note.
+    // The `is not null` guards are load-bearing — a CHECK whose expression is
+    // NULL passes, so `length(btrim(null)) > 0` forbids nothing (0009).
     check(
       "gap_resolution_shape",
       sql`(${t.disposition} = 'open'
@@ -418,7 +442,10 @@ export const gap = pgTable(
              and ${t.resolutionNote} is null)
        or (${t.disposition} in ('accepted','excluded')
              and ${t.resolvedByUserId} is not null and ${t.resolvedAt} is not null
-             and length(btrim(${t.resolutionNote})) > 0)`,
+             and ${t.resolutionNote} is not null and length(btrim(${t.resolutionNote})) > 0)
+       or (${t.disposition} = 'closed'
+             and ${t.resolvedByUserId} is null and ${t.resolvedAt} is not null
+             and ${t.resolutionNote} is null)`,
     ),
   ],
 );
@@ -617,5 +644,193 @@ export const aiUsage = pgTable(
       and ${t.cacheWriteTokens} >= 0 and ${t.outputTokens} >= 0 and ${t.latencyMs} >= 0`,
     ),
     check("ai_usage_purpose_len", sql`length(btrim(${t.purpose})) between 1 and 60`),
+  ],
+);
+
+/**
+ * product-spec.md §5 — one scoring run: an artifact version, a rubric, and what
+ * the pinned scorer said about it.
+ *
+ * **The fifth append-only ledger**, after `artifact_version`, `activity`,
+ * `decision` and `ai_usage`, enforced the same three ways: no UPDATE or DELETE
+ * policy, an explicit REVOKE, and `app.deny_mutation()` as a trigger that the
+ * service role cannot bypass either. Runs are history — §5's re-baseline "so
+ * numbers never wobble without explanation" is only answerable if the old
+ * numbers are still there to compare against, and a run that could be edited
+ * would make "scored 4 min ago" a claim about nothing.
+ *
+ * **There is no score column.** The run stores `earned` and `denominator`,
+ * which are facts, and the score is `earned / denominator × 100` — arithmetic
+ * over them, and §12's code node law puts arithmetic in code. It is the same
+ * refusal `ai_usage` makes about money for a related reason: a stored quotient
+ * is a second copy of a derived fact, and the two can disagree. `scoreRun()` in
+ * `src/packs/scoring.ts` is the one place that divides.
+ *
+ * **The unique index is the cache.** §5: "Results cache per artifact version;
+ * only checks whose artifact changed re-run." An artifact version is immutable,
+ * so one version scored against one rubric version can only ever have produced
+ * one run, and the database says so rather than the code path remembering to.
+ * Asking twice cannot return two different scores.
+ *
+ * Provider and model are stamped but deliberately **not** in that key: §5 makes
+ * a model or rubric change trigger a deliberate re-baseline pass, and a key
+ * that included the model would instead re-score the whole workspace silently
+ * the moment a pin moved.
+ */
+export const scoringRun = pgTable(
+  "scoring_run",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id").notNull(),
+    /** Denormalized from the artifact so RLS and the item's history read it directly. */
+    itemId: uuid("item_id").notNull(),
+    artifactId: uuid("artifact_id").notNull(),
+    artifactVersionId: uuid("artifact_version_id").notNull(),
+    /** §5: "Every scoring run stamps provider + model + rubric version." */
+    packId: text("pack_id").notNull(),
+    packVersion: text("pack_version").notNull(),
+    /**
+     * The other half of the prompt — `src/lib/scoring/prompt.ts`'s protocol.
+     *
+     * The pack versions the rubric; this versions the instruction wrapped around
+     * it, which changes verdicts just as surely. It is in the cache key for that
+     * reason: a protocol edit has to invalidate a stored run, or one artifact
+     * carries two numbers produced by two different questions.
+     */
+    protocolVersion: text("protocol_version").notNull(),
+    provider: aiProvider("provider").notNull(),
+    /** The pinned model that actually ran, never a tier-map lookup. */
+    model: text("model").notNull(),
+    /** §4's conditions that held, as the model answered them in the scoring pass. */
+    conditionsMet: text("conditions_met").array().notNull(),
+    earned: integer("earned").notNull(),
+    /** §5's renormalized denominator — what the applicable checks were worth. */
+    denominator: integer("denominator").notNull(),
+    scoredAt: timestamp("scored_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("scoring_run_workspace_id").on(t.workspaceId, t.id),
+    // §5's cache, as a constraint rather than a convention.
+    // Every input that decides a verdict is in here: the text scored, the
+    // rubric, and the protocol that asked. Provider and model are deliberately
+    // *not* — §5 makes those a re-baseline someone runs, not a silent re-score.
+    unique("scoring_run_cache_key").on(
+      t.workspaceId,
+      t.artifactVersionId,
+      t.packId,
+      t.packVersion,
+      t.protocolVersion,
+    ),
+    // RESTRICT on every parent, because an append-only table cannot carry a
+    // cascade: a cascade is a DELETE and the trigger refuses it. v1 ships no
+    // delete UI, which is the same trade `artifact_version → artifact` makes.
+    foreignKey({
+      columns: [t.workspaceId],
+      foreignColumns: [workspace.id],
+      name: "scoring_run_workspace_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.workspaceId, t.itemId],
+      foreignColumns: [item.workspaceId, item.id],
+      name: "scoring_run_item_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.workspaceId, t.artifactId],
+      foreignColumns: [artifact.workspaceId, artifact.id],
+      name: "scoring_run_artifact_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.workspaceId, t.artifactVersionId],
+      foreignColumns: [artifactVersion.workspaceId, artifactVersion.id],
+      name: "scoring_run_version_fk",
+    }).onDelete("restrict"),
+    // "What is this item's freshness" — newest run per artifact, §13's clock.
+    index("scoring_run_artifact_idx").on(t.workspaceId, t.artifactId, t.scoredAt.desc()),
+    index("scoring_run_item_idx").on(t.workspaceId, t.itemId, t.scoredAt.desc()),
+    check("scoring_run_earned_nonneg", sql`${t.earned} >= 0`),
+    check("scoring_run_denominator_positive", sql`${t.denominator} > 0`),
+    // A run cannot earn more than it was scored out of. The one arithmetic
+    // invariant the database can state without knowing what a rubric is.
+    check("scoring_run_earned_bounded", sql`${t.earned} <= ${t.denominator}`),
+    check("scoring_run_pack_len", sql`length(btrim(${t.packId})) between 1 and 120`),
+    check("scoring_run_pack_version_len", sql`length(btrim(${t.packVersion})) between 1 and 40`),
+    check(
+      "scoring_run_protocol_version_len",
+      sql`length(btrim(${t.protocolVersion})) between 1 and 40`,
+    ),
+  ],
+);
+
+/**
+ * One check's verdict inside a run — §5: "Checks are binary with evidence. A
+ * check passes or fails, and a failure quotes the exact gap."
+ *
+ * Append-only, like its run, and `RESTRICT` to it for the same reason.
+ *
+ * Only *applicable* checks get a row. §4 has non-applicable checks leave the
+ * denominator, and a row for one would be a verdict about a check that was not
+ * being asked, sitting in the table a meter expands into.
+ *
+ * `tag` and `points` are **copied from the pack as it was at run time**, not
+ * looked up. §5 versions rubrics like documents, so a run has to stay readable
+ * against the rubric that produced it — a lookup would re-price last month's
+ * run through this month's rubric and call it history.
+ *
+ * The three evidence columns are the parts, stored apart:
+ *
+ * - `requirementId` — the PRD's own label for the story the gap lives at
+ *   (`MN-2`), which §7.2 keeps in a different id space from `check_id`.
+ * - `quote` — verbatim from the artifact. Verified to occur in it before the
+ *   run is written; §1 law 3 is "evidence or nothing" and an invented quote is
+ *   worse than no score. Null only for an absence, where there is nothing to
+ *   cite because the thing is missing.
+ * - `note` — the reading. Null exactly when the check passed.
+ *
+ * `gap.evidence` is one text column, so the three are rendered into §5's own
+ * sentence shape at the boundary. Rendering is code; storing the parts is what
+ * lets it be re-rendered when the surface wants them apart.
+ */
+export const scoringCheckResult = pgTable(
+  "scoring_check_result",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id").notNull(),
+    runId: uuid("run_id").notNull(),
+    /** A rubric check id (`prd-19`), never a requirement id. */
+    checkId: text("check_id").notNull(),
+    tag: gapTag("tag").notNull(),
+    points: integer("points").notNull(),
+    passed: boolean("passed").notNull(),
+    requirementId: text("requirement_id"),
+    quote: text("quote"),
+    note: text("note"),
+  },
+  (t) => [
+    unique("scoring_check_result_run_check").on(t.workspaceId, t.runId, t.checkId),
+    foreignKey({
+      columns: [t.workspaceId, t.runId],
+      foreignColumns: [scoringRun.workspaceId, scoringRun.id],
+      name: "scoring_check_result_run_fk",
+    }).onDelete("restrict"),
+    index("scoring_check_result_run_idx").on(t.workspaceId, t.runId),
+    // §15 counts which checks fail across a workspace; this is that read.
+    index("scoring_check_result_check_idx").on(t.workspaceId, t.checkId, t.passed),
+    check("scoring_check_result_points_positive", sql`${t.points} > 0`),
+    check("scoring_check_result_check_len", sql`length(btrim(${t.checkId})) between 1 and 120`),
+    // §5's binary law, as a constraint: a failure carries a reading, and a pass
+    // carries none. Evidence or nothing, in the shape the database can hold.
+    // `is not null` before the length test, and not merely for tidiness: a CHECK
+    // rejects a row only when its expression is FALSE, and `length(btrim(null))
+    // > 0` is NULL. Without the guard this constraint accepts the one row it
+    // exists to forbid — see drizzle/0009.
+    check(
+      "scoring_check_result_evidence_shape",
+      sql`(${t.passed} and ${t.note} is null and ${t.quote} is null and ${t.requirementId} is null)
+       or (not ${t.passed} and ${t.note} is not null and length(btrim(${t.note})) > 0)`,
+    ),
+    check(
+      "scoring_check_result_quote_len",
+      sql`${t.quote} is null or length(btrim(${t.quote})) between 1 and 2000`,
+    ),
   ],
 );

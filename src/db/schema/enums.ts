@@ -64,8 +64,16 @@ export const gapTag = pgEnum("gap_tag", ["must", "should"]);
  * human — §5's three negotiation moves are exactly the act of declaring it —
  * which is the opposite of an item's stage, and `disposition` says so without
  * asking the guard to make an exception.
+ *
+ * **`closed` is the exception, and the only value a machine may write.**
+ * `accepted` and `excluded` are §5's negotiation moves: a named person taking a
+ * debt or ruling a check out, which is what §1 law 7 makes undeniable. `closed`
+ * claims nothing about the debt — it says reality moved, which is what a
+ * re-score observes when a check starts passing or when its condition stops
+ * holding. T2.3 writes it; no human sets it and no re-score touches the other
+ * two. See §5 move 2: "Pass → closed with the evidence linked."
  */
-export const gapDisposition = pgEnum("gap_disposition", ["open", "accepted", "excluded"]);
+export const gapDisposition = pgEnum("gap_disposition", ["open", "accepted", "excluded", "closed"]);
 
 /**
  * product-spec.md §12 — the certified providers. "One provider is active at a

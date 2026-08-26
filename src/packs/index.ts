@@ -12,7 +12,14 @@ export type {
   ScoringRun,
   SkillPack,
 } from "./types";
-export { applicableChecks, conditionSet, denominatorFor, scoreRun } from "./scoring";
+export {
+  applicableChecks,
+  conditionSet,
+  denominatorFor,
+  packConditions,
+  percentageOf,
+  scoreRun,
+} from "./scoring";
 export type { RunScore } from "./scoring";
 export { RUBRIC_TOTAL, allChecks, assertValidPack, validatePack } from "./validate";
 

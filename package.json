@@ -13,6 +13,7 @@
     "db:baseline": "tsx --env-file=.env.local scripts/db-baseline.ts",
     "db:seed": "tsx --conditions=react-server --env-file=.env.local scripts/seed.ts",
     "ai:smoke": "tsx --conditions=react-server --env-file=.env.local scripts/ai-smoke.ts",
+    "score:smoke": "tsx --conditions=react-server --env-file=.env.local scripts/score-smoke.ts",
     "lint": "eslint . && prettier --check .",
     "typecheck": "tsc --noEmit"
   },
