@@ -11,8 +11,9 @@
 **Repo:** github.com/alkininan/aenima
 **Deployed:** yes — **aeni.ma** on Vercel
 
-`docs/design-spec.md` is **v2.15** and `docs/product-spec.md` is **v1.3**, both complete and
-closed, and the code matches.
+`docs/design-spec.md` is **v2.15** and `docs/product-spec.md` is **v1.4**, both complete and
+closed, and the code matches. v1.4 landed just ahead of T2.2: §12's code node law, and the scope
+a critic objection carries (§6).
 
 The form language was settled over two runs against real use of the sign-in flow. v2.3–v2.6:
 48h fields, floating labels bound at every moment, an always-reserved label zone and helper
@@ -113,9 +114,13 @@ T2.1 — the skill-pack format and the Feature PRD rubric as data: §7.2's check
 T2.2 — the AI provider abstraction: one seam every AI call goes through, both providers behind it,
   three tiers per §12, schema-validated output with §12's single escalation, and the usage meter.
   Keys are workspace-held in Supabase Vault with the public row holding only a pointer, a hint and
-  §5's pinned scorer model; migration `0007`. Model IDs, structured-output shapes, caching
-  semantics and prices were read off each provider's live documentation on 2026-08-24 rather than
-  recalled.
+  §5's pinned scorer model; migration `0007` — `cdacb24`. Model IDs, structured-output shapes,
+  caching semantics and prices were read off each provider's live documentation on 2026-08-24
+  rather than recalled. A fresh-context review of the diff against the spec returned seven
+  findings, all closed with the tests that keep them closed — `a2bb53e`. Two were real defects: a
+  failed scoring call metered against the tier map's model rather than the pin, and an
+  `AiRequest.purpose` wide enough to route a scoring call down a tier. Both were invisible while
+  two values coincided.
 
 
 ## Decisions made during the build
@@ -268,7 +273,10 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
   model from `workspace_ai_credential.scorer_model`, and does not call the escalating code path at
   all. There is no function anywhere that accepts a pinned model plus a fallback. A comment saying
   "do not route this for cost" would be a rule someone could follow wrongly; an argument that does
-  not exist cannot be passed.
+  not exist cannot be passed. **The other direction is closed the same way**: `AiRequest.purpose` is
+  `Exclude<Purpose, ScorerPurpose>`, so a tier-routed entry point has no scoring purpose to carry,
+  just as `runScorer` has no tier to route down. It was the whole `Purpose` union until the review
+  — wide enough to run a scoring call on Haiku through `runRoutine` and meter it as a scoring run.
 - **The AI key lives in Supabase Vault, and the public row holds a pointer.** `authenticated` and
   `anon` hold no privilege on the `vault` schema — that is Supabase's own grant, not ours — so a
   signed-in member cannot read a key through PostgREST even if every policy we wrote were wrong.
@@ -277,6 +285,14 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
   additionally survive a database dump; it was not chosen because `SUPABASE_SERVICE_ROLE_KEY` and
   `DATABASE_URL` already live in that same env, so the separation is thin, and it would cost us key
   management, rotation and a crypto path we own.
+- **A secret bound as a query parameter needs its error scrubbed, always.** `postgres@3` hangs
+  `query`, `parameters` and `args` off every rejected query's error, so `err.parameters[0]` is the
+  plaintext key. They are non-enumerable while `debug` is off — invisible to `console.error` and to
+  `JSON.stringify`, which is exactly why this reads as safe — but an error reporter that walks
+  `Object.getOwnPropertyNames` captures non-enumerable own properties and ships them off the box.
+  "Not usually printed" is a weaker promise than "never logged". The two vault statements that bind
+  the key run inside a wrapper that rethrows the message alone, with the key replaced in it in case
+  a driver ever interpolates one.
 - **Spend is arithmetic over stored token counts, never a stored number.** Each `ai_usage` row keeps
   the four token counts the provider reported plus the id of the rate card in force. §12's own code
   node law puts the multiplication in code, and the card id is what keeps history stable: **a price
@@ -325,6 +341,18 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
   `next dev` — every other browser test depends on it being inert. A unit test covers `devOnly()`
   in isolation; only an HTTP status from the build that would ship covers the segment being
   attached to it.
+
+- **A structural ticket does not close until a fresh context has reviewed it.** A new session,
+  holding none of the writing context, reads the diff against the spec and reports findings —
+  it changes nothing. T2.2's returned seven, of which two were real defects: a failed scoring
+  call metered against the tier map's model instead of the pin, and a `purpose` union wide enough
+  to route a scoring call down a tier. **Both were invisible while two values coincided** — the
+  pinned model equalled the tier map's analysis model, so the wrong meter still read right, and
+  no call site had yet carried a scoring purpose into a tier-routed request. The context that
+  wrote the code knows what it meant, so it reads
+  the coincidence as the invariant; a context that knows only the spec reads what is there. Fixes
+  land with tests, and each test is negative-checked: reintroduce the defect, watch the named test
+  fail, revert.
 
 ## Open questions
 
