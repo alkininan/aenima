@@ -57,6 +57,18 @@ export const SCORER_PURPOSES = ["score", "evidence"] as const;
 export type ScorerPurpose = (typeof SCORER_PURPOSES)[number];
 
 /**
+ * Everything else — the purposes that *do* route on a tier.
+ *
+ * The exclusion is the other half of §5's pin, and the half that is easy to
+ * miss. `runScorer` having no tier parameter stops a scoring call from being
+ * routed *down*; this stops one from going in through the tier-routed door in
+ * the first place, where it would run on Haiku and still meter as
+ * `purpose: "score"`. Both doors have to be shut, and only one of them is
+ * guarded by the shape of a function signature.
+ */
+export type TierPurpose = Exclude<Purpose, ScorerPurpose>;
+
+/**
  * One call's request, minus the model — which the router decides and the caller
  * cannot.
  *
@@ -67,7 +79,12 @@ export type ScorerPurpose = (typeof SCORER_PURPOSES)[number];
  * across calls. `input` is this artifact, this fragment, this answer.
  */
 export type AiRequest<T> = {
-  purpose: Purpose;
+  /**
+   * Never a scoring purpose. §5's pinned model is reachable only through
+   * `runScorer`, so `"score"` and `"evidence"` are not expressible here — see
+   * `TierPurpose`.
+   */
+  purpose: TierPurpose;
   /** The stable prefix. Cached where the provider can cache it. */
   context: string;
   /** The part that changes per call. Always last in the request. */

@@ -290,6 +290,17 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
   cache hit would pay more to save less. The rubric prefix will grow — the `feature-prd` pack is
   already 19 checks of prose — so this may resolve itself.
   https://platform.claude.com/docs/en/build-with-claude/prompt-caching
+- **The AI layer holds one direct Postgres connection for the process, not one per call.**
+  `src/db/client.ts` used to say the direct connection was "not for the request path", and T2.2
+  made that untrue: reading a key out of `vault.decrypted_secrets` and writing `ai_usage` are both
+  things no signed-in role is permitted to do, so neither can go through PostgREST. Opening a
+  client per call meant **two TLS handshakes against the pooler per model call, plus two
+  teardowns**, none of which anyone is waiting on the database for. `sharedDbClient()` keeps
+  `max: 1` — so concurrent callers queue exactly as before and the only change is that the
+  connection survives — with an `idle_timeout` so an idle instance releases its pooler slot.
+  Raising the pool is the next lever if metering ever becomes the wait, and it is deliberately not
+  being guessed at now. Scripts must call `closeSharedDbClient()`, because a connection that
+  outlives a request also outlives a script's work and keeps Node's event loop alive.
 - **A provider outage is not this layer's problem to solve, only to name.** §5 has a failed run
   queue silently while "the timestamp does the honest work", so `AiFailure` carries `retryable` and
   stops there. **The queue's shape is a `next_attempt_at` on the scoring-run row T2.3 owns** — the

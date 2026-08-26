@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createDbClient } from "@/db/client";
+import { sharedDbClient } from "@/db/client";
 import { spendOf, cardById } from "@/lib/ai/pricing";
 import type { CallUsage, Outcome, ProviderId, Tier } from "@/lib/ai/types";
 
@@ -46,38 +46,34 @@ export type UsageEntry = {
  * would under-report it.
  */
 export async function recordUsage(entry: UsageEntry): Promise<void> {
-  const { sql } = createDbClient();
+  const { sql } = sharedDbClient();
 
-  try {
-    await sql`
-      insert into ai_usage (
-        workspace_id, product_id, actor_kind, actor_user_id, actor_agent,
-        provider, model, tier, purpose,
-        uncached_input_tokens, cache_read_tokens, cache_write_tokens, output_tokens,
-        escalated_from, outcome, latency_ms, rate_card
-      ) values (
-        ${entry.workspaceId},
-        ${entry.productId},
-        ${entry.actor.kind}::actor_kind,
-        ${entry.actor.kind === "human" ? entry.actor.userId : null},
-        ${entry.actor.kind === "agent" ? entry.actor.name : null},
-        ${entry.provider}::ai_provider,
-        ${entry.model},
-        ${entry.tier}::ai_tier,
-        ${entry.purpose},
-        ${entry.usage.uncachedInputTokens},
-        ${entry.usage.cacheReadTokens},
-        ${entry.usage.cacheWriteTokens},
-        ${entry.usage.outputTokens},
-        ${entry.escalatedFrom}::ai_tier,
-        ${entry.outcome}::ai_outcome,
-        ${entry.latencyMs},
-        ${entry.rateCard}
-      )
-    `;
-  } finally {
-    await sql.end();
-  }
+  await sql`
+    insert into ai_usage (
+      workspace_id, product_id, actor_kind, actor_user_id, actor_agent,
+      provider, model, tier, purpose,
+      uncached_input_tokens, cache_read_tokens, cache_write_tokens, output_tokens,
+      escalated_from, outcome, latency_ms, rate_card
+    ) values (
+      ${entry.workspaceId},
+      ${entry.productId},
+      ${entry.actor.kind}::actor_kind,
+      ${entry.actor.kind === "human" ? entry.actor.userId : null},
+      ${entry.actor.kind === "agent" ? entry.actor.name : null},
+      ${entry.provider}::ai_provider,
+      ${entry.model},
+      ${entry.tier}::ai_tier,
+      ${entry.purpose},
+      ${entry.usage.uncachedInputTokens},
+      ${entry.usage.cacheReadTokens},
+      ${entry.usage.cacheWriteTokens},
+      ${entry.usage.outputTokens},
+      ${entry.escalatedFrom}::ai_tier,
+      ${entry.outcome}::ai_outcome,
+      ${entry.latencyMs},
+      ${entry.rateCard}
+    )
+  `;
 }
 
 /** One row as the meter reads it back. */
@@ -104,45 +100,41 @@ export type UsageRow = {
  * LIMIT that silently drops the oldest spend in the period.
  */
 export async function listUsage(workspaceId: string, since: Date): Promise<UsageRow[]> {
-  const { sql } = createDbClient();
+  const { sql } = sharedDbClient();
 
-  try {
-    const rows = await sql<
-      Array<{
-        tier: Tier;
-        model: string;
-        rate_card: string;
-        actor_user_id: string | null;
-        escalated_from: Tier | null;
-        uncached_input_tokens: number;
-        cache_read_tokens: number;
-        cache_write_tokens: number;
-        output_tokens: number;
-      }>
-    >`
-      select tier, model, rate_card, actor_user_id, escalated_from,
-             uncached_input_tokens, cache_read_tokens, cache_write_tokens, output_tokens
-        from ai_usage
-       where workspace_id = ${workspaceId} and occurred_at >= ${since}
-       order by occurred_at desc
-    `;
+  const rows = await sql<
+    Array<{
+      tier: Tier;
+      model: string;
+      rate_card: string;
+      actor_user_id: string | null;
+      escalated_from: Tier | null;
+      uncached_input_tokens: number;
+      cache_read_tokens: number;
+      cache_write_tokens: number;
+      output_tokens: number;
+    }>
+  >`
+    select tier, model, rate_card, actor_user_id, escalated_from,
+           uncached_input_tokens, cache_read_tokens, cache_write_tokens, output_tokens
+      from ai_usage
+     where workspace_id = ${workspaceId} and occurred_at >= ${since}
+     order by occurred_at desc
+  `;
 
-    return rows.map((row) => ({
-      tier: row.tier,
-      model: row.model,
-      rateCard: row.rate_card,
-      actorUserId: row.actor_user_id,
-      escalatedFrom: row.escalated_from,
-      usage: {
-        uncachedInputTokens: row.uncached_input_tokens,
-        cacheReadTokens: row.cache_read_tokens,
-        cacheWriteTokens: row.cache_write_tokens,
-        outputTokens: row.output_tokens,
-      },
-    }));
-  } finally {
-    await sql.end();
-  }
+  return rows.map((row) => ({
+    tier: row.tier,
+    model: row.model,
+    rateCard: row.rate_card,
+    actorUserId: row.actor_user_id,
+    escalatedFrom: row.escalated_from,
+    usage: {
+      uncachedInputTokens: row.uncached_input_tokens,
+      cacheReadTokens: row.cache_read_tokens,
+      cacheWriteTokens: row.cache_write_tokens,
+      outputTokens: row.output_tokens,
+    },
+  }));
 }
 
 /** One row's spend, at the card it was billed at rather than today's. */

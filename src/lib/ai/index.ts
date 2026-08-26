@@ -4,11 +4,11 @@ import { readApiKey } from "@/db/queries/ai-credential";
 import { recordUsage, type UsageActor } from "@/db/queries/ai-usage";
 
 import { createAnthropicProvider } from "./anthropic";
-import { callAtTier, callPinned } from "./call";
+import { callAtTier, callPinned, type CallOutcome } from "./call";
 import { createOpenAiProvider } from "./openai";
 import { currentCard } from "./pricing";
 import type { AiRequest, AiResult, Provider, ProviderId, ScorerRequest } from "./types";
-import { NO_USAGE, outcomeOf } from "./types";
+import { outcomeOf } from "./types";
 
 /**
  * The seam — product-spec.md §12. Every AI call in the product comes through
@@ -35,8 +35,10 @@ export type {
   AiResult,
   CallUsage,
   Purpose,
+  ScorerPurpose,
   ScorerRequest,
   Tier,
+  TierPurpose,
 } from "./types";
 export { TIERS } from "./types";
 export { ANTHROPIC_MODELS, OPENAI_MODELS, modelFor, initialScorerModel } from "./router";
@@ -77,10 +79,7 @@ const noCredential = <T>(): AiResult<T> => ({
  */
 async function meter<T>(
   context: CallContext,
-  run: (
-    provider: Provider,
-    credential: { scorerModel: string },
-  ) => Promise<AiResult<T> & { usage: import("./types").CallUsage; tier: import("./types").Tier }>,
+  run: (provider: Provider, credential: { scorerModel: string }) => Promise<CallOutcome<T>>,
   purpose: string,
 ): Promise<AiResult<T>> {
   const credential = await readApiKey(context.workspaceId);
@@ -91,20 +90,24 @@ async function meter<T>(
   const result = await run(provider, credential);
   const latencyMs = Date.now() - startedAt;
 
-  const usage = "usage" in result ? result.usage : NO_USAGE;
-  const model = result.ok ? result.model : provider.modelFor(result.tier);
-
   try {
     await recordUsage({
       workspaceId: context.workspaceId,
       productId: context.productId,
       actor: context.actor,
       provider: credential.provider,
-      model,
+      // The model that ran, taken from the call itself. **Never a tier-map
+      // lookup**: `runScorer` uses the workspace's pinned model, which is a
+      // stored column precisely so it can differ from whatever the map points
+      // at today, and a lookup here would misname and misprice every failed
+      // scoring call the moment those two diverge.
+      model: result.model,
       tier: result.tier,
       purpose,
-      usage,
-      escalatedFrom: result.ok ? result.escalatedFrom : null,
+      usage: result.usage,
+      // Carried through failures too — see the escalation branch in `call.ts`
+      // for why §15's early-warning light depends on it.
+      escalatedFrom: result.escalatedFrom,
       outcome: outcomeOf(result),
       latencyMs,
       rateCard: currentCard(credential.provider).id,

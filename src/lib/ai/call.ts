@@ -4,9 +4,9 @@ import { ESCALATES_TO, canEscalate } from "./router";
 import type {
   AiFailure,
   AiRequest,
-  AiResult,
   CallUsage,
   Provider,
+  ProviderId,
   ScorerRequest,
   Tier,
 } from "./types";
@@ -77,6 +77,22 @@ export function jsonSchemaOf(schema: z.ZodType<unknown>): Record<string, unknown
 type Attempt<T> =
   { ok: true; value: T; usage: CallUsage } | { ok: false; failure: AiFailure; usage: CallUsage };
 
+/**
+ * What a call reports back, whether or not it produced a value.
+ *
+ * **The provenance fields are on both arms, deliberately.** A failure has a
+ * model, a tier and an escalation history exactly as a success does — tokens
+ * were spent on a specific model, and the meter has to say which one. An
+ * earlier shape carried them only on success, which left the caller
+ * reconstructing the model from a tier-map lookup: correct only while the
+ * pinned model happens to equal the map's, and silently wrong the day the map
+ * moves.
+ */
+export type CallOutcome<T> = { usage: CallUsage; tier: Tier; model: string } & (
+  | { ok: true; value: T; provider: ProviderId; escalatedFrom: Tier | null }
+  | { ok: false; failure: AiFailure; provider: ProviderId; escalatedFrom: Tier | null }
+);
+
 async function attempt<T>(
   provider: Provider,
   model: string,
@@ -122,7 +138,7 @@ export async function callAtTier<T>(
   provider: Provider,
   tier: Tier,
   request: AiRequest<T>,
-): Promise<AiResult<T> & { usage: CallUsage; tier: Tier }> {
+): Promise<CallOutcome<T>> {
   const jsonSchema = jsonSchemaOf(request.schema);
   const model = provider.modelFor(tier);
 
@@ -140,9 +156,18 @@ export async function callAtTier<T>(
   }
 
   // Everything except a schema failure stops here — including a schema failure
-  // on a tier that has nowhere to escalate to.
+  // on a tier that has nowhere to escalate to. The model reported is the one
+  // that ran, not the one a tier lookup would name later.
   if (first.failure.kind !== "schema-invalid" || !canEscalate(tier)) {
-    return { ok: false, failure: first.failure, usage: first.usage, tier };
+    return {
+      ok: false,
+      failure: first.failure,
+      provider: provider.id,
+      model,
+      tier,
+      usage: first.usage,
+      escalatedFrom: null,
+    };
   }
 
   const escalatedTier: Tier = ESCALATES_TO;
@@ -162,9 +187,28 @@ export async function callAtTier<T>(
     };
   }
 
-  // Two attempts, and that is the end of it. The failure returned is the second
-  // one, because it is the more recent account of what went wrong.
-  return { ok: false, failure: second.failure, usage, tier: escalatedTier };
+  /**
+   * Two attempts, and that is the end of it. The failure returned is the second
+   * one, because it is the more recent account of what went wrong.
+   *
+   * **`escalatedFrom` survives the failure**, and that is the whole point of
+   * this branch. §15 reads the escalation rate as "the quality early-warning
+   * light": a routine call the cheap model could not answer, and the mid model
+   * could not answer either, is the strongest evidence there is that the
+   * routine tier has lost its grip on the task. Dropping the field here would
+   * file the row under plain analysis work and erase it from both halves of the
+   * rate — so the light would dim precisely when quality is worst, which is the
+   * one failure mode a warning light must not have.
+   */
+  return {
+    ok: false,
+    failure: second.failure,
+    provider: provider.id,
+    model: escalatedModel,
+    tier: escalatedTier,
+    usage,
+    escalatedFrom: tier,
+  };
 }
 
 /**
@@ -183,7 +227,7 @@ export async function callPinned<T>(
   provider: Provider,
   pinnedModel: string,
   request: ScorerRequest<T>,
-): Promise<AiResult<T> & { usage: CallUsage; tier: Tier }> {
+): Promise<CallOutcome<T>> {
   const jsonSchema = jsonSchemaOf(request.schema);
   const only = await attempt(provider, pinnedModel, request, jsonSchema);
 
@@ -201,5 +245,16 @@ export async function callPinned<T>(
     };
   }
 
-  return { ok: false, failure: only.failure, usage: only.usage, tier: "analysis" };
+  // The pinned model, on the failure arm too. §5 stamps every scoring run with
+  // the model that produced it, and a failed run spent tokens on this model —
+  // naming any other would misprice the row and misattribute the attempt.
+  return {
+    ok: false,
+    failure: only.failure,
+    provider: provider.id,
+    model: pinnedModel,
+    tier: "analysis",
+    usage: only.usage,
+    escalatedFrom: null,
+  };
 }

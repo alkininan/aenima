@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createDbClient } from "@/db/client";
+import { sharedDbClient } from "@/db/client";
 import { createClient } from "@/lib/supabase/server";
 import type { ProviderId } from "@/lib/ai/types";
 import { initialScorerModel } from "@/lib/ai/router";
@@ -101,64 +101,92 @@ export async function setWorkspaceCredential(input: {
   apiKey: string;
   setByUserId: string | null;
 }): Promise<CredentialSummary> {
-  const { sql } = createDbClient();
+  const { sql } = sharedDbClient();
 
-  try {
-    const existing = await sql<
-      Array<{ vault_secret_id: string; provider: ProviderId; scorer_model: string }>
-    >`
-      select vault_secret_id, provider, scorer_model
-        from workspace_ai_credential
-       where workspace_id = ${input.workspaceId}
-    `;
-    const previous = existing.at(0);
+  const existing = await sql<
+    Array<{ vault_secret_id: string; provider: ProviderId; scorer_model: string }>
+  >`
+    select vault_secret_id, provider, scorer_model
+      from workspace_ai_credential
+     where workspace_id = ${input.workspaceId}
+  `;
+  const previous = existing.at(0);
 
-    const secretName = `ai_key:${input.workspaceId}`;
-    let secretId: string;
+  const secretName = `ai_key:${input.workspaceId}`;
 
-    if (previous) {
-      await sql`select vault.update_secret(${previous.vault_secret_id}::uuid, ${input.apiKey}, ${secretName}, null)`;
-      secretId = previous.vault_secret_id;
-    } else {
-      const created = await sql<Array<{ id: string }>>`
-        select vault.create_secret(${input.apiKey}, ${secretName}, ${"aenima workspace AI key"}) as id
-      `;
-      const id = created.at(0)?.id;
-      if (!id) throw new Error("vault.create_secret returned no id");
-      secretId = id;
+  /**
+   * The two statements that bind the plaintext key, wrapped so its error cannot
+   * carry it.
+   *
+   * `postgres@3` defines `query`, `parameters` and `args` on every rejected
+   * query's error (`src/connection.js`). They are non-enumerable while `debug`
+   * is off, so `console.error` and `JSON.stringify` do not print them — but
+   * `err.parameters[0]` is the key, and error reporters that walk
+   * `Object.getOwnPropertyNames` capture non-enumerable own properties. The
+   * ticket's rule is that a key is never logged, and "not usually printed" is a
+   * weaker promise than that.
+   *
+   * Only the message survives, and only after the key is stripped from it in
+   * case a driver ever interpolates one.
+   */
+  const scrubbed = async <T>(what: string, run: () => Promise<T>): Promise<T> => {
+    try {
+      return await run();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`${what} failed: ${message.replaceAll(input.apiKey, "[redacted]")}`);
     }
+  };
 
-    // The pin moves only when the provider does.
-    const scorerModel =
-      previous && previous.provider === input.provider
-        ? previous.scorer_model
-        : initialScorerModel(input.provider);
+  let secretId: string;
 
-    const hint = hintOf(input.apiKey);
-
-    await sql`
-      insert into workspace_ai_credential
-        (workspace_id, provider, vault_secret_id, key_hint, scorer_model, created_by_user_id)
-      values
-        (${input.workspaceId}, ${input.provider}::ai_provider, ${secretId}::uuid, ${hint},
-         ${scorerModel}, ${input.setByUserId})
-      on conflict (workspace_id) do update set
-        provider = excluded.provider,
-        vault_secret_id = excluded.vault_secret_id,
-        key_hint = excluded.key_hint,
-        scorer_model = excluded.scorer_model
-    `;
-
-    return {
-      provider: input.provider,
-      keyHint: hint,
-      scorerModel,
-      setByUserId: input.setByUserId,
-      setAt: new Date().toISOString(),
-    };
-  } finally {
-    await sql.end();
+  if (previous) {
+    await scrubbed(
+      "vault.update_secret",
+      () =>
+        sql`select vault.update_secret(${previous.vault_secret_id}::uuid, ${input.apiKey}, ${secretName}, null)`,
+    );
+    secretId = previous.vault_secret_id;
+  } else {
+    const created = await scrubbed(
+      "vault.create_secret",
+      () => sql<Array<{ id: string }>>`
+        select vault.create_secret(${input.apiKey}, ${secretName}, ${"aenima workspace AI key"}) as id
+      `,
+    );
+    const id = created.at(0)?.id;
+    if (!id) throw new Error("vault.create_secret returned no id");
+    secretId = id;
   }
+
+  // The pin moves only when the provider does.
+  const scorerModel =
+    previous && previous.provider === input.provider
+      ? previous.scorer_model
+      : initialScorerModel(input.provider);
+
+  const hint = hintOf(input.apiKey);
+
+  await sql`
+    insert into workspace_ai_credential
+      (workspace_id, provider, vault_secret_id, key_hint, scorer_model, created_by_user_id)
+    values
+      (${input.workspaceId}, ${input.provider}::ai_provider, ${secretId}::uuid, ${hint},
+       ${scorerModel}, ${input.setByUserId})
+    on conflict (workspace_id) do update set
+      provider = excluded.provider,
+      vault_secret_id = excluded.vault_secret_id,
+      key_hint = excluded.key_hint,
+      scorer_model = excluded.scorer_model
+  `;
+
+  return {
+    provider: input.provider,
+    keyHint: hint,
+    scorerModel,
+    setByUserId: input.setByUserId,
+    setAt: new Date().toISOString(),
+  };
 }
 
 /** What an adapter needs, and the only shape that ever carries a key. */
@@ -178,21 +206,17 @@ export type ProviderCredential = {
  * Never cached, never memoized, never returned anywhere but into an adapter.
  */
 export async function readApiKey(workspaceId: string): Promise<ProviderCredential | null> {
-  const { sql } = createDbClient();
+  const { sql } = sharedDbClient();
 
-  try {
-    const rows = await sql<Array<{ provider: ProviderId; scorer_model: string; secret: string }>>`
-      select c.provider, c.scorer_model, s.decrypted_secret as secret
-        from workspace_ai_credential c
-        join vault.decrypted_secrets s on s.id = c.vault_secret_id
-       where c.workspace_id = ${workspaceId}
-    `;
+  const rows = await sql<Array<{ provider: ProviderId; scorer_model: string; secret: string }>>`
+    select c.provider, c.scorer_model, s.decrypted_secret as secret
+      from workspace_ai_credential c
+      join vault.decrypted_secrets s on s.id = c.vault_secret_id
+     where c.workspace_id = ${workspaceId}
+  `;
 
-    const row = rows.at(0);
-    if (!row) return null;
+  const row = rows.at(0);
+  if (!row) return null;
 
-    return { provider: row.provider, apiKey: row.secret, scorerModel: row.scorer_model };
-  } finally {
-    await sql.end();
-  }
+  return { provider: row.provider, apiKey: row.secret, scorerModel: row.scorer_model };
 }

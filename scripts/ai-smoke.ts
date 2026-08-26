@@ -24,7 +24,7 @@
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
-import { createDbClient } from "../src/db/client";
+import { closeSharedDbClient, createDbClient } from "../src/db/client";
 import { membership, workspace } from "../src/db/schema";
 import { readApiKey } from "../src/db/queries/ai-credential";
 import { createAnthropicProvider } from "../src/lib/ai/anthropic";
@@ -166,6 +166,10 @@ async function main() {
 
   console.log("");
   if ((await smokeSeam()) === false) failed = true;
+
+  // The AI layer's connection outlives a request by design; a script has to
+  // say when it is done or hang on an open handle.
+  await closeSharedDbClient();
 
   console.log("");
   process.exit(failed ? 1 : 0);

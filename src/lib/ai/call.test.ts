@@ -3,7 +3,14 @@ import { z } from "zod";
 
 import { callAtTier, callPinned, jsonSchemaOf, validate } from "@/lib/ai/call";
 import { ANTHROPIC_MODELS } from "@/lib/ai/router";
-import type { CallUsage, Provider, ProviderResponse, ResolvedRequest } from "@/lib/ai/types";
+import type {
+  AiRequest,
+  CallUsage,
+  Provider,
+  ProviderResponse,
+  ResolvedRequest,
+  TierPurpose,
+} from "@/lib/ai/types";
 
 /**
  * The seam, against a fake transport rather than the network.
@@ -208,6 +215,53 @@ describe("the pinned scorer", () => {
     // makes "never moved for cost" structural rather than a rule in a comment.
     const withTier: Parameters<typeof callPinned>[2] = { ...scoring, tier: "routine" };
     expect(withTier).toBeDefined();
+  });
+});
+
+/**
+ * The other half of §5's pin, and the half that was missing.
+ *
+ * `runScorer` taking no tier stops a scoring call from being routed *down*.
+ * Nothing stopped one from going in through the tier-routed door — `purpose`
+ * was the whole `Purpose` union, so `runRoutine(ctx, { purpose: "score", … })`
+ * compiled, ran on the cheap model, and metered as a scoring run against a
+ * model the workspace never pinned.
+ *
+ * These are compile-time assertions: `pnpm typecheck` fails if the exclusion
+ * widens, because an unused `@ts-expect-error` is itself an error. Vitest does
+ * not typecheck, so the runtime body here is a formality — the gate is `tsc`.
+ */
+describe("what a tier-routed request may be for", () => {
+  it("refuses a scoring purpose at compile time", () => {
+    const base = { context: "c", input: "i", schema: Answer, maxTokens: 16 };
+
+    // @ts-expect-error — "score" belongs to the pinned scorer, not to a tier.
+    const scored: AiRequest<{ verdict: string }> = { ...base, purpose: "score" };
+    // @ts-expect-error — and so does "evidence".
+    const evidenced: AiRequest<{ verdict: string }> = { ...base, purpose: "evidence" };
+
+    expect([scored, evidenced]).toHaveLength(2);
+  });
+
+  it("still accepts every purpose that does route on a tier", () => {
+    const base = { context: "c", input: "i", schema: Answer, maxTokens: 16 };
+    const purposes: TierPurpose[] = [
+      "classify",
+      "translate",
+      "applicability",
+      "draft",
+      "question",
+      "patch",
+    ];
+
+    // No @ts-expect-error here on purpose: if the exclusion ever grew teeth it
+    // should not have, this line is what would start failing.
+    const requests = purposes.map((purpose): AiRequest<{ verdict: string }> => ({
+      ...base,
+      purpose,
+    }));
+
+    expect(requests).toHaveLength(6);
   });
 });
 

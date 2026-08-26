@@ -6,6 +6,9 @@ import { describe, expect, it, vi } from "vitest";
 // `src/db/queries/item.test.ts` does.
 vi.mock("server-only", () => ({}));
 
+import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
+
 import * as anthropic from "@/lib/ai/anthropic";
 import * as openai from "@/lib/ai/openai";
 import { ANTHROPIC_MODELS, OPENAI_MODELS } from "@/lib/ai/router";
@@ -153,8 +156,75 @@ describe("error classification", () => {
     }
   });
 
-  it("says retryable for outages and rate limits, and not for the rest", () => {
-    expect(anthropic.classifyError(new Error("boom")).retryable).toBe(true);
+  /**
+   * A 429, on both providers, with the provider's own `retry-after`.
+   *
+   * `retryAfterMs` is the number §5's queue will eventually pace itself by, so
+   * seconds arriving as milliseconds — or a missing header arriving as `NaN`,
+   * or as zero — is a scheduler that retries immediately, forever, into a rate
+   * limit.
+   */
+  it("reads a rate limit and its retry-after, on both providers", () => {
+    for (const { classify, Ctor } of [
+      { classify: anthropic.classifyError, Ctor: Anthropic.APIError },
+      { classify: openai.classifyError, Ctor: OpenAI.APIError },
+    ]) {
+      const error = new Ctor(429, undefined, "slow down", new Headers({ "retry-after": "30" }));
+      const failure = classify(error);
+
+      expect(failure.kind).toBe("rate-limited");
+      expect(failure.retryable).toBe(true);
+      expect(failure).toMatchObject({ retryAfterMs: 30_000 });
+    }
+  });
+
+  it("reports a missing retry-after as null, never as zero or NaN", () => {
+    const error = new Anthropic.APIError(429, undefined, "slow down", new Headers());
+    expect(anthropic.classifyError(error)).toMatchObject({ retryAfterMs: null });
+  });
+
+  it("treats a 5xx as an outage on both providers", () => {
+    for (const { classify, Ctor } of [
+      { classify: anthropic.classifyError, Ctor: Anthropic.APIError },
+      { classify: openai.classifyError, Ctor: OpenAI.APIError },
+    ]) {
+      const failure = classify(new Ctor(503, undefined, "upstream", new Headers()));
+      expect(failure.kind).toBe("unavailable");
+      expect(failure.retryable).toBe(true);
+    }
+  });
+
+  /**
+   * The half the original test named and never checked.
+   *
+   * A 4xx marked retryable is a caller that queues a request with a bad key and
+   * re-sends it forever — §5's queue reads nothing but this flag.
+   */
+  it("says not retryable for a 4xx, on both providers", () => {
+    for (const { classify, Ctor } of [
+      { classify: anthropic.classifyError, Ctor: Anthropic.APIError },
+      { classify: openai.classifyError, Ctor: OpenAI.APIError },
+    ]) {
+      for (const status of [400, 401, 403, 404]) {
+        const failure = classify(new Ctor(status, undefined, "no", new Headers()));
+        expect(failure.kind, `status ${status}`).toBe("rejected");
+        expect(failure.retryable, `status ${status}`).toBe(false);
+      }
+    }
+  });
+
+  it("never puts a key in a failure, even when the provider quotes one back", () => {
+    const key = "sk-ant-do-not-log-me-0000";
+    for (const { classify, Ctor } of [
+      { classify: anthropic.classifyError, Ctor: Anthropic.APIError },
+      { classify: openai.classifyError, Ctor: OpenAI.APIError },
+    ]) {
+      // The adapter builds its client from the key; nothing it constructs may
+      // carry one. A provider echoing the request is its own business — this
+      // asserts we add nothing.
+      const failure = classify(new Ctor(401, undefined, "invalid x-api-key", new Headers()));
+      expect(JSON.stringify(failure)).not.toContain(key);
+    }
   });
 });
 

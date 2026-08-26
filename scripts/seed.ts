@@ -22,7 +22,7 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { and, eq } from "drizzle-orm";
 
-import { createDbClient } from "../src/db/client";
+import { closeSharedDbClient, createDbClient } from "../src/db/client";
 import { setWorkspaceCredential } from "../src/db/queries/ai-credential";
 import type { ProviderId } from "../src/lib/ai/types";
 import {
@@ -730,6 +730,9 @@ async function main() {
     if (credential) console.log(`seed: AI key set — ${credential}.`);
   } finally {
     await sql.end();
+    // `setWorkspaceCredential` runs on the shared connection, which outlives a
+    // request on purpose — and would keep this process alive after its work.
+    await closeSharedDbClient();
   }
 }
 
