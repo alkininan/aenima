@@ -19,8 +19,10 @@ Close out the ticket just completed. Update docs/build-log.md:
 5. Accounts and keys → tick anything newly set up.
 
 If a decision here is a rule that should hold in every session, also add
-it to CLAUDE.md — but keep that file under ~60 lines. If adding would
-push it over, tell me what you would cut instead of cutting it yourself.
+it to CLAUDE.md — but keep that file under ~150 lines, which is the
+budget product spec §9 sets for a constitution and the one CLAUDE.md's
+own footer states. If adding would push it over, tell me what you would
+cut instead of cutting it yourself.
 
 Keep the log terse: state, decisions, open questions. Not a diary.
 Commit as "build log: <ticket ID>". Do not push.

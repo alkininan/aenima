@@ -55,6 +55,9 @@ Only what differs from framework defaults:
 
 ## Done means
 `pnpm lint && pnpm typecheck && pnpm test` all pass. New logic has tests.
+A structural ticket also needs a fresh-context review — a session that did not write the code
+reads the diff against the spec. A self-review does not count: T2.3's passed a diff a cold
+session then found four real defects in.
 Report back as: ACs implemented, tests written, open questions.
 
 ## References (read on demand)
