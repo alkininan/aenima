@@ -1,3 +1,9 @@
+---
+description: Apply a spec patch to docs/design-spec.md or docs/product-spec.md, bumping the version and recording the change in the header comment.
+argument-hint: [patch content]
+disable-model-invocation: true
+---
+
 Apply a spec patch to docs/design-spec.md or docs/product-spec.md.
 
 The patch content follows this command. Apply it exactly — the wording

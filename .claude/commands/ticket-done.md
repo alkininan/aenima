@@ -1,3 +1,9 @@
+---
+description: Close out the ticket just completed by updating docs/build-log.md and committing the result.
+argument-hint: [ticket-id]
+disable-model-invocation: true
+---
+
 Close out the ticket just completed. Update docs/build-log.md:
 
 1. Current state → set "Next ticket" to the next ticket in the build
