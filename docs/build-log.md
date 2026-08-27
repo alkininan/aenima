@@ -358,6 +358,17 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
 - **Verify a fix by breaking it.** Every law added in v2.10–v2.12 was checked by reverting the
   implementation and confirming the new assertion — and only that assertion — went red. A CSS
   rule that matches nothing and a mapping that never fires both pass a green suite otherwise.
+- **A test that asserts on the position of a row must order by something the database guarantees.**
+  Inside one transaction `now()` is constant, so `occurred_at` ties and any assertion on "the last
+  row" is a coin flip. Negative-checking proves a test *can* fail; it does not prove the test fails
+  only when it should. This one passed on roughly two runs in three and closed T2.3 as green — the
+  third distinct way a green suite has lied here, after tests that measured layout boxes instead of
+  painted glyphs and a substring test that passed with the leak it named already in place. The
+  discriminator is `writeRun`'s returned run id, matched against the `score.recorded` row's
+  `subject_id`: the run is that row's subject, so the id is a column the server must honour rather
+  than a metadata key. Writing the fix found the second half of the same defect — the first
+  assertion in the test read `rows[0]`, which sorted to a `gap.*` row and passed because a gap row
+  has no `clipped` key at all, so a null it was never testing satisfied it.
 
 - **`/app` is workspace-wide; the product switcher filters it in place.** §13's buckets are a
   priority queue — "anything awaiting a human" — so a list that stopped at a product boundary would

@@ -193,15 +193,33 @@ const ledger = (tx: Tx, workspaceId: string) =>
       check_id: string | null;
       reason: string | null;
       clipped: string | null;
+      subject_id: string;
     }[]
   >`
-    select action, subject_table, metadata,
+    select action, subject_table, subject_id, metadata,
            jsonb_typeof(metadata) as shape,
            metadata->>'checkId' as check_id,
            metadata->>'reason' as reason,
            metadata->>'clipped' as clipped
       from activity
      where workspace_id = ${workspaceId} order by occurred_at, action`;
+
+/**
+ * The `score.recorded` row for one run, selected by that run's own id.
+ *
+ * Never by position. `occurred_at` defaults to `now()`, which is
+ * transaction-*start* time and therefore constant, so every row a test writes
+ * inside one transaction carries the same timestamp, `order by occurred_at`
+ * ties, and `.at(-1)` picks whichever tied row the server happened to return
+ * last. `writeRun` returns the run id precisely so an assertion has a
+ * discriminator the database is obliged to honour — here `subject_id`, which is
+ * what a `score.recorded` row names: the run is the subject, so the id is a
+ * column rather than a metadata key the way it is on the `gap.*` rows.
+ */
+const scoreRecorded = async (tx: Tx, workspaceId: string, runId: string) =>
+  (await ledger(tx, workspaceId)).find(
+    (row) => row.action === "score.recorded" && row.subject_id === runId,
+  );
 
 beforeEach(() => {
   injected.tx = null;
@@ -240,11 +258,12 @@ describe.skipIf(OFFLINE)("writeRun — the run and its verdicts", () => {
       const world = await seedWorld(tx);
 
       const plain = await writeRun(runFor(world));
-      const [ordinary] = await ledger(tx, world.workspaceId);
+      expect(plain).toBeTruthy();
       // Null rather than "" on an ordinary run, so `->> 'clipped' is not null`
       // is the whole query for "which runs shortened evidence".
+      const ordinary = await scoreRecorded(tx, world.workspaceId, plain);
+      expect(ordinary).toBeDefined();
       expect(ordinary!.clipped).toBeNull();
-      expect(plain).toBeTruthy();
 
       // A second version, because one artifact version scores exactly once.
       const [next] = await tx<{ id: string }[]>`
@@ -254,15 +273,15 @@ describe.skipIf(OFFLINE)("writeRun — the run and its verdicts", () => {
                 ${tx.json({ body: "# Ghost mode v2" })}, 'hash-2', 'agent', 'seed')
         returning id`;
 
-      await writeRun(
+      const shortened = await writeRun(
         runFor({ ...world, versionId: next!.id }, { clippedChecks: ["prd-19", "prd-8"] }),
       );
 
-      const rows = await ledger(tx, world.workspaceId);
-      const recorded = rows.filter((r) => r.action === "score.recorded");
       // The gap text carries the elision mark a reader sees; this is the part
       // that says which run did the shortening.
-      expect(recorded.at(-1)!.clipped).toBe("prd-19 prd-8");
+      const clipped = await scoreRecorded(tx, world.workspaceId, shortened);
+      expect(clipped).toBeDefined();
+      expect(clipped!.clipped).toBe("prd-19 prd-8");
     });
   });
 
