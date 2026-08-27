@@ -128,10 +128,11 @@ T2.3 — the scoring run: an artifact version and a pack in, per-check verdicts 
   version), so re-scoring an unchanged version is a hit rather than a second opinion. One call per
   run, applicability decided in the same pass and renormalized by T2.1's pure function, every
   failure's quote verified against the artifact before anything is written, and a failed run
-  writing nothing at all. Migration `0008`, plus `0009` for two CHECK constraints that did not
-  hold. The seed gained a real PRD to score, and open question 11 is closed — `MN-2`, `MN-7`,
-  `SF-1` and `SF-2` were requirement ids naming no check, and are now `prd-19`, `prd-16` and
-  `prd-20` with the requirement id moved into the evidence where §7.2 puts it.
+  writing nothing at all. Migrations `0008`, `0009` for two CHECK constraints that did not hold,
+  and `0010` for the protocol fingerprint in §5's cache key. The seed gained a real PRD to score,
+  and open question 11 is closed — `MN-2`, `MN-7`, `SF-1` and `SF-2` were requirement ids naming
+  no check, and are now `prd-19`, `prd-16` and
+  `prd-20` with the requirement id moved into the evidence where §7.2 puts it — `19a079f`.
   Verified end to end against Claude Sonnet 5 on the seeded PRD: **58.6 out of 100, 58 of 99
   points**, six checks failed, every quote real, and a second run answering from the cache in
   581ms without calling the provider. **That run predates the second review pass below**, which cut
@@ -160,7 +161,9 @@ T2.3 — the scoring run: an artifact version and a pack in, per-check verdicts 
      the provider had been called and billed. Clipped at read time and recorded; the write returns
      a typed failure.
 
-  Each fix negative-checked: defect reintroduced, named test observed failing, reverted.
+  Each fix negative-checked: defect reintroduced, named test observed failing, reverted. The
+  review's four fixes are in `19a079f` with the rest of the ticket — the cold session read the
+  working tree, so there is no separate follow-up commit to name.
 
 ### The golden set's first labeled sample
 
@@ -628,17 +631,23 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
   written and another when cached — and §8's meter expansion is a list a person compares against the
   last run. The database cannot know a pack's order, so the read is deliberately unordered and
   `run.ts` restores it from `applicableChecks`.
-- **A structural ticket does not close until a fresh context has reviewed it.** A new session,
-  holding none of the writing context, reads the diff against the spec and reports findings —
-  it changes nothing. T2.2's returned seven, of which two were real defects: a failed scoring
-  call metered against the tier map's model instead of the pin, and a `purpose` union wide enough
-  to route a scoring call down a tier. **Both were invisible while two values coincided** — the
-  pinned model equalled the tier map's analysis model, so the wrong meter still read right, and
-  no call site had yet carried a scoring purpose into a tier-routed request. The context that
-  wrote the code knows what it meant, so it reads
-  the coincidence as the invariant; a context that knows only the spec reads what is there. Fixes
-  land with tests, and each test is negative-checked: reintroduce the defect, watch the named test
-  fail, revert.
+- **A structural ticket does not close until a fresh context has reviewed it, and the review must
+  run in a session that did not write the code.** A new session, holding none of the writing
+  context, reads the diff against the spec and reports findings — it changes nothing. T2.2's
+  returned seven, of which two were real defects: a failed scoring call metered against the tier
+  map's model instead of the pin, and a `purpose` union wide enough to route a scoring call down a
+  tier. **Both were invisible while two values coincided** — the pinned model equalled the tier
+  map's analysis model, so the wrong meter still read right, and no call site had yet carried a
+  scoring purpose into a tier-routed request. The context that wrote the code knows what it meant,
+  so it reads the coincidence as the invariant; a context that knows only the spec reads what is
+  there. **T2.3 is why the second half of the rule is written down.** The writing session reviewed
+  its own diff and reported it clean; a cold session then found four, all real: NFKC folding
+  `10⁵` to `105` inside the fabrication guard, an 8-point Must's standard paraphrased into the
+  protocol, three renderers shaping the prompt from outside the cache key, and an over-long answer
+  aborting a transaction the provider had already been billed for. A self-review re-reads its own
+  intent and finds it consistent, which is the one thing it cannot fail to do. Fixes land with
+  tests, and each test is negative-checked: reintroduce the defect, watch the named test fail,
+  revert.
 
 ## Open questions
 
