@@ -34,8 +34,13 @@ Only what differs from framework defaults:
 - Artifacts are immutable. Never UPDATE an artifact's content — INSERT a new version row.
 - Status is **derived** from which artifacts exist and what they score. There is no settable
   status field anywhere in the schema or the UI.
-- Every mutating action writes an `activity` row with actor (human or agent), timestamp, trigger.
+- Every mutating action writes an `activity` row with actor (human or agent), timestamp, trigger —
+  except a write that only schedules future work (`next_scoring_attempt_at` is the only one today):
+  the ledger holds what happened, a queued retry is a note that something has not, and §5's queue
+  is silent by design.
 - All user-facing strings go through `src/i18n/*` in EN/TR/NL. No bare strings in JSX.
+- A failure's `detail` string is a diagnostic for the log and the developer, never surface copy. A
+  surface that shows a failure maps its *kind* to a translated string; it never renders `detail`.
 - Store timestamps in UTC; render in the workspace timezone.
 - An input that cannot yet be observed is typed `never`, not `boolean` — see `src/lib/stage.ts`.
   A boolean claims "observable, currently false", which is a different claim and a false one.
