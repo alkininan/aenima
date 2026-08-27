@@ -648,6 +648,19 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
   intent and finds it consistent, which is the one thing it cannot fail to do. Fixes land with
   tests, and each test is negative-checked: reintroduce the defect, watch the named test fail,
   revert.
+- **Claude Code is started from the repo root.** Not a preference: `CLAUDE.md`, `AGENTS.md` and
+  `.claude/commands/` are discovered at-or-above the working directory and never below it, so a
+  session started from the home directory has no constitution at launch, acquires it only when
+  something attaches a project file — 53 minutes and 8 writes into T2.3 — loses it again on every
+  compaction, and never registers the project's commands at all. **Everything through T2.3 was
+  built this way.** The work held up because the tickets carried their own rules in prose; that is
+  not a reason to keep doing it. The evidence is in the session records: a `nested_memory`
+  attachment naming `dev/aenima/CLAUDE.md` arrives at +10.9 min in the T2.1/T2.2 session, +53.5 min
+  in T2.3's, and never at all in two others. A shell-only session can run indefinitely without it —
+  71 Bash calls did — because the load is triggered by a file attachment, not by the working
+  directory. Started from the root, all three become launch context and survive compaction.
+  Confirm with `/context` (both files under **Memory files**) and `/help` (both commands under
+  Custom).
 
 ## Open questions
 
