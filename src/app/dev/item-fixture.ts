@@ -28,6 +28,12 @@ import { featurePrdPack } from "@/packs/feature-prd";
  * the product rather than about a mock. A fixture that made its own numbers up
  * could pass every test while the page showed something else.
  *
+ * **And the gaps agree with it.** `ITEM_GAPS` is not a free list of dispositions
+ * beside a run: every row is one `reconcileGaps` could have written against these
+ * verdicts, because a gap that contradicts the run on the same screen is a state
+ * `/i/<key>` cannot produce, and a test asserting against one measures the mock.
+ * `run-view.test.ts` holds that as a rule so this file cannot drift out of it.
+ *
  * DELETE BEFORE LAUNCH, with everything else under /dev.
  */
 
@@ -78,21 +84,43 @@ export const ITEM_ARTIFACTS: ArtifactView[] = [
  *
  * The check ids are **rubric check ids**, as T2.3 made them: a gap names a
  * check, a story names a requirement, and the requirement id lives inside the
- * evidence where §7.2 puts it (build log, open question 11). The two `MN-*`
- * labels below are requirement ids inside §5's own sentence shape, which is
- * exactly where they belong.
+ * evidence where §7.2 puts it (build log, open question 11). The `GM-*` and
+ * `MN-*` labels below are requirement ids inside §5's own sentence shape, which
+ * is exactly where they belong.
  *
  * The last two exist to be **absent** from the rendered list. An open Should
  * lives under the score, where its check explains it; a closed gap renders
  * nowhere, because the check passing is the record.
+ *
+ * **Every row here is one `reconcileGaps` could have written against
+ * `GHOST_MODE_RUN`**, and that is a constraint rather than a nicety. The
+ * reconciler's table is total: a verdict that fails and has no open gap raises
+ * one, a verdict that passes closes the open gap it finds, and only `accepted`
+ * and `excluded` survive a verdict either way because they carry a name. So a
+ * gap open on a check the run *passed* is a state the product cannot reach, and
+ * a browser test asserting against one proves something about the mock rather
+ * than about the page — the same objection that keeps §8's `--success`-at-100
+ * branch unwritten. `run-view.test.ts` holds the pairing as a rule; the map:
+ *
+ * | gap | check's verdict | why the pairing is legal |
+ * |---|---|---|
+ * | `prd-10` open Must | unclear | fails, nothing settled → an open gap |
+ * | `prd-16` accepted | passed | a name outranks a pass; it stays accepted |
+ * | `prd-20` excluded | passed | same, and it is the layer check §4 let in |
+ * | `prd-8` open Should | unclear | fails; §13 files it under the score |
+ * | `prd-19` closed | passed | the re-score found it passing and closed it |
  */
 export const ITEM_GAPS: GapView[] = [
+  // The failing Must. Its evidence is the same sentence `renderEvidence` builds
+  // from the run's own three parts, because reconcile wrote it from them.
   {
     id: "g1",
-    checkId: "prd-19",
+    checkId: "prd-10",
     tag: "must",
     disposition: "open",
-    evidence: "MN-2: 'nearby' — same venue, or within 100 m? Two readings possible.",
+    evidence:
+      "GM-4: 'Members someone has blocked never see them at a venue, ghost mode on or off.' — " +
+      "GM-4 is prose. The other four stories carry Given/When/Then.",
     resolvedBy: null,
     resolutionNote: null,
   },
@@ -120,17 +148,19 @@ export const ITEM_GAPS: GapView[] = [
     checkId: "prd-8",
     tag: "should",
     disposition: "open",
-    evidence: "No kill or rollback line anywhere in the document.",
+    evidence: "There is no kill or rollback line anywhere in the document.",
     resolvedBy: null,
     resolutionNote: null,
   },
-  // Closed by a re-score. A time, no name, no note — and no line on the page.
+  // Closed by a re-score that found the check passing — a time, no name, no
+  // note, and no line on the page. This is soc-9's real one: `prd-19` closed
+  // when the protocol change made it pass.
   {
     id: "g5",
-    checkId: "prd-10",
+    checkId: "prd-19",
     tag: "must",
     disposition: "closed",
-    evidence: "GM-4 is prose rather than Given/When/Then.",
+    evidence: "MN-2: 'nearby' — same venue, or within 100 m? Two readings possible.",
     resolvedBy: null,
     resolutionNote: null,
   },
@@ -202,9 +232,19 @@ const GHOST_MODE_RUN: StoredRunInput = {
   model: "claude-sonnet-5",
   scoredAt: new Date(ITEM_NOW - 4 * 60 * 60 * 1000).toISOString(),
   nextScoringAttemptAt: null,
-  conditionsMet: ["network-dependent-surface", "user-to-user-or-location"],
   earned: 66,
   denominator: 99,
+  // §4's other half, as the run recorded it (drizzle/0011). `prd-15` is the
+  // −6 in 99, and its condition is the pack's own sentence — written
+  // affirmatively, stored here because it was false of this PRD.
+  notAsked: [
+    {
+      checkId: "prd-15",
+      tag: "must",
+      points: 6,
+      conditionWhen: "The feature renders a list, so it has empty and first-use states.",
+    },
+  ],
   results: [
     {
       checkId: "prd-1",
@@ -393,8 +433,8 @@ export const ITEM_RUN: RunView = composeRunView(featurePrdPack, GHOST_MODE_RUN);
  * "scored 4h ago — retrying".
  *
  * A provider outage cannot be staged in a browser test, and it is the one
- * freshness state that must never read as an error. So it is a fixture, and
- * `/dev/primitives` renders it beside the other two.
+ * freshness state that must never read as an error. So it is a fixture, reached
+ * at `/dev/item?run=retrying` — `/dev/primitives` has no meter on it.
  */
 export const ITEM_RUN_RETRYING: RunView = composeRunView(featurePrdPack, {
   ...GHOST_MODE_RUN,

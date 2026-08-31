@@ -6,6 +6,10 @@
  * route is the Supabase MCP server's `generate_typescript_types` against the
  * project the migration was just applied to.
  *
+ * T2.4's review added `scoring_check_not_asked` (drizzle/0011) and this file was
+ * regenerated against it; the block below is the generator's, spliced in
+ * alphabetically, and nothing else in the file moved.
+ *
  * T2.4 regenerated this whole file, which retires two hand-edit notes and
  * confirms them: `item.key`, `product.key_prefix` (T1.2) and `ai_usage`,
  * `workspace_ai_credential` (T2.2) came back byte-identical in shape to what
@@ -601,6 +605,47 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "workspace";
             referencedColumns: ["id"];
+          },
+        ];
+      };
+      scoring_check_not_asked: {
+        Row: {
+          check_id: string;
+          condition_id: string;
+          condition_when: string;
+          id: string;
+          points: number;
+          run_id: string;
+          tag: Database["public"]["Enums"]["gap_tag"];
+          workspace_id: string;
+        };
+        Insert: {
+          check_id: string;
+          condition_id: string;
+          condition_when: string;
+          id?: string;
+          points: number;
+          run_id: string;
+          tag: Database["public"]["Enums"]["gap_tag"];
+          workspace_id: string;
+        };
+        Update: {
+          check_id?: string;
+          condition_id?: string;
+          condition_when?: string;
+          id?: string;
+          points?: number;
+          run_id?: string;
+          tag?: Database["public"]["Enums"]["gap_tag"];
+          workspace_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "scoring_check_not_asked_run_fk";
+            columns: ["workspace_id", "run_id"];
+            isOneToOne: false;
+            referencedRelation: "scoring_run";
+            referencedColumns: ["workspace_id", "id"];
           },
         ];
       };

@@ -18,11 +18,16 @@ import { CheckList } from "./CheckList";
  * **A native `<details>`, and no client component.** The disclosure needs
  * open/closed state and nothing else — no callback, no effect, no measurement —
  * and the element that has that state already is `<summary>`. It comes with the
- * keyboard path §11 asks for (Tab to it, Enter or Space to toggle) and the
- * `:focus-visible` ring §6 asks for, for free. The alternative was a `"use
- * client"` island, which would have put the first RSC boundary on this page for
- * a triangle — and the dictionary this component is handed holds formatter
- * functions, which is precisely what cannot cross one.
+ * keyboard path §11 asks for (Tab to it, Enter or Space to toggle) for free, and
+ * `:focus-visible` is the right selector here for the reason §6 gives: browsers
+ * match it on a *clicked* text input but not on a clicked button or summary, so
+ * on this element it means what the spec means by keyboard focus. What is not
+ * free is §7's interaction states, which govern "any interactive element" — the
+ * summary wears `.control` for those, so the ring arrives with the aero glow §6
+ * and §7 pair it with, and the press physics arrive at all. The alternative was
+ * a `"use client"` island, which would have put the first RSC boundary on this
+ * page for a triangle — and the dictionary this component is handed holds
+ * formatter functions, which is precisely what cannot cross one.
  *
  * **With no run there is no `<details>` at all.** §10: an unscored meter is a
  * hollow track plus "connect AI to activate scoring" — "never zeros, never
@@ -44,7 +49,9 @@ export function ReadinessPanel({
 }) {
   if (run === null) {
     return (
-      <div data-testid="readiness" className="flex max-w-[420px] flex-col gap-[8px]">
+      // The same 420 and the same 8 inset the summary carries, so the track sits
+      // in one place whether or not there is a run behind it.
+      <div data-testid="readiness" className="flex max-w-[420px] flex-col gap-[8px] p-[8px]">
         <Meter score={null} size={8} label={t.item.readiness} emptyLabel={t.list.noScoring} />
         <span className="type-ui-footnote text-n-secondary">{t.list.noScoring}</span>
       </div>
@@ -53,11 +60,18 @@ export function ReadinessPanel({
 
   return (
     <details data-testid="readiness" className="group flex flex-col">
-      {/* §7's hover overlay on the whole hit area. The marker is removed in both
-          spellings — `list-none` for the standards one, the pseudo-element for
-          WebKit's — because §8's affordance is the chevron, and a browser
-          triangle beside it would be two. */}
-      <summary className="type-mono-readout flex max-w-[420px] cursor-pointer list-none flex-col gap-[8px] rounded-sm p-[8px] text-n-secondary hover:bg-hover-overlay [&::-webkit-details-marker]:hidden">
+      {/* §7's interaction states on the whole hit area, from `.control` — hover
+          overlay, press physics, and the focus ring *with* the aero glow §6 and
+          §7 pair it with. Hand-rolling `hover:bg-hover-overlay` got the first
+          and neither of the others; a disclosure is an interactive element and
+          §7 governs "any interactive element". `control-edge-none` opts out of
+          the specular edge, which §8 states for Primary alone — the same pairing
+          an interactive chip uses.
+
+          The marker is removed in both spellings — `list-none` for the standards
+          one, the pseudo-element for WebKit's — because §8's affordance is the
+          chevron, and a browser triangle beside it would be two. */}
+      <summary className="control control-edge-none type-mono-readout flex max-w-[420px] list-none flex-col gap-[8px] rounded-sm p-[8px] text-n-secondary [&::-webkit-details-marker]:hidden">
         <span className="flex items-center gap-[12px]">
           <span className="min-w-0 flex-1">
             <Meter
@@ -70,8 +84,10 @@ export function ReadinessPanel({
 
           {/* §8: the percentage sits beside the track, in mono-readout. It is
               the same rounded number the fill is drawn at and the same one a
-              screen reader announces — §13 pairs colour with *the* value. */}
-          <span className="shrink-0 text-n-primary">{run.score}%</span>
+              screen reader announces — §13 pairs colour with *the* value. The
+              sign comes from the dictionary because §12 renders numbers per
+              locale and Turkish puts it first. */}
+          <span className="shrink-0 text-n-primary">{t.item.scorePercent(run.score)}</span>
 
           {/* Swapped rather than rotated: §6 names no duration for a disclosure
               and v1 makes step changes instant, so nothing is invented here. */}

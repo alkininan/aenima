@@ -834,3 +834,83 @@ export const scoringCheckResult = pgTable(
     ),
   ],
 );
+
+/**
+ * One check the run did **not** ask, and the condition that kept it out — §4's
+ * renormalization, stored rather than re-derived.
+ *
+ * The sibling of `scoring_check_result`: between them they hold every check the
+ * rubric contained at run time, one row each, which is exactly the list §8's
+ * meter expands into. Verdicts on one side, the checks §4 removed on the other.
+ *
+ * **Why this is a table and not arithmetic done at read time.** The denominator
+ * is 99 rather than 100 because these rows exist, and §1 law 3 makes a number
+ * that cannot be interrogated something that does not ship — so the explanation
+ * has to be as durable as the number it explains. Re-deriving it from today's
+ * pack looks equivalent and is not: a rubric edit moves a check in or out of the
+ * excluded set without touching the run, and the page would then explain a
+ * stored 99 with a set of checks that no longer adds up to it. §5 versions
+ * rubrics like documents; a run has to stay readable against the one that
+ * produced it, and that is the same argument `scoring_check_result` makes for
+ * copying `tag` and `points` rather than looking them up.
+ *
+ * `tag` and `points` are copied for that reason, and are what the check was
+ * worth *had it been asked* — the run's denominator does not contain them.
+ *
+ * `conditionId` and `conditionWhen` are the condition that did not hold, both
+ * of it: the id so §15 can count how often a condition removes a check, and the
+ * sentence so the surface can say why in the rubric's own words years later.
+ * **The sentence is written affirmatively** — "The feature renders a list, so it
+ * has empty and first-use states." — and it is stored here because it was
+ * *false* of this artifact. Negating it belongs to the surface (`src/i18n`), not
+ * to this column; see `src/packs/scoring.ts`.
+ *
+ * Not the same word as `gap_disposition`'s `excluded`, deliberately. That is
+ * §5's first negotiation move — a person arguing a check away, with their name
+ * on it. This is the applicability engine answering in the pass that scores, and
+ * no one decided anything. The surface says "not asked" for the same reason.
+ */
+export const scoringCheckNotAsked = pgTable(
+  "scoring_check_not_asked",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id").notNull(),
+    runId: uuid("run_id").notNull(),
+    /** A rubric check id (`prd-15`), never a requirement id. */
+    checkId: text("check_id").notNull(),
+    /** What it would have been worth. Not in the run's denominator. */
+    tag: gapTag("tag").notNull(),
+    points: integer("points").notNull(),
+    /** §4's condition id, as `packConditions` names it. */
+    conditionId: text("condition_id").notNull(),
+    /** The condition's sentence, verbatim from the pack that ran. */
+    conditionWhen: text("condition_when").notNull(),
+  },
+  (t) => [
+    unique("scoring_check_not_asked_run_check").on(t.workspaceId, t.runId, t.checkId),
+    foreignKey({
+      columns: [t.workspaceId, t.runId],
+      foreignColumns: [scoringRun.workspaceId, scoringRun.id],
+      name: "scoring_check_not_asked_run_fk",
+    }).onDelete("restrict"),
+    index("scoring_check_not_asked_run_idx").on(t.workspaceId, t.runId),
+    // §5's learning loop: "when a workspace repeatedly accepts or excludes the
+    // same check, the agent proposes a rubric change". This is the read that
+    // counts how often a condition takes a check out of the denominator.
+    index("scoring_check_not_asked_condition_idx").on(t.workspaceId, t.conditionId),
+    check("scoring_check_not_asked_points_positive", sql`${t.points} > 0`),
+    check("scoring_check_not_asked_check_len", sql`length(btrim(${t.checkId})) between 1 and 120`),
+    check(
+      "scoring_check_not_asked_condition_len",
+      sql`length(btrim(${t.conditionId})) between 1 and 120`,
+    ),
+    // The reason is the whole point of the row, so it may not be blank. `is not
+    // null` is redundant against a NOT NULL column and is left out; 0009's
+    // lesson was about a *nullable* column, where `length(btrim(null)) > 0` is
+    // NULL and a CHECK accepts what it exists to forbid.
+    check(
+      "scoring_check_not_asked_condition_when_len",
+      sql`length(btrim(${t.conditionWhen})) between 1 and 2000`,
+    ),
+  ],
+);

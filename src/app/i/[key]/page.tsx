@@ -60,14 +60,20 @@ export default async function ItemPage({ params }: PageProps<"/i/[key]">) {
   /**
    * The run, composed against the pack that names its checks.
    *
-   * Null in two situations the page renders identically, and §10 says it
-   * should: nothing has ever scored this item, or a pack for the run's id no
-   * longer ships. Both mean there is no canonical view to open, and both render
-   * as a hollow track with the line that says what the emptiness means — never
-   * a zero, which would claim a score that was never computed.
+   * **Null means one thing only: nothing has ever scored this item.** That is
+   * §10's hollow track and its line — never a zero, which would claim a score
+   * that was never computed.
+   *
+   * A run whose pack id no longer ships is *not* that case, and used to be
+   * routed there. "Connect AI to activate scoring" is a false sentence to
+   * someone who has a key and whose item carries a stored run, and it hid a
+   * number the run had already computed — which is §1 law 3 read backwards. So
+   * the pack is passed through as whatever it is, `undefined` included, and
+   * `composeRunView` renders the run with what survives: the score, the
+   * verdicts, the checks §4 did not ask, the provenance, and check ids without
+   * prose.
    */
-  const pack = latestRun === null ? undefined : getPack(latestRun.packId);
-  const run = latestRun && pack ? composeRunView(pack, latestRun) : null;
+  const run = latestRun === null ? null : composeRunView(getPack(latestRun.packId), latestRun);
 
   // The read stamped its own instant, and everything below is judged against
   // it — see `ItemPageDetail.readAt`.

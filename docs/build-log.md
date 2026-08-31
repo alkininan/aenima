@@ -244,6 +244,70 @@ at 94 on Shoulds. Rendering that as a triumphant 94 and rendering it as a plain 
 defensible; picking by accident is not. Whoever writes the branch resolves which one fires it and
 ships it with an artifact that actually reaches the state. The note in `variants.ts` says so.
 
+### T2.4's fresh-context review — six findings, all fixed
+
+A cold session read the diff against §1 laws 3/6/7, §5, §13 and design §8/§10/§12. Six real defects,
+fixed in `0011`'s commit. Every changed test was negative-checked: defect restored, that test
+observed failing, reverted.
+
+1. **The meter's not-asked lines were recomputed from today's pack** —
+   `excludedChecks(getPack(...), run.conditionsMet)` at render time. The lines that explain why the
+   denominator is 99 were therefore derived from a rubric that can change after the run, so a pack
+   edit would move a check in or out of the excluded set and the page would go on explaining a
+   stored 99 with a set that no longer adds up to it — reading perfectly while doing it. It also
+   read `tag` and `points` off the current pack for those lines, directly against the invariant the
+   module's own header states, and a check the pack newly conditioned could render twice: once as a
+   stored verdict, once as not-asked, on a duplicate React key.
+   **Fixed with a table**, `scoring_check_not_asked` (drizzle/0011): the sibling of
+   `scoring_check_result`, written in the same transaction, so between them a run holds one row per
+   check the rubric contained and the expansion is readable off the run alone. §5 versions rubrics
+   like documents and T2.3 already copied `tag` and `points` for this exact reason; this is that
+   argument applied to the other half of the list. **A jsonb column on `scoring_run` was the cheaper
+   option and was not taken:** it would store the two halves of one rendered list two different ways,
+   and it cannot carry `points > 0` or the non-blank reason as constraints. The name avoids
+   `excluded` on purpose — that is `gap_disposition`'s word for §5's first negotiation move, a
+   person arguing a check away with their name on it, and this is the applicability engine answering
+   in the pass that scores.
+2. **A run whose pack no longer ships rendered as "connect AI to activate scoring"** — §10's no-key
+   line, shown to someone who has a key and a stored run, hiding a number the run had already
+   computed. §1 law 3 read backwards. `composeRunView` now takes `SkillPack | undefined` and renders
+   the run with what survives: score, verdicts, not-asked lines, provenance, and check ids with no
+   prose — the same floor `CheckLine.prose` already gave a single dropped check. The sort gained an
+   id tie-break so the no-pack fallback is a **total** order; without it the rows nobody can rank
+   kept the database's arbitrary order and one stored run could render two ways on two page loads.
+3. **`{run.score}%` was built in JSX.** Not pack prose, so the T2.4 ruling does not cover it: it is
+   copy that moves, and §12 renders numbers per locale — Turkish writes `%67`, sign first. Now
+   `t.item.scorePercent`. The test drives the panel with a dictionary that puts the sign first,
+   because no assertion over the English render can tell the two apart — both produce "67%", which
+   is how the hard-coded version survived review once already.
+4. **Three tests could not fail.** The container test counted occurrences of the word "Unclear",
+   which says nothing about whether a pass is wearing a chip — it now reads the fill, the outline and
+   the pill on each of the three state labels. The polarity test compared the render to
+   `t.item.checkNotAskedReason(...)`, the very function that decides the polarity, so an affirmative
+   reframe changed both sides at once — the expected sentence is now spelled out in the test, which
+   is the cost of a copy rule being a rule. Both were confirmed blind: with the defects in place the
+   old bodies stayed green. And a docstring claimed a closed `<details>` is reachable by a screen
+   reader, which is false and was never asserted; deleted rather than tested.
+5. **The `/dev/item` fixture staged two states `reconcileGaps` cannot produce** — an open Must on
+   `prd-19`, which the same run passed (a pass closes an open gap), and a closed gap on `prd-10`,
+   which the same run found unclear (a failure with nothing settled raises one). Three e2e tests
+   rested on the pair, including the one proving the closed-gap filter. Swapped, which is also
+   soc-9's real story: `prd-19` closed when the protocol change made it pass. `run-view.test.ts` now
+   holds the fixture to the reconciler's table so it cannot drift back — the fixture is what the
+   browser tests measure, and a fixture the product cannot reach measures the mock. Same objection
+   that keeps §8's `--success`-at-100 branch unwritten.
+6. **The disclosure had §6's focus ring and not its glow.** `:focus-visible` in `globals.css` gives
+   every element the outline; §6 and §7 both pair the ring **with** `--prime-glow`, and §7 gives any
+   interactive element press physics — both live on `.control`, which the hand-rolled
+   `hover:bg-hover-overlay` did not bring. The summary now wears `control control-edge-none`, the
+   pairing an interactive chip uses (§8 states the specular edge for Primary alone). The e2e tabs to
+   it and measures outline and box-shadow, because `.focus()` does not make the claim
+   `:focus-visible` is about.
+
+Two nits with them: the hollow branch sat at a different inset from the summary, so the meter moved
+8px between the scored and unscored states; and `item-fixture.ts` pointed at `/dev/primitives` for
+the retry state, which has no meter on it.
+
 ### The golden set's first labeled sample
 
 `scripts/seed-prd.ts` is a Feature PRD for a Sociera feature — Ghost mode, a per-venue
@@ -901,15 +965,28 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
     becomes a read per artifact rather than one per item. The seam is small on purpose: `RunView` is
     composed from one run, so the change is the query and the layout, not the composition.
 
-18. **A run's check prose is not versioned with the run, the way its tag and points are.** T2.3
-    copied `tag` and `points` onto `scoring_check_result` so a run stays priced by the rubric that
-    produced it; prose was not copied, and `getPack` returns the **current** pack. So a rubric that
-    reworded a check would display the new sentence against an old verdict, and one that dropped a
-    check displays no sentence at all — `CheckLine.prose` is nullable and the line renders on its id
-    alone, which is the honest floor rather than a fix. **Decide when a pack version actually
-    bumps**: either copy prose onto the row like tag and points, or make packs loadable by version so
-    a run can be read against its own. The second is what §5 means by versioning rubrics like
+18. **A run's check prose is not versioned with the run — and after 0011 it is the only thing that
+    is not.** T2.3 copied `tag` and `points` onto `scoring_check_result` so a run stays priced by the
+    rubric that produced it; T2.4's review copied the not-asked checks and their conditions onto
+    `scoring_check_not_asked` for the same reason. Prose was not copied, and `getPack` returns the
+    **current** pack. So a rubric that reworded a check displays the new sentence against an old
+    verdict, and one that dropped a check — or was retired entirely — displays no sentence at all:
+    `CheckLine.prose` is nullable and the line renders on its id alone, which is the honest floor
+    rather than a fix. The blast radius is now bounded to the sentence; nothing that decides what a
+    line *says about the run* comes from the pack any more. **Decide when a pack version actually
+    bumps**: either copy prose onto the row like everything else, or make packs loadable by version
+    so a run can be read against its own. The second is what §5 means by versioning rubrics like
     documents, and it is what a re-baseline pass (open question 15) will want anyway.
+
+19. **Two stored runs predate `scoring_check_not_asked` and carry no rows in it — Phase 2 owns it.**
+    0011 backfills nothing, so those two runs' expansions list their verdicts and no not-asked lines,
+    and their denominators go unexplained. That is the honest reading: the runs did not record what
+    they did not ask. The alternative is to derive the rows from the pack that ships today, which is
+    the defect 0011 exists to remove — sound only because the pack happens not to have moved yet,
+    which is exactly the assumption that fails silently later. §5's cache key fixes it on its own the
+    moment the artifact, the pack version or the protocol version moves, and both rows are dev data
+    on a pre-launch database. Re-score rather than backfill; if a backfill is ever wanted, it belongs
+    in a script that loads the pack by version, not in SQL that hardcodes rubric prose.
 
 ## On the horizon
 

@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { getDictionary } from "@/i18n";
+import { getDictionary, type Dictionary } from "@/i18n";
 import { composeRunView, type RunView, type StoredRunInput } from "@/lib/scoring/run-view";
 import { featurePrdPack } from "@/packs/feature-prd";
 
@@ -18,9 +18,17 @@ const stored = (overrides: Partial<StoredRunInput> = {}): StoredRunInput => ({
   model: "claude-sonnet-5",
   scoredAt: new Date(NOW - 4 * HOUR).toISOString(),
   nextScoringAttemptAt: null,
-  conditionsMet: ["network-dependent-surface", "user-to-user-or-location"],
   earned: 66,
   denominator: 99,
+  // §4's exclusion as the run recorded it — the −6 that makes 99 out of 105.
+  notAsked: [
+    {
+      checkId: "prd-15",
+      tag: "must",
+      points: 6,
+      conditionWhen: "The feature renders a list, so it has empty and first-use states.",
+    },
+  ],
   results: [
     {
       checkId: "prd-1",
@@ -65,9 +73,33 @@ describe("ReadinessPanel", () => {
   it("shows the run's percentage beside the track, and announces the same one", () => {
     render(<ReadinessPanel run={view()} t={t} now={NOW} />);
 
-    // 66 of 99 is 66.67, rounded once, in the composer.
-    expect(screen.getByText("67%")).not.toBeNull();
+    // 66 of 99 is 66.67, rounded once, in the composer. The sign comes from the
+    // dictionary: §12 renders numbers per locale and Turkish writes it first.
+    expect(screen.getByText(t.item.scorePercent(67))).not.toBeNull();
     expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("67");
+  });
+
+  /**
+   * §12: "dates/numbers per locale". The percent sign is copy that moves —
+   * Turkish writes `%67`, sign first — so it belongs to the dictionary and not
+   * to JSX, where no translator can reach it.
+   *
+   * **Driven through a dictionary that moves the sign**, because no assertion
+   * over the English render can tell `t.item.scorePercent(run.score)` from
+   * `{run.score}%`: both produce "67%", which is the whole reason the hard-coded
+   * version survived review once already. A dictionary is the only thing that
+   * separates them, so the test hands the component one.
+   */
+  it("takes the percent sign from the dictionary, including where the locale puts it", () => {
+    const signFirst: Dictionary = {
+      ...t,
+      item: { ...t.item, scorePercent: (score: number) => `%${score}` },
+    };
+
+    render(<ReadinessPanel run={view()} t={signFirst} now={NOW} />);
+
+    expect(screen.getByText("%67")).not.toBeNull();
+    expect(screen.queryByText("67%")).toBeNull();
   });
 
   /**
@@ -135,9 +167,13 @@ describe("ReadinessPanel", () => {
 
   /**
    * §8: "click expands per-check list". The expansion is a native `<details>`,
-   * which keeps the item page free of client islands — and its content is in
-   * the DOM whether or not it is open, which is what lets a screen reader and a
-   * find-in-page reach it.
+   * which keeps the item page free of client islands.
+   *
+   * Its content is in the DOM when closed but is **not** reachable by assistive
+   * tech there — a closed `<details>` hides its contents from the accessibility
+   * tree, which is what makes it a disclosure rather than a `hidden` attribute
+   * nobody can see past. Nothing here claims otherwise; the reason the element
+   * is right is the state, the keyboard path and §7's states, not exposure.
    */
   it("puts the whole run inside one disclosure", () => {
     const { container } = render(<ReadinessPanel run={view()} t={t} now={NOW} />);
@@ -150,6 +186,31 @@ describe("ReadinessPanel", () => {
     // Closed by default: a run explains a number someone asked about, and the
     // question comes before the answer.
     expect(details?.hasAttribute("open")).toBe(false);
+  });
+
+  /**
+   * §7 governs "any interactive element", and the summary is one.
+   *
+   * The ring alone arrives free from the `:focus-visible` rule in globals.css;
+   * §6 and §7 both pair the ring **with the aero glow**, and §7 gives every
+   * interactive element press physics as well. Those live on `.control`, so the
+   * summary wears it — `control-edge-none` alongside, because §8 states the
+   * specular edge for Primary and the quiet variants opt out (the same pairing
+   * an interactive chip uses).
+   *
+   * A class assertion rather than a computed one: jsdom has no stylesheet, and
+   * the rules being claimed are `.control:focus-visible` and `.control:active`,
+   * which no static computation would show anyway. The e2e measures the paint.
+   */
+  it("gives the disclosure §7's interaction states, not just the focus ring", () => {
+    const { container } = render(<ReadinessPanel run={view()} t={t} now={NOW} />);
+
+    const summary = container.querySelector("summary");
+    expect(summary?.className).toContain("control");
+    expect(summary?.className).toContain("control-edge-none");
+    // The hand-rolled hover that used to stand in for §7 — it got the overlay
+    // and neither the glow nor the press, and `.control` supersedes it.
+    expect(summary?.className).not.toContain("hover:bg-hover-overlay");
   });
 
   /**

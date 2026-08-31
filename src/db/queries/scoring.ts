@@ -227,6 +227,21 @@ export async function readGapsForItem(workspaceId: string, itemId: string): Prom
   }));
 }
 
+/**
+ * One check the run did not ask, as it is written.
+ *
+ * `tag` and `points` are what the check was worth had it been asked — the run's
+ * denominator does not contain them. `conditionWhen` is the pack's own sentence,
+ * written affirmatively and stored because it was *false* of this artifact.
+ */
+export type NotAskedWrite = {
+  checkId: string;
+  tag: "must" | "should";
+  points: number;
+  conditionId: string;
+  conditionWhen: string;
+};
+
 export type RunToWrite = {
   workspaceId: string;
   productId: string;
@@ -242,6 +257,15 @@ export type RunToWrite = {
   earned: number;
   denominator: number;
   verdicts: readonly VerifiedVerdict[];
+  /**
+   * The checks §4 took out of the denominator, and the condition that did it.
+   *
+   * Stored rather than re-derived, for the reason `tag` and `points` are copied
+   * onto a verdict: §5 versions rubrics like documents, so a rubric edit must
+   * not be able to change what an old run says it did not ask. See
+   * `drizzle/0011_scoring_check_not_asked.sql`.
+   */
+  notAsked: readonly NotAskedWrite[];
   gapWrites: readonly GapWrite[];
   /**
    * Checks whose evidence `readAnswer` clipped to fit its column.
@@ -317,6 +341,20 @@ export async function writeRun(run: RunToWrite): Promise<string> {
           ${run.workspaceId}, ${runId}, ${verdict.checkId}, ${verdict.tag}::gap_tag,
           ${verdict.points}, ${verdict.passed},
           ${verdict.requirementId}, ${verdict.quote}, ${verdict.note}
+        )
+      `;
+    }
+
+    // §4's other half, in the same transaction as the verdicts: between the two
+    // tables the run holds one row for every check the rubric contained, which
+    // is what lets the meter's expansion be read off the run alone.
+    for (const skipped of run.notAsked) {
+      await tx`
+        insert into scoring_check_not_asked (
+          workspace_id, run_id, check_id, tag, points, condition_id, condition_when
+        ) values (
+          ${run.workspaceId}, ${runId}, ${skipped.checkId}, ${skipped.tag}::gap_tag,
+          ${skipped.points}, ${skipped.conditionId}, ${skipped.conditionWhen}
         )
       `;
     }
@@ -466,6 +504,16 @@ export type RunCheckRow = {
   note: string | null;
 };
 
+/** One check the run did not ask, exactly as `scoring_check_not_asked` holds it. */
+export type RunNotAskedRow = {
+  checkId: string;
+  tag: "must" | "should";
+  points: number;
+  conditionId: string;
+  /** The condition that did **not** hold, in the words of the pack that ran. */
+  conditionWhen: string;
+};
+
 /** The newest run on an item, with its verdicts and §5's queue flag. */
 export type LatestRun = StoredRun & {
   artifactId: string;
@@ -480,6 +528,13 @@ export type LatestRun = StoredRun & {
    * pack's order. `src/lib/scoring/run-view.ts` sorts these into it.
    */
   results: RunCheckRow[];
+  /**
+   * §4's renormalization, as the run recorded it — **unordered**, for the same
+   * reason. Together with `results` this is one row per check in the rubric the
+   * run scored against, which is what lets the expansion be read off the run
+   * rather than recomputed against a pack that has moved on.
+   */
+  notAsked: RunNotAskedRow[];
 };
 
 /**
@@ -493,7 +548,10 @@ export type LatestRun = StoredRun & {
  * showing nothing because the fingerprint moved would blank a meter over a
  * change the reader cannot see.
  *
- * One request. It rides `scoring_run_item_idx` on
+ * One request, and both halves of the run's own account of itself come back with
+ * it: the verdicts it reached, and the checks §4 took out of its denominator.
+ * Neither is recomputed against today's pack — see
+ * `drizzle/0011_scoring_check_not_asked.sql`. It rides `scoring_run_item_idx` on
  * `(workspace_id, item_id, scored_at desc)`, which exists for this.
  *
  * **The retry flag comes through the run's own artifact**, embedded rather than
@@ -516,7 +574,8 @@ export async function getLatestRunForItem(
       `id, artifact_id, pack_id, pack_version, protocol_version, provider, model,
        conditions_met, earned, denominator, scored_at,
        artifact(next_scoring_attempt_at),
-       scoring_check_result(check_id, tag, points, passed, requirement_id, quote, note)`,
+       scoring_check_result(check_id, tag, points, passed, requirement_id, quote, note),
+       scoring_check_not_asked(check_id, tag, points, condition_id, condition_when)`,
     )
     .eq("workspace_id", workspaceId)
     .eq("item_id", itemId)
@@ -548,6 +607,13 @@ export async function getLatestRunForItem(
       requirementId: row.requirement_id,
       quote: row.quote,
       note: row.note,
+    })),
+    notAsked: (data.scoring_check_not_asked ?? []).map((row) => ({
+      checkId: row.check_id,
+      tag: row.tag,
+      points: row.points,
+      conditionId: row.condition_id,
+      conditionWhen: row.condition_when,
     })),
   };
 }

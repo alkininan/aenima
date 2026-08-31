@@ -16,11 +16,12 @@ export {
   applicableChecks,
   conditionSet,
   denominatorFor,
+  excludedChecks,
   packConditions,
   percentageOf,
   scoreRun,
 } from "./scoring";
-export type { RunScore } from "./scoring";
+export type { ExcludedCheck, RunScore } from "./scoring";
 export { RUBRIC_TOTAL, allChecks, assertValidPack, validatePack } from "./validate";
 
 /**

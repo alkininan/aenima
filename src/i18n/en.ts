@@ -176,6 +176,16 @@ export const en = {
      */
     checkNotAskedReason: (when: string) => `Only asked when: ${when} That is not true here.`,
     /**
+     * §8's mono-readout percentage beside the track.
+     *
+     * The sign is here rather than in the component because it is not
+     * punctuation, it is copy that moves: §12 renders numbers per locale and
+     * Turkish writes the sign **first** — `%67`, not `67%`. A component that
+     * concatenates `%` after the number has hard-coded English word order into
+     * JSX, where no translator can reach it.
+     */
+    scorePercent: (score: number) => `${score}%`,
+    /**
      * §4's renormalized denominator, said out loud.
      *
      * The arithmetic is invisible until someone asks why the denominator is 99

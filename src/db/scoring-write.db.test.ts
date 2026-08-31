@@ -169,6 +169,17 @@ function runFor(world: World, over: Partial<Parameters<typeof writeRun>[0]> = {}
         evidence: "",
       },
     ],
+    // §4's other half, written with the run. `prd-15` is out because the PRD
+    // has no list surface, which is what makes the denominator 99.
+    notAsked: [
+      {
+        checkId: "prd-15",
+        tag: "must" as const,
+        points: 6,
+        conditionId: "list-rendering-surface",
+        conditionWhen: "The feature renders a list, so it has empty and first-use states.",
+      },
+    ],
     gapWrites: [],
     clippedChecks: [],
     actor: { kind: "agent" as const, name: "scorer" },
@@ -250,6 +261,68 @@ describe.skipIf(OFFLINE)("writeRun — the run and its verdicts", () => {
       expect(rows.map((r) => r.action)).toEqual(["score.recorded"]);
       // An object, not a string that looks like one — see `logActivity`.
       expect(rows[0]!.shape).toBe("object");
+    });
+  });
+
+  /**
+   * §4's renormalization, stored with the run — drizzle/0011.
+   *
+   * The denominator is 99 rather than 100 because `prd-15` left it, and §1 law 3
+   * makes the number and its explanation the same obligation. Deriving the
+   * explanation at read time from whatever pack ships then is the defect this
+   * table removed: a rubric edit moves a check in or out of the excluded set
+   * without touching the run, and the page goes on explaining a stored 99 with a
+   * set that no longer adds up to it.
+   */
+  it("writes the checks §4 did not ask, with the condition that kept each one out", async () => {
+    await rolledBack(async (tx) => {
+      const world = await seedWorld(tx);
+
+      const runId = await writeRun(runFor(world));
+
+      const skipped = await tx<
+        {
+          check_id: string;
+          tag: string;
+          points: number;
+          condition_id: string;
+          condition_when: string;
+        }[]
+      >`select check_id, tag::text as tag, points, condition_id, condition_when
+          from scoring_check_not_asked where run_id = ${runId}`;
+
+      expect(skipped).toHaveLength(1);
+      expect(skipped[0]).toMatchObject({
+        check_id: "prd-15",
+        // What it would have been worth. The run's denominator does not contain
+        // it — 99 is 105 less these 6.
+        tag: "must",
+        points: 6,
+        condition_id: "list-rendering-surface",
+        condition_when: "The feature renders a list, so it has empty and first-use states.",
+      });
+
+      // The two tables together are one row per check in the rubric that ran,
+      // and a check is on exactly one side. Both halves of §8's expansion come
+      // off the run, so nothing about it needs today's pack to be readable.
+      const asked = await tx<{ check_id: string }[]>`
+        select check_id from scoring_check_result where run_id = ${runId}`;
+      const overlap = asked
+        .map((r) => r.check_id)
+        .filter((id) => skipped.some((s) => s.check_id === id));
+      expect(overlap).toEqual([]);
+    });
+  });
+
+  // The seventh append-only table, and the trigger refuses the service role too.
+  it("refuses to update a not-asked row once it is written", async () => {
+    await rolledBack(async (tx) => {
+      const world = await seedWorld(tx);
+      const runId = await writeRun(runFor(world));
+
+      await expect(
+        tx`update scoring_check_not_asked set points = 1 where run_id = ${runId}`,
+      ).rejects.toThrow();
     });
   });
 

@@ -11,7 +11,14 @@ import {
 import type { UsageActor } from "@/db/queries/ai-usage";
 import { runScorer } from "@/lib/ai";
 import type { AiFailure } from "@/lib/ai";
-import { allChecks, applicableChecks, listPacks, percentageOf, scoreRun } from "@/packs";
+import {
+  allChecks,
+  applicableChecks,
+  excludedChecks,
+  listPacks,
+  percentageOf,
+  scoreRun,
+} from "@/packs";
 import type { ScoringRun, SkillPack } from "@/packs";
 
 import { readAnswer } from "./answer";
@@ -264,6 +271,17 @@ export async function scoreArtifact(input: ScoreInput): Promise<ScoreResult> {
       earned,
       denominator,
       verdicts: read.verdicts,
+      // §4's other half, written with the run rather than recomputed when
+      // someone opens the meter. The pack is in hand here and is by definition
+      // the one that produced this run; at read time it is only the pack that
+      // ships today, which is a different rubric the moment one is edited.
+      notAsked: excludedChecks(pack, read.conditionsMet).map(({ check, condition }) => ({
+        checkId: check.id,
+        tag: check.tag,
+        points: check.points,
+        conditionId: condition.id,
+        conditionWhen: condition.when,
+      })),
       gapWrites,
       clippedChecks: read.clipped,
       actor: input.actor,

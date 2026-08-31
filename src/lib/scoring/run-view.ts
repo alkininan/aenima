@@ -1,4 +1,4 @@
-import { excludedChecks, percentageOf } from "@/packs/scoring";
+import { percentageOf } from "@/packs/scoring";
 import type { CheckTag, SkillPack } from "@/packs/types";
 import { allChecks } from "@/packs/validate";
 
@@ -9,17 +9,26 @@ import { renderEvidence } from "./evidence";
  *
  * "Every score, flag, and suggestion expands into the exact quoted gap. A number
  * that cannot be interrogated does not ship." This is the composition that makes
- * that literal: a run's rows plus its pack become one ordered list in which
- * every check says what happened to it.
+ * that literal: a run's rows become one ordered list in which every check says
+ * what happened to it.
  *
  * Pure. No database, no clock, no provider — the run comes in as data and the
  * view comes out, so every rule below is testable without any of the three.
  *
- * **No arithmetic is invented here.** The denominator was renormalized when the
- * run was written (§4), the score is `percentageOf` and nothing else (§5's one
- * place a score is divided), and points and tags are read off the stored row
- * rather than looked up — T2.3 copied them there so a run stays readable against
- * the rubric that produced it.
+ * **Nothing about the run is invented here, and that includes what it did not
+ * ask.** The denominator was renormalized when the run was written (§4), the
+ * score is `percentageOf` and nothing else (§5's one place a score is divided),
+ * and tag, points, verdicts and the not-asked checks with their conditions are
+ * all read off stored rows — T2.3 copied the first two there and T2.4's review
+ * added the rest (drizzle/0011), so a run stays readable against the rubric that
+ * produced it rather than the one that ships today.
+ *
+ * **The pack is consulted for exactly two things: prose and order**, and it is
+ * optional for that reason. Both degrade to something honest when the run's pack
+ * no longer ships — the ids stand on their own and the list falls back to a
+ * stable order — because a stored run must not become unreadable just because a
+ * rubric was retired. Everything that decides *what a check's line says* comes
+ * from the run.
  */
 
 /** What one check's line says. Exactly three things can have happened to a check. */
@@ -29,14 +38,15 @@ export type CheckLine = {
    * The rubric's own wording — §7.2 transcribed, and content the pack owns
    * rather than a string the product says (see `src/packs/types.ts`).
    *
-   * **Null when the loaded pack has no check with this id.** `getPack` returns
-   * the *current* pack and a run is stamped with the pack version that produced
-   * it, so a rubric that has since dropped or renamed a check leaves a real,
+   * **Null when the loaded pack has no check with this id**, or when no pack
+   * ships for the run at all. `getPack` returns the *current* pack and a run is
+   * stamped with the pack version that produced it, so a rubric that has since
+   * dropped or renamed a check — or been retired entirely — leaves a real,
    * scored verdict with no sentence to show. The id is still true, so the line
    * renders on its own rather than disappearing — a verdict that counted toward
    * the score must not vanish from the list that explains it. See the open
    * question in docs/build-log.md: prose is not versioned with the run the way
-   * tag and points are.
+   * tag, points and the not-asked conditions are.
    */
   prose: string | null;
   tag: CheckTag;
@@ -50,9 +60,10 @@ export type CheckLine = {
   | { state: "unclear"; evidence: string }
   /**
    * §4: the check left the denominator. `condition` is the sentence that did
-   * **not** hold — it is written affirmatively in the pack, so a surface that
-   * prints it bare states the opposite of the reason. Negating it is the
-   * surface's job (`t.item.checkNotAskedReason`).
+   * **not** hold, in the words of the pack that ran — it is written
+   * affirmatively there, so a surface that prints it bare states the opposite of
+   * the reason. Negating it is the surface's job
+   * (`t.item.checkNotAskedReason`).
    */
   | { state: "not-asked"; condition: string }
 );
@@ -91,7 +102,6 @@ export type StoredRunInput = {
   model: string;
   scoredAt: string;
   nextScoringAttemptAt: string | null;
-  conditionsMet: readonly string[];
   earned: number;
   denominator: number;
   results: readonly {
@@ -102,6 +112,22 @@ export type StoredRunInput = {
     requirementId: string | null;
     quote: string | null;
     note: string | null;
+  }[];
+  /**
+   * §4's renormalization, as the run recorded it.
+   *
+   * `conditionsMet` is deliberately **not** in this type. It was here to
+   * recompute the excluded set against whatever pack was loaded, which made a
+   * stored denominator explainable by a rubric that had moved on; the rows are
+   * now written with the run (drizzle/0011) and the condition list is the write
+   * path's business alone.
+   */
+  notAsked: readonly {
+    checkId: string;
+    tag: CheckTag;
+    points: number;
+    /** The condition that did **not** hold, affirmatively worded. */
+    conditionWhen: string;
   }[];
 };
 
@@ -114,13 +140,25 @@ export type StoredRunInput = {
  * deliberately unordered (`check_id` sorts `prd-10` before `prd-2`), so this
  * restores pack order the same way `run.ts` does on the cached path.
  *
- * A check the current pack does not name sorts to the end, keeping its relative
- * order — it is still a verdict this run reached and still counted toward the
- * score, so it belongs in the list that explains the score.
+ * A check the current pack does not name sorts to the end, and ties there break
+ * on the id. The tie-break is what makes the order **total** rather than merely
+ * pack-shaped: without it, two checks the pack cannot place keep whatever order
+ * the database happened to return them in, so the same stored run could render
+ * in two orders on two page loads. `prd-10` before `prd-2` is ugly and it is
+ * stable, which is the property that matters for rows nobody can rank properly.
+ *
+ * **`pack` is optional**, and undefined is the case where none ships for this
+ * run's id at all. The run still has a score, its verdicts, its not-asked rows
+ * and its provenance, so it still renders: every line falls back to its id with no prose
+ * and the whole list to id order. §10's hollow track is the *no-key* state and
+ * says "connect AI to activate scoring" — a sentence that is false to someone
+ * holding a key and a stored run, which is why a retired rubric must not route
+ * there.
  */
-export function composeRunView(pack: SkillPack, run: StoredRunInput): RunView {
-  const order = new Map(allChecks(pack).map((check, index) => [check.id, index]));
-  const prose = new Map(allChecks(pack).map((check) => [check.id, check.prose]));
+export function composeRunView(pack: SkillPack | undefined, run: StoredRunInput): RunView {
+  const checksInPack = pack ? allChecks(pack) : [];
+  const order = new Map(checksInPack.map((check, index) => [check.id, index]));
+  const prose = new Map(checksInPack.map((check) => [check.id, check.prose]));
 
   const verdicts: CheckLine[] = run.results.map((row) => {
     const shared = {
@@ -146,22 +184,25 @@ export function composeRunView(pack: SkillPack, run: StoredRunInput): RunView {
     };
   });
 
-  const notAsked: CheckLine[] = excludedChecks(pack, run.conditionsMet).map(
-    ({ check, condition }) => ({
-      checkId: check.id,
-      prose: check.prose,
-      tag: check.tag,
-      points: check.points,
-      state: "not-asked",
-      condition: condition.when,
-    }),
-  );
+  // Read off the run, not recomputed: these rows say what *this* run did not
+  // ask and why, and they go on saying it after the rubric changes underneath
+  // them. Prose is looked up exactly as a verdict's is, and is null on the same
+  // terms — it is the one thing the pack still owns.
+  const notAsked: CheckLine[] = run.notAsked.map((row) => ({
+    checkId: row.checkId,
+    prose: prose.get(row.checkId) ?? null,
+    tag: row.tag,
+    points: row.points,
+    state: "not-asked",
+    condition: row.conditionWhen,
+  }));
 
-  const checks = [...verdicts, ...notAsked].sort(
-    (a, b) =>
+  const checks = [...verdicts, ...notAsked].sort((a, b) => {
+    const byPack =
       (order.get(a.checkId) ?? Number.MAX_SAFE_INTEGER) -
-      (order.get(b.checkId) ?? Number.MAX_SAFE_INTEGER),
-  );
+      (order.get(b.checkId) ?? Number.MAX_SAFE_INTEGER);
+    return byPack !== 0 ? byPack : a.checkId.localeCompare(b.checkId);
+  });
 
   return {
     score: Math.round(percentageOf(run.earned, run.denominator)),

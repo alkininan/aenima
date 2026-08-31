@@ -14,8 +14,8 @@ These four are load-bearing. Each is enforced by the database, not by
 convention — a rule that lives only in TypeScript gets broken by the first
 script that talks to Postgres directly.
 
-**1. `artifact_version`, `activity`, `decision`, `ai_usage`, `scoring_run` and
-`scoring_check_result` are append-only.**
+**1. `artifact_version`, `activity`, `decision`, `ai_usage`, `scoring_run`,
+`scoring_check_result` and `scoring_check_not_asked` are append-only.**
 No UPDATE, no DELETE, ever. New content is a new row with an incrementing
 `version_no`. Three independent layers enforce it, because the first two have a
 hole the third closes:
@@ -164,6 +164,7 @@ assertion, never a null `user_id`.
 | `ai_usage` | The meter: token counts and a rate-card id per call, never money. Append-only. |
 | `scoring_run` | One run: artifact version, rubric version, protocol version, provider, model, earned out of denominator. Append-only. |
 | `scoring_check_result` | One check's verdict inside a run, with the quote behind a failure. Append-only. |
+| `scoring_check_not_asked` | Its sibling: one check §4 took out of the run's denominator, and the condition that did it. Append-only. |
 
 ### Enums
 
@@ -223,6 +224,7 @@ driver underneath.
 | `ai_usage` | **owner only** | **none** — written server-side | **never** | **never** |
 | `scoring_run` | member + visible | **none** — written server-side | **never** | **never** |
 | `scoring_check_result` | member + visible (through its run) | **none** — written server-side | **never** | **never** |
+| `scoring_check_not_asked` | member + visible (through its run) | **none** — written server-side | **never** | **never** |
 
 Viewer appears in no write policy anywhere: §14 read-only means read-only.
 
@@ -303,6 +305,20 @@ invalidates the cache whether or not anyone remembered to bump anything. No
 migration: the shape of a text column's contents is the application's business,
 and rows stamped with the old bare semver simply miss the cache and re-score,
 which is what a protocol change is for.
+
+`drizzle/0011_scoring_check_not_asked.sql` — the sibling of
+`scoring_check_result`. Between them a run holds one row per check the rubric
+contained at run time: verdicts on one side, the checks §4 renormalized out on
+the other, each with the condition that kept it out. T2.4 derived that second
+half at render time from the pack that ships *today*, which meant a rubric edit
+could change what an old run said it did not ask — the page explaining a stored
+denominator of 99 with a set of checks that no longer adds up to it. The
+argument is `scoring_check_result`'s own, one table over: §5 versions rubrics
+like documents, so `tag`, `points` and now the condition are copied rather than
+looked up. Not named `excluded`, which is `gap_disposition`'s word for a person
+arguing a check away with their name on it (§5's first negotiation move); this
+is the applicability engine answering in the pass that scores. **Nothing is
+backfilled** — see build-log open question 19.
 
 ```
 pnpm db:generate   # diff the schema files into a new migration

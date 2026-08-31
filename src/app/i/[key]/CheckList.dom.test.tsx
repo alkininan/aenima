@@ -81,17 +81,25 @@ describe("CheckList", () => {
    * *false* of this artifact. Rendering the condition bare would state the
    * opposite of the reason, and it would read perfectly while doing it, which
    * is what makes it worth a test rather than a comment.
+   *
+   * **The expected sentence is spelled out here rather than taken from `t`.**
+   * Comparing the render to `t.item.checkNotAskedReason(...)` compares the
+   * component to the very function that decides the polarity, so re-framing the
+   * copy affirmatively — "Applies when: …" — changes both sides at once and the
+   * test stays green through exactly the defect it is named for. Duplicating the
+   * sentence is the cost of a copy rule being a rule: this test is the
+   * specification for that string, and it is supposed to go red when it moves.
    */
   it("says the condition did NOT hold, never just what the condition is", () => {
     render(<CheckList checks={[notAsked("prd-15", LIST_CONDITION)]} t={t} />);
 
     expect(screen.getByText(t.item.checkNotAsked)).not.toBeNull();
 
-    const line = screen.getByText(t.item.checkNotAskedReason(LIST_CONDITION));
+    const line = screen.getByText(`Only asked when: ${LIST_CONDITION} That is not true here.`);
     expect(line).not.toBeNull();
-    // The condition is quoted, and it is quoted inside a frame that negates it.
+    // The condition is quoted whole, and the frame around it says it is false.
     expect(line.textContent).toContain(LIST_CONDITION);
-    expect(line.textContent).not.toBe(LIST_CONDITION);
+    expect(line.textContent).toMatch(/not true here/i);
   });
 
   // §4: a not-asked check is neither a pass nor a failure, and saying either
@@ -107,6 +115,13 @@ describe("CheckList", () => {
    * §8 (v2.15): "a bordered chip in a row must mean something, and what it
    * means there is a gap." One level down, the same rule: only an unclear check
    * carries a container, so the eye lands on the ones that need something.
+   *
+   * **This observes the container**, which is the only way the rule can fail
+   * honestly. Counting occurrences of the word "Unclear" says nothing about
+   * whether a pass is wearing a chip — put `<Chip>` around `checkPassed` and a
+   * count of one is still a count of one. A container is a fill or an outline,
+   * so that is what is read: every `Chip` tone in §8 carries a `bg-` or a
+   * `border`, and the two plain labels carry neither.
    */
   it("puts a container on an unclear check and on nothing else", () => {
     render(
@@ -123,9 +138,22 @@ describe("CheckList", () => {
     const rows = screen.getAllByRole("listitem");
     expect(rows).toHaveLength(3);
 
-    // The gap chip renders as a span carrying a border/background tone; the
-    // marker for "this is contained" is the chip's own text, and it appears once.
-    expect(screen.getAllByText(t.item.checkUnclear)).toHaveLength(1);
+    const labelIn = (row: HTMLElement, text: string) => within(row).getByText(text);
+    // A fill or an outline — §8's four gap-chip tones are three `bg-` and one
+    // `border`, and nothing uncontained carries either.
+    const contained = (node: HTMLElement) =>
+      /(?:^|\s)(?:bg-|border(?:$|\s|-))/.test(node.className);
+
+    expect(contained(labelIn(rows[1]!, t.item.checkUnclear))).toBe(true);
+    expect(contained(labelIn(rows[0]!, t.item.checkPassed))).toBe(false);
+    expect(contained(labelIn(rows[2]!, t.item.checkNotAsked))).toBe(false);
+
+    // And the chip's own geometry sits on the unclear label alone: §8 gives a
+    // chip a pill and 10px of horizontal padding, which is the shape of a
+    // container rather than the colour of one.
+    expect(labelIn(rows[1]!, t.item.checkUnclear).className).toContain("rounded-pill");
+    expect(labelIn(rows[0]!, t.item.checkPassed).className).not.toContain("rounded-pill");
+    expect(labelIn(rows[2]!, t.item.checkNotAsked).className).not.toContain("rounded-pill");
   });
 
   /**

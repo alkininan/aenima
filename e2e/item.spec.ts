@@ -100,7 +100,7 @@ test.describe("at 1440", () => {
     // expansion, where they mean something else entirely.
     const gaps = page.getByTestId("gap-list");
 
-    await expect(gaps.getByText("prd-19")).toBeVisible();
+    await expect(gaps.getByText("prd-10")).toBeVisible();
     await expect(gaps.getByText("prd-16")).toBeVisible();
     await expect(gaps.getByText("prd-20")).toBeVisible();
 
@@ -123,10 +123,18 @@ test.describe("at 1440", () => {
    * score where its check explains it, and a closed gap renders nowhere,
    * because the check passing is the record.
    *
-   * The fixture carries one of each to be absent. `prd-8` and `prd-10` appear
+   * The fixture carries one of each to be absent. `prd-8` and `prd-19` appear
    * on the page — inside the expansion — so the assertion has to be scoped to
    * this list rather than to the document, which is also the distinction the
    * ticket is making.
+   *
+   * Both absentees are gaps the reconciler could really have written against
+   * this run: `prd-8` fails and is a Should, and `prd-19` passes, which is
+   * exactly what closes a gap. The fixture used to prove the closed filter with
+   * `prd-10` — a check the same run reports as unclear, which reconcile would
+   * have raised an open gap for rather than left closed. That pairing cannot
+   * occur, so the assertion proved something about the mock.
+   * `run-view.test.ts` now holds the fixture to the reconciler's table.
    */
   test("narrows to open Musts and named debts, filing the rest under the score", async ({
     page,
@@ -136,7 +144,7 @@ test.describe("at 1440", () => {
     await expect(gaps.getByRole("listitem")).toHaveCount(3);
     // The open Should, and the closed gap.
     await expect(gaps.getByText("prd-8")).toHaveCount(0);
-    await expect(gaps.getByText("prd-10")).toHaveCount(0);
+    await expect(gaps.getByText("prd-19")).toHaveCount(0);
   });
 
   /**
@@ -145,14 +153,21 @@ test.describe("at 1440", () => {
    * a disclosure.
    *
    * The requirement id rides inside the sentence, where §7.2 puts it: a gap
-   * names a check (`prd-19`), a story names a requirement (`MN-2`), and the
-   * evidence cites the requirement as the place the gap lives.
+   * names a check (`prd-10`), a story names a requirement (`GM-4`), and the
+   * evidence cites the requirement as the place the gap lives. It is the same
+   * sentence the check's own line carries inside the expansion, because
+   * `renderEvidence` built both from one run's three stored parts.
    */
   test("quotes an open Must's evidence on the page rather than behind anything", async ({
     page,
   }) => {
     await expect(
-      page.getByText("MN-2: 'nearby' — same venue, or within 100 m? Two readings possible."),
+      page
+        .getByTestId("gap-list")
+        .getByText(
+          "GM-4: 'Members someone has blocked never see them at a venue, ghost mode on or off.' — " +
+            "GM-4 is prose. The other four stories carry Given/When/Then.",
+        ),
     ).toBeVisible();
   });
 
@@ -443,6 +458,49 @@ test.describe("at 1440", () => {
     await page.keyboard.press("Enter");
 
     await expect(checks).toBeVisible();
+  });
+
+  /**
+   * §7, every row of it: the disclosure is an interactive element, so it takes
+   * the interaction states any interactive element takes.
+   *
+   * §6 and §7 both pair the focus ring **with the aero glow** — "the aero glow
+   * lives on focus and on live dots, nowhere else" — and the ring alone is what
+   * the bare `:focus-visible` rule in globals.css gives. `.control` is what adds
+   * the rest, so this measures the paint rather than the class: an outline *and*
+   * a box-shadow, arrived at by Tab.
+   *
+   * **Tabbed to rather than focused programmatically**, which is the point:
+   * `:focus-visible` is a claim about how focus arrived, and `.focus()` does not
+   * make that claim. It is also §11's "every interactive element reachable by
+   * Tab in visual order". The loop is for `next dev`, which injects its own
+   * overlay control ahead of the page's content — the mirror page itself has
+   * nothing focusable before the disclosure.
+   */
+  test("rings and glows the disclosure on keyboard focus", async ({ page }) => {
+    const summary = page.getByTestId("readiness").locator("summary");
+
+    for (let tabs = 0; tabs < 6; tabs += 1) {
+      await page.keyboard.press("Tab");
+      if (await summary.evaluate((node) => node === document.activeElement)) break;
+    }
+    await expect(summary).toBeFocused();
+
+    const focused = await summary.evaluate((node) => {
+      const computed = getComputedStyle(node);
+      return {
+        outlineWidth: computed.outlineWidth,
+        outlineColor: computed.outlineColor,
+        boxShadow: computed.boxShadow,
+      };
+    });
+
+    // §6: `outline: 2px solid var(--prime); outline-offset: 2px;`
+    expect(focused.outlineWidth).toBe("2px");
+    expect(focused.outlineColor).toBe(PRIME);
+    // …plus `box-shadow: var(--prime-glow)`. Not "none", and prime-tinted.
+    expect(focused.boxShadow).not.toBe("none");
+    expect(focused.boxShadow).toContain("33, 184, 220");
   });
 });
 
