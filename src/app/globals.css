@@ -865,4 +865,11 @@
   .field-label {
     transition: none;
   }
+
+  /* §6 — "kill … meter animation". The fill still lands at its width; it just
+   * does not travel there. Reachable only since T2.4: before a run existed
+   * every meter rendered hollow, and a hollow meter has no fill to animate. */
+  .meter-fill {
+    transition: none;
+  }
 }

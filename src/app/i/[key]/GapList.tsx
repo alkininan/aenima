@@ -8,22 +8,74 @@ export type GapView = {
   id: string;
   checkId: string;
   tag: "must" | "should";
-  disposition: "open" | "accepted" | "excluded";
+  /**
+   * §5's lifecycle, all four values. `closed` is the only one a machine writes
+   * — a time, no name — and the only one that never reaches the page.
+   */
+  disposition: "open" | "accepted" | "excluded" | "closed";
   evidence: string;
   /** Who settled it, already resolved to what can honestly be said. */
   resolvedBy: Actor | null;
   resolutionNote: string | null;
 };
 
-/** §5's three dispositions, in the order a reader wants them. */
-const ORDER: Record<GapView["disposition"], number> = { open: 0, accepted: 1, excluded: 2 };
+/** §5's dispositions, in the order a reader wants them. `closed` never renders. */
+const ORDER: Record<GapView["disposition"], number> = {
+  open: 0,
+  accepted: 1,
+  excluded: 2,
+  closed: 3,
+};
+
+/**
+ * What §13 puts on the item page — the narrowing T2.4 applies to this list.
+ *
+ * §13 names two things a person needs to see here: work that is waiting on a
+ * human, and debts somebody put their name to. Everything else about a run
+ * lives under the score, where the check that produced it explains it.
+ *
+ * | gap | here? | why |
+ * |---|---|---|
+ * | open Must | yes | §13's "Your move" — the only kind that blocks handover |
+ * | accepted / excluded | yes, dimmed | §1 law 7: removing one deletes the name |
+ * | open Should | no | advisory; its check states it, with its evidence, in the expansion |
+ * | closed | no | the check passing is the record |
+ *
+ * **An open Should is not hidden, it is filed.** Before T2.4 this list was the
+ * only place a run's findings appeared, so it had to hold all of them; now the
+ * expansion is the canonical view and this is the shortlist. A page that
+ * repeated every advisory finding twice would bury the three that block.
+ *
+ * **A closed gap renders nowhere at all**, and that is the honest treatment
+ * rather than a quiet one. `gap_resolution_shape` gives a closed row a time and
+ * no name and no note, because nobody decided anything — a re-score found the
+ * check passing, or §4's condition stopped holding. There is no person to
+ * attribute it to and no debt to carry, and §1 law 7's "visible debts that a
+ * named person accepts" is about the two dispositions that have a name. The
+ * check passing is the record; the ledger holds the transition.
+ *
+ * The filter lives here rather than at the call site so that `/i/<key>` and
+ * `/dev/item` cannot show two different lists.
+ */
+function belongsOnThePage(gap: GapView): gap is PageGap {
+  if (gap.disposition === "closed") return false;
+  if (gap.disposition === "open") return gap.tag === "must";
+  return true;
+}
+
+/**
+ * A gap that reached the page. A type guard rather than a filter returning
+ * `GapView[]`, so that `closed` — which has no chip tone and no label, because
+ * it never renders — cannot reach the rendering below even by mistake.
+ */
+type PageGap = GapView & { disposition: "open" | "accepted" | "excluded" };
 
 /**
  * §8's gap chips carry the tone. An open gap takes its tag's tone — a Must is
  * `--warning-soft`, which is the only warm thing on the page — and a settled one
  * takes its disposition's, which is deliberately quiet.
  */
-function toneFor(gap: GapView): "must" | "should" | "accepted" | "excluded" {
+function toneFor(gap: PageGap): "must" | "should" | "accepted" | "excluded" {
   return gap.disposition === "open" ? gap.tag : gap.disposition;
 }
 
@@ -34,7 +86,11 @@ function actorWords(actor: Actor | null, t: Dictionary): string {
 }
 
 /**
- * The item's gaps, in every disposition — product-spec.md §5.
+ * What this item owes a person — product-spec.md §13.
+ *
+ * **This is no longer the picture of a run; the meter's expansion is** (T2.4).
+ * What survives here is what §13 asks the item page for: open Musts, and gaps
+ * someone accepted or excluded by name. See `belongsOnThePage`.
  *
  * **Settled gaps render settled, not hidden.** §1 law 7: "Gaps, exclusions, and
  * flags are visible debts that a named person accepts. Freedom is total;
@@ -49,12 +105,34 @@ function actorWords(actor: Actor | null, t: Dictionary): string {
  * accept this risk" — are Phase 2, and each is a mutation with a scoring run
  * behind it. Nothing here is a control.
  */
-export function GapList({ gaps, t }: { gaps: readonly GapView[]; t: Dictionary }) {
-  if (gaps.length === 0) {
-    return <p className="type-ui-body text-n-secondary">{t.item.noGaps}</p>;
+export function GapList({
+  gaps,
+  t,
+  scored,
+}: {
+  gaps: readonly GapView[];
+  t: Dictionary;
+  /**
+   * Whether this item has ever been scored — which is what the empty line has
+   * to say something true about.
+   *
+   * Unscored, "no gaps yet, they appear when scoring runs" is the whole truth.
+   * Scored, it is not: there may be several open Shoulds one click away, and a
+   * line claiming none would be the page contradicting the meter above it.
+   */
+  scored: boolean;
+}) {
+  const shown = gaps.filter(belongsOnThePage);
+
+  if (shown.length === 0) {
+    return (
+      <p className="type-ui-body text-n-secondary">
+        {scored ? t.item.noGapsScored : t.item.noGaps}
+      </p>
+    );
   }
 
-  const ordered = [...gaps].sort((a, b) => {
+  const ordered = [...shown].sort((a, b) => {
     const byDisposition = ORDER[a.disposition] - ORDER[b.disposition];
     if (byDisposition !== 0) return byDisposition;
     // Musts before Shoulds inside a disposition: a blocking debt outranks an
@@ -64,7 +142,7 @@ export function GapList({ gaps, t }: { gaps: readonly GapView[]; t: Dictionary }
   });
 
   return (
-    <ul className="flex flex-col gap-[8px]">
+    <ul data-testid="gap-list" className="flex flex-col gap-[8px]">
       {ordered.map((gap) => {
         const settled = gap.disposition !== "open";
         const label =

@@ -145,3 +145,58 @@ export function scoreRun(
 
   return { earned, denominator, score: percentageOf(earned, denominator) };
 }
+
+/**
+ * A check that was not asked, and the condition that kept it out.
+ *
+ * §4's renormalization is invisible arithmetic until someone asks why the
+ * denominator is 99, and this is the answer. It is the exact complement of
+ * `applicableChecks` over the same pack and the same conditions: every check
+ * that has a row in the rubric and no verdict in the run.
+ *
+ * The condition is carried rather than looked up because the two directions do
+ * not share one. A base check is excluded by **its own** `appliesWhen`; a layer
+ * check is excluded by **the layer's**, and may never have carried one of its
+ * own. A caller holding only the check id could not tell which sentence to show,
+ * and would show the wrong one for `prd-20`.
+ *
+ * **The condition it returns held false.** `ApplicabilityCondition.when` is
+ * written affirmatively — "The feature renders a list, so it has empty and
+ * first-use states." — and a check is here precisely because that is *not* true
+ * of this artifact. A surface that prints `when` on its own states the opposite
+ * of the reason; the negation belongs to the surface (see `src/i18n`), and this
+ * function only says which sentence is the false one.
+ */
+export type ExcludedCheck = {
+  check: RubricCheck;
+  /** The condition that did **not** hold. */
+  condition: ApplicabilityCondition;
+};
+
+export function excludedChecks(pack: SkillPack, conditionsMet: readonly string[]): ExcludedCheck[] {
+  const met = conditionSet(conditionsMet);
+
+  // A base check leaves when its own condition failed.
+  const base = pack.checks.flatMap((check) =>
+    check.appliesWhen !== undefined && !met.has(check.appliesWhen.id)
+      ? [{ check, condition: check.appliesWhen }]
+      : [],
+  );
+
+  const layered = pack.layers.flatMap((layer) => {
+    // The layer never entered: every check it holds is out, and the layer's own
+    // condition is why — not whatever a check may additionally carry.
+    if (!met.has(layer.appliesWhen.id)) {
+      return layer.checks.map((check) => ({ check, condition: layer.appliesWhen }));
+    }
+
+    // The layer entered, so a check inside it is out only on its own condition.
+    return layer.checks.flatMap((check) =>
+      check.appliesWhen !== undefined && !met.has(check.appliesWhen.id)
+        ? [{ check, condition: check.appliesWhen }]
+        : [],
+    );
+  });
+
+  return [...base, ...layered];
+}

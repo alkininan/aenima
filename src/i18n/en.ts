@@ -145,12 +145,72 @@ export const en = {
     /** §8: the 8h meter's own name, for the screen reader. */
     readiness: "Readiness",
     /**
+     * §8's meter expansion — §1 law 3's "every score expands into the exact
+     * quoted gap", as chrome around content the pack owns.
+     *
+     * **The check's own wording is not here, and that is deliberate.** A
+     * check's prose and its applicability condition are pack content, versioned
+     * with the rubric and translated by shipping a translated pack (§18) — see
+     * `src/packs/types.ts`. Copying them into this file would make two sources
+     * for one sentence that drift on the first version bump.
+     */
+    checks: "Checks",
+    /** §12: calm vocabulary. A check that passed was answered, not "passed". */
+    checkPassed: "Answered",
+    /** §12 verbatim: "this section was unclear" — never test, fail, violation. */
+    checkUnclear: "Unclear",
+    /** §4: the check left the denominator. Not a pass, and not a failure. */
+    checkNotAsked: "Not asked",
+    /**
+     * Why a check was not asked — and the polarity is the whole point.
+     *
+     * `ApplicabilityCondition.when` is written affirmatively ("The feature
+     * renders a list, so it has empty and first-use states."), and a check is
+     * not asked precisely because that is **false** of this artifact. Printing
+     * the condition on its own states the opposite of the reason, so the
+     * negation lives here, in the frame.
+     *
+     * One key rather than two, because TR and NL do not order the clauses the
+     * way English does; and the second clause says nothing about the first's
+     * grammar, so it survives a pack sentence that does not open "The feature".
+     */
+    checkNotAskedReason: (when: string) => `Only asked when: ${when} That is not true here.`,
+    /**
+     * §4's renormalized denominator, said out loud.
+     *
+     * The arithmetic is invisible until someone asks why the denominator is 99
+     * rather than 100, and the not-asked lines below are the answer — but only
+     * once the number they explain is on screen.
+     */
+    pointsOf: (earned: number, of: number) => `${earned} of ${of} points`,
+    /** §5: "Timestamps show freshness". The clock is the run's, not the item's. */
+    scoredAt: (relative: string) => `scored ${relative}`,
+    /**
+     * §10: "freshness shows --warning dot + 'scored 6 h ago — retrying'; no
+     * banners." §5 queues provider outages silently and the timestamp does the
+     * honest work — this is the whole of what a person is told.
+     */
+    scoredRetrying: (relative: string) => `scored ${relative} — retrying`,
+    /**
+     * §5 stamps provider, model and rubric version on every run, because a
+     * number nobody can trace is a number nobody can argue with. mono-readout,
+     * per §8.
+     */
+    provenance: (pack: string, version: string, model: string) => `${pack}@${version} · ${model}`,
+    /**
      * §12: empty is the ordinary case here — most items own nothing yet — so it
      * reads as normal rather than as absence. Never "missing", never "none".
      */
     noArtifacts: "Nothing here yet. Artifacts appear as they are written.",
     noContent: "Nothing written yet.",
     noGaps: "No gaps yet. They appear when scoring runs.",
+    /**
+     * The same section, once a run exists — §13 narrows this list to open Musts
+     * and gaps someone put their name to, and everything else lives under the
+     * score. "No gaps yet" would be false here: there may be several, and they
+     * are one click away.
+     */
+    noGapsScored: "Nothing owed here. Anything unclear is under the score.",
     noDecisions: "No decisions logged yet.",
     noActivity: "Nothing has happened to this item yet.",
     /** §7: how much history an artifact has, and when it last moved. */

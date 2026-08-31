@@ -902,14 +902,30 @@ export function meterTrackClasses(size: MeterSize = 4, className?: string): stri
 }
 
 /**
- * The fill. §8 switches it to `--success` at 100 with all Musts passed; nothing
- * can reach that until scoring exists, so that branch is not written here —
- * this paints `--prime`, and Phase 2 adds the rest alongside the check results
- * that would justify it.
+ * The fill. §8: "Meter fill animates width `--t-slow`."
+ *
+ * `meter-fill` is a hook for one rule and nothing else — §6's
+ * `prefers-reduced-motion` kills the meter animation, and until T2.4 there was
+ * no fill element in the product to kill it on. Every meter rendered hollow, so
+ * the transition below was unreachable; now that a run puts a width on this
+ * element, the rule that turns it off has something to turn off.
+ *
+ * **§8's `--success` branch at 100 is still not written here, and the reason is
+ * not that nothing reaches 100 yet.** It is that a fixture proving the branch
+ * would assert a state the product cannot produce — and a test over an
+ * unproducible state is exactly how T2.2's escalation bug hid, invisible while
+ * two values coincided.
+ *
+ * The trigger is also undecided, and §8 states it ambiguously: "All Musts
+ * passed / 100" are two different conditions. A run can pass every Must and sit
+ * at 94 on Shoulds; rendering that as a triumphant 94 and rendering it as a
+ * plain 100 are both defensible, and picking by accident is not. Whoever writes
+ * this branch resolves which one fires it, and ships it with an artifact that
+ * actually reaches the state.
  */
 export function meterFillClasses(className?: string): string {
   return cx(
-    "block h-full rounded-pill bg-prime",
+    "meter-fill block h-full rounded-pill bg-prime",
     "transition-[width] duration-[var(--t-slow)] ease-brand",
     className,
   );

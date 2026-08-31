@@ -1,6 +1,7 @@
 import "server-only";
 
 import { sharedDbClient } from "@/db/client";
+import { createClient } from "@/lib/supabase/server";
 import type { UsageActor } from "@/db/queries/ai-usage";
 import type { GapWrite } from "@/lib/scoring/reconcile";
 import type { ExistingGap } from "@/lib/scoring/reconcile";
@@ -15,11 +16,16 @@ import type { ProviderId } from "@/lib/ai/types";
  * all, deliberately. A client that could write its own run row could write its
  * own score, and §1 law 1 has the whole product deriving from what artifacts
  * score. Reads for a surface go through PostgREST as the signed-in human, where
- * RLS decides what is visible; nothing in this file is on that path yet, and
- * T2.4 is where it will be.
+ * RLS decides what is visible, and `getLatestRunForItem` at the foot of this
+ * file is that path — T2.4's meter, the first surface to read a run.
  *
- * The connection bypasses RLS, so **every statement here filters
- * `workspace_id`** — the boundary is ours to hold on this path.
+ * **Two clients live here, and which one a function uses is load-bearing.** The
+ * direct connection bypasses RLS, so **every statement on it filters
+ * `workspace_id`** — the boundary is ours to hold on that path. The read path
+ * uses `createClient()` and filters `workspace_id` as well, but that filter is
+ * belt to RLS's braces: `scoring_run_select` also checks
+ * `app.can_see_product(...)`, and a member who cannot see a product must not
+ * read its scores. A workspace filter alone would hand them over.
  */
 
 /** The artifact a run scores, and the version it scores. */
@@ -442,4 +448,106 @@ export async function scheduleRetry(
     update artifact set next_scoring_attempt_at = ${nextAttemptAt}
      where workspace_id = ${workspaceId} and id = ${artifactId}
   `;
+}
+
+/* -------------------------------------------------------------------------- */
+/* The read path — T2.4's meter, as the signed-in human                       */
+/* -------------------------------------------------------------------------- */
+
+/** One check's stored verdict, exactly as `scoring_check_result` holds it. */
+export type RunCheckRow = {
+  checkId: string;
+  /** Copied from the pack at run time, so a run stays readable against its own rubric. */
+  tag: "must" | "should";
+  points: number;
+  passed: boolean;
+  requirementId: string | null;
+  quote: string | null;
+  note: string | null;
+};
+
+/** The newest run on an item, with its verdicts and §5's queue flag. */
+export type LatestRun = StoredRun & {
+  artifactId: string;
+  /**
+   * §5's queue, from the run's own artifact. Non-null means a retry is pending
+   * — §10's "scored 6 h ago — retrying", never an error banner.
+   */
+  nextScoringAttemptAt: string | null;
+  /**
+   * Every stored verdict, **unordered**, for the reason `readRunResults` gives:
+   * `check_id` sorts `prd-10` before `prd-2` and the database cannot know a
+   * pack's order. `src/lib/scoring/run-view.ts` sorts these into it.
+   */
+  results: RunCheckRow[];
+};
+
+/**
+ * The newest scoring run on an item — §8's meter, and everything it expands into.
+ *
+ * **Newest, not "the one the cache would return".** `findRunForVersion` answers a
+ * different question: whether *this* version against *this* pack and protocol has
+ * already been scored, which is what stops a second opinion. A surface wants the
+ * last thing that actually happened, whatever pack version produced it — a run
+ * stamped with an older protocol is still the run whose number is on screen, and
+ * showing nothing because the fingerprint moved would blank a meter over a
+ * change the reader cannot see.
+ *
+ * One request. It rides `scoring_run_item_idx` on
+ * `(workspace_id, item_id, scored_at desc)`, which exists for this.
+ *
+ * **The retry flag comes through the run's own artifact**, embedded rather than
+ * read off the item's artifact list. An item may hold several artifacts and only
+ * one of them is this run's; a queue flag taken from the wrong one would put
+ * "retrying" beside a number that is not being re-scored.
+ *
+ * Returns null when nothing has ever scored this item — which is §10's hollow
+ * track, and is not an error.
+ */
+export async function getLatestRunForItem(
+  workspaceId: string,
+  itemId: string,
+): Promise<LatestRun | null> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("scoring_run")
+    .select(
+      `id, artifact_id, pack_id, pack_version, protocol_version, provider, model,
+       conditions_met, earned, denominator, scored_at,
+       artifact(next_scoring_attempt_at),
+       scoring_check_result(check_id, tag, points, passed, requirement_id, quote, note)`,
+    )
+    .eq("workspace_id", workspaceId)
+    .eq("item_id", itemId)
+    .order("scored_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw new Error(`Could not read the scoring run: ${error.message}`);
+  if (!data) return null;
+
+  return {
+    id: data.id,
+    packId: data.pack_id,
+    packVersion: data.pack_version,
+    protocolVersion: data.protocol_version,
+    provider: data.provider,
+    model: data.model,
+    conditionsMet: data.conditions_met,
+    earned: data.earned,
+    denominator: data.denominator,
+    scoredAt: data.scored_at,
+    artifactId: data.artifact_id,
+    nextScoringAttemptAt: data.artifact?.next_scoring_attempt_at ?? null,
+    results: (data.scoring_check_result ?? []).map((row) => ({
+      checkId: row.check_id,
+      tag: row.tag,
+      points: row.points,
+      passed: row.passed,
+      requirementId: row.requirement_id,
+      quote: row.quote,
+      note: row.note,
+    })),
+  };
 }

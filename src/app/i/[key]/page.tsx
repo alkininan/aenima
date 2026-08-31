@@ -3,11 +3,14 @@ import { notFound, redirect } from "next/navigation";
 
 import { listItemActivity } from "@/db/queries/activity";
 import { getItemByKey } from "@/db/queries/item";
+import { getLatestRunForItem } from "@/db/queries/scoring";
 import { getSessionUser } from "@/db/queries/session";
 import { getCurrentWorkspace } from "@/db/queries/workspace";
 import { getDictionary } from "@/i18n";
 import { describeActor } from "@/lib/actor";
 import { ROUTES } from "@/lib/routes";
+import { composeRunView } from "@/lib/scoring/run-view";
+import { getPack } from "@/packs";
 
 import { ActivityFeed } from "./ActivityFeed";
 import { ArtifactList } from "./ArtifactList";
@@ -15,6 +18,7 @@ import { DecisionList } from "./DecisionList";
 import { GapList } from "./GapList";
 import { ItemHeader } from "./ItemHeader";
 import { ItemSection } from "./ItemSection";
+import { ReadinessPanel } from "./ReadinessPanel";
 
 /**
  * One item, everything it owns, readable — the page `/app`'s rows link to.
@@ -46,9 +50,24 @@ export default async function ItemPage({ params }: PageProps<"/i/[key]">) {
   const item = await getItemByKey(workspace.id, key);
   if (!item) notFound();
 
-  // The second request, and the only one. It needs the uuid the first read
-  // returned, so the two are sequential rather than parallel.
-  const activity = await listItemActivity(workspace.id, item.id);
+  // The second and third requests. Both need the uuid the first read returned,
+  // so they follow it — but not each other, so they go together.
+  const [activity, latestRun] = await Promise.all([
+    listItemActivity(workspace.id, item.id),
+    getLatestRunForItem(workspace.id, item.id),
+  ]);
+
+  /**
+   * The run, composed against the pack that names its checks.
+   *
+   * Null in two situations the page renders identically, and §10 says it
+   * should: nothing has ever scored this item, or a pack for the run's id no
+   * longer ships. Both mean there is no canonical view to open, and both render
+   * as a hollow track with the line that says what the emptiness means — never
+   * a zero, which would claim a score that was never computed.
+   */
+  const pack = latestRun === null ? undefined : getPack(latestRun.packId);
+  const run = latestRun && pack ? composeRunView(pack, latestRun) : null;
 
   // The read stamped its own instant, and everything below is judged against
   // it — see `ItemPageDetail.readAt`.
@@ -76,17 +95,25 @@ export default async function ItemPage({ params }: PageProps<"/i/[key]">) {
             {t.item.backToList}
           </Link>
 
-          <ItemHeader
-            item={{
-              key: item.key,
-              title: item.title,
-              type: item.type,
-              stage: item.stage,
-              productName: item.productName,
-              opportunityTitle: item.opportunityTitle,
-            }}
-            t={t}
-          />
+          {/* §4's topbar and §8's meter, held at the 16 they had when the meter
+              lived inside the header. The meter is the summary of a disclosure
+              now (T2.4), and what it opens onto is a page's worth of check
+              results — which does not belong inside a `<header>`. */}
+          <div className="flex flex-col gap-[16px]">
+            <ItemHeader
+              item={{
+                key: item.key,
+                title: item.title,
+                type: item.type,
+                stage: item.stage,
+                productName: item.productName,
+                opportunityTitle: item.opportunityTitle,
+              }}
+              t={t}
+            />
+
+            <ReadinessPanel run={run} t={t} now={now} />
+          </div>
 
           <ItemSection title={t.item.artifacts}>
             <ArtifactList
@@ -122,6 +149,7 @@ export default async function ItemPage({ params }: PageProps<"/i/[key]">) {
                 resolutionNote: gap.resolutionNote,
               }))}
               t={t}
+              scored={run !== null}
             />
           </ItemSection>
 

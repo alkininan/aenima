@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import { featurePrdPack } from "@/packs/feature-prd";
-import { applicableChecks, denominatorFor, packConditions, scoreRun } from "@/packs/scoring";
+import {
+  applicableChecks,
+  denominatorFor,
+  excludedChecks,
+  packConditions,
+  scoreRun,
+} from "@/packs/scoring";
 import type { CheckResult, SkillPack } from "@/packs/types";
+import { allChecks } from "@/packs/validate";
 
 const LIST = "list-rendering-surface";
 const NETWORK = "network-dependent-surface";
@@ -172,5 +179,118 @@ describe("packConditions", () => {
     };
 
     expect(packConditions(pack)).toEqual([]);
+  });
+});
+
+/**
+ * §4's renormalization, said out loud — product-spec.md §4 and T2.4's AC3.
+ *
+ * `applicableChecks` answers "what counts"; this answers "what did not, and
+ * why". A denominator of 99 is arithmetic nobody can argue with until the two
+ * checks behind it are named, so these tests pin the naming rather than the
+ * arithmetic — which the table above already covers.
+ */
+describe("excludedChecks", () => {
+  const excluded = (conditions: string[]) =>
+    excludedChecks(featurePrdPack, conditions).map(({ check, condition }) => [
+      check.id,
+      condition.id,
+    ]);
+
+  /**
+   * Ghost mode's three conditions, from the marking scheme in docs/build-log.md:
+   * no list surface, network-dependent, user-to-user. One check leaves, the
+   * layer enters, and 99 is what they add up to.
+   */
+  it("names the one check Ghost mode did not ask, and the condition that kept it out", () => {
+    expect(excluded([NETWORK, SAFETY])).toEqual([["prd-15", LIST]]);
+
+    // The other direction, on the same run: the layer entered, so prd-20 is
+    // asked and is not in this list at all.
+    expect(applicableChecks(featurePrdPack, [NETWORK, SAFETY]).map((check) => check.id)).toContain(
+      "prd-20",
+    );
+    expect(denominator([NETWORK, SAFETY])).toBe(99);
+  });
+
+  /**
+   * A layer check is excluded by **the layer's** condition, never by one of its
+   * own — `prd-20` carries no `appliesWhen`, so a function that read only the
+   * check would have no sentence to show and would show nothing.
+   */
+  it("blames the layer's condition when the layer never entered", () => {
+    expect(excluded([LIST, NETWORK])).toEqual([["prd-20", SAFETY]]);
+  });
+
+  it("names both conditional checks when neither condition holds", () => {
+    expect(excluded([SAFETY])).toEqual([
+      ["prd-15", LIST],
+      ["prd-16", NETWORK],
+    ]);
+  });
+
+  // The complement is exact: every check is asked or excluded, never both and
+  // never neither. If this ever fails, a check has fallen out of the rubric.
+  it("is the exact complement of applicableChecks, for every combination", () => {
+    const all = allChecks(featurePrdPack)
+      .map((check) => check.id)
+      .sort();
+
+    for (const conditions of [
+      [],
+      [LIST],
+      [NETWORK],
+      [SAFETY],
+      [LIST, NETWORK],
+      [LIST, SAFETY],
+      [NETWORK, SAFETY],
+      [LIST, NETWORK, SAFETY],
+    ]) {
+      const asked = applicableChecks(featurePrdPack, conditions).map((check) => check.id);
+      const notAsked = excludedChecks(featurePrdPack, conditions).map(({ check }) => check.id);
+
+      expect([...asked, ...notAsked].sort()).toEqual(all);
+    }
+  });
+
+  it("is empty when every condition holds", () => {
+    expect(excluded([LIST, NETWORK, SAFETY])).toEqual([]);
+  });
+
+  /**
+   * The rule the real pack cannot test.
+   *
+   * `prd-20` carries no `appliesWhen` of its own, so on `featurePrdPack` the
+   * layer's condition and the check's coincide — and a function that read the
+   * wrong one would pass every test above. That coincidence is the shape of
+   * T2.2's escalation bug, so the rule gets a pack where the two differ: the
+   * layer did not enter, and the layer's condition is the answer even though
+   * the check has one to offer.
+   */
+  it("blames the layer, not the check, when a layer check carries its own condition", () => {
+    const inner = { id: "inner", when: "The check's own condition." };
+    const outer = { id: "outer", when: "The layer's condition." };
+
+    const pack: SkillPack = {
+      ...featurePrdPack,
+      checks: [{ id: "base", prose: "Base", tag: "must", points: 100 }],
+      layers: [
+        {
+          id: "layer",
+          appliesWhen: outer,
+          checks: [{ id: "layered", prose: "Layered", tag: "must", points: 5, appliesWhen: inner }],
+        },
+      ],
+      interview: [],
+    };
+
+    // Neither condition holds. The layer never entered, so that is the reason.
+    expect(excludedChecks(pack, []).map(({ condition }) => condition.id)).toEqual(["outer"]);
+
+    // The layer entered and the check's own condition failed: now it is the check's.
+    expect(excludedChecks(pack, ["outer"]).map(({ condition }) => condition.id)).toEqual(["inner"]);
+
+    // Both hold: nothing is excluded.
+    expect(excludedChecks(pack, ["outer", "inner"])).toEqual([]);
   });
 });

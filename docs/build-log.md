@@ -7,7 +7,7 @@
 ## Current state
 
 **Phase:** 2 — the scoring engine · phases 0 (foundation) and 1 (the spine) complete
-**Next ticket:** T2.4 — the meter and its expansion: a score that opens into its checks (§8, §13)
+**Next ticket:** T2.5 — the negotiation moves: arguing with the numbers T2.4 renders (§5, §13)
 **Repo:** github.com/alkininan/aenima
 **Deployed:** yes — **aeni.ma** on Vercel
 
@@ -164,6 +164,85 @@ T2.3 — the scoring run: an artifact version and a pack in, per-check verdicts 
   Each fix negative-checked: defect reintroduced, named test observed failing, reverted. The
   review's four fixes are in `19a079f` with the rest of the ticket — the cold session read the
   working tree, so there is no separate follow-up commit to name.
+
+T2.4 — the meter, and what it expands into: `/i/<key>` renders the artifact's latest run as §8's
+  8h meter with its mono-readout percentage, opening into the canonical view of that run — every
+  check in pack order, passes included, each failure carrying the quote T2.3 verified, and the
+  checks §4 renormalized out shown as **not asked** with the condition that did not hold. The run's
+  provenance sits under it in mono-readout, and freshness reads §5's clock: `--prime` dot normally,
+  `--warning` plus "scored Nh ago — retrying" when §5's queue holds one, never a banner and never
+  red. The gap list narrows to §13 — open Musts, and accepted or excluded gaps with the person who
+  owns them.
+
+  **The expansion is a native `<details>`, so the item page still has no client island.** The
+  disclosure needs open/closed state and nothing else, and `<summary>` already has it — with §11's
+  keyboard path and §6's focus ring included. A `"use client"` component would have put the first
+  RSC boundary on this page for a triangle, and the dictionary these components are handed holds
+  formatter functions, which is exactly what cannot cross one.
+
+  **The read is the first in `src/db/queries/scoring.ts` to go through PostgREST as the signed-in
+  human.** Everything else in that file writes over the direct connection, which bypasses RLS. A
+  surface must not: `scoring_run_select` checks `app.can_see_product`, and a workspace-id filter
+  alone would hand a member the scores of a product they cannot see.
+
+  Verified against real data rather than the fixture. `pnpm score:smoke` reports **66 of 99** on
+  soc-9 from the cache, and reading those same rows back through `composeRunView` produces all
+  twenty checks in pack order, five unclear with the stored quotes, `prd-15` not asked and `prd-20`
+  asked — both directions of §4 on one screen — and 3 of the 6 stored gap rows on the page.
+
+  Three things found while building, all closed here:
+
+  1. **`src/db/database.types.ts` was two migrations stale**, with no `scoring_run` or
+     `scoring_check_result` at all, no `artifact.next_scoring_attempt_at`, and `gap_disposition`
+     missing `closed`. Regenerating it surfaced a **live bug**: `writeRun` has written closed gaps
+     since T2.3 and `getItemByKey` selects every disposition, so a closed gap fell through
+     `GapList`'s ternary and rendered as **"Open"** — the page telling someone they owed work a run
+     had already found done. soc-9 holds one (`prd-19`, closed when the protocol change made it
+     pass), so this was on screen, not hypothetical. Closes open question 5: `item.key`,
+     `product.key_prefix`, `ai_usage` and `workspace_ai_credential` all came back identical in shape
+     to the hand-written versions. One value had drifted — `PostgrestVersion` was hand-typed `14.15`
+     against the platform's `14.5`. Nothing read it.
+  2. **The first `excludedChecks` test could not fail.** `prd-20` carries no `appliesWhen` of its
+     own, so on the real pack "the layer's condition" and "the check's condition" are the same
+     object, and a function reading the wrong one passed every assertion. That is the shape of
+     T2.2's escalation bug — invisible while two values coincide — so the rule got a synthetic pack
+     where the two differ. Negative-checked: defect reintroduced, named test observed failing,
+     reverted.
+  3. **§6's `prefers-reduced-motion` rule for the meter had never been reachable.** Every meter in
+     the product rendered hollow, and a hollow meter has no fill element to animate. T2.4 is the
+     first ticket that puts a width on one, so `.meter-fill` and the rule that switches its
+     transition off arrived with it.
+
+### T2.4's rulings
+
+**Pack prose is not an i18n string.** A check's wording (`RubricCheck.prose`) and its applicability
+condition (`ApplicabilityCondition.when`) are read by a person in the meter's expansion, which looks
+like a breach of CLAUDE.md's "all user-facing strings go through `src/i18n/*`" and is not. **The
+i18n rule governs strings the product says; pack prose is a string the rubric says, and it travels
+with its version.** It is the standard itself — cited by every gap and every critic objection, shown
+to the model in the same words the human reviewer reads (§4), and versioned like a document (§5). A
+Turkish workspace sees a Turkish check by being shipped a **translated pack**, which §18 already
+makes the law: "TR/NL are a translation build-step over finished packs, never parallel authoring."
+Copying rubric text into `src/i18n` would create two sources for one sentence that disagree on the
+first version bump — the pack scoring against one standard while the page displays another. Until
+translated packs exist, a TR or NL workspace reads English check prose inside otherwise translated
+chrome: **a known gap with an owner (§18's seed-content workstream), not an oversight.** The rule is
+written into `src/packs/types.ts` so the next session does not "fix" it.
+
+**A not-asked check must say why the condition did NOT hold.** `when` is written affirmatively — "The
+feature renders a list, so it has empty and first-use states." — and a check is not asked precisely
+because that is **false** of the artifact. Rendering the condition bare states the opposite of the
+reason, and it reads perfectly while doing it, which is what makes it a test rather than a comment.
+The negation lives in the i18n frame (`t.item.checkNotAskedReason`), never in the pack: one key so
+TR/NL can order both clauses, and a second clause that says nothing about the first's grammar.
+
+**§8's `--success`-at-100 branch stays unwritten, and the reason is not that nothing reaches 100.**
+It is that a fixture proving the branch would assert a state the product cannot produce, and a test
+over an unproducible state is how T2.2's escalation bug hid. The trigger is also undecided: §8's
+"All Musts passed / 100" names **two different conditions**, and a run can pass every Must and sit
+at 94 on Shoulds. Rendering that as a triumphant 94 and rendering it as a plain 100 are both
+defensible; picking by accident is not. Whoever writes the branch resolves which one fires it and
+ships it with an artifact that actually reaches the state. The note in `variants.ts` says so.
 
 ### The golden set's first labeled sample
 
@@ -698,7 +777,16 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
    token — one that can modify every project on the account. Putting that in the Vercel build
    env to read one integer is the trade, if this ever needs automating.
 
-5. **`src/db/database.types.ts` was hand-edited — regenerate and diff.** T1.2 added `item.key` and
+5. **~~`src/db/database.types.ts` was hand-edited — regenerate and diff.~~ Closed by T2.4.** The
+   file was regenerated from the live project and every hand-written shape was correct: `item.key`,
+   `product.key_prefix`, `ai_usage` and `workspace_ai_credential` came back identical — required on
+   Row and Insert, optional on Update. One value had drifted and nothing read it: `PostgrestVersion`
+   was hand-typed `14.15` where the platform reports `14.5`. The stale *content* was the real cost —
+   two migrations of scoring schema were missing, and with them the `closed` disposition that was
+   already rendering wrong on the item page. **Regenerate after every migration, not at the next
+   opportunity.** The original note follows.
+
+   **`src/db/database.types.ts` was hand-edited — regenerate and diff.** T1.2 added `item.key` and
    `product.key_prefix` to that file by hand, because the Supabase MCP server was not connected in
    that session and there is no second route to the generator on this machine. Both follow
    `artifact_version.version_no` exactly — required on Row and Insert, optional on Update, which is
@@ -713,7 +801,12 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
    row's layout after the fact. Arrow-key walking of list rows (§11) is unwired, and
    `src/lib/roving.ts` is already there for whoever does it — **T1.3 or a later pass**. The row's
    freshness is *last activity*, not *scored at*: §8's dot and §10's "scored 6 h ago — retrying"
-   both want a scoring clock, which arrives in **Phase 2**.
+   both want a scoring clock, which arrives in **Phase 2**. **Half-answered by T2.4:** the item page
+   now reads that clock — `scoring_run.scored_at` for the timestamp, `artifact.next_scoring_attempt_at`
+   for the retry — and renders both states. The *row* still shows last activity, because §13's list
+   is a workspace-wide ranking and giving every row its newest run is a second read across the whole
+   workspace, not a column on the one it already makes. Decide it with the list's pagination question
+   (open question 7), which is the same read.
 7. **The list read is unpaginated, deliberately — revisit when a workspace gets large.** The buckets
    are a ranking over the whole workspace, so there is no page of rows that could be bucketed
    correctly: you cannot tell that an item belongs at the top of Your move from a slice of the
@@ -799,6 +892,24 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
     disagree with the pack, and nothing detects that. `validatePack` enforces the zero-sum budget
     but not that a change came with a version. **Worth a check when packs start syncing from a git
     repo (§7)**, which is the point where an edit can arrive without a human bumping anything.
+
+17. **Which artifact's meter, once a second pack ships.** T2.4 reads "the artifact's latest run" as
+    *the item's* latest run, which is exact today: `packForKind` gives one pack per artifact kind and
+    only `prd` has one, so an item has at most one scorable artifact. §2 says "per-stage readiness
+    scores" and §13's row carries "per-stage readiness meters" — both plural. **When the tech-spec or
+    brief pack lands, the item page needs a meter per scored artifact**, and `getLatestRunForItem`
+    becomes a read per artifact rather than one per item. The seam is small on purpose: `RunView` is
+    composed from one run, so the change is the query and the layout, not the composition.
+
+18. **A run's check prose is not versioned with the run, the way its tag and points are.** T2.3
+    copied `tag` and `points` onto `scoring_check_result` so a run stays priced by the rubric that
+    produced it; prose was not copied, and `getPack` returns the **current** pack. So a rubric that
+    reworded a check would display the new sentence against an old verdict, and one that dropped a
+    check displays no sentence at all — `CheckLine.prose` is nullable and the line renders on its id
+    alone, which is the honest floor rather than a fix. **Decide when a pack version actually
+    bumps**: either copy prose onto the row like tag and points, or make packs loadable by version so
+    a run can be read against its own. The second is what §5 means by versioning rubrics like
+    documents, and it is what a re-baseline pass (open question 15) will want anyway.
 
 ## On the horizon
 

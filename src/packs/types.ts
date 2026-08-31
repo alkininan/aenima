@@ -10,6 +10,28 @@ import type { Database } from "@/db/database.types";
  * database, no prompt: a pack is data that later tickets load, pin and score
  * against, and keeping it inert is what lets the standard be reviewed by
  * someone who does not read TypeScript for a living.
+ *
+ * **A pack's prose is user-facing content, and it is not translated through
+ * `src/i18n`.** `RubricCheck.prose` and `ApplicabilityCondition.when` are read
+ * by a person on the item page (T2.4's meter expansion), which looks like a
+ * violation of CLAUDE.md's "all user-facing strings go through `src/i18n/*`"
+ * and is not. The i18n rule governs strings the **product** says. A check's
+ * wording is a string the **rubric** says: it is the standard itself, versioned
+ * with the pack (§5 versions rubrics like documents), cited by every gap and
+ * every critic objection, and shown to the model in the same words the human
+ * reviewer reads (§4).
+ *
+ * So a Turkish workspace sees a Turkish check by being shipped a **translated
+ * pack**, which is what §18 already makes the law — "English is the authoring
+ * source; TR/NL are a translation build-step over finished packs, never
+ * parallel authoring". Copying rubric text into `src/i18n` would create two
+ * sources for one sentence, and they would disagree on the first version bump:
+ * the pack would score against one standard while the page displayed another.
+ *
+ * Until translated packs exist, a TR or NL workspace reads English check prose
+ * inside otherwise translated chrome. That is a **known gap with an owner**
+ * (§18's seed-content workstream), recorded in docs/build-log.md — not an
+ * oversight to be "fixed" by moving these strings.
  */
 
 type ArtifactKind = Database["public"]["Enums"]["artifact_kind"];

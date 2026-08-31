@@ -3,6 +3,8 @@ import type { ArtifactView } from "@/app/i/[key]/ArtifactList";
 import type { DecisionView } from "@/app/i/[key]/DecisionList";
 import type { GapView } from "@/app/i/[key]/GapList";
 import type { ItemHeaderData } from "@/app/i/[key]/ItemHeader";
+import { composeRunView, type RunView, type StoredRunInput } from "@/lib/scoring/run-view";
+import { featurePrdPack } from "@/packs/feature-prd";
 
 /**
  * The item-page fixture.
@@ -13,10 +15,18 @@ import type { ItemHeaderData } from "@/app/i/[key]/ItemHeader";
  * has exists here too.
  *
  * Every case the page has to survive is represented once: an artifact with
- * versions and a body, one with none, all three gap dispositions, a superseded
+ * versions and a body, one with none, all four gap dispositions, a superseded
  * decision and the one that replaced it, and a ledger with both actor kinds.
  * Real data cannot show most of that — no seeded item has any activity at all,
  * and only one has gaps.
+ *
+ * **The run is the exception, and it is deliberately not invented.** `ITEM_RUN`
+ * is Ghost mode's real run — the conditions, the verdicts, the points and the
+ * arithmetic from the marking scheme in docs/build-log.md — composed through
+ * the same `composeRunView` the real page calls. So `/dev/item` renders what
+ * `/i/soc-9` renders, and an assertion that holds here is an assertion about
+ * the product rather than about a mock. A fixture that made its own numbers up
+ * could pass every test while the page showed something else.
  *
  * DELETE BEFORE LAUNCH, with everything else under /dev.
  */
@@ -63,33 +73,66 @@ export const ITEM_ARTIFACTS: ArtifactView[] = [
   },
 ];
 
+/**
+ * §5's four dispositions — and only two kinds of them reach the page (§13).
+ *
+ * The check ids are **rubric check ids**, as T2.3 made them: a gap names a
+ * check, a story names a requirement, and the requirement id lives inside the
+ * evidence where §7.2 puts it (build log, open question 11). The two `MN-*`
+ * labels below are requirement ids inside §5's own sentence shape, which is
+ * exactly where they belong.
+ *
+ * The last two exist to be **absent** from the rendered list. An open Should
+ * lives under the score, where its check explains it; a closed gap renders
+ * nowhere, because the check passing is the record.
+ */
 export const ITEM_GAPS: GapView[] = [
   {
     id: "g1",
-    checkId: "MN-2",
+    checkId: "prd-19",
     tag: "must",
     disposition: "open",
-    evidence: "'nearby' — same venue, or within 100 m? Two readings possible.",
+    evidence: "MN-2: 'nearby' — same venue, or within 100 m? Two readings possible.",
     resolvedBy: null,
     resolutionNote: null,
   },
   {
     id: "g2",
-    checkId: "MN-7",
-    tag: "should",
+    checkId: "prd-16",
+    tag: "must",
     disposition: "accepted",
-    evidence: "No offline behaviour described for the digest list.",
+    evidence: "MN-7: no offline behaviour described for the digest list.",
     resolvedBy: { kind: "self" },
     resolutionNote: "Accepted for V1 — the list is server-rendered and rarely opened offline.",
   },
   {
     id: "g3",
-    checkId: "SF-1",
+    checkId: "prd-20",
     tag: "must",
     disposition: "excluded",
     evidence: "No user-to-user visibility on this surface.",
     resolvedBy: { kind: "other" },
     resolutionNote: "Excluded: the digest has no interpersonal surface.",
+  },
+  // §13 files this under the score rather than here. It must not render.
+  {
+    id: "g4",
+    checkId: "prd-8",
+    tag: "should",
+    disposition: "open",
+    evidence: "No kill or rollback line anywhere in the document.",
+    resolvedBy: null,
+    resolutionNote: null,
+  },
+  // Closed by a re-score. A time, no name, no note — and no line on the page.
+  {
+    id: "g5",
+    checkId: "prd-10",
+    tag: "must",
+    disposition: "closed",
+    evidence: "GM-4 is prose rather than Given/When/Then.",
+    resolvedBy: null,
+    resolutionNote: null,
   },
 ];
 
@@ -129,3 +172,231 @@ export const ITEM_ACTIVITY: ActivityView[] = [
     occurredAt: ITEM_NOW - 20 * DAY,
   },
 ];
+
+/* -------------------------------------------------------------------------- */
+/* The run — Ghost mode's, exactly                                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Ghost mode's stored run, from the marking scheme in docs/build-log.md.
+ *
+ * Three conditions were answered in the scoring pass: no list surface,
+ * network-dependent, user-to-user. So `prd-15` renormalizes **out** (−6) and
+ * the safety layer's `prd-20` renormalizes **in** (+5), and the denominator is
+ * **99** — the one number that proves both directions ran.
+ *
+ * Five checks came back unclear against the shipped protocol, costing
+ * 3 + 4 + 10 + 8 + 8 = 33, so the run earned **66 of 99**. (The answer key says
+ * 58: it is labelled against what the rubric *should* find, and `prd-19` passes
+ * on the shipped prompt. That gap is a recorded open question about the rubric,
+ * not about this surface — and a fixture that quietly used 58 would be asserting
+ * a run the product does not currently produce.)
+ *
+ * The quotes are real text from `scripts/seed-prd.ts`. Two failures are
+ * *absences* — there is nothing to quote, and a null quote is legal and
+ * different from a missing one.
+ */
+const GHOST_MODE_RUN: StoredRunInput = {
+  packId: "feature-prd",
+  packVersion: "1.0.0",
+  model: "claude-sonnet-5",
+  scoredAt: new Date(ITEM_NOW - 4 * 60 * 60 * 1000).toISOString(),
+  nextScoringAttemptAt: null,
+  conditionsMet: ["network-dependent-surface", "user-to-user-or-location"],
+  earned: 66,
+  denominator: 99,
+  results: [
+    {
+      checkId: "prd-1",
+      tag: "should",
+      points: 5,
+      passed: true,
+      requirementId: null,
+      quote: null,
+      note: null,
+    },
+    {
+      checkId: "prd-2",
+      tag: "should",
+      points: 3,
+      passed: true,
+      requirementId: null,
+      quote: null,
+      note: null,
+    },
+    {
+      checkId: "prd-3",
+      tag: "should",
+      points: 4,
+      passed: true,
+      requirementId: null,
+      quote: null,
+      note: null,
+    },
+    {
+      checkId: "prd-4",
+      tag: "should",
+      points: 2,
+      passed: true,
+      requirementId: null,
+      quote: null,
+      note: null,
+    },
+    // An absence: three assumptions, and no detection signal for any of them.
+    {
+      checkId: "prd-5",
+      tag: "should",
+      points: 3,
+      passed: false,
+      requirementId: null,
+      quote: null,
+      note: "Three assumptions are listed, and none of them says how we would notice it was wrong.",
+    },
+    {
+      checkId: "prd-6",
+      tag: "must",
+      points: 6,
+      passed: true,
+      requirementId: null,
+      quote: null,
+      note: null,
+    },
+    {
+      checkId: "prd-7",
+      tag: "should",
+      points: 4,
+      passed: true,
+      requirementId: null,
+      quote: null,
+      note: null,
+    },
+    // The other absence: no kill or rollback line exists to quote.
+    {
+      checkId: "prd-8",
+      tag: "should",
+      points: 4,
+      passed: false,
+      requirementId: null,
+      quote: null,
+      note: "There is no kill or rollback line anywhere in the document.",
+    },
+    {
+      checkId: "prd-9",
+      tag: "must",
+      points: 6,
+      passed: true,
+      requirementId: null,
+      quote: null,
+      note: null,
+    },
+    {
+      checkId: "prd-10",
+      tag: "must",
+      points: 10,
+      passed: false,
+      requirementId: "GM-4",
+      quote: "Members someone has blocked never see them at a venue, ghost mode on or off.",
+      note: "GM-4 is prose. The other four stories carry Given/When/Then.",
+    },
+    {
+      checkId: "prd-11",
+      tag: "must",
+      points: 5,
+      passed: true,
+      requirementId: null,
+      quote: null,
+      note: null,
+    },
+    {
+      checkId: "prd-12",
+      tag: "should",
+      points: 4,
+      passed: true,
+      requirementId: null,
+      quote: null,
+      note: null,
+    },
+    {
+      checkId: "prd-13",
+      tag: "should",
+      points: 4,
+      passed: true,
+      requirementId: null,
+      quote: null,
+      note: null,
+    },
+    {
+      checkId: "prd-14",
+      tag: "must",
+      points: 8,
+      passed: false,
+      requirementId: "GM-3",
+      quote:
+        "Given ghost mode is on, when I look at the venue screen, then a persistent indicator tells me that other members cannot see me here.",
+      note: "GM-3 and GM-4 describe no failure behaviour. GM-1, GM-2 and GM-5 do.",
+    },
+    // prd-15 is absent by construction: it renormalized out, so the run holds
+    // no verdict for it and `composeRunView` renders it as not asked.
+    {
+      checkId: "prd-16",
+      tag: "must",
+      points: 6,
+      passed: true,
+      requirementId: null,
+      quote: null,
+      note: null,
+    },
+    {
+      checkId: "prd-17",
+      tag: "must",
+      points: 8,
+      passed: false,
+      requirementId: null,
+      quote: "Events: `GhostOn`, `ghost_mode_toggled`.",
+      note: "The two event names disagree on convention, there is no off event, and the hypothesis metric is not computable from either.",
+    },
+    {
+      checkId: "prd-18",
+      tag: "should",
+      points: 4,
+      passed: true,
+      requirementId: null,
+      quote: null,
+      note: null,
+    },
+    {
+      checkId: "prd-19",
+      tag: "must",
+      points: 8,
+      passed: true,
+      requirementId: null,
+      quote: null,
+      note: null,
+    },
+    {
+      checkId: "prd-20",
+      tag: "must",
+      points: 5,
+      passed: true,
+      requirementId: null,
+      quote: null,
+      note: null,
+    },
+  ],
+};
+
+/** The run as the page composes it — through the real composer, not by hand. */
+export const ITEM_RUN: RunView = composeRunView(featurePrdPack, GHOST_MODE_RUN);
+
+/**
+ * The same run with §5's queue holding a retry — §10's warning dot and
+ * "scored 4h ago — retrying".
+ *
+ * A provider outage cannot be staged in a browser test, and it is the one
+ * freshness state that must never read as an error. So it is a fixture, and
+ * `/dev/primitives` renders it beside the other two.
+ */
+export const ITEM_RUN_RETRYING: RunView = composeRunView(featurePrdPack, {
+  ...GHOST_MODE_RUN,
+  nextScoringAttemptAt: new Date(ITEM_NOW + 15 * 60 * 1000).toISOString(),
+});

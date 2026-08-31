@@ -8,9 +8,11 @@ import { GapList, type GapView } from "./GapList";
 const t = getDictionary();
 
 const gap = (overrides: Partial<GapView> & Pick<GapView, "id" | "disposition">): GapView => ({
-  checkId: "MN-2",
+  // A rubric check id, as T2.3 made it: a gap names a check, and the
+  // requirement id lives inside the evidence where §7.2 puts it.
+  checkId: "prd-19",
   tag: "must",
-  evidence: "'nearby' — same venue, or within 100 m?",
+  evidence: "MN-2: 'nearby' — same venue, or within 100 m?",
   resolvedBy: null,
   resolutionNote: null,
   ...overrides,
@@ -26,12 +28,12 @@ const gap = (overrides: Partial<GapView> & Pick<GapView, "id" | "disposition">):
  */
 describe("GapList", () => {
   it("renders an open gap with its check id and quoted evidence", () => {
-    render(<GapList gaps={[gap({ id: "g1", disposition: "open" })]} t={t} />);
+    render(<GapList gaps={[gap({ id: "g1", disposition: "open" })]} t={t} scored={false} />);
 
-    expect(screen.getByText("MN-2")).not.toBeNull();
+    expect(screen.getByText("prd-19")).not.toBeNull();
     // §5: "a failure quotes the exact gap." The evidence is the body, not a
     // detail behind a disclosure.
-    expect(screen.getByText("'nearby' — same venue, or within 100 m?")).not.toBeNull();
+    expect(screen.getByText("MN-2: 'nearby' — same venue, or within 100 m?")).not.toBeNull();
     expect(screen.getByText(t.item.gapOpen)).not.toBeNull();
   });
 
@@ -47,6 +49,7 @@ describe("GapList", () => {
           }),
         ]}
         t={t}
+        scored={false}
       />,
     );
 
@@ -68,6 +71,7 @@ describe("GapList", () => {
           }),
         ]}
         t={t}
+        scored={false}
       />,
     );
 
@@ -87,6 +91,7 @@ describe("GapList", () => {
           gap({ id: "g2", disposition: "accepted", tag: "must", resolvedBy: { kind: "self" } }),
         ]}
         t={t}
+        scored={false}
       />,
     );
 
@@ -98,20 +103,21 @@ describe("GapList", () => {
     render(
       <GapList
         gaps={[
-          gap({ id: "g4", disposition: "excluded", checkId: "SF-1" }),
-          gap({ id: "g5", disposition: "open", tag: "should", checkId: "MN-9" }),
-          gap({ id: "g6", disposition: "open", tag: "must", checkId: "MN-2" }),
-          gap({ id: "g7", disposition: "accepted", checkId: "MN-7" }),
+          gap({ id: "g4", disposition: "excluded", checkId: "prd-20" }),
+          gap({ id: "g5", disposition: "accepted", tag: "should", checkId: "prd-8" }),
+          gap({ id: "g6", disposition: "open", tag: "must", checkId: "prd-19" }),
+          gap({ id: "g7", disposition: "accepted", checkId: "prd-16" }),
         ]}
         t={t}
+        scored={false}
       />,
     );
 
     const ids = screen
       .getAllByRole("listitem")
-      .map((row) => within(row).getByText(/^(MN|SF)-\d+$/).textContent);
+      .map((row) => within(row).getByText(/^prd-\d+$/).textContent);
 
-    expect(ids).toEqual(["MN-2", "MN-9", "MN-7", "SF-1"]);
+    expect(ids).toEqual(["prd-19", "prd-16", "prd-8", "prd-20"]);
   });
 
   /**
@@ -128,6 +134,7 @@ describe("GapList", () => {
           gap({ id: "g2", disposition: "accepted", resolvedBy: { kind: "self" } }),
         ]}
         t={t}
+        scored={false}
       />,
     );
 
@@ -139,7 +146,101 @@ describe("GapList", () => {
   // No gaps yet is the ordinary case — scoring has not run — so it reads as
   // normal rather than as absence. §12: never "missing", never "none".
   it("says nothing has been found yet rather than reporting an absence", () => {
-    render(<GapList gaps={[]} t={t} />);
+    render(<GapList gaps={[]} t={t} scored={false} />);
     expect(screen.getByText(t.item.noGaps)).not.toBeNull();
+  });
+
+  /* ------------------------------------------------------------------------ */
+  /* T2.4: this list narrows to §13, and the run's full picture moves          */
+  /* ------------------------------------------------------------------------ */
+
+  /**
+   * §13 names what belongs on the item page: work waiting on a human, and
+   * debts someone put their name to. An open Should is neither — it is
+   * advisory, and its own check states it with its evidence in the meter's
+   * expansion. Repeating every advisory finding here would bury the ones that
+   * block handover.
+   */
+  it("files an open Should under the score instead of listing it here", () => {
+    render(
+      <GapList
+        gaps={[
+          gap({ id: "g1", disposition: "open", tag: "must", checkId: "prd-19" }),
+          gap({ id: "g2", disposition: "open", tag: "should", checkId: "prd-8" }),
+        ]}
+        t={t}
+        scored
+      />,
+    );
+
+    expect(screen.getByText("prd-19")).not.toBeNull();
+    expect(screen.queryByText("prd-8")).toBeNull();
+  });
+
+  /**
+   * A closed gap renders nowhere at all — the check passing is the record.
+   *
+   * `gap_resolution_shape` gives a closed row a time and no name and no note,
+   * because nobody decided anything: a re-score found the check passing, or
+   * §4's condition stopped holding. §1 law 7 is about debts a *named person*
+   * accepted, and there is no name here to preserve.
+   *
+   * This is also the live bug T2.4 closed. `writeRun` has written `closed` gaps
+   * since T2.3 and `getItemByKey` selects every disposition, so before the
+   * narrowing they fell through and rendered as "Open" — the page telling
+   * someone they owed work that a run had already found done.
+   */
+  it("renders a closed gap nowhere, in any tag", () => {
+    render(
+      <GapList
+        gaps={[
+          gap({ id: "g1", disposition: "closed", tag: "must", checkId: "prd-10" }),
+          gap({ id: "g2", disposition: "closed", tag: "should", checkId: "prd-5" }),
+        ]}
+        t={t}
+        scored
+      />,
+    );
+
+    expect(screen.queryByText("prd-10")).toBeNull();
+    expect(screen.queryByText("prd-5")).toBeNull();
+    expect(screen.queryByText(t.item.gapOpen)).toBeNull();
+    // Nothing left to show, so the scored empty line — which does not claim
+    // there were never any gaps.
+    expect(screen.getByText(t.item.noGapsScored)).not.toBeNull();
+  });
+
+  // A settled gap survives the narrowing whatever its tag: §1 law 7 is about
+  // the name on it, and a Should someone accepted still has one.
+  it("keeps accepted and excluded gaps of either tag", () => {
+    render(
+      <GapList
+        gaps={[
+          gap({ id: "g1", disposition: "accepted", tag: "should", checkId: "prd-8" }),
+          gap({ id: "g2", disposition: "excluded", tag: "must", checkId: "prd-20" }),
+        ]}
+        t={t}
+        scored
+      />,
+    );
+
+    expect(screen.getByText("prd-8")).not.toBeNull();
+    expect(screen.getByText("prd-20")).not.toBeNull();
+  });
+
+  /**
+   * The empty line has to say something true about why it is empty. Before a
+   * run, "no gaps yet, they appear when scoring runs" is the whole truth. After
+   * one it is not: there may be several open Shoulds a click away, and a line
+   * claiming none would have the page contradicting the meter above it.
+   */
+  it("says something different when the emptiness follows a run", () => {
+    const { unmount } = render(<GapList gaps={[]} t={t} scored={false} />);
+    expect(screen.getByText(t.item.noGaps)).not.toBeNull();
+    unmount();
+
+    render(<GapList gaps={[]} t={t} scored />);
+    expect(screen.getByText(t.item.noGapsScored)).not.toBeNull();
+    expect(screen.queryByText(t.item.noGaps)).toBeNull();
   });
 });

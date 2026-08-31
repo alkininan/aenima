@@ -6,19 +6,18 @@
  * route is the Supabase MCP server's `generate_typescript_types` against the
  * project the migration was just applied to.
  *
- * T2.2 note: `ai_usage`, `workspace_ai_credential` and the three `ai_*` enums
- * were added here **by hand** as well, for the same reason and following the
- * same shapes. `vault_secret_id` is typed here because Drizzle owns the column;
- * the request path cannot select it — `authenticated` holds no grant on it (see
- * `drizzle/0007_ai_layer.sql`), so a query that names it fails at run time even
- * though it typechecks. That gap is the one thing this file cannot express.
+ * T2.4 regenerated this whole file, which retires two hand-edit notes and
+ * confirms them: `item.key`, `product.key_prefix` (T1.2) and `ai_usage`,
+ * `workspace_ai_credential` (T2.2) came back byte-identical in shape to what
+ * was written by hand — required on Row and Insert, optional on Update, the
+ * shape the generator gives a NOT NULL column with no default. One value did
+ * drift: `PostgrestVersion` was hand-typed `14.15` and the platform reports
+ * `14.5`. Nothing read it, so nothing was wrong; it is right now.
  *
- * T1.2 note: `item.key` and `product.key_prefix` were added here **by hand**,
- * because the Supabase MCP server was not connected in that session and there is
- * no second route to the generator on this machine. They follow
- * `artifact_version.version_no` exactly — required on Row and Insert, optional on
- * Update — which is the shape the generator gives a NOT NULL column with no
- * default. Regenerate at the next opportunity and this note goes with it.
+ * The one thing this file still cannot express: `vault_secret_id` is typed
+ * because Drizzle owns the column, but the request path cannot select it —
+ * `authenticated` holds no grant on it (see `drizzle/0007_ai_layer.sql`), so a
+ * query naming it fails at run time even though it typechecks.
  *
  * This file is what makes `src/db/queries/*` typed rather than typed-looking:
  * the clients in `src/lib/supabase/` are parameterised with `Database`, so a
@@ -32,7 +31,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.15";
+    PostgrestVersion: "14.5";
   };
   public: {
     Tables: {
@@ -183,6 +182,7 @@ export type Database = {
           id: string;
           item_id: string;
           kind: Database["public"]["Enums"]["artifact_kind"];
+          next_scoring_attempt_at: string | null;
           workspace_id: string;
         };
         Insert: {
@@ -190,6 +190,7 @@ export type Database = {
           id?: string;
           item_id: string;
           kind: Database["public"]["Enums"]["artifact_kind"];
+          next_scoring_attempt_at?: string | null;
           workspace_id: string;
         };
         Update: {
@@ -197,6 +198,7 @@ export type Database = {
           id?: string;
           item_id?: string;
           kind?: Database["public"]["Enums"]["artifact_kind"];
+          next_scoring_attempt_at?: string | null;
           workspace_id?: string;
         };
         Relationships: [
@@ -602,6 +604,133 @@ export type Database = {
           },
         ];
       };
+      scoring_check_result: {
+        Row: {
+          check_id: string;
+          id: string;
+          note: string | null;
+          passed: boolean;
+          points: number;
+          quote: string | null;
+          requirement_id: string | null;
+          run_id: string;
+          tag: Database["public"]["Enums"]["gap_tag"];
+          workspace_id: string;
+        };
+        Insert: {
+          check_id: string;
+          id?: string;
+          note?: string | null;
+          passed: boolean;
+          points: number;
+          quote?: string | null;
+          requirement_id?: string | null;
+          run_id: string;
+          tag: Database["public"]["Enums"]["gap_tag"];
+          workspace_id: string;
+        };
+        Update: {
+          check_id?: string;
+          id?: string;
+          note?: string | null;
+          passed?: boolean;
+          points?: number;
+          quote?: string | null;
+          requirement_id?: string | null;
+          run_id?: string;
+          tag?: Database["public"]["Enums"]["gap_tag"];
+          workspace_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "scoring_check_result_run_fk";
+            columns: ["workspace_id", "run_id"];
+            isOneToOne: false;
+            referencedRelation: "scoring_run";
+            referencedColumns: ["workspace_id", "id"];
+          },
+        ];
+      };
+      scoring_run: {
+        Row: {
+          artifact_id: string;
+          artifact_version_id: string;
+          conditions_met: string[];
+          denominator: number;
+          earned: number;
+          id: string;
+          item_id: string;
+          model: string;
+          pack_id: string;
+          pack_version: string;
+          protocol_version: string;
+          provider: Database["public"]["Enums"]["ai_provider"];
+          scored_at: string;
+          workspace_id: string;
+        };
+        Insert: {
+          artifact_id: string;
+          artifact_version_id: string;
+          conditions_met: string[];
+          denominator: number;
+          earned: number;
+          id?: string;
+          item_id: string;
+          model: string;
+          pack_id: string;
+          pack_version: string;
+          protocol_version: string;
+          provider: Database["public"]["Enums"]["ai_provider"];
+          scored_at?: string;
+          workspace_id: string;
+        };
+        Update: {
+          artifact_id?: string;
+          artifact_version_id?: string;
+          conditions_met?: string[];
+          denominator?: number;
+          earned?: number;
+          id?: string;
+          item_id?: string;
+          model?: string;
+          pack_id?: string;
+          pack_version?: string;
+          protocol_version?: string;
+          provider?: Database["public"]["Enums"]["ai_provider"];
+          scored_at?: string;
+          workspace_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "scoring_run_artifact_fk";
+            columns: ["workspace_id", "artifact_id"];
+            isOneToOne: false;
+            referencedRelation: "artifact";
+            referencedColumns: ["workspace_id", "id"];
+          },
+          {
+            foreignKeyName: "scoring_run_item_fk";
+            columns: ["workspace_id", "item_id"];
+            isOneToOne: false;
+            referencedRelation: "item";
+            referencedColumns: ["workspace_id", "id"];
+          },
+          {
+            foreignKeyName: "scoring_run_version_fk";
+            columns: ["workspace_id", "artifact_version_id"];
+            isOneToOne: false;
+            referencedRelation: "artifact_version";
+            referencedColumns: ["workspace_id", "id"];
+          },
+          {
+            foreignKeyName: "scoring_run_workspace_fk";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspace";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       workspace: {
         Row: {
           created_at: string;
@@ -701,7 +830,7 @@ export type Database = {
       ai_tier: "routine" | "analysis" | "generation";
       artifact_kind: "brief" | "prd" | "tech_spec" | "design_package" | "backlog";
       flow_intent: "value" | "quality" | "risk" | "debt";
-      gap_disposition: "open" | "accepted" | "excluded";
+      gap_disposition: "open" | "accepted" | "excluded" | "closed";
       gap_tag: "must" | "should";
       item_type:
         "feature" | "enhancement" | "technical" | "content" | "experiment" | "fix" | "spike";
@@ -808,6 +937,22 @@ export type Enums<
     ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
     : never;
 
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    keyof DefaultSchema["CompositeTypes"] | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals;
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never) = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals;
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never;
+
 export const Constants = {
   public: {
     Enums: {
@@ -818,7 +963,7 @@ export const Constants = {
       ai_tier: ["routine", "analysis", "generation"],
       artifact_kind: ["brief", "prd", "tech_spec", "design_package", "backlog"],
       flow_intent: ["value", "quality", "risk", "debt"],
-      gap_disposition: ["open", "accepted", "excluded"],
+      gap_disposition: ["open", "accepted", "excluded", "closed"],
       gap_tag: ["must", "should"],
       item_type: ["feature", "enhancement", "technical", "content", "experiment", "fix", "spike"],
       member_role: ["owner", "product", "developer", "viewer"],

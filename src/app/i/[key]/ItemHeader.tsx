@@ -1,4 +1,3 @@
-import { Meter } from "@/components/ui/Meter";
 import type { Dictionary } from "@/i18n";
 import type { Stage } from "@/lib/stage";
 
@@ -22,19 +21,19 @@ export type ItemHeaderData = {
  * The type renders bare, per §8 (v2.15): no container. A bordered thing on a
  * surface that also carries gap chips means a gap, and type is taxonomy.
  *
- * **The meter is hollow, and here that is right.** §10 renders an unscored
- * meter as a track plus "connect AI to activate scoring", and this is the
- * surface where the line fits beside it — which is exactly why v2.15 removed
- * the meter from the list row, where it did not.
+ * **The meter is not here.** It left with T2.4, because §8 makes the meter the
+ * summary of a disclosure and the run it opens onto is a list, not a header.
+ * `ReadinessPanel` owns both, and the page holds the two together at the gap
+ * they had when they were one element — the meter keeps its position, and a
+ * header stops containing a page's worth of check results.
  */
 export function ItemHeader({ item, t }: { item: ItemHeaderData; t: Dictionary }) {
   return (
-    <header className="flex flex-col gap-[16px]">
-      <div className="flex flex-col gap-[8px]">
-        <span className="type-mono-readout text-n-secondary">{item.key}</span>
-        <h1 className="type-display-xl text-n-primary">{item.title}</h1>
+    <header className="flex flex-col gap-[8px]">
+      <span className="type-mono-readout text-n-secondary">{item.key}</span>
+      <h1 className="type-display-xl text-n-primary">{item.title}</h1>
 
-        {/* §2 lineage, in §4's subtitle slot: ui-body, --n-secondary, one line,
+      {/* §2 lineage, in §4's subtitle slot: ui-body, --n-secondary, one line,
             truncating rather than wrapping. The opportunity is the thing that
             explains why this item exists, so it sits directly under the title
             rather than among the taxonomy below it.
@@ -47,32 +46,25 @@ export function ItemHeader({ item, t }: { item: ItemHeaderData; t: Dictionary })
             Absent when the item is unlinked. §2 makes that legal — "an item may
             be unlinked from any opportunity … never a block" — so there is
             nothing to report and nothing is said. */}
-        {item.opportunityTitle === null ? null : (
-          <p className="flex items-baseline gap-[8px]">
-            <span className="type-mono-micro shrink-0 text-n-secondary">{t.item.opportunity}</span>
-            <span className="type-ui-body truncate text-n-secondary">{item.opportunityTitle}</span>
-          </p>
-        )}
-
-        {/* Taxonomy, product and derived stage — the three things that place an
-            item without describing it. mono-micro is §3's eyebrow. */}
-        <p className="type-mono-micro flex flex-wrap items-center gap-[8px] text-n-secondary">
-          <span>{t.itemTypes[item.type]}</span>
-          <span aria-hidden="true">·</span>
-          <span>{item.productName}</span>
-          <span aria-hidden="true">·</span>
-          {/* Named so nobody reads a derived value as a settable field. */}
-          <span>
-            {t.item.stageLabel}: {t.stages[item.stage]}
-          </span>
+      {item.opportunityTitle === null ? null : (
+        <p className="flex items-baseline gap-[8px]">
+          <span className="type-mono-micro shrink-0 text-n-secondary">{t.item.opportunity}</span>
+          <span className="type-ui-body truncate text-n-secondary">{item.opportunityTitle}</span>
         </p>
-      </div>
+      )}
 
-      {/* §8: the item-page meter is 8h with its readout beside it. */}
-      <div className="flex max-w-[420px] flex-col gap-[8px]">
-        <Meter score={null} size={8} label={t.item.readiness} emptyLabel={t.list.noScoring} />
-        <span className="type-ui-footnote text-n-secondary">{t.list.noScoring}</span>
-      </div>
+      {/* Taxonomy, product and derived stage — the three things that place an
+            item without describing it. mono-micro is §3's eyebrow. */}
+      <p className="type-mono-micro flex flex-wrap items-center gap-[8px] text-n-secondary">
+        <span>{t.itemTypes[item.type]}</span>
+        <span aria-hidden="true">·</span>
+        <span>{item.productName}</span>
+        <span aria-hidden="true">·</span>
+        {/* Named so nobody reads a derived value as a settable field. */}
+        <span>
+          {t.item.stageLabel}: {t.stages[item.stage]}
+        </span>
+      </p>
     </header>
   );
 }
