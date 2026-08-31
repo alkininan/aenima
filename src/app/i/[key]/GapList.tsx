@@ -3,6 +3,10 @@ import { Chip } from "@/components/ui/Chip";
 import type { Dictionary } from "@/i18n";
 import type { Actor } from "@/lib/actor";
 import { cx } from "@/lib/cx";
+import type { GapMoveOutcome } from "@/lib/gap-move";
+import { gapAnchor } from "@/lib/routes";
+
+import { GapMoves } from "./GapMoves";
 
 export type GapView = {
   id: string;
@@ -79,12 +83,6 @@ function toneFor(gap: PageGap): "must" | "should" | "accepted" | "excluded" {
   return gap.disposition === "open" ? gap.tag : gap.disposition;
 }
 
-function actorWords(actor: Actor | null, t: Dictionary): string {
-  if (!actor) return t.item.actorOther;
-  if (actor.kind === "agent") return actor.name;
-  return actor.kind === "self" ? t.item.actorSelf : t.item.actorOther;
-}
-
 /**
  * What this item owes a person — product-spec.md §13.
  *
@@ -109,9 +107,15 @@ export function GapList({
   gaps,
   t,
   scored,
+  itemKey,
+  outcome,
 }: {
   gaps: readonly GapView[];
   t: Dictionary;
+  /** The key the moves submit, so a redirect knows where to come back to. */
+  itemKey: string;
+  /** §5's last outcome and the gap it belongs to, straight off the URL. */
+  outcome: { gapId: string; kind: GapMoveOutcome } | null;
   /**
    * Whether this item has ever been scored — which is what the empty line has
    * to say something true about.
@@ -153,7 +157,10 @@ export function GapList({
               : t.item.gapOpen;
 
         return (
-          <li key={gap.id}>
+          // The anchor `gapOutcomeHref` targets, so a move scrolls its own card
+          // into view. `tabIndex={-1}` makes it a focus destination without
+          // putting it in the tab order — §11 keeps that for controls.
+          <li key={gap.id} id={gapAnchor(gap.id)} tabIndex={-1}>
             {/* §7 disabled is for controls; a settled gap is not disabled, it is
                 resolved — so it dims the way §0 law 7 dims idle work rather than
                 taking a disabled treatment. */}
@@ -179,14 +186,22 @@ export function GapList({
               {/* §5: the exact quoted gap, never a paraphrase. */}
               <p className="type-ui-body text-n-primary">{gap.evidence}</p>
 
-              {settled ? (
-                <p className="type-ui-footnote text-n-secondary">
-                  {gap.disposition === "accepted"
-                    ? t.item.settledBy(actorWords(gap.resolvedBy, t))
-                    : t.item.excludedBy(actorWords(gap.resolvedBy, t))}
-                  {gap.resolutionNote ? ` — ${gap.resolutionNote}` : ""}
-                </p>
-              ) : null}
+              {/* The stamp and the move, from the one component that writes
+                  them — the expansion's unclear check renders the same thing
+                  for the same gap. */}
+              <GapMoves
+                gap={{
+                  id: gap.id,
+                  checkId: gap.checkId,
+                  tag: gap.tag,
+                  disposition: gap.disposition,
+                  resolvedBy: gap.resolvedBy,
+                  resolutionNote: gap.resolutionNote,
+                }}
+                itemKey={itemKey}
+                t={t}
+                outcome={outcome?.gapId === gap.id ? outcome.kind : null}
+              />
             </Card>
           </li>
         );

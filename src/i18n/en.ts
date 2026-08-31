@@ -9,6 +9,8 @@
  * §12 also asks for +30% width headroom for TR/NL, which is why nothing below
  * is written to fit a fixed box.
  */
+import type { GapMoveOutcome } from "@/lib/gap-move";
+
 export const en = {
   common: {
     appName: "aenima",
@@ -244,6 +246,54 @@ export const en = {
     noActivity: "Nothing has happened to this item yet.",
     /** §7: how much history an artifact has, and when it last moved. */
     versionCount: (n: number) => (n === 1 ? "1 version" : `${n} versions`),
+    /* ---------------------------------------------------------------- */
+    /* §5's third negotiation move — "we accept this risk" (T2.5)         */
+    /* ---------------------------------------------------------------- */
+    /**
+     * §5's own name for the move, and the disclosure that opens the form.
+     *
+     * §12: sentence case, calm, no exclamation. "Risk" rather than "gap"
+     * because §5 names the move that way and §0 law 8 keeps one term per
+     * concept — the thing being accepted is the risk; the gap is the record.
+     */
+    gapAccept: "Accept this risk",
+    /** §8: a field shows one text, ever — its label. */
+    gapAcceptReason: "Why this is acceptable",
+    /**
+     * §12's named confirm default. The disclosure above already says which move
+     * this is, and §0 law 8 says one term per concept — repeating "Accept this
+     * risk" on the button would say it twice on one control.
+     */
+    gapAcceptSubmit: "Looks right",
+    /**
+     * §1 law 4's "always undoable", as a standing control rather than a toast.
+     * A debt can be handed back at any time by anyone who could have taken it.
+     */
+    gapReopen: "Reopen this gap",
+    /**
+     * What came of a move — §5's outcomes, one sentence each.
+     *
+     * Keyed by `GapMoveOutcome` so the compiler names any token still missing a
+     * sentence. These map a *kind*; no string the database produced ever
+     * reaches a person (CLAUDE.md).
+     *
+     * §12 throughout: states the cause, blames nobody, never "failed" or
+     * "invalid" at someone. §0 law 1 keeps the tone off Danger — none of these
+     * is destructive and all of them are reversible.
+     */
+    gapMove: {
+      accepted: "Accepted. It stays on the page with your name on it.",
+      reopened: "Reopened. The record of why it was accepted is in the activity log.",
+      "reason-required": "Add a reason. It is the record of why this was accepted.",
+      "reason-too-long": "That reason is longer than we can store. Try the short version.",
+      "not-found": "That gap isn't here any more.",
+      "not-open": "This gap changed while you were writing, so nothing moved. Take another look.",
+      "not-accepted":
+        "This gap changed while you were writing, so nothing moved. Take another look.",
+      "not-decider": "Accepting a Must is the Decider's call. An Owner can make it too.",
+      "not-permitted": "Your role doesn't settle gaps. Someone with Product or Owner can.",
+      unavailable: "That didn't go through. Try again.",
+    } satisfies Record<GapMoveOutcome, string>,
     /** §5's three dispositions, as §5 names the moves that produce them. */
     gapOpen: "Open",
     gapAccepted: "Accepted",

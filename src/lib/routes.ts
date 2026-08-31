@@ -34,6 +34,40 @@ export const opportunityHref = (key: string) => `${ROUTES.opportunity}/${key}` a
 export const productHref = (slug: string) => `${ROUTES.product}/${slug}` as const;
 export const packetHref = (key: string) => `${ROUTES.packet}/${key}` as const;
 
+/**
+ * An item key, as `item_key_shape` in drizzle/0005 defines it.
+ *
+ * §5's moves submit the key in a form, and it becomes a path segment in the
+ * redirect that follows — so it is shape-checked before it is interpolated. The
+ * result is always `/i/<segment>`, never an absolute URL, so there is no open
+ * redirect here even without the check; the check is what turns a tampered key
+ * into the list rather than a 404.
+ */
+const ITEM_KEY = /^[a-z][a-z0-9]{1,7}-[0-9]+$/;
+
+export const isItemKey = (value: string): boolean => ITEM_KEY.test(value);
+
+/**
+ * §5's negotiation moves report themselves in the URL.
+ *
+ * The item page has no client island, so an outcome cannot live in
+ * `useActionState`. It travels as two search params instead: which gap, and what
+ * happened to it. Both are non-secret — the gap id is already the card's anchor,
+ * and the outcome is one of a closed set of tokens (`src/lib/gap-move.ts`).
+ * Nothing a person typed and nothing the database said is ever in the URL.
+ */
+export const GAP_PARAMS = { move: "move", gap: "gap" } as const;
+
+/** Where a move sends the person back to, with what to say when they arrive. */
+export function gapOutcomeHref(key: string, gapId: string, outcome: string): string {
+  const params = new URLSearchParams({ [GAP_PARAMS.move]: outcome, [GAP_PARAMS.gap]: gapId });
+  // The fragment scrolls the card that moved into view, with JS and without.
+  return `${itemHref(key)}?${params.toString()}#gap-${gapId}`;
+}
+
+/** The anchor a moved gap's card carries, so `gapOutcomeHref` has a target. */
+export const gapAnchor = (gapId: string) => `gap-${gapId}` as const;
+
 /** §4's sidebar nav, in order. `built` gates whether it is a link at all. */
 export type NavEntry = {
   href: string;

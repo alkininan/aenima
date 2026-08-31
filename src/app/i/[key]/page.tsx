@@ -8,7 +8,8 @@ import { getSessionUser } from "@/db/queries/session";
 import { getCurrentWorkspace } from "@/db/queries/workspace";
 import { getDictionary } from "@/i18n";
 import { describeActor } from "@/lib/actor";
-import { ROUTES } from "@/lib/routes";
+import { isGapMoveOutcome } from "@/lib/gap-move";
+import { GAP_PARAMS, ROUTES } from "@/lib/routes";
 import { composeRunView } from "@/lib/scoring/run-view";
 import { getPack } from "@/packs";
 
@@ -17,6 +18,7 @@ import { ArtifactList } from "./ArtifactList";
 import { DecisionList } from "./DecisionList";
 import { GapList } from "./GapList";
 import { ItemHeader } from "./ItemHeader";
+import type { MoveableGap } from "./GapMoves";
 import { ItemSection } from "./ItemSection";
 import { ReadinessPanel } from "./ReadinessPanel";
 
@@ -35,7 +37,7 @@ import { ReadinessPanel } from "./ReadinessPanel";
  * Read-only throughout. §5's three negotiation moves, park, authoring and
  * scoring are all mutations and all later — nothing on this page is a control.
  */
-export default async function ItemPage({ params }: PageProps<"/i/[key]">) {
+export default async function ItemPage({ params, searchParams }: PageProps<"/i/[key]">) {
   const t = getDictionary();
   const { key } = await params;
 
@@ -79,6 +81,64 @@ export default async function ItemPage({ params }: PageProps<"/i/[key]">) {
   // it — see `ItemPageDetail.readAt`.
   const now = item.readAt;
 
+  /**
+   * §5's last move, as the URL reports it.
+   *
+   * The page has no client island, so an action's outcome comes back in search
+   * params rather than through `useActionState`. Both are validated here and
+   * neither is ever rendered: `move` is a key into `t.item.gapMove` and nothing
+   * else, so an unrecognised value renders no sentence at all rather than
+   * putting a crafted string on the page.
+   *
+   * It says what a finished request answered, not what is true now — a shared
+   * or bookmarked link carries it indefinitely, and a re-score can move the gap
+   * underneath it. `GapMoves` checks each claim against the row before showing
+   * it.
+   */
+  const query = await searchParams;
+  const movedGap = query[GAP_PARAMS.gap];
+  const moveKind = query[GAP_PARAMS.move];
+  const outcome =
+    isGapMoveOutcome(moveKind) && typeof movedGap === "string"
+      ? { gapId: movedGap, kind: moveKind }
+      : null;
+
+  /**
+   * What each check currently owes, by check id — the map §5's moves need in
+   * the meter's expansion.
+   *
+   * Built here and passed **alongside** the `RunView`, never folded into it. A
+   * run is immutable history; a disposition changes underneath it. Merging them
+   * would make `composeRunView`'s output a function of two clocks, and its own
+   * docstring promises that everything deciding what a check's line says comes
+   * from the run.
+   *
+   * `closed` is excluded because it renders nowhere (T2.4) and carries no move.
+   */
+  const gapsByCheck = new Map<string, MoveableGap>(
+    item.gaps
+      .filter((gap) => gap.disposition !== "closed")
+      .map((gap) => [
+        gap.checkId,
+        {
+          id: gap.id,
+          checkId: gap.checkId,
+          tag: gap.tag,
+          disposition: gap.disposition as MoveableGap["disposition"],
+          resolvedBy:
+            gap.resolvedByUserId === null
+              ? null
+              : describeActor({
+                  actorKind: "human",
+                  actorUserId: gap.resolvedByUserId,
+                  actorAgent: null,
+                  viewerId: user.id,
+                }),
+          resolutionNote: gap.resolutionNote,
+        },
+      ]),
+  );
+
   /** §11: a correction is a new decision naming the one it replaced. */
   const supersededIds = new Set(
     item.decisions
@@ -118,7 +178,14 @@ export default async function ItemPage({ params }: PageProps<"/i/[key]">) {
               t={t}
             />
 
-            <ReadinessPanel run={run} t={t} now={now} />
+            <ReadinessPanel
+              run={run}
+              t={t}
+              now={now}
+              itemKey={item.key}
+              gapsByCheck={gapsByCheck}
+              outcome={outcome}
+            />
           </div>
 
           <ItemSection title={t.item.artifacts}>
@@ -156,6 +223,8 @@ export default async function ItemPage({ params }: PageProps<"/i/[key]">) {
               }))}
               t={t}
               scored={run !== null}
+              itemKey={item.key}
+              outcome={outcome}
             />
           </ItemSection>
 

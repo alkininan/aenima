@@ -264,17 +264,136 @@ test.describe("at 1440", () => {
    * field, no toggle, nothing that submits — plus exactly one disclosure, which
    * pins the count so a second interactive thing cannot arrive unnoticed.
    */
-  test("offers nothing that changes anything, and exactly one disclosure", async ({ page }) => {
+  test("offers exactly §5's third move, once per gap that has one", async ({ page }) => {
     // Scoped to `main`: `next dev` injects its own overlay button into the
     // document, which is not the page's and would fail this for the wrong reason.
     const content = page.locator("main");
 
-    await expect(content.locator("button")).toHaveCount(0);
-    await expect(content.getByRole("textbox")).toHaveCount(0);
-    await expect(content.getByRole("checkbox")).toHaveCount(0);
-    await expect(content.locator("input, select, textarea, form")).toHaveCount(0);
+    // The fixture's gaps: `prd-10` open Must, `prd-8` open Should, `prd-16`
+    // accepted, `prd-20` excluded, `prd-19` closed. §13's narrowing keeps the
+    // open Should off the card, so the moves land like this:
+    //
+    //   gap card   prd-10 accept · prd-16 reopen · prd-20 nothing (move 1 is Phase 3)
+    //   expansion  prd-10 accept · prd-8 accept
+    //
+    // `prd-5`, `prd-14` and `prd-17` are unclear with no gap in the fixture, and
+    // offer nothing — the control follows the debt, not the check.
+    await expect(content.getByText("Accept this risk")).toHaveCount(3);
+    await expect(content.getByRole("button", { name: "Reopen this gap" })).toHaveCount(1);
 
-    await expect(content.locator("summary")).toHaveCount(1);
+    // One reason field per accept form, and no other input on the page. DOM
+    // locators rather than roles: a closed `<details>` keeps its contents out of
+    // the accessibility tree, which is exactly what a disclosure is for.
+    await expect(content.locator("input[name=reason]")).toHaveCount(3);
+    await expect(content.locator("input:not([type=hidden])")).toHaveCount(3);
+    await expect(content.getByRole("checkbox")).toHaveCount(0);
+    await expect(content.locator("select, textarea")).toHaveCount(0);
+
+    // Three accept submits and one reopen: §5's other two moves are Phase 3, and
+    // a control for them here would offer something that cannot happen.
+    await expect(content.locator("button")).toHaveCount(4);
+    await expect(content.locator("button[type=submit]")).toHaveCount(4);
+
+    // The meter's disclosure plus one per accept form.
+    await expect(content.locator("summary")).toHaveCount(4);
+  });
+
+  /**
+   * **The rule that makes the move work with JavaScript off**, and the one that
+   * is silent when broken.
+   *
+   * React encodes a server-action form as `multipart/form-data`; Next 16 bails
+   * out of a `application/x-www-form-urlencoded` action POST and lets it fall
+   * through to a normal page render, so an overridden `encType` turns every
+   * accept into a no-op that looks like nothing happened. Measured on the real
+   * markup because it is an attribute React writes, not one we can assert in a
+   * unit test's virtual DOM.
+   */
+  test("posts the move as multipart, which is what works without JavaScript", async ({ page }) => {
+    const form = page.locator("main form").first();
+
+    await expect(form).toHaveAttribute("enctype", "multipart/form-data");
+    await expect(form).toHaveAttribute("method", /post/i);
+    // The hidden field React writes to name the action. Without it a no-JS
+    // submit reaches the page rather than the function.
+    await expect(form.locator('input[type=hidden][name^="$ACTION_"]')).not.toHaveCount(0);
+  });
+
+  /**
+   * **AC3's "working without JS", proved by turning JavaScript off and pressing
+   * the button.**
+   *
+   * `/dev` carries no session — it is in `PUBLIC_PREFIXES` — so `settleGap`
+   * redirects to sign-in. That is the assertion: landing there means the POST
+   * reached the action. The failure this guards against is the opposite and is
+   * *silent* — Next drops a urlencoded action POST and re-renders the page, so a
+   * broken form looks exactly like a form nobody pressed.
+   */
+  test("submits the move with JavaScript disabled", async ({ browser }) => {
+    const context = await browser.newContext({ javaScriptEnabled: false });
+    const page = await context.newPage();
+
+    await page.goto("/dev/item");
+    // Opened by clicking its `<summary>`, which is the browser's own behaviour
+    // and not page script — the reason the disclosure is a `<details>` at all.
+    // The gap card's, not the meter expansion's: that one is inside the
+    // readiness disclosure, which is closed, so it is not on screen to click.
+    const card = page.getByTestId("gap-list").getByRole("listitem").filter({ hasText: "prd-10" });
+    await card.getByText("Accept this risk").click();
+    await card.locator("input[name=reason]").fill("Accepted for V1.");
+    await Promise.all([page.waitForURL(/\/sign-in/), card.locator("button[type=submit]").click()]);
+
+    expect(new URL(page.url()).pathname).toBe("/sign-in");
+    await context.close();
+  });
+
+  /**
+   * §13's narrowing (T2.4) keeps an open Should off the gap card, so the meter's
+   * expansion is the only place one can be accepted. That is why the move is
+   * rendered in both surfaces from one component rather than only on the card.
+   */
+  test("offers the move on an open Should, which only the expansion shows", async ({ page }) => {
+    const gaps = page.getByTestId("gap-list");
+    await expect(gaps.getByText("prd-8")).toHaveCount(0);
+
+    await page.getByTestId("readiness").locator("summary").first().first().click();
+
+    const row = page.getByTestId("check-list").getByRole("listitem").filter({ hasText: "prd-8" });
+    await expect(row.getByText("Accept this risk")).toHaveCount(1);
+  });
+
+  /**
+   * §1 law 7: "visible debts that a named person accepts." The accepted card
+   * keeps the name and carries the reversal, and §0 law 7 dims it rather than
+   * disabling it — it stays fully interactive at .60.
+   */
+  test("keeps an accepted gap named, dimmed and reversible", async ({ page }) => {
+    const card = page.getByTestId("gap-list").getByRole("listitem").filter({ hasText: "prd-16" });
+
+    await expect(card.getByRole("button", { name: "Reopen this gap" })).toBeVisible();
+    const opacity = await card
+      .locator("> *")
+      .first()
+      .evaluate((node) => getComputedStyle(node).opacity);
+    expect(opacity).toBe("0.6");
+  });
+
+  // §0 law 1: gaps never render in Danger, and neither do the moves on them.
+  // Accepting is not destructive and reopening is not either.
+  test("renders no danger red on any gap or any move", async ({ page }) => {
+    await page.getByTestId("readiness").locator("summary").first().first().click();
+
+    const danger = await page.locator("main").evaluate((root) => {
+      const DANGER = ["rgb(255, 114, 118)", "rgb(217, 58, 63)"];
+      return [...root.querySelectorAll("*")].some((node) => {
+        const style = getComputedStyle(node);
+        return [style.color, style.backgroundColor, style.borderTopColor].some((v) =>
+          DANGER.includes(v),
+        );
+      });
+    });
+
+    expect(danger).toBe(false);
   });
 
   /* ------------------------------------------------------------------------ */
@@ -322,7 +441,7 @@ test.describe("at 1440", () => {
     const checks = page.getByTestId("check-list");
     await expect(checks).toBeHidden();
 
-    await page.getByTestId("readiness").locator("summary").click();
+    await page.getByTestId("readiness").locator("summary").first().click();
     await expect(checks).toBeVisible();
 
     // Ghost mode's rubric: nineteen asked and one not, all twenty in the order
@@ -354,7 +473,7 @@ test.describe("at 1440", () => {
    * of the reason and read perfectly while doing it.
    */
   test("shows a not-asked check with the condition that did not hold", async ({ page }) => {
-    await page.getByTestId("readiness").locator("summary").click();
+    await page.getByTestId("readiness").locator("summary").first().click();
 
     const checks = page.getByTestId("check-list");
     const fifteen = checks.getByRole("listitem").filter({ hasText: "prd-15" });
@@ -381,7 +500,7 @@ test.describe("at 1440", () => {
    * a number nobody can argue with. §8 puts it in mono-readout.
    */
   test("carries the run's provenance, quietly", async ({ page }) => {
-    await page.getByTestId("readiness").locator("summary").click();
+    await page.getByTestId("readiness").locator("summary").first().click();
 
     const provenance = page.getByText("feature-prd@1.0.0 · claude-sonnet-5");
     await expect(provenance).toBeVisible();
@@ -395,14 +514,17 @@ test.describe("at 1440", () => {
    * the gap list uses, and §0 law 10 keeps glass off both.
    */
   test("puts a failing check's evidence on a card, and the card is not glass", async ({ page }) => {
-    await page.getByTestId("readiness").locator("summary").click();
+    await page.getByTestId("readiness").locator("summary").first().click();
 
+    // The row's direct children are the header line and the evidence Card, in
+    // that order; §5's move follows as a `<details>`, so `.last()` no longer
+    // names the card.
     const card = page
       .getByTestId("check-list")
       .getByRole("listitem")
       .filter({ hasText: "prd-10" })
-      .locator("div")
-      .last();
+      .locator("> div")
+      .nth(1);
 
     const style = await card.evaluate((node) => {
       const computed = getComputedStyle(node);
@@ -427,7 +549,7 @@ test.describe("at 1440", () => {
    * a class-name assertion would miss a token reached through a variable.
    */
   test("renders no danger red anywhere in the expansion", async ({ page }) => {
-    await page.getByTestId("readiness").locator("summary").click();
+    await page.getByTestId("readiness").locator("summary").first().click();
 
     const danger = await page.getByTestId("readiness").evaluate((root) => {
       const DANGER = ["rgb(255, 114, 118)", "rgb(217, 58, 63)"];
@@ -454,7 +576,7 @@ test.describe("at 1440", () => {
     const checks = page.getByTestId("check-list");
     await expect(checks).toBeHidden();
 
-    await page.getByTestId("readiness").locator("summary").focus();
+    await page.getByTestId("readiness").locator("summary").first().focus();
     await page.keyboard.press("Enter");
 
     await expect(checks).toBeVisible();
@@ -478,7 +600,7 @@ test.describe("at 1440", () => {
    * nothing focusable before the disclosure.
    */
   test("rings and glows the disclosure on keyboard focus", async ({ page }) => {
-    const summary = page.getByTestId("readiness").locator("summary");
+    const summary = page.getByTestId("readiness").locator("summary").first();
 
     for (let tabs = 0; tabs < 6; tabs += 1) {
       await page.keyboard.press("Tab");
@@ -529,7 +651,10 @@ test.describe("the meter's other states", () => {
     await page.evaluate(() => document.fonts.ready);
 
     await expect(page.getByText("Connect AI to activate scoring")).toBeVisible();
-    await expect(page.locator("main summary")).toHaveCount(0);
+    // Scoped to the meter: §10's rule is that an unscored meter opens onto
+    // nothing. The gap cards still carry §5's move, because a debt someone owes
+    // does not depend on whether a score was ever computed.
+    await expect(page.getByTestId("readiness").locator("summary")).toHaveCount(0);
     // Never a zero: a hollow meter is not a progressbar pinned at 0.
     await expect(page.getByRole("progressbar")).toHaveCount(0);
   });

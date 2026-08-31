@@ -323,6 +323,17 @@ the rubric, and says so in one line rather than letting the list read as
 complete — the missing lines are never reconstructed from the pack that ships
 today. See build-log open question 19, which also carries the line's deletion.
 
+`drizzle/0012_gap_accept.sql` — §5's third negotiation move, as
+`public.accept_gap` and `public.reopen_gap`. **SECURITY INVOKER**, so
+`gap_update` and `activity_insert` decide what they may write and nothing
+bypasses RLS; one function call is one PostgREST request and therefore one
+transaction, which is what makes the gap change and its `activity` row atomic.
+They return a status token rather than raising, because most of their outcomes
+are no-ops worth reporting rather than errors. `app.may_settle_must` is §14's
+Decider-or-Owner gate. Also `gap_resolution_note_len`: the note becomes
+user-writable with this ticket, so it gets an upper bound — only the bound, since
+`gap_resolution_shape` already refuses a blank one.
+
 ```
 pnpm db:generate   # diff the schema files into a new migration
 pnpm db:migrate    # apply pending migrations to DATABASE_URL

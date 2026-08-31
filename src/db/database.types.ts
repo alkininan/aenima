@@ -6,6 +6,10 @@
  * route is the Supabase MCP server's `generate_typescript_types` against the
  * project the migration was just applied to.
  *
+ * T2.5 added `accept_gap` and `reopen_gap` (drizzle/0012) to the `Functions`
+ * block. `app.may_settle_must` is absent by design: PostgREST exposes only
+ * `public`, and a predicate no client can call needs no client type.
+ *
  * T2.4's review added `scoring_check_not_asked` (drizzle/0011) and this file was
  * regenerated against it; the block below is the generator's, spliced in
  * alphabetically, and nothing else in the file moved.
@@ -849,6 +853,10 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      accept_gap: {
+        Args: { p_gap_id: string; p_reason: string };
+        Returns: string;
+      };
       bootstrap_workspace: {
         Args: { p_name: string };
         Returns: {
@@ -866,6 +874,7 @@ export type Database = {
           isSetofReturn: true;
         };
       };
+      reopen_gap: { Args: { p_gap_id: string }; Returns: string };
     };
     Enums: {
       activity_trigger: "user" | "agent" | "schedule" | "webhook" | "sync";

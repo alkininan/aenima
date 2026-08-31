@@ -5,7 +5,10 @@ import { GapList } from "@/app/i/[key]/GapList";
 import { ItemHeader } from "@/app/i/[key]/ItemHeader";
 import { ItemSection } from "@/app/i/[key]/ItemSection";
 import { ReadinessPanel } from "@/app/i/[key]/ReadinessPanel";
+import type { MoveableGap } from "@/app/i/[key]/GapMoves";
 import { getDictionary } from "@/i18n";
+import { isGapMoveOutcome } from "@/lib/gap-move";
+import { GAP_PARAMS } from "@/lib/routes";
 
 import { devOnly } from "../dev-only";
 import {
@@ -57,7 +60,37 @@ export default async function DevItemPage({ searchParams }: PageProps<"/dev/item
   devOnly();
 
   const t = getDictionary();
-  const { run: requested } = await searchParams;
+  const { run: requested, ...move } = await searchParams;
+
+  /**
+   * The same `checkId → gap` map and the same URL outcome the real page builds,
+   * so the mirror renders §5's moves on the same side of the RSC boundary.
+   *
+   * The form here posts to the real action, which will refuse: `/dev` is in
+   * `PUBLIC_PREFIXES` and carries no session, so `settleGap` redirects to
+   * sign-in. That is the honest limit of the mirror — it proves the control
+   * renders and is a real form, never that the write works.
+   */
+  const gapsByCheck = new Map<string, MoveableGap>(
+    ITEM_GAPS.filter((gap) => gap.disposition !== "closed").map((gap) => [
+      gap.checkId,
+      {
+        id: gap.id,
+        checkId: gap.checkId,
+        tag: gap.tag,
+        disposition: gap.disposition as MoveableGap["disposition"],
+        resolvedBy: gap.resolvedBy,
+        resolutionNote: gap.resolutionNote,
+      },
+    ]),
+  );
+
+  const movedGap = move[GAP_PARAMS.gap];
+  const moveKind = move[GAP_PARAMS.move];
+  const outcome =
+    isGapMoveOutcome(moveKind) && typeof movedGap === "string"
+      ? { gapId: movedGap, kind: moveKind }
+      : null;
   const run =
     RUNS[
       isRunState(typeof requested === "string" ? requested : undefined)
@@ -72,7 +105,14 @@ export default async function DevItemPage({ searchParams }: PageProps<"/dev/item
           {/* The same 16 the real page holds these two at. */}
           <div className="flex flex-col gap-[16px]">
             <ItemHeader item={ITEM_HEADER} t={t} />
-            <ReadinessPanel run={run} t={t} now={ITEM_NOW} />
+            <ReadinessPanel
+              run={run}
+              t={t}
+              now={ITEM_NOW}
+              itemKey={ITEM_HEADER.key}
+              gapsByCheck={gapsByCheck}
+              outcome={outcome}
+            />
           </div>
 
           <ItemSection title={t.item.artifacts}>
@@ -80,7 +120,13 @@ export default async function DevItemPage({ searchParams }: PageProps<"/dev/item
           </ItemSection>
 
           <ItemSection title={t.item.gaps}>
-            <GapList gaps={ITEM_GAPS} t={t} scored={run !== null} />
+            <GapList
+              gaps={ITEM_GAPS}
+              t={t}
+              scored={run !== null}
+              itemKey={ITEM_HEADER.key}
+              outcome={outcome}
+            />
           </ItemSection>
 
           <ItemSection title={t.item.decisions}>

@@ -244,6 +244,109 @@ at 94 on Shoulds. Rendering that as a triumphant 94 and rendering it as a plain 
 defensible; picking by accident is not. Whoever writes the branch resolves which one fires it and
 ships it with an artifact that actually reaches the state. The note in `variants.ts` says so.
 
+### T2.5 — "we accept this risk"
+
+§5's third negotiation move, and the **first mutation of product data in the codebase**. An open
+gap becomes a named person's accepted debt with a required reason, reversibly. No score moves: §5
+says accept never closes the gap, and nothing here touches the three tables the meter reads.
+
+**The atomicity mechanism, which is the precedent for every human move after this one.** The move is
+two statements — the gap UPDATE and the `activity` row §2 requires — and they commit together or
+not at all. PostgREST cannot transact two requests, so this is **one `SECURITY INVOKER` function per
+move, called over `supabase.rpc()`** (`drizzle/0012_gap_accept.sql`). PostgREST wraps every request
+including an RPC in one transaction, and SECURITY INVOKER runs the body as the caller, so
+`gap_update` and `activity_insert` — both already present since 0004 and 0001 — decide what it may
+write. **Nothing bypasses RLS and no policy was loosened.** The two in-repo alternatives were
+rejected for reasons that do not carry over: `writeRun` uses the RLS-bypassing direct connection
+because `scoring_run` has *no* INSERT policy at all, and `app.bootstrap_workspace` is DEFINER
+because a user with no membership can satisfy no INSERT policy on `workspace`. Every caller here is
+already a member. The functions live in `public` because PostgREST exposes only that; the usual
+thin-wrapper split exists to hide a DEFINER body, and there is none to hide.
+
+**Declared outcomes return a token; only genuine failures raise.** A RAISE rolls the transaction
+back, which is right for a constraint violation and wrong for "someone accepted this while you were
+typing" — a no-op we want to *report*. The tokens are a closed set in `src/lib/gap-move.ts`, keyed
+into `t.item.gapMove`, so the compiler will name any one still missing a sentence when TR and NL
+land. No string the database produced ever reaches a person.
+
+**Write-time truth, both directions.** The accept re-asserts `disposition = 'open'` in its own
+WHERE and the reopen re-asserts `'accepted'`; a row that moved is a reported no-op with no ledger
+row. **The first draft had this untestable and the negative check caught it**: a pre-UPDATE
+`IF v_state <> 'open'` branch answered from the snapshot and shadowed the guard, so deleting the
+guard entirely left every test green. The classification SELECT now reads only the tag, the guard is
+the only thing that decides, and a re-read after a zero-row write is what separates "someone beat
+you to it" from "your role cannot settle gaps" — by observation rather than by restating
+`gap_update`'s predicate somewhere it could drift.
+
+**No client island.** The item page still has none. The form is a plain `<form action={settleGap}>`
+in a Server Component and the outcome comes back in two search params rather than through
+`useActionState`; §8's floating label is pure CSS (`:placeholder-shown`), so the field is assembled
+from the same server-safe builders `Input.tsx` uses. Every path ends in `redirect()`, which is also
+what dodges the memoization trap 0002 recorded — a read after a PostgREST write in one render pass
+replays the pre-write response, and a redirect starts a new request.
+
+**A search param is a claim about a finished request; the row is the truth now.** A shared or
+bookmarked link carries `?move=accepted` indefinitely and a re-score can move the gap underneath it,
+so each token renders only where the current state agrees — and "you accepted this" only to the
+person whose name is on it. Same epistemics as `writeRun`'s "where nothing changes, no ledger row is
+written".
+
+**The move is rendered twice and written once.** `GapMoves` is used by the gap card and by the
+expansion's unclear check. Both are necessary: §13's narrowing (T2.4) keeps open Shoulds off the
+card, so for `prd-5` and `prd-8` the expansion is the only route, while the card is where §13 puts
+what an item owes. The `checkId → gap` map is passed **alongside** the `RunView`, never folded into
+it — a run is immutable history and a disposition changes underneath it, so merging them would make
+`composeRunView` a function of two clocks.
+
+Verified on real data as the real account, not only against fixtures: signed in as
+`alkininan@gmail.com`, accepted `prd-10` on soc-9 through PostgREST, saw the page render 67% and
+"66 of 99 points" unchanged with the debt named and dimmed, got `not-open` on a second accept,
+reopened it, got `not-accepted` on a second reopen, and found `gap.accepted` and `gap.reopened` in
+the ledger as `human`/`user` with the reason on both. soc-9 is back as it was.
+
+### T2.5's rulings
+
+**AC2's premise was wrong, and §14 is what shipped.** The ticket gated a Must on the Owner "since
+`product.decider` does not exist yet". It has existed since `0000_object_tree.sql:98`, is FK'd in
+0001, is read into `ProductSummary`, and is populated on both seeded products. §14 names the Decider
+as the one who "accepts flags" and the Owner as "Everything… Fallback Decider", so the gate is
+**`caller is product.decider_user_id OR role = 'owner'`**, and a null decider makes the Owner half
+the automatic fallback §14 describes. Read at write time inside the function, never handed in by the
+page: the Decider can change between render and submit. `app.may_settle_must` is the predicate, and
+a db test pins the whole §14 matrix including the row that matters most — a Product-role member who
+*is* the named Decider settling a Must.
+
+**"A Should, any member" is `owner|product`.** `gap_update` admits those two and no others, which is
+also §14's division: a Developer authors technical artifacts and a Viewer is read-only. This ticket
+loosened nothing. A Developer or Viewer gets `not-permitted` rather than `not-decider`, because
+telling them a Must is "the Decider's call" would imply that being the Decider would help — the
+first draft did exactly that, and the role matrix test is what surfaced it.
+
+**Reopening is gated exactly as accepting is, and carries no reason.** §1 law 7 makes a debt
+something a *named* person owns, so whoever could take it on can hand it back and nobody else can
+quietly undo their name. `gap_resolution_shape`'s `open` arm forbids a note on an open row, so the
+ledger is where "who reopened this, and when" lives.
+
+**The accepted reason lives in the ledger as well as the column, and that is not redundancy.**
+Reopening nulls `resolution_note`; without `metadata->>'reason'` on the `gap.accepted` row, undoing
+an acceptance would erase from the system the only record of *why* the risk was accepted — §1 law 7
+read backwards. `gap.reopened` carries `undid` for the same reason. The schema's own doctrine: the
+gap holds the current answer, the ledger holds how it got there.
+
+**`encType` is not the hazard it first looked like.** Next drops a urlencoded action POST and falls
+through to a page render, which with JavaScript off is a silent no-op — but React's server renderer
+picks `multipart/form-data` for an action form and overrides a disagreeing prop, warning about the
+mismatch rather than shipping the wrong body. The negative check proved that: overriding `encType`
+produced a hydration warning and a still-correct form. The real hazard is a hand-written
+`<form method="post">` that bypasses the action, so the e2e submits the accept form **with
+JavaScript disabled** and asserts it lands on `/sign-in` — proof the POST reached `settleGap`
+rather than re-rendering the page. Replacing the form with a hand-written one turns that test red.
+
+**The one Danger on this surface is the reason field's helper line.** §8 tones a helper line's error
+`--danger` and §0 law 2 names validation errors as one of its three sanctioned uses. Nothing else —
+not the chip, not the card, not either button: accepting is not destructive, reopening is not
+either, and both have standing reversals.
+
 ### T2.4's fresh-context review — six findings, all fixed
 
 A cold session read the diff against §1 laws 3/6/7, §5, §13 and design §8/§10/§12. Six real defects,

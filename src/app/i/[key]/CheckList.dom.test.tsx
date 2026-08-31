@@ -1,10 +1,17 @@
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { getDictionary } from "@/i18n";
 import type { CheckLine } from "@/lib/scoring/run-view";
 
-import { CheckList } from "./CheckList";
+// An unclear check now carries §5's third move, which reaches the server action.
+vi.mock("./actions", () => ({ settleGap: async () => {} }));
+
+const { CheckList } = await import("./CheckList");
+type MoveableGap = import("./GapMoves").MoveableGap;
+
+/** No gap for any check, which is every case but the two that test the move. */
+const NO_GAPS = new Map<string, MoveableGap>();
 
 const t = getDictionary();
 
@@ -42,7 +49,15 @@ const LIST_CONDITION = "The feature renders a list, so it has empty and first-us
  */
 describe("CheckList", () => {
   it("gives a passing check its id, its prose and a word for what happened", () => {
-    render(<CheckList checks={[passed("prd-1")]} t={t} />);
+    render(
+      <CheckList
+        checks={[passed("prd-1")]}
+        t={t}
+        itemKey="soc-12"
+        gapsByCheck={NO_GAPS}
+        outcome={null}
+      />,
+    );
 
     expect(screen.getByText("prd-1")).not.toBeNull();
     expect(screen.getByText("Problem written without the solution")).not.toBeNull();
@@ -56,7 +71,15 @@ describe("CheckList", () => {
    */
   it("carries a failing check's quoted evidence, in §5's sentence", () => {
     const evidence = "GM-4: 'Members someone has blocked never see them.' — GM-4 is prose.";
-    render(<CheckList checks={[unclear("prd-10", "must", evidence)]} t={t} />);
+    render(
+      <CheckList
+        checks={[unclear("prd-10", "must", evidence)]}
+        t={t}
+        itemKey="soc-12"
+        gapsByCheck={NO_GAPS}
+        outcome={null}
+      />,
+    );
 
     expect(screen.getByText(evidence)).not.toBeNull();
     expect(screen.getByText(t.item.checkUnclear)).not.toBeNull();
@@ -68,7 +91,15 @@ describe("CheckList", () => {
    * before they read the quote.
    */
   it("never says failed", () => {
-    render(<CheckList checks={[unclear("prd-10", "must", "Something.")]} t={t} />);
+    render(
+      <CheckList
+        checks={[unclear("prd-10", "must", "Something.")]}
+        t={t}
+        itemKey="soc-12"
+        gapsByCheck={NO_GAPS}
+        outcome={null}
+      />,
+    );
 
     expect(document.body.textContent).not.toMatch(/fail|violation|error/i);
   });
@@ -91,7 +122,15 @@ describe("CheckList", () => {
    * specification for that string, and it is supposed to go red when it moves.
    */
   it("says the condition did NOT hold, never just what the condition is", () => {
-    render(<CheckList checks={[notAsked("prd-15", LIST_CONDITION)]} t={t} />);
+    render(
+      <CheckList
+        checks={[notAsked("prd-15", LIST_CONDITION)]}
+        t={t}
+        itemKey="soc-12"
+        gapsByCheck={NO_GAPS}
+        outcome={null}
+      />,
+    );
 
     expect(screen.getByText(t.item.checkNotAsked)).not.toBeNull();
 
@@ -105,7 +144,15 @@ describe("CheckList", () => {
   // §4: a not-asked check is neither a pass nor a failure, and saying either
   // would put a verdict on a question nobody asked.
   it("shows a not-asked check as neither passed nor unclear", () => {
-    render(<CheckList checks={[notAsked("prd-15", LIST_CONDITION)]} t={t} />);
+    render(
+      <CheckList
+        checks={[notAsked("prd-15", LIST_CONDITION)]}
+        t={t}
+        itemKey="soc-12"
+        gapsByCheck={NO_GAPS}
+        outcome={null}
+      />,
+    );
 
     expect(screen.queryByText(t.item.checkPassed)).toBeNull();
     expect(screen.queryByText(t.item.checkUnclear)).toBeNull();
@@ -132,6 +179,9 @@ describe("CheckList", () => {
           notAsked("prd-15", LIST_CONDITION),
         ]}
         t={t}
+        itemKey="soc-12"
+        gapsByCheck={NO_GAPS}
+        outcome={null}
       />,
     );
 
@@ -171,6 +221,9 @@ describe("CheckList", () => {
           notAsked("prd-15", LIST_CONDITION),
         ]}
         t={t}
+        itemKey="soc-12"
+        gapsByCheck={NO_GAPS}
+        outcome={null}
       />,
     );
 
@@ -187,6 +240,9 @@ describe("CheckList", () => {
       <CheckList
         checks={[unclear("prd-10", "must", "A."), unclear("prd-5", "should", "B.")]}
         t={t}
+        itemKey="soc-12"
+        gapsByCheck={NO_GAPS}
+        outcome={null}
       />,
     );
 
@@ -206,15 +262,29 @@ describe("CheckList", () => {
    * that explains the number above it.
    */
   it("renders a line whose prose the pack no longer carries", () => {
-    render(<CheckList checks={[{ ...passed("prd-retired"), prose: null }]} t={t} />);
+    render(
+      <CheckList
+        checks={[{ ...passed("prd-retired"), prose: null }]}
+        t={t}
+        itemKey="soc-12"
+        gapsByCheck={NO_GAPS}
+        outcome={null}
+      />,
+    );
 
     expect(screen.getByText("prd-retired")).not.toBeNull();
     expect(screen.getByText(t.item.checkPassed)).not.toBeNull();
   });
 
-  // Read-only. §5's three negotiation moves are T2.5, each a mutation with a
-  // scoring run behind it. Nothing here offers one.
-  it("offers no controls at all", () => {
+  /**
+   * **T2.5 restates this rather than deleting it.**
+   *
+   * §5's third move now exists, and reaches this list because §13's narrowing
+   * keeps open Shoulds off the gap card — so for a Should this is the only
+   * place the move is. But a check with no gap still offers nothing, which is
+   * what this holds: the control follows the debt, not the check.
+   */
+  it("offers no control on a check that carries no gap", () => {
     render(
       <CheckList
         checks={[
@@ -223,6 +293,9 @@ describe("CheckList", () => {
           notAsked("prd-15", LIST_CONDITION),
         ]}
         t={t}
+        itemKey="soc-12"
+        gapsByCheck={NO_GAPS}
+        outcome={null}
       />,
     );
 

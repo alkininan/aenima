@@ -1,11 +1,18 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { getDictionary, type Dictionary } from "@/i18n";
 import { composeRunView, type RunView, type StoredRunInput } from "@/lib/scoring/run-view";
 import { featurePrdPack } from "@/packs/feature-prd";
 
-import { ReadinessPanel } from "./ReadinessPanel";
+// The expansion's unclear checks now carry §5's third move.
+vi.mock("./actions", () => ({ settleGap: async () => {} }));
+
+const { ReadinessPanel } = await import("./ReadinessPanel");
+type MoveableGap = import("./GapMoves").MoveableGap;
+
+/** No gap on any check — the default for everything but the parity test. */
+const NO_GAPS = new Map<string, MoveableGap>();
 
 const t = getDictionary();
 
@@ -56,7 +63,16 @@ describe("ReadinessPanel", () => {
    * none: it offers to explain a number that was never computed.
    */
   it("renders §10's hollow track with its line, and nothing to open, with no run", () => {
-    const { container } = render(<ReadinessPanel run={null} t={t} now={NOW} />);
+    const { container } = render(
+      <ReadinessPanel
+        run={null}
+        t={t}
+        now={NOW}
+        itemKey="soc-12"
+        gapsByCheck={NO_GAPS}
+        outcome={null}
+      />,
+    );
 
     expect(screen.getByText(t.list.noScoring)).not.toBeNull();
     expect(container.querySelector("details")).toBeNull();
@@ -71,7 +87,16 @@ describe("ReadinessPanel", () => {
    * and the number on screen are one number, and the bar is drawn at it.
    */
   it("shows the run's percentage beside the track, and announces the same one", () => {
-    render(<ReadinessPanel run={view()} t={t} now={NOW} />);
+    render(
+      <ReadinessPanel
+        run={view()}
+        t={t}
+        now={NOW}
+        itemKey="soc-12"
+        gapsByCheck={NO_GAPS}
+        outcome={null}
+      />,
+    );
 
     // 66 of 99 is 66.67, rounded once, in the composer. The sign comes from the
     // dictionary: §12 renders numbers per locale and Turkish writes it first.
@@ -96,7 +121,16 @@ describe("ReadinessPanel", () => {
       item: { ...t.item, scorePercent: (score: number) => `%${score}` },
     };
 
-    render(<ReadinessPanel run={view()} t={signFirst} now={NOW} />);
+    render(
+      <ReadinessPanel
+        run={view()}
+        t={signFirst}
+        now={NOW}
+        itemKey="soc-12"
+        gapsByCheck={NO_GAPS}
+        outcome={null}
+      />,
+    );
 
     expect(screen.getByText("%67")).not.toBeNull();
     expect(screen.queryByText("67%")).toBeNull();
@@ -108,14 +142,32 @@ describe("ReadinessPanel", () => {
    * screen to be asked about.
    */
   it("says what the score is out of", () => {
-    render(<ReadinessPanel run={view()} t={t} now={NOW} />);
+    render(
+      <ReadinessPanel
+        run={view()}
+        t={t}
+        now={NOW}
+        itemKey="soc-12"
+        gapsByCheck={NO_GAPS}
+        outcome={null}
+      />,
+    );
 
     expect(screen.getByText(t.item.pointsOf(66, 99))).not.toBeNull();
   });
 
   // §5: "Timestamps show freshness." The clock is the run's own.
   it("dates the run relative to the page's read clock", () => {
-    render(<ReadinessPanel run={view()} t={t} now={NOW} />);
+    render(
+      <ReadinessPanel
+        run={view()}
+        t={t}
+        now={NOW}
+        itemKey="soc-12"
+        gapsByCheck={NO_GAPS}
+        outcome={null}
+      />,
+    );
 
     expect(screen.getByText(t.item.scoredAt(t.relativeTime.hours(4)))).not.toBeNull();
   });
@@ -134,6 +186,9 @@ describe("ReadinessPanel", () => {
         run={view({ nextScoringAttemptAt: new Date(NOW + 15 * 60 * 1000).toISOString() })}
         t={t}
         now={NOW}
+        itemKey="soc-12"
+        gapsByCheck={NO_GAPS}
+        outcome={null}
       />,
     );
 
@@ -147,7 +202,16 @@ describe("ReadinessPanel", () => {
   });
 
   it("shows a settled run with the prime dot, not the warning one", () => {
-    const { container } = render(<ReadinessPanel run={view()} t={t} now={NOW} />);
+    const { container } = render(
+      <ReadinessPanel
+        run={view()}
+        t={t}
+        now={NOW}
+        itemKey="soc-12"
+        gapsByCheck={NO_GAPS}
+        outcome={null}
+      />,
+    );
 
     expect(container.innerHTML).toMatch(/bg-prime/);
     expect(container.innerHTML).not.toMatch(/bg-warning/);
@@ -162,7 +226,16 @@ describe("ReadinessPanel", () => {
    * not a fault.
    */
   it("says when a run cannot account for what it did not ask", () => {
-    const { container } = render(<ReadinessPanel run={view({ notAsked: [] })} t={t} now={NOW} />);
+    const { container } = render(
+      <ReadinessPanel
+        run={view({ notAsked: [] })}
+        t={t}
+        now={NOW}
+        itemKey="soc-12"
+        gapsByCheck={NO_GAPS}
+        outcome={null}
+      />,
+    );
 
     expect(screen.getByText(t.item.checksNotAskedUnrecorded)).not.toBeNull();
     expect(container.innerHTML).not.toMatch(/danger/);
@@ -172,7 +245,16 @@ describe("ReadinessPanel", () => {
   // And stays quiet on a run that carries its own exclusions, which is every
   // run written from drizzle/0011 on.
   it("says nothing of the sort when the run accounts for the whole rubric", () => {
-    render(<ReadinessPanel run={view()} t={t} now={NOW} />);
+    render(
+      <ReadinessPanel
+        run={view()}
+        t={t}
+        now={NOW}
+        itemKey="soc-12"
+        gapsByCheck={NO_GAPS}
+        outcome={null}
+      />,
+    );
 
     expect(screen.queryByText(t.item.checksNotAskedUnrecorded)).toBeNull();
   });
@@ -182,7 +264,16 @@ describe("ReadinessPanel", () => {
    * number nobody can trace is a number nobody can argue with.
    */
   it("stamps the run with the pack, its version and the model that ran", () => {
-    render(<ReadinessPanel run={view()} t={t} now={NOW} />);
+    render(
+      <ReadinessPanel
+        run={view()}
+        t={t}
+        now={NOW}
+        itemKey="soc-12"
+        gapsByCheck={NO_GAPS}
+        outcome={null}
+      />,
+    );
 
     expect(
       screen.getByText(t.item.provenance("feature-prd", "1.0.0", "claude-sonnet-5")),
@@ -200,7 +291,16 @@ describe("ReadinessPanel", () => {
    * is right is the state, the keyboard path and §7's states, not exposure.
    */
   it("puts the whole run inside one disclosure", () => {
-    const { container } = render(<ReadinessPanel run={view()} t={t} now={NOW} />);
+    const { container } = render(
+      <ReadinessPanel
+        run={view()}
+        t={t}
+        now={NOW}
+        itemKey="soc-12"
+        gapsByCheck={NO_GAPS}
+        outcome={null}
+      />,
+    );
 
     const details = container.querySelector("details");
     expect(details).not.toBeNull();
@@ -210,6 +310,56 @@ describe("ReadinessPanel", () => {
     // Closed by default: a run explains a number someone asked about, and the
     // question comes before the answer.
     expect(details?.hasAttribute("open")).toBe(false);
+  });
+
+  /**
+   * **§5's move reaches the expansion, which for an open Should is the only
+   * place it can.**
+   *
+   * §13's narrowing keeps open Shoulds off the gap card (T2.4), so a person
+   * looking at `prd-8` sees it here or nowhere. The same component the card
+   * renders, so the two cannot drift.
+   */
+  it("offers the move on an unclear check that carries a gap", () => {
+    const gaps = new Map<string, MoveableGap>([
+      [
+        "prd-1",
+        {
+          id: "g-1",
+          checkId: "prd-1",
+          tag: "should",
+          disposition: "open",
+          resolvedBy: null,
+          resolutionNote: null,
+        },
+      ],
+    ]);
+
+    render(
+      <ReadinessPanel
+        run={view({
+          results: [
+            {
+              checkId: "prd-1",
+              tag: "should",
+              points: 5,
+              passed: false,
+              requirementId: null,
+              quote: null,
+              note: "Unclear.",
+            },
+          ],
+        })}
+        t={t}
+        now={NOW}
+        itemKey="soc-12"
+        gapsByCheck={gaps}
+        outcome={null}
+      />,
+    );
+
+    expect(screen.getByText(t.item.gapAccept)).not.toBeNull();
+    expect(screen.getByRole("button", { name: t.item.gapAcceptSubmit })).not.toBeNull();
   });
 
   /**
@@ -227,7 +377,16 @@ describe("ReadinessPanel", () => {
    * which no static computation would show anyway. The e2e measures the paint.
    */
   it("gives the disclosure §7's interaction states, not just the focus ring", () => {
-    const { container } = render(<ReadinessPanel run={view()} t={t} now={NOW} />);
+    const { container } = render(
+      <ReadinessPanel
+        run={view()}
+        t={t}
+        now={NOW}
+        itemKey="soc-12"
+        gapsByCheck={NO_GAPS}
+        outcome={null}
+      />,
+    );
 
     const summary = container.querySelector("summary");
     expect(summary?.className).toContain("control");
@@ -243,12 +402,23 @@ describe("ReadinessPanel", () => {
    * operable from the keyboard, which §11 requires of everything interactive.
    */
   it("offers the disclosure and no other control", () => {
-    const { container } = render(<ReadinessPanel run={view()} t={t} now={NOW} />);
+    const { container } = render(
+      <ReadinessPanel
+        run={view()}
+        t={t}
+        now={NOW}
+        itemKey="soc-12"
+        gapsByCheck={NO_GAPS}
+        outcome={null}
+      />,
+    );
 
     expect(screen.queryAllByRole("textbox")).toEqual([]);
     expect(screen.queryAllByRole("checkbox")).toEqual([]);
     expect(screen.queryAllByRole("link")).toEqual([]);
     expect(container.querySelectorAll("button")).toHaveLength(0);
+    // One disclosure: the meter's own. A check with no gap adds none — the
+    // count grows only with the debts on screen, which the parity test pins.
     expect(container.querySelectorAll("summary")).toHaveLength(1);
   });
 });

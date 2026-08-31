@@ -2,7 +2,10 @@ import { Card } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
 import { CheckIcon } from "@/components/ui/icons";
 import type { Dictionary } from "@/i18n";
+import type { GapMoveOutcome } from "@/lib/gap-move";
 import type { CheckLine } from "@/lib/scoring/run-view";
+
+import { GapMoves, type MoveableGap } from "./GapMoves";
 
 /**
  * One run, every check — product-spec.md §1 law 3 rendered literally.
@@ -33,7 +36,31 @@ import type { CheckLine } from "@/lib/scoring/run-view";
  * Read-only. §5's three negotiation moves are T2.5, and each is a mutation with
  * a scoring run behind it.
  */
-export function CheckList({ checks, t }: { checks: readonly CheckLine[]; t: Dictionary }) {
+export function CheckList({
+  checks,
+  t,
+  itemKey,
+  gapsByCheck,
+  outcome,
+}: {
+  checks: readonly CheckLine[];
+  t: Dictionary;
+  itemKey: string;
+  /**
+   * The gap each check currently carries, by check id — **passed alongside the
+   * run, never folded into it.**
+   *
+   * A run is immutable history and a disposition changes underneath it, so
+   * merging the two would make `composeRunView`'s output a function of two
+   * clocks. `CheckLine` stays what the run said; this says what is true now.
+   *
+   * At most one gap per check is open at a time (`reconcileGaps`), and a check
+   * can be unclear while its gap is already settled — the reconciler leaves an
+   * accepted gap alone — so this is keyed by check rather than filtered to open.
+   */
+  gapsByCheck: ReadonlyMap<string, MoveableGap>;
+  outcome: { gapId: string; kind: GapMoveOutcome } | null;
+}) {
   return (
     <ul data-testid="check-list" aria-label={t.item.checks} className="flex flex-col gap-[8px]">
       {checks.map((check) => (
@@ -67,9 +94,56 @@ export function CheckList({ checks, t }: { checks: readonly CheckLine[]; t: Dict
               {t.item.checkNotAskedReason(check.condition)}
             </p>
           ) : null}
+
+          {/* §5's move, on the gap this check raised. The same component the
+              gap card renders — §13's narrowing keeps open Shoulds off that
+              card, so for those this is the only place the move exists, and a
+              second implementation here would drift from that one.
+
+              Only on an unclear check: a passing check has no gap, and a
+              not-asked one left the denominator. */}
+          {check.state === "unclear" ? (
+            <CheckGapMoves
+              gap={gapsByCheck.get(check.checkId)}
+              itemKey={itemKey}
+              t={t}
+              outcome={outcome}
+            />
+          ) : null}
         </li>
       ))}
     </ul>
+  );
+}
+
+/**
+ * The move on an unclear check's gap, when it has one.
+ *
+ * A failing check usually does — `reconcileGaps` raises one — but not always:
+ * the run is a snapshot and the gap is current state, so a gap closed by a later
+ * re-score leaves an unclear line from an older run with nothing to act on.
+ * Nothing renders then, which is honest: there is no debt to settle.
+ */
+function CheckGapMoves({
+  gap,
+  itemKey,
+  t,
+  outcome,
+}: {
+  gap: MoveableGap | undefined;
+  itemKey: string;
+  t: Dictionary;
+  outcome: { gapId: string; kind: GapMoveOutcome } | null;
+}) {
+  if (!gap) return null;
+
+  return (
+    <GapMoves
+      gap={gap}
+      itemKey={itemKey}
+      t={t}
+      outcome={outcome?.gapId === gap.id ? outcome.kind : null}
+    />
   );
 }
 

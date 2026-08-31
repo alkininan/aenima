@@ -1,10 +1,12 @@
 import { Meter } from "@/components/ui/Meter";
 import { ChevronDownIcon, ChevronRightIcon } from "@/components/ui/icons";
 import type { Dictionary } from "@/i18n";
+import type { GapMoveOutcome } from "@/lib/gap-move";
 import { relativeTime } from "@/lib/relative-time";
 import type { RunView } from "@/lib/scoring/run-view";
 
 import { CheckList } from "./CheckList";
+import type { MoveableGap } from "./GapMoves";
 
 /**
  * The score, and what it expands into — design-spec.md §8's readiness meter.
@@ -42,10 +44,22 @@ export function ReadinessPanel({
   run,
   t,
   now,
+  itemKey,
+  gapsByCheck,
+  outcome,
 }: {
   run: RunView | null;
   t: Dictionary;
   now: number;
+  /**
+   * The three below are the expansion's, not the meter's — this component only
+   * carries them across. §5's moves belong to the checks inside `CheckList`,
+   * and threading them keeps `composeRunView` a function of the stored run
+   * alone: a gap's disposition is current state and does not belong in a run.
+   */
+  itemKey: string;
+  gapsByCheck: ReadonlyMap<string, MoveableGap>;
+  outcome: { gapId: string; kind: GapMoveOutcome } | null;
 }) {
   if (run === null) {
     return (
@@ -106,7 +120,13 @@ export function ReadinessPanel({
       </summary>
 
       <div className="flex flex-col gap-[16px] p-[8px] pt-[16px]">
-        <CheckList checks={run.checks} t={t} />
+        <CheckList
+          checks={run.checks}
+          t={t}
+          itemKey={itemKey}
+          gapsByCheck={gapsByCheck}
+          outcome={outcome}
+        />
 
         {/* A run written before `scoring_check_not_asked` existed lists its
             verdicts and stops short of the rubric, and nothing above accounts
