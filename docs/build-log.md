@@ -267,7 +267,10 @@ observed failing, reverted.
    and it cannot carry `points > 0` or the non-blank reason as constraints. The name avoids
    `excluded` on purpose — that is `gap_disposition`'s word for §5's first negotiation move, a
    person arguing a check away with their name on it, and this is the applicability engine answering
-   in the pass that scores.
+   in the pass that scores. **Nothing is backfilled**, so a run written before the table says so in
+   one line rather than letting its list read as complete — a denominator with nothing under it is
+   the number law 3 forbids — and soc-9 was re-scored so the seeded item shows the whole picture.
+   Open question 19 carries both, and the line's deletion.
 2. **A run whose pack no longer ships rendered as "connect AI to activate scoring"** — §10's no-key
    line, shown to someone who has a key and a stored run, hiding a number the run had already
    computed. §1 law 3 read backwards. `composeRunView` now takes `SkillPack | undefined` and renders
@@ -978,15 +981,35 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
     so a run can be read against its own. The second is what §5 means by versioning rubrics like
     documents, and it is what a re-baseline pass (open question 15) will want anyway.
 
-19. **Two stored runs predate `scoring_check_not_asked` and carry no rows in it — Phase 2 owns it.**
-    0011 backfills nothing, so those two runs' expansions list their verdicts and no not-asked lines,
-    and their denominators go unexplained. That is the honest reading: the runs did not record what
-    they did not ask. The alternative is to derive the rows from the pack that ships today, which is
-    the defect 0011 exists to remove — sound only because the pack happens not to have moved yet,
-    which is exactly the assumption that fails silently later. §5's cache key fixes it on its own the
-    moment the artifact, the pack version or the protocol version moves, and both rows are dev data
-    on a pre-launch database. Re-score rather than backfill; if a backfill is ever wanted, it belongs
-    in a script that loads the pack by version, not in SQL that hardcodes rubric prose.
+19. **A run stored before `scoring_check_not_asked` says so, and the line goes when the last such
+    run does.** 0011 backfills nothing, so a run written before it lists its verdicts and stops
+    short of the rubric with nothing accounting for the difference — 66 of 99, and no line under it
+    for the missing 6. That is §1 law 3's "a number that cannot be interrogated", so the expansion
+    discloses it: `RunView.notAskedUnrecorded` and `t.item.checksNotAskedUnrecorded`, one quiet
+    ui-footnote saying the run predates the record and a re-score adds it. **The absence is
+    detected, never filled** — deriving the missing lines from the pack that ships today is the
+    defect 0011 removed, sound only for as long as the rubric happens not to have moved.
+
+    The detection is the run's own rows against the rubric's total: flagged when a run has verdicts,
+    no not-asked rows, and its points fall short. §5's zero-sum budget is what makes that stable —
+    `validatePack` holds the base checks to exactly `RUBRIC_TOTAL`, so a new check takes its points
+    from an existing one and a rubric edit cannot move the total underneath a stored run. Only a
+    layer arriving or leaving can, and a layer that did not enter writes not-asked rows, which the
+    flag excludes. With no pack loaded it says nothing rather than guessing.
+
+    **soc-9 was re-scored** so the seeded item shows the complete picture: 67% from 66 of 99, twenty
+    checks in pack order, fourteen answered, five unclear, and `prd-15` not asked with its condition.
+    Runs cache per artifact version and are append-only, so a re-score is a new version — the PRD's
+    content and hash were copied forward from version 1 rather than retyped, leaving the golden
+    labeled sample byte-identical, and the run that followed was a real provider call (41s, the same
+    five failures). The two pre-0011 runs are still in the table and still account for 99 of 105;
+    they are no longer the newest, so no surface reaches them today.
+
+    **Delete `notAskedUnrecorded`, its string, its line and its tests once no run predating 0011
+    remains** — in this database that is already true of every run a surface can reach, and becomes
+    true outright once the two stragglers are gone or a fresh environment is seeded. If a backfill is
+    ever wanted instead, it belongs in a script that loads the pack by version, not in SQL that
+    hardcodes rubric prose.
 
 ## On the horizon
 

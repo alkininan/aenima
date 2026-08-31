@@ -299,6 +299,57 @@ describe("composeRunView", () => {
     ]);
   });
 
+  /**
+   * **A run that cannot say what it did not ask says so.**
+   *
+   * The two runs stored before drizzle/0011 have verdicts and no not-asked rows,
+   * so their lists stop short of the rubric with nothing accounting for the
+   * difference — §1 law 3's "a number that cannot be interrogated". The absence
+   * is *detected*, never filled: reconstructing the lines from today's pack is
+   * the defect 0011 removed.
+   *
+   * The run below is Ghost mode's exactly as the database holds it today —
+   * verdicts worth 99 against a rubric worth 105, and no rows for the 6 that
+   * left.
+   */
+  it("flags a run that stopped short of the rubric and recorded no reason", () => {
+    const view = composeRunView(featurePrdPack, run({ notAsked: [] }));
+
+    expect(view.notAskedUnrecorded).toBe(true);
+    // Flagged, not filled: no line is invented for the missing points.
+    expect(view.checks.map((check) => check.checkId)).not.toContain("prd-15");
+    expect(view.checks.every((check) => check.state !== "not-asked")).toBe(true);
+  });
+
+  // The ordinary case, and the one every run written from here on is: the rows
+  // account for the whole rubric, so there is nothing to disclose.
+  it("says nothing about a run whose own rows account for the rubric", () => {
+    expect(composeRunView(featurePrdPack, run()).notAskedUnrecorded).toBe(false);
+  });
+
+  /**
+   * The guard that keeps the line off a run that is merely *short*.
+   *
+   * §5's zero-sum budget holds the base checks to `RUBRIC_TOTAL`, so a rubric
+   * edit cannot move the total underneath a stored run — only a layer can, and a
+   * layer that did not enter writes not-asked rows. A run with any such row has
+   * recorded what it did not ask, whatever the arithmetic then says.
+   */
+  it("says nothing when the run recorded its exclusions, however short it falls", () => {
+    const view = composeRunView(
+      featurePrdPack,
+      run({ notAsked: [{ ...NOT_ASKED_15, points: 1 }] }),
+    );
+
+    expect(view.notAskedUnrecorded).toBe(false);
+  });
+
+  // With no pack there is nothing to compare against, so the honest answer is to
+  // say nothing rather than to guess — the same floor prose falls back to.
+  it("says nothing when no pack ships to compare the run against", () => {
+    expect(composeRunView(undefined, run({ notAsked: [] })).notAskedUnrecorded).toBe(false);
+  });
+
   // §5 stamps provenance on every run for a reason: a number nobody can trace
   // is a number nobody can argue with.
   it("carries the provenance the run was stamped with", () => {

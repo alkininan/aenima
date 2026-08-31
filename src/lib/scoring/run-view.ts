@@ -1,4 +1,4 @@
-import { percentageOf } from "@/packs/scoring";
+import { denominatorFor, percentageOf } from "@/packs/scoring";
 import type { CheckTag, SkillPack } from "@/packs/types";
 import { allChecks } from "@/packs/validate";
 
@@ -92,6 +92,34 @@ export type RunView = {
   /** §4's renormalized total. 99 for Ghost mode, and the not-asked lines say why. */
   denominator: number;
   checks: CheckLine[];
+  /**
+   * **True when this run cannot say what it did not ask.**
+   *
+   * A run written before `scoring_check_not_asked` existed (drizzle/0011) has
+   * verdicts and no not-asked rows, so its list stops short of the rubric and
+   * nothing on the page accounts for the difference. That is the shape §1 law 3
+   * forbids — "a number that cannot be interrogated" — so the surface says so in
+   * one line rather than letting the list read as complete.
+   *
+   * **The absence is detected, never filled.** Deriving the missing lines from
+   * the pack that ships today is exactly the defect 0011 removed: it would be
+   * sound only for as long as the rubric happens not to have moved, which is the
+   * assumption that fails silently later.
+   *
+   * The arithmetic is the run's own rows against the rubric's total, and §5's
+   * zero-sum budget is what makes that comparison stable: `validatePack` holds
+   * the base checks to exactly `RUBRIC_TOTAL`, so "a new check takes its points
+   * from an existing one" and a rubric edit cannot move the total underneath a
+   * stored run. Only a layer arriving or leaving can, and a layer that did not
+   * enter writes not-asked rows — which is the case this flag excludes.
+   *
+   * False when no pack is loaded: with nothing to compare against, the honest
+   * answer is to say nothing rather than to guess.
+   *
+   * **Delete this, its string and its line once no such run remains** — see
+   * docs/build-log.md open question 19.
+   */
+  notAskedUnrecorded: boolean;
   provenance: RunProvenance;
 };
 
@@ -204,11 +232,21 @@ export function composeRunView(pack: SkillPack | undefined, run: StoredRunInput)
     return byPack !== 0 ? byPack : a.checkId.localeCompare(b.checkId);
   });
 
+  // What this run's own rows say the rubric was worth, against what it is worth.
+  // A run that recorded its exclusions accounts for every point either way; one
+  // written before it could accounts for the applicable checks alone.
+  const accounted = [...run.results, ...run.notAsked].reduce((total, row) => total + row.points, 0);
+
   return {
     score: Math.round(percentageOf(run.earned, run.denominator)),
     earned: run.earned,
     denominator: run.denominator,
     checks,
+    notAskedUnrecorded:
+      pack !== undefined &&
+      run.results.length > 0 &&
+      run.notAsked.length === 0 &&
+      accounted < denominatorFor(checksInPack),
     provenance: {
       packId: run.packId,
       packVersion: run.packVersion,

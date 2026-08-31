@@ -108,6 +108,21 @@ export function ReadinessPanel({
       <div className="flex flex-col gap-[16px] p-[8px] pt-[16px]">
         <CheckList checks={run.checks} t={t} />
 
+        {/* A run written before `scoring_check_not_asked` existed lists its
+            verdicts and stops short of the rubric, and nothing above accounts
+            for the difference — §1 law 3's "a number that cannot be
+            interrogated". So the list says it is short rather than reading as
+            complete, and the missing lines are *not* reconstructed from the
+            pack that ships today, which is the defect drizzle/0011 removed.
+
+            Under the list, where a footnote about a list belongs, and in the
+            same quiet ui-footnote the not-asked reasons use. §0 law 1 keeps
+            Warning and Danger off it: an old run is not a fault. Temporary —
+            see `RunView.notAskedUnrecorded`. */}
+        {run.notAskedUnrecorded ? (
+          <p className="type-ui-footnote text-n-secondary">{t.item.checksNotAskedUnrecorded}</p>
+        ) : null}
+
         {/* §5 stamps pack, version and model on every run, and §8 puts data in
             mono. Quiet, and always there: a number nobody can trace is a number
             nobody can argue with. */}

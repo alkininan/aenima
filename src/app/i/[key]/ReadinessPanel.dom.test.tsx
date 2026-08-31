@@ -154,6 +154,30 @@ describe("ReadinessPanel", () => {
   });
 
   /**
+   * §1 law 3, on a run that predates the record of what it did not ask.
+   *
+   * Its list stops short of the rubric and nothing above accounts for the
+   * difference, so the expansion says which it is rather than reading as
+   * complete. §12's voice and §0 law 1: no warning tone, no red — an old run is
+   * not a fault.
+   */
+  it("says when a run cannot account for what it did not ask", () => {
+    const { container } = render(<ReadinessPanel run={view({ notAsked: [] })} t={t} now={NOW} />);
+
+    expect(screen.getByText(t.item.checksNotAskedUnrecorded)).not.toBeNull();
+    expect(container.innerHTML).not.toMatch(/danger/);
+    expect(container.innerHTML).not.toMatch(/bg-warning/);
+  });
+
+  // And stays quiet on a run that carries its own exclusions, which is every
+  // run written from drizzle/0011 on.
+  it("says nothing of the sort when the run accounts for the whole rubric", () => {
+    render(<ReadinessPanel run={view()} t={t} now={NOW} />);
+
+    expect(screen.queryByText(t.item.checksNotAskedUnrecorded)).toBeNull();
+  });
+
+  /**
    * §5 stamps provider, model and rubric version on every run for a reason: a
    * number nobody can trace is a number nobody can argue with.
    */

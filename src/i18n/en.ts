@@ -202,6 +202,25 @@ export const en = {
      */
     scoredRetrying: (relative: string) => `scored ${relative} — retrying`,
     /**
+     * A run stored before aenima recorded what it did not ask — drizzle/0011.
+     *
+     * §1 law 3: "a number that cannot be interrogated does not ship." Such a run
+     * lists its verdicts and stops short of the rubric, with nothing on the page
+     * accounting for the difference, so the page says which it is rather than
+     * letting the list read as complete. The missing lines are **not** filled in
+     * from today's rubric: that is the defect 0011 removed.
+     *
+     * §12's voice — states the cause, blames nobody, offers the one thing that
+     * changes it. No warning tone and no red: §0 law 1 keeps both off a score,
+     * and an old run is not a fault, it is an old run.
+     *
+     * **Temporary.** Delete this with `RunView.notAskedUnrecorded` and its line
+     * once no run predating 0011 remains — build log, open question 19.
+     */
+    checksNotAskedUnrecorded:
+      "Scored before aenima recorded which checks it did not ask, so they are missing from " +
+      "this list. A re-score adds them.",
+    /**
      * §5 stamps provider, model and rubric version on every run, because a
      * number nobody can trace is a number nobody can argue with. mono-readout,
      * per §8.

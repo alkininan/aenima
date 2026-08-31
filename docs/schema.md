@@ -318,7 +318,10 @@ like documents, so `tag`, `points` and now the condition are copied rather than
 looked up. Not named `excluded`, which is `gap_disposition`'s word for a person
 arguing a check away with their name on it (§5's first negotiation move); this
 is the applicability engine answering in the pass that scores. **Nothing is
-backfilled** — see build-log open question 19.
+backfilled**: a run written before this table lists its verdicts, stops short of
+the rubric, and says so in one line rather than letting the list read as
+complete — the missing lines are never reconstructed from the pack that ships
+today. See build-log open question 19, which also carries the line's deletion.
 
 ```
 pnpm db:generate   # diff the schema files into a new migration
