@@ -1,6 +1,6 @@
 import "server-only";
 
-import { isGapMoveOutcome, type GapMoveOutcome } from "@/lib/gap-move";
+import { isOutcomeOf, type AcceptOutcome, type ReopenOutcome } from "@/lib/gap-move";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -29,8 +29,8 @@ import { createClient } from "@/lib/supabase/server";
 
 /** The RPCs, by the argument shape the generated types give them. */
 type MoveCall =
-  | { fn: "accept_gap"; args: { p_gap_id: string; p_reason: string } }
-  | { fn: "reopen_gap"; args: { p_gap_id: string } };
+  | { intent: "accept"; fn: "accept_gap"; args: { p_gap_id: string; p_reason: string } }
+  | { intent: "reopen"; fn: "reopen_gap"; args: { p_gap_id: string } };
 
 /**
  * One move, and what the database says came of it.
@@ -41,13 +41,21 @@ type MoveCall =
  * so nothing partial survives, and they collapse to `unavailable` here: the
  * message is logged for a developer and never returned, because CLAUDE.md keeps
  * a failure's detail off every surface.
+ *
+ * The token is validated against **this move's** outcome set, not the union of
+ * both: a `reopen_gap` that answered `reason-required` would mean the schema
+ * moved underneath this file just as surely as an unknown string would.
  */
-async function move(call: MoveCall): Promise<GapMoveOutcome> {
+async function move(call: MoveCall): Promise<AcceptOutcome | ReopenOutcome> {
   const supabase = await createClient();
 
   // Volatile in the database, so PostgREST serves it over POST — which is also
-  // what keeps it out of Next's per-render GET memoization.
-  const { data, error } = await supabase.rpc(call.fn, call.args);
+  // what keeps it out of Next's per-render GET memoization. Narrowed before the
+  // call so `fn` and `args` stay the correlated pair the generated types want.
+  const { data, error } =
+    call.intent === "accept"
+      ? await supabase.rpc(call.fn, call.args)
+      : await supabase.rpc(call.fn, call.args);
 
   if (error) {
     console.error(`${call.fn} failed`, error);
@@ -57,7 +65,7 @@ async function move(call: MoveCall): Promise<GapMoveOutcome> {
   // The function returns a token from a closed set. Anything else means the
   // schema moved underneath this file, which is a throw rather than a rendered
   // surprise — an unrecognised token would otherwise render as silence.
-  if (!isGapMoveOutcome(data)) {
+  if (!isOutcomeOf(call.intent, data)) {
     throw new Error(`${call.fn} returned an outcome this build does not know`);
   }
 
@@ -65,11 +73,19 @@ async function move(call: MoveCall): Promise<GapMoveOutcome> {
 }
 
 /** §5: "converts it to an accepted gap stamped with the accepter's name." */
-export function acceptGap(gapId: string, reason: string): Promise<GapMoveOutcome> {
-  return move({ fn: "accept_gap", args: { p_gap_id: gapId, p_reason: reason } });
+export function acceptGap(gapId: string, reason: string): Promise<AcceptOutcome> {
+  return move({
+    intent: "accept",
+    fn: "accept_gap",
+    args: { p_gap_id: gapId, p_reason: reason },
+  }) as Promise<AcceptOutcome>;
 }
 
 /** §1 law 4: "always undoable". The stamp clears; the ledger keeps both moves. */
-export function reopenGap(gapId: string): Promise<GapMoveOutcome> {
-  return move({ fn: "reopen_gap", args: { p_gap_id: gapId } });
+export function reopenGap(gapId: string): Promise<ReopenOutcome> {
+  return move({
+    intent: "reopen",
+    fn: "reopen_gap",
+    args: { p_gap_id: gapId },
+  }) as Promise<ReopenOutcome>;
 }

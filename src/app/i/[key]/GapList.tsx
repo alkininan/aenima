@@ -3,7 +3,7 @@ import { Chip } from "@/components/ui/Chip";
 import type { Dictionary } from "@/i18n";
 import type { Actor } from "@/lib/actor";
 import { cx } from "@/lib/cx";
-import type { GapMoveOutcome } from "@/lib/gap-move";
+import type { GapMoveClaim } from "@/lib/gap-move";
 import { gapAnchor } from "@/lib/routes";
 
 import { GapMoves } from "./GapMoves";
@@ -62,6 +62,26 @@ const ORDER: Record<GapView["disposition"], number> = {
  * `/dev/item` cannot show two different lists.
  */
 function belongsOnThePage(gap: GapView): gap is PageGap {
+  return gapHasCard(gap);
+}
+
+/**
+ * §13's narrowing, over the two fields that decide it — **the one place that
+ * answers "does this gap have a card?"**
+ *
+ * Exported because two other surfaces have to ask the same question and must
+ * get the same answer. `CheckList` asks it to decide whether *it* carries the
+ * gap's anchor: exactly one element per gap may wear `gap-<id>`, so the
+ * expansion takes it only for the open Shoulds this list files away, and the
+ * card takes it for everything else. `ReadinessPanel` asks it to decide whether
+ * a move named a gap that lives inside the expansion, and therefore whether to
+ * open. Three copies of this table would drift, and the drift would show up as
+ * a link to nowhere.
+ */
+export function gapHasCard(gap: {
+  tag: GapView["tag"];
+  disposition: GapView["disposition"];
+}): boolean {
   if (gap.disposition === "closed") return false;
   if (gap.disposition === "open") return gap.tag === "must";
   return true;
@@ -99,9 +119,11 @@ function toneFor(gap: PageGap): "must" | "should" | "accepted" | "excluded" {
  * 3: "a number that cannot be interrogated does not ship." So the evidence is
  * the body of each card rather than a detail behind a disclosure.
  *
- * Read-only. §5's three moves — "doesn't apply here", "already covered", "we
- * accept this risk" — are Phase 2, and each is a mutation with a scoring run
- * behind it. Nothing here is a control.
+ * **§5's third move is here, and only that one.** "We accept this risk" and its
+ * reversal render on every card that has a gap to move, from `GapMoves` — the
+ * same component the meter's expansion uses, so one failure cannot show two
+ * ways. Moves 1 and 2 — "doesn't apply here" and "already covered" — are Phase
+ * 3, and a control for them here would offer something that cannot happen.
  */
 export function GapList({
   gaps,
@@ -114,8 +136,8 @@ export function GapList({
   t: Dictionary;
   /** The key the moves submit, so a redirect knows where to come back to. */
   itemKey: string;
-  /** §5's last outcome and the gap it belongs to, straight off the URL. */
-  outcome: { gapId: string; kind: GapMoveOutcome } | null;
+  /** §5's last move and what came of it, straight off the URL. */
+  outcome: GapMoveClaim | null;
   /**
    * Whether this item has ever been scored — which is what the empty line has
    * to say something true about.
@@ -200,7 +222,7 @@ export function GapList({
                 }}
                 itemKey={itemKey}
                 t={t}
-                outcome={outcome?.gapId === gap.id ? outcome.kind : null}
+                outcome={outcome !== null && outcome.gapId === gap.id ? outcome : null}
               />
             </Card>
           </li>

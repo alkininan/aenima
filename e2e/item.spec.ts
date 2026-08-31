@@ -378,10 +378,23 @@ test.describe("at 1440", () => {
     expect(opacity).toBe("0.6");
   });
 
-  // §0 law 1: gaps never render in Danger, and neither do the moves on them.
-  // Accepting is not destructive and reopening is not either.
-  test("renders no danger red on any gap or any move", async ({ page }) => {
-    await page.getByTestId("readiness").locator("summary").first().first().click();
+  /**
+   * §0 law 1: gaps never render in Danger, and neither do the moves on them.
+   * Accepting is not destructive and reopening is not either.
+   *
+   * **Staged with a move that actually answered**, through the same three
+   * params the real page reads. A version of this that loaded `/dev/item` bare
+   * would pass over a `MoveMessage` painted `--danger`, because with no move in
+   * the URL there is no message on the page to paint.
+   */
+  test("renders no danger red on a gap, a move, or a move's answer", async ({ page }) => {
+    await page.goto("/dev/item?intent=accept&move=not-decider&gap=g1");
+    await page.getByTestId("readiness").locator("summary").first().click();
+
+    // Scoped: `prd-10` is an open Must, so it renders on the card *and* on its
+    // check line, and each carries its own copy of the move and its answer.
+    const card = page.getByTestId("gap-list").getByRole("listitem").filter({ hasText: "prd-10" });
+    await expect(card.getByText("Accepting a Must is the Decider's call.")).toBeVisible();
 
     const danger = await page.locator("main").evaluate((root) => {
       const DANGER = ["rgb(255, 114, 118)", "rgb(217, 58, 63)"];
@@ -394,6 +407,98 @@ test.describe("at 1440", () => {
     });
 
     expect(danger).toBe(false);
+  });
+
+  /**
+   * §8's one sanctioned Danger on this page — a field's own validation state —
+   * and the proof that it stays inside the field. The border and the helper
+   * line go `--danger`; nothing outside the composite does.
+   */
+  test("keeps the reason field's error tone inside the field", async ({ page }) => {
+    await page.goto("/dev/item?intent=accept&move=reason-required&gap=g1");
+
+    const card = page.getByTestId("gap-list").getByRole("listitem").filter({ hasText: "prd-10" });
+    await expect(card.getByText("Add a reason.")).toBeVisible();
+
+    const escaped = await page.locator("main").evaluate((root) => {
+      const DANGER = ["rgb(255, 114, 118)", "rgb(217, 58, 63)"];
+      return [...root.querySelectorAll("*")]
+        .filter((node) => {
+          const style = getComputedStyle(node);
+          return [style.color, style.borderTopColor].some((v) => DANGER.includes(v));
+        })
+        .some((node) => node.closest(".field") === null);
+    });
+
+    expect(escaped).toBe(false);
+  });
+
+  /**
+   * **Finding 1: the reversal's confirmation, where it can be read.**
+   *
+   * A reopen that landed leaves the gap open, so the accept form renders again
+   * — closed, because the work is done. The sentence therefore cannot live
+   * inside that disclosure, which is exactly where it used to live: rendered,
+   * nested in a collapsed `<details>`, and reaching nobody. Measured in a real
+   * browser because "inside a closed `<details>`" is a layout fact.
+   */
+  test("shows the reversal's confirmation after a reopen lands", async ({ page }) => {
+    await page.goto("/dev/item?intent=reopen&move=reopened&gap=g1");
+
+    const card = page.getByTestId("gap-list").getByRole("listitem").filter({ hasText: "prd-10" });
+    await expect(card.getByText("Reopened.")).toBeVisible();
+    // Closed, and the sentence readable anyway. Both halves matter.
+    await expect(card.locator("details")).not.toHaveAttribute("open", /.*/);
+  });
+
+  /**
+   * **Finding 2: everything that speaks about an open Should follows it into
+   * the expansion.**
+   *
+   * §13 files `prd-8` under the score, so its move has no card — which means
+   * the redirect's `#gap-<id>` has to be carried by the check line, and the
+   * panel has to be open when someone arrives on it. Otherwise a failed accept
+   * on a Should scrolls nowhere and says nothing, twice collapsed.
+   */
+  test("opens the expansion onto an open Should the URL names, anchor and all", async ({
+    page,
+  }) => {
+    await page.goto("/dev/item?intent=accept&move=reason-required&gap=g4");
+
+    // The panel opened itself; nobody clicked it.
+    await expect(page.getByTestId("check-list")).toBeVisible();
+
+    const row = page.getByTestId("check-list").getByRole("listitem").filter({ hasText: "prd-8" });
+    await expect(row.getByText("Add a reason.")).toBeVisible();
+    // The anchor the redirect targets, on the only surface that shows this gap.
+    await expect(page.locator("#gap-g4")).toHaveCount(1);
+    // And nowhere else: the card list does not render this gap at all.
+    await expect(page.getByTestId("gap-list").getByText("prd-8")).toHaveCount(0);
+  });
+
+  /**
+   * **Finding 4: an answer that names no gap still says something.**
+   *
+   * `not-found` names a gap the page does not hold, and a submission with no
+   * readable move names neither. Both used to render nothing whatsoever. They
+   * report at the top, which is where a redirect with no fragment lands.
+   */
+  test("reports a move no gap on the page can speak for", async ({ page }) => {
+    await page.goto("/dev/item?intent=accept&move=not-found&gap=g-nope");
+    // Once, at the top: no gap on the page claims it, so no card repeats it.
+    await expect(
+      page.getByText("That gap isn't here any more, so nothing was accepted."),
+    ).toHaveCount(1);
+
+    await page.goto("/dev/item?move=unreadable");
+    await expect(page.getByText("That didn't arrive as a move, so nothing changed.")).toHaveCount(
+      1,
+    );
+
+    // Fail closed: a crafted pair that no move can produce says nothing at all,
+    // rather than borrowing the other move's sentence.
+    await page.goto("/dev/item?intent=reopen&move=reason-required&gap=g1");
+    await expect(page.getByText("Add a reason.")).toHaveCount(0);
   });
 
   /* ------------------------------------------------------------------------ */

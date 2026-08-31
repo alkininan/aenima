@@ -316,11 +316,12 @@ page: the Decider can change between render and submit. `app.may_settle_must` is
 a db test pins the whole §14 matrix including the row that matters most — a Product-role member who
 *is* the named Decider settling a Must.
 
-**"A Should, any member" is `owner|product`.** `gap_update` admits those two and no others, which is
-also §14's division: a Developer authors technical artifacts and a Viewer is read-only. This ticket
-loosened nothing. A Developer or Viewer gets `not-permitted` rather than `not-decider`, because
-telling them a Must is "the Decider's call" would imply that being the Decider would help — the
-first draft did exactly that, and the role matrix test is what surfaced it.
+**"A Should, any member" is `owner|product`.** `gap_update` admits those two, which is also §14's
+division: a Developer authors technical artifacts and a Viewer is read-only. A Developer or Viewer
+gets `not-permitted` rather than `not-decider`, because telling them a Must is "the Decider's call"
+would imply that being the Decider would help — the first draft did exactly that, and the role
+matrix test is what surfaced it. **Superseded in part by the review below**: the reasoning holds for
+someone the product does not name, and was wrong for someone it does. See drizzle/0013.
 
 **Reopening is gated exactly as accepting is, and carries no reason.** §1 law 7 makes a debt
 something a *named* person owns, so whoever could take it on can hand it back and nobody else can
@@ -346,6 +347,75 @@ rather than re-rendering the page. Replacing the form with a hand-written one tu
 `--danger` and §0 law 2 names validation errors as one of its three sanctioned uses. Nothing else —
 not the chip, not the card, not either button: accepting is not destructive, reopening is not
 either, and both have standing reversals.
+
+### T2.5's fresh-context review — six findings, all fixed
+
+A cold session read the diff against §5, §1 (laws 4, 6, 7), §14, §8 and §12. Every finding was
+real. Five were in the surface; one was the §14 reading, and it is the one that cost a migration.
+
+**1. The reversal's confirmation rendered into a collapsed disclosure.** `AcceptForm` put every
+non-field message *inside* the `<details>` whose `open` the outcome itself decided — and a landed
+move closes it. So "Reopened." was in the DOM, inside a closed element, reaching nobody, on the one
+move §1 law 4 exists to make visible. **The rule now, stated in the component:** the disclosure
+decides whether the *form* is open and never whether a sentence is readable; every message on this
+surface is a sibling of it. Both branches carry a test, so neither can regress alone.
+
+**2. Everything that speaks about an open Should had to follow it into the expansion.** §13 files
+open Shoulds under the score, so `prd-8` has no card — but `gapOutcomeHref` emitted `#gap-<id>` for
+an anchor only the card carried, and the message landed inside the readiness `<details>`, closed by
+default. A failed accept on a Should therefore scrolled nowhere and said nothing, twice collapsed.
+Now the check line carries the anchor for exactly the gaps with no card, and the panel opens itself
+when the URL names one. **Exactly one element wears `gap-<id>`**, which is why `gapHasCard` is
+exported from `GapList` and asked by all three surfaces rather than restated in each.
+
+**3. One outcome token served two moves, so the copy named the wrong one.** Both functions answer
+`not-decider`, and "Accepting a Must is the Decider's call" was said to someone who pressed
+*reopen* — a move they did not make. The intent now travels in the URL beside the outcome, the two
+are validated as a **pair**, and `t.item.gapMove` is keyed by move first over each move's own
+outcome set. That second part matters: the compiler still lists every missing sentence, and refuses
+to demand one for a pair the database cannot produce. A crafted `?intent=reopen&move=reason-required`
+now renders nothing rather than borrowing the other move's words.
+
+**And the §14 reading was wrong, which is drizzle/0013.** T2.5 asked the role gate first, so a
+Developer or Viewer who *was* the product's named Decider was told their role does not settle gaps.
+§14 names a person, not a role — "each product names a **Decider** who approves spec patches,
+accepts flags" — and the Owner is the fallback for a Decider's *absence*, not an override of a
+present one. An explicit per-product assignment must not be shadowed by the general table. The
+ordering argument T2.5 made is still right for the case it covered and is kept.
+
+**This is the one place the fix widened a boundary, and it needs its own cold read.** The functions
+are INVOKER, so reordering plpgsql alone would have been a comment: `gap_update` refuses a
+Developer's UPDATE and `activity_insert` refuses a Viewer's ledger row. `app.is_product_decider` is
+added as one disjunct to each — scoped to the product that names the caller, and to workspaces they
+are still a member of. Against `gap_update` it grants the gap-writing power a Product member already
+has, narrowed to one product, which is what §14 calls "accepts flags"; against `activity_insert` it
+is strictly narrower than the whole-workspace insert every Developer already had. `can_see_product`
+is untouched and no product boundary moves. A db test pins that the policy half is load-bearing:
+with the functions reordered and `gap_update` restored to 0004's text, the Developer-Decider gets
+`not-permitted` from the re-read.
+
+**4. Two exits reported into silence.** `not-found` names a gap the page does not hold, so no card
+and no check line could ever render its sentence; a form missing its gap or intent redirected to
+`?move=not-found` with no `gap` param, which the page parsed to `null` and rendered as nothing. §12
+has copy for every outcome and none for a silent no-op. The page now speaks for an answer no gap can
+claim — at the top, where a fragment-less redirect lands — and a submission carrying no readable
+move reports as `unreadable` rather than borrowing one move's words for something that was neither.
+
+**5. Three tests could not fail.** The worst was the one whose name claimed to cover finding 1:
+"closes it on a move that landed" passed `outcome={null}`, which is no move at all, so the clause
+that hid the message could be deleted and the test stayed green. Two danger assertions rendered with
+no outcome, so no message and no field state existed to be painted wrong. All three now pass the
+outcome that reaches the branch, and each was observed failing with its own defect restored — as was
+every other changed test in this pass, the policy widening included.
+
+**6. Three docstrings asserted the opposite of what their files did.** `page.tsx`, `GapList` and
+`CheckList` still said "read-only" and "nothing here is a control" above files that render §5's
+third move. T2.5 restated the *tests* below them and left the prose. Corrected, and each now says
+which move it carries and which are still Phase 3.
+
+**Minor, also fixed:** `gapId` was the one form value interpolated into a URL without a shape check —
+`URLSearchParams` encodes the query but not the fragment. It is now checked against the uuid the
+database issues, exactly as the item key is checked before becoming a path segment.
 
 ### T2.4's fresh-context review — six findings, all fixed
 

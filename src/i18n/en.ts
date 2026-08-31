@@ -9,7 +9,7 @@
  * §12 also asks for +30% width headroom for TR/NL, which is why nothing below
  * is written to fit a fixed box.
  */
-import type { GapMoveOutcome } from "@/lib/gap-move";
+import type { AcceptOutcome, ReopenOutcome } from "@/lib/gap-move";
 
 export const en = {
   common: {
@@ -271,29 +271,52 @@ export const en = {
      */
     gapReopen: "Reopen this gap",
     /**
-     * What came of a move — §5's outcomes, one sentence each.
+     * What came of a move — §5's outcomes, one sentence each, **per move**.
      *
-     * Keyed by `GapMoveOutcome` so the compiler names any token still missing a
-     * sentence. These map a *kind*; no string the database produced ever
-     * reaches a person (CLAUDE.md).
+     * Keyed by intent first because one token serves two moves: both answer
+     * `not-decider`, and "accepting a Must is the Decider's call" said to
+     * someone who pressed *reopen* names a move they did not make. Inside each
+     * move the record is exact over that move's own outcome set, so the
+     * compiler names any sentence still missing and never asks for one the
+     * database cannot produce — there is no reopen that wants a reason.
+     *
+     * These map a *kind*; no string the database produced ever reaches a person
+     * (CLAUDE.md).
      *
      * §12 throughout: states the cause, blames nobody, never "failed" or
      * "invalid" at someone. §0 law 1 keeps the tone off Danger — none of these
      * is destructive and all of them are reversible.
      */
     gapMove: {
-      accepted: "Accepted. It stays on the page with your name on it.",
-      reopened: "Reopened. The record of why it was accepted is in the activity log.",
-      "reason-required": "Add a reason. It is the record of why this was accepted.",
-      "reason-too-long": "That reason is longer than we can store. Try the short version.",
-      "not-found": "That gap isn't here any more.",
-      "not-open": "This gap changed while you were writing, so nothing moved. Take another look.",
-      "not-accepted":
-        "This gap changed while you were writing, so nothing moved. Take another look.",
-      "not-decider": "Accepting a Must is the Decider's call. An Owner can make it too.",
-      "not-permitted": "Your role doesn't settle gaps. Someone with Product or Owner can.",
-      unavailable: "That didn't go through. Try again.",
-    } satisfies Record<GapMoveOutcome, string>,
+      accept: {
+        accepted: "Accepted. It stays on the page with your name on it.",
+        "reason-required": "Add a reason. It is the record of why this was accepted.",
+        "reason-too-long": "That reason is longer than we can store. Try the short version.",
+        "not-found": "That gap isn't here any more, so nothing was accepted.",
+        "not-open": "This gap changed while you were writing, so nothing moved. Take another look.",
+        "not-decider": "Accepting a Must is the Decider's call. An Owner can make it too.",
+        "not-permitted": "Your role doesn't settle gaps. Someone with Product or Owner can.",
+        unavailable: "That didn't go through. Try accepting it again.",
+      } satisfies Record<AcceptOutcome, string>,
+      reopen: {
+        reopened: "Reopened. The record of why it was accepted is in the activity log.",
+        "not-found": "That gap isn't here any more, so nothing was reopened.",
+        "not-accepted":
+          "This gap changed while you were writing, so nothing moved. Take another look.",
+        "not-decider": "Reopening a Must is the Decider's call. An Owner can make it too.",
+        "not-permitted": "Your role doesn't settle gaps. Someone with Product or Owner can.",
+        unavailable: "That didn't go through. Try reopening it again.",
+      } satisfies Record<ReopenOutcome, string>,
+    },
+    /**
+     * The one answer that belongs to no move: the submission carried none.
+     *
+     * Only a hand-written POST reaches it — every form on the page carries its
+     * intent and its gap. It still gets a sentence, because §12 has no copy for
+     * a silent no-op and "nothing happened and nobody said so" is the one
+     * outcome a person cannot act on.
+     */
+    gapMoveUnreadable: "That didn't arrive as a move, so nothing changed. Try it from the gap.",
     /** §5's three dispositions, as §5 names the moves that produce them. */
     gapOpen: "Open",
     gapAccepted: "Accepted",

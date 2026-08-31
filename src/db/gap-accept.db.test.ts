@@ -206,15 +206,118 @@ describe.skipIf(OFFLINE)("accept_gap — §5's third move", () => {
         // Product, not the Decider: §5 routes a blocking gap through them.
         product: { must: "not-decider", should: "accepted" },
         // §14: "Viewer appears in no write policy anywhere", and a Developer
-        // authors artifacts. Neither settles a gap of either tag — and the
-        // answer says *that*, rather than implying the Decider role would help.
+        // authors artifacts. Neither settles a gap of either tag *unless the
+        // product names them Decider* — see the two tests below — and the
+        // answer says that, rather than implying the Decider role would help.
         developer: { must: "not-permitted", should: "not-permitted" },
         viewer: { must: "not-permitted", should: "not-permitted" },
       });
     });
   });
 
-  // §5's reason is the record of why a debt was taken on, so a blank one is not
+  /**
+   * **§14's appointment is not shadowed by the role table.**
+   *
+   * "Each product names a **Decider** (config field) who approves spec patches,
+   * accepts flags, and can waive walkthroughs." It names a person, not a role,
+   * and the Owner is the fallback for a Decider's *absence* rather than an
+   * override of a present one. T2.5 asked the role first, so a Developer who
+   * was the named Decider was told their role does not settle gaps — which was
+   * the review's finding, and drizzle/0013 is the answer: the appointment is
+   * asked first, and `gap_update` and `activity_insert` were widened by exactly
+   * that disjunct so the policies say what §14 says.
+   */
+  it("lets a Developer who is the named Decider settle both tags", async () => {
+    await rolledBack(async (tx) => {
+      const world = await seedWorld(tx);
+      await tx`update product set decider_user_id = ${USERS.developer} where id = ${world.productId}`;
+      const must = await makeGap(tx, world, "must");
+      const should = await makeGap(tx, world, "should");
+
+      await actAs(tx, USERS.developer);
+      expect(await accept(tx, must, "The API contract is the record.")).toBe("accepted");
+      expect(await accept(tx, should, "Same.")).toBe("accepted");
+      // And it is a real write, with the ledger row §2 requires — not a token
+      // returned by a function whose UPDATE the policy then refused.
+      expect(await reopen(tx, must)).toBe("reopened");
+
+      await asOwner(tx);
+      const rows = await ledger(tx, must);
+      expect(rows.map((r) => r.action)).toEqual(["gap.accepted", "gap.reopened"]);
+
+      const [row] = await tx<
+        { by: string | null }[]
+      >`select resolved_by_user_id as by from gap where id = ${should}`;
+      // §5's stamp is `auth.uid()`, so the Decider's own name is on the debt.
+      expect(row!.by).toBe(USERS.developer);
+    });
+  });
+
+  /**
+   * The other half, and the reason the reorder is not a loosening: the
+   * appointment is what grants this, so a Developer who does not hold it is
+   * refused exactly as before — including on the same product, once the
+   * appointment moves to somebody else.
+   */
+  it("still refuses a Developer the product does not name", async () => {
+    await rolledBack(async (tx) => {
+      const world = await seedWorld(tx);
+      const must = await makeGap(tx, world, "must");
+      const should = await makeGap(tx, world, "should");
+
+      // The product names `decider`, not `developer`.
+      await actAs(tx, USERS.developer);
+      expect(await accept(tx, must, "r")).toBe("not-permitted");
+      expect(await accept(tx, should, "r")).toBe("not-permitted");
+
+      await asOwner(tx);
+      const rows = await tx<{ d: string }[]>`
+        select disposition::text as d from gap where id in (${must}, ${should})`;
+      expect(rows.map((r) => r.d)).toEqual(["open", "open"]);
+      expect(await ledger(tx, must)).toEqual([]);
+    });
+  });
+
+  /**
+   * The appointment is scoped to the product *and* to membership:
+   * `app.is_product_decider` requires the caller to still be in the workspace,
+   * so a Decider whose membership is gone loses it rather than keeping a
+   * standing write on a workspace they left.
+   *
+   * **Asserted on the predicate, not only through the move.** `gap_select`
+   * already refuses a non-member, so both moves would answer `not-found`
+   * whether the clause were there or not — a test that only pressed the button
+   * would go green with the clause deleted. The predicate is where the rule
+   * lives, so it is where the rule is measured; the move is asserted after it
+   * to prove nothing else lets the appointment back in.
+   */
+  it("takes the appointment away from a Decider who left the workspace", async () => {
+    await rolledBack(async (tx) => {
+      const world = await seedWorld(tx);
+      const must = await makeGap(tx, world, "must");
+
+      const decides = async () =>
+        (await tx<{ v: boolean }[]>`select app.is_product_decider(${world.productId}) as v`)[0]!.v;
+
+      await actAs(tx, USERS.decider);
+      expect(await decides()).toBe(true);
+      await asOwner(tx);
+
+      await tx`delete from membership
+                where workspace_id = ${world.workspaceId} and user_id = ${USERS.decider}`;
+
+      await actAs(tx, USERS.decider);
+      expect(await decides()).toBe(false);
+      // And the move answers as it does for any stranger — deliberately the
+      // same 404 `/i/[key]` gives, since `gap_select` needs the membership too.
+      expect(await accept(tx, must, "r")).toBe("not-found");
+
+      await asOwner(tx);
+      expect(await ledger(tx, must)).toEqual([]);
+    });
+  });
+
+  // §5's reason is the record of why a debt was taken on  // §5's reason is the record of why a debt was taken on, so a blank one is not
   // a decision anyone can read later. Refused before the write, so the person
   // gets a field to fill in rather than a constraint violation.
   it("refuses a blank reason without touching the gap or the ledger", async () => {

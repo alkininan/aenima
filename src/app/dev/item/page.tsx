@@ -5,9 +5,9 @@ import { GapList } from "@/app/i/[key]/GapList";
 import { ItemHeader } from "@/app/i/[key]/ItemHeader";
 import { ItemSection } from "@/app/i/[key]/ItemSection";
 import { ReadinessPanel } from "@/app/i/[key]/ReadinessPanel";
-import type { MoveableGap } from "@/app/i/[key]/GapMoves";
+import { MoveMessage, type MoveableGap } from "@/app/i/[key]/GapMoves";
 import { getDictionary } from "@/i18n";
-import { isGapMoveOutcome } from "@/lib/gap-move";
+import { readGapMove } from "@/lib/gap-move";
 import { GAP_PARAMS } from "@/lib/routes";
 
 import { devOnly } from "../dev-only";
@@ -85,12 +85,20 @@ export default async function DevItemPage({ searchParams }: PageProps<"/dev/item
     ]),
   );
 
-  const movedGap = move[GAP_PARAMS.gap];
-  const moveKind = move[GAP_PARAMS.move];
+  /**
+   * The same three params the real page reads, through the same reader — so the
+   * mirror can stage every outcome §5 produces without a database. `?intent=` +
+   * `?move=` + `?gap=` is what the browser tests drive the message and the
+   * field's error state with.
+   */
+  const parsed = readGapMove(move[GAP_PARAMS.intent], move[GAP_PARAMS.move], move[GAP_PARAMS.gap]);
+  const heldGapIds = new Set(
+    ITEM_GAPS.filter((gap) => gap.disposition !== "closed").map((gap) => gap.id),
+  );
+  const unclaimedMove =
+    parsed !== null && (parsed.gapId === null || !heldGapIds.has(parsed.gapId)) ? parsed : null;
   const outcome =
-    isGapMoveOutcome(moveKind) && typeof movedGap === "string"
-      ? { gapId: movedGap, kind: moveKind }
-      : null;
+    parsed !== null && parsed.intent !== null && unclaimedMove === null ? parsed : null;
   const run =
     RUNS[
       isRunState(typeof requested === "string" ? requested : undefined)
@@ -102,6 +110,8 @@ export default async function DevItemPage({ searchParams }: PageProps<"/dev/item
     <main className="mx-auto w-full max-w-[1200px] px-[24px] py-[32px]">
       <div className="grid grid-cols-1 gap-[24px] lg:grid-cols-[1fr_380px]">
         <div className="flex min-w-0 flex-col gap-[32px]">
+          {unclaimedMove === null ? null : <MoveMessage report={unclaimedMove} t={t} />}
+
           {/* The same 16 the real page holds these two at. */}
           <div className="flex flex-col gap-[16px]">
             <ItemHeader item={ITEM_HEADER} t={t} />

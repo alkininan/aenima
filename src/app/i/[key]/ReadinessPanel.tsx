@@ -1,11 +1,12 @@
 import { Meter } from "@/components/ui/Meter";
 import { ChevronDownIcon, ChevronRightIcon } from "@/components/ui/icons";
 import type { Dictionary } from "@/i18n";
-import type { GapMoveOutcome } from "@/lib/gap-move";
+import type { GapMoveClaim } from "@/lib/gap-move";
 import { relativeTime } from "@/lib/relative-time";
 import type { RunView } from "@/lib/scoring/run-view";
 
 import { CheckList } from "./CheckList";
+import { gapHasCard } from "./GapList";
 import type { MoveableGap } from "./GapMoves";
 
 /**
@@ -37,8 +38,12 @@ import type { MoveableGap } from "./GapMoves";
  * that opens onto nothing is worse than no disclosure, and a 0% bar would claim
  * a score that was never computed.
  *
- * Read-only. Opening a disclosure changes nothing: no row is written, no score
- * moves, and nothing here is a control in §5's sense.
+ * Opening a disclosure changes nothing: no row is written and no score moves.
+ * What it opens *onto* is a control — §13's narrowing files open Shoulds under
+ * the score, so the expansion is the only place §5's third move exists for one.
+ * That is why this element opens itself when a move names such a gap: a message
+ * inside a collapsed disclosure is not a message, and the redirect that carries
+ * it has nowhere else to land.
  */
 export function ReadinessPanel({
   run,
@@ -59,7 +64,7 @@ export function ReadinessPanel({
    */
   itemKey: string;
   gapsByCheck: ReadonlyMap<string, MoveableGap>;
-  outcome: { gapId: string; kind: GapMoveOutcome } | null;
+  outcome: GapMoveClaim | null;
 }) {
   if (run === null) {
     return (
@@ -72,8 +77,28 @@ export function ReadinessPanel({
     );
   }
 
+  /**
+   * Whether the URL's move landed on a gap that lives *in here*.
+   *
+   * Open only then. A gap with a card is reported on the card, above and
+   * already visible, and opening the whole rubric to repeat it would be a
+   * page-sized reaction to a one-line message. The check's state is part of the
+   * question because a line renders the move only when it is unclear — opening
+   * onto a gap the list does not draw would be a disclosure that opens onto
+   * nothing, which §10 already refuses elsewhere on this component.
+   */
+  const opensOntoTheMovedGap = run.checks.some((check) => {
+    if (check.state !== "unclear" || outcome === null || outcome.gapId === null) return false;
+    const gap = gapsByCheck.get(check.checkId);
+    return gap !== undefined && gap.id === outcome.gapId && !gapHasCard(gap);
+  });
+
   return (
-    <details data-testid="readiness" className="group flex flex-col">
+    <details
+      data-testid="readiness"
+      open={opensOntoTheMovedGap || undefined}
+      className="group flex flex-col"
+    >
       {/* §7's interaction states on the whole hit area, from `.control` — hover
           overlay, press physics, and the focus ring *with* the aero glow §6 and
           §7 pair it with. Hand-rolling `hover:bg-hover-overlay` got the first

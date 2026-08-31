@@ -334,6 +334,29 @@ Decider-or-Owner gate. Also `gap_resolution_note_len`: the note becomes
 user-writable with this ticket, so it gets an upper bound — only the bound, since
 `gap_resolution_shape` already refuses a blank one.
 
+`drizzle/0013_decider_settles.sql` — T2.5's fresh-context review. §14 names a
+Decider "who approves spec patches, accepts flags, and can waive walkthroughs"
+and does not qualify it by workspace role, but 0012 asked the role first, so a
+Developer or Viewer who *was* the named Decider was refused with
+`not-permitted`. A general role table must not silently shadow an explicit
+per-product assignment, so the order is reversed: the appointment is asked
+first, and the role gate only answers for people it did not already answer for.
+Both obstacles keep their own name — someone with no gap-writing role and no
+appointment still hears about their role, and someone with the role but not the
+appointment still hears about the Decider.
+
+**It widens two policies, and that is the honest cost.** The functions are
+INVOKER, so a plpgsql reorder alone would have changed nothing: `gap_update`
+refuses a Developer's UPDATE and `activity_insert` refuses a Viewer's ledger
+row, and the re-read would have reported `not-permitted` anyway. So
+`app.is_product_decider(product)` — DEFINER, and itself scoped to workspaces the
+caller is still a member of — is added as one disjunct to each. `gap_update`
+gains it beside `can_see_product`, which is unchanged; `activity_insert` gains
+it, which is strictly narrower than the whole-workspace insert every Developer
+already had. Nothing crosses a product boundary: the predicate answers only for
+the product that names the caller. A db test pins each half, including the one
+that proves the policy change is load-bearing rather than decorative.
+
 ```
 pnpm db:generate   # diff the schema files into a new migration
 pnpm db:migrate    # apply pending migrations to DATABASE_URL

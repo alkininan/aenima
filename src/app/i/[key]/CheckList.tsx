@@ -2,9 +2,11 @@ import { Card } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
 import { CheckIcon } from "@/components/ui/icons";
 import type { Dictionary } from "@/i18n";
-import type { GapMoveOutcome } from "@/lib/gap-move";
+import type { GapMoveClaim } from "@/lib/gap-move";
+import { gapAnchor } from "@/lib/routes";
 import type { CheckLine } from "@/lib/scoring/run-view";
 
+import { gapHasCard } from "./GapList";
 import { GapMoves, type MoveableGap } from "./GapMoves";
 
 /**
@@ -33,8 +35,11 @@ import { GapMoves, type MoveableGap } from "./GapMoves";
  * check's prose is content the rubric owns and versions; the chrome around it
  * is what the product says. See `src/packs/types.ts`.
  *
- * Read-only. §5's three negotiation moves are T2.5, and each is a mutation with
- * a scoring run behind it.
+ * **§5's third move lives on these lines too, and for some gaps only here.**
+ * §13's narrowing keeps an open Should off the gap card, so the expansion is
+ * the only route to accepting one — which is why the anchor a move redirects to
+ * is carried here for exactly those gaps, and why `ReadinessPanel` opens itself
+ * when a move names one. See `gapHasCard`. Moves 1 and 2 are Phase 3.
  */
 export function CheckList({
   checks,
@@ -59,59 +64,72 @@ export function CheckList({
    * accepted gap alone — so this is keyed by check rather than filtered to open.
    */
   gapsByCheck: ReadonlyMap<string, MoveableGap>;
-  outcome: { gapId: string; kind: GapMoveOutcome } | null;
+  outcome: GapMoveClaim | null;
 }) {
   return (
     <ul data-testid="check-list" aria-label={t.item.checks} className="flex flex-col gap-[8px]">
-      {checks.map((check) => (
-        <li key={check.checkId} className="flex flex-col gap-[8px]">
-          <div className="flex flex-wrap items-baseline gap-x-[8px] gap-y-[4px]">
-            {/* §3: check IDs are mono-readout. */}
-            <span className="type-mono-readout shrink-0 text-n-secondary">{check.checkId}</span>
+      {checks.map((check) => {
+        // The gap this line can act on, and whether this line is the one that
+        // has to be reachable by name. A gap with a card is anchored there;
+        // §13's filed-away open Shoulds have nowhere else, so they anchor here.
+        // Exactly one element per gap wears the id — two would make the
+        // fragment mean whichever the browser reached first.
+        const gap = check.state === "unclear" ? gapsByCheck.get(check.checkId) : undefined;
+        const anchored = gap !== undefined && !gapHasCard(gap);
 
-            {/* Null when the loaded pack no longer names this check — the id is
+        return (
+          // `tabIndex={-1}` makes it a focus destination without putting it in
+          // the tab order — §11 keeps that for controls. Same treatment the gap
+          // card gives its own anchor.
+          <li
+            key={check.checkId}
+            id={anchored ? gapAnchor(gap.id) : undefined}
+            tabIndex={anchored ? -1 : undefined}
+            className="flex flex-col gap-[8px]"
+          >
+            <div className="flex flex-wrap items-baseline gap-x-[8px] gap-y-[4px]">
+              {/* §3: check IDs are mono-readout. */}
+              <span className="type-mono-readout shrink-0 text-n-secondary">{check.checkId}</span>
+
+              {/* Null when the loaded pack no longer names this check — the id is
                 still true, so the line stands on it rather than disappearing.
                 See `CheckLine.prose`. */}
-            {check.prose === null ? null : (
-              <span className="type-ui-body min-w-0 text-n-primary">{check.prose}</span>
-            )}
+              {check.prose === null ? null : (
+                <span className="type-ui-body min-w-0 text-n-primary">{check.prose}</span>
+              )}
 
-            <span className="ml-auto shrink-0">{stateLabel(check, t)}</span>
-          </div>
+              <span className="ml-auto shrink-0">{stateLabel(check, t)}</span>
+            </div>
 
-          {/* §8: "evidence quotes ui-body on --surface-1 cards". §5's own
+            {/* §8: "evidence quotes ui-body on --surface-1 cards". §5's own
               sentence shape, rendered by the one function that renders it, so
               this and the gap list cannot show one failure two ways. */}
-          {check.state === "unclear" ? (
-            <Card className="type-ui-body text-n-primary">{check.evidence}</Card>
-          ) : null}
+            {check.state === "unclear" ? (
+              <Card className="type-ui-body text-n-primary">{check.evidence}</Card>
+            ) : null}
 
-          {/* §4's renormalization, said out loud. The condition is written
+            {/* §4's renormalization, said out loud. The condition is written
               affirmatively in the pack and it is here because it did **not**
               hold, so the negation is in the string, never in the pack. */}
-          {check.state === "not-asked" ? (
-            <p className="type-ui-footnote text-n-secondary">
-              {t.item.checkNotAskedReason(check.condition)}
-            </p>
-          ) : null}
+            {check.state === "not-asked" ? (
+              <p className="type-ui-footnote text-n-secondary">
+                {t.item.checkNotAskedReason(check.condition)}
+              </p>
+            ) : null}
 
-          {/* §5's move, on the gap this check raised. The same component the
+            {/* §5's move, on the gap this check raised. The same component the
               gap card renders — §13's narrowing keeps open Shoulds off that
               card, so for those this is the only place the move exists, and a
               second implementation here would drift from that one.
 
               Only on an unclear check: a passing check has no gap, and a
               not-asked one left the denominator. */}
-          {check.state === "unclear" ? (
-            <CheckGapMoves
-              gap={gapsByCheck.get(check.checkId)}
-              itemKey={itemKey}
-              t={t}
-              outcome={outcome}
-            />
-          ) : null}
-        </li>
-      ))}
+            {check.state === "unclear" ? (
+              <CheckGapMoves gap={gap} itemKey={itemKey} t={t} outcome={outcome} />
+            ) : null}
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -133,7 +151,7 @@ function CheckGapMoves({
   gap: MoveableGap | undefined;
   itemKey: string;
   t: Dictionary;
-  outcome: { gapId: string; kind: GapMoveOutcome } | null;
+  outcome: GapMoveClaim | null;
 }) {
   if (!gap) return null;
 
@@ -142,7 +160,7 @@ function CheckGapMoves({
       gap={gap}
       itemKey={itemKey}
       t={t}
-      outcome={outcome?.gapId === gap.id ? outcome.kind : null}
+      outcome={outcome !== null && outcome.gapId === gap.id ? outcome : null}
     />
   );
 }

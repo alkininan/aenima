@@ -48,24 +48,68 @@ const ITEM_KEY = /^[a-z][a-z0-9]{1,7}-[0-9]+$/;
 export const isItemKey = (value: string): boolean => ITEM_KEY.test(value);
 
 /**
+ * A gap id, as the database issues them: `gen_random_uuid()`, and nothing else.
+ *
+ * Checked for the same reason `isItemKey` is. The gap id arrives in a form and
+ * is interpolated into the redirect's **fragment**, which `URLSearchParams` does
+ * not encode for us — so it is the one value on that path that could carry a
+ * character the `Location` header has no room for. A tampered id becomes no
+ * anchor at all rather than a malformed URL.
+ */
+const GAP_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export const isGapId = (value: string): boolean => GAP_ID.test(value);
+
+/**
  * §5's negotiation moves report themselves in the URL.
  *
  * The item page has no client island, so an outcome cannot live in
- * `useActionState`. It travels as two search params instead: which gap, and what
- * happened to it. Both are non-secret — the gap id is already the card's anchor,
- * and the outcome is one of a closed set of tokens (`src/lib/gap-move.ts`).
- * Nothing a person typed and nothing the database said is ever in the URL.
+ * `useActionState`. It travels as three search params instead: which move, what
+ * happened to it, and which gap. All three are non-secret — the gap id is
+ * already the card's anchor, and the intent and outcome are closed sets of
+ * tokens (`src/lib/gap-move.ts`). Nothing a person typed and nothing the
+ * database said is ever in the URL.
+ *
+ * **The intent is there because one outcome token serves two moves.** Both
+ * moves answer `not-decider`; only the intent says whether the sentence should
+ * be about accepting or about reopening.
  */
-export const GAP_PARAMS = { move: "move", gap: "gap" } as const;
+export const GAP_PARAMS = { intent: "intent", move: "move", gap: "gap" } as const;
 
-/** Where a move sends the person back to, with what to say when they arrive. */
-export function gapOutcomeHref(key: string, gapId: string, outcome: string): string {
-  const params = new URLSearchParams({ [GAP_PARAMS.move]: outcome, [GAP_PARAMS.gap]: gapId });
-  // The fragment scrolls the card that moved into view, with JS and without.
-  return `${itemHref(key)}?${params.toString()}#gap-${gapId}`;
+/**
+ * Where a move sends the person back to, with what to say when they arrive.
+ *
+ * `gapId` is nullable: a submission that named no gap still reports, it just
+ * reports above the list rather than on a card. An id that is not a uuid is
+ * dropped for the same reason — there is no card it could name.
+ */
+export function gapOutcomeHref(
+  key: string,
+  intent: string,
+  outcome: string,
+  gapId: string | null,
+): string {
+  const anchored = gapId !== null && isGapId(gapId);
+  const params = new URLSearchParams({
+    [GAP_PARAMS.intent]: intent,
+    [GAP_PARAMS.move]: outcome,
+  });
+  if (anchored) params.set(GAP_PARAMS.gap, gapId);
+
+  // The fragment scrolls whichever surface carries that gap into view, with JS
+  // and without. No anchor when no gap was named — the notice is at the top.
+  const fragment = anchored ? `#${gapAnchor(gapId)}` : "";
+  return `${itemHref(key)}?${params.toString()}${fragment}`;
 }
 
-/** The anchor a moved gap's card carries, so `gapOutcomeHref` has a target. */
+/**
+ * The anchor a moved gap carries, so `gapOutcomeHref` has a target.
+ *
+ * **Exactly one element wears it per gap.** The card wears it when §13 puts the
+ * gap on the page; the meter's expansion wears it for the open Shoulds §13 files
+ * under the score, which have no card. Two elements sharing an id would make the
+ * fragment name whichever the browser found first.
+ */
 export const gapAnchor = (gapId: string) => `gap-${gapId}` as const;
 
 /** §4's sidebar nav, in order. `built` gates whether it is a link at all. */

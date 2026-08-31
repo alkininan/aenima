@@ -94,7 +94,7 @@ describe("settleGap", () => {
     });
 
     expect(hooks.accept).toHaveBeenCalledWith(GAP, "Accepted for V1.");
-    expect(redirected.url).toBe(`/i/soc-9?move=accepted&gap=${GAP}#gap-${GAP}`);
+    expect(redirected.url).toBe(`/i/soc-9?intent=accept&move=accepted&gap=${GAP}#gap-${GAP}`);
     // Inside an action `redirect` defaults to `push`, and this URL differs from
     // the previous one only by a transient message — Back should not re-show a
     // sentence about something already done.
@@ -135,7 +135,7 @@ describe("settleGap", () => {
 
     const redirected = await submit({ key: "soc-9", gapId: GAP, intent: "accept", reason: "r" });
 
-    expect(redirected.url).toBe(`/i/soc-9?move=not-decider&gap=${GAP}#gap-${GAP}`);
+    expect(redirected.url).toBe(`/i/soc-9?intent=accept&move=not-decider&gap=${GAP}#gap-${GAP}`);
   });
 
   /**
@@ -152,17 +152,48 @@ describe("settleGap", () => {
     expect(hooks.accept).not.toHaveBeenCalled();
   });
 
-  // A form with no gap or no intent is not a move at all, and reports as the
-  // missing gap it is rather than reaching the database to find out.
-  it("refuses a submission missing the gap or the intent", async () => {
-    expect((await submit({ key: "soc-9", intent: "accept", reason: "r" })).url).toBe(
-      "/i/soc-9?move=not-found",
-    );
-    expect((await submit({ key: "soc-9", gapId: GAP, intent: "delete" })).url).toBe(
-      "/i/soc-9?move=not-found",
-    );
+  /**
+   * **A submission that answers nothing still says something.**
+   *
+   * §12 has copy for every outcome and none for silence. A form with no
+   * readable intent is neither move, so there is no move to attribute a
+   * sentence to and it reports as `unreadable`; one that named no usable gap is
+   * `not-found` under the intent it did carry. Both used to redirect to a URL
+   * the page could not turn into a sentence at all — the item page renders each
+   * of these at the top, where a fragment-less redirect lands.
+   */
+  it("reports a submission with no readable move, and calls nothing", async () => {
+    const redirected = await submit({ key: "soc-9", gapId: GAP, intent: "delete" });
+
+    expect(redirected.url).toBe("/i/soc-9?move=unreadable");
     expect(hooks.accept).not.toHaveBeenCalled();
     expect(hooks.reopen).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The gap id is interpolated into the redirect's **fragment**, which
+   * `URLSearchParams` does not encode — so it is shape-checked against the uuid
+   * the database issues, exactly as the key is checked before it becomes a path
+   * segment. A tampered id names no gap, which is `not-found`, and carries no
+   * anchor because there is nothing for one to point at.
+   */
+  it("refuses a gap id that is not a uuid, and calls nothing", async () => {
+    for (const gapId of ["", "not-a-uuid", "../../evil", `${GAP}\r\nX-Injected: 1`]) {
+      const redirected = await submit({ key: "soc-9", gapId, intent: "accept", reason: "r" });
+      expect(redirected.url).toBe("/i/soc-9?intent=accept&move=not-found");
+    }
+    expect(hooks.accept).not.toHaveBeenCalled();
+  });
+
+  // The intent rides along so the page can tell one move's words from the
+  // other's: both functions answer `not-decider`, and only this says which
+  // sentence it is.
+  it("carries the move that was made, not just what came of it", async () => {
+    hooks.reopen.mockResolvedValue("not-decider");
+
+    const redirected = await submit({ key: "soc-9", gapId: GAP, intent: "reopen" });
+
+    expect(redirected.url).toBe(`/i/soc-9?intent=reopen&move=not-decider&gap=${GAP}#gap-${GAP}`);
   });
 
   /**

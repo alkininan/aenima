@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { getDictionary } from "@/i18n";
+import type { GapMoveClaim } from "@/lib/gap-move";
 
 vi.mock("./actions", () => ({ settleGap: async () => {} }));
 
@@ -20,7 +21,19 @@ const gap = (over: Partial<MoveableGap> = {}): MoveableGap => ({
   ...over,
 });
 
-const show = (g: MoveableGap, outcome: Parameters<typeof GapMoves>[0]["outcome"] = null) =>
+/** A move's answer as the URL reports it, already narrowed to this gap. */
+const accepted = (kind: Extract<GapMoveClaim, { intent: "accept" }>["kind"]): GapMoveClaim => ({
+  intent: "accept",
+  kind,
+  gapId: "g1",
+});
+const reopened = (kind: Extract<GapMoveClaim, { intent: "reopen" }>["kind"]): GapMoveClaim => ({
+  intent: "reopen",
+  kind,
+  gapId: "g1",
+});
+
+const show = (g: MoveableGap, outcome: GapMoveClaim | null = null) =>
   render(<GapMoves gap={g} itemKey="soc-12" t={t} outcome={outcome} />);
 
 /**
@@ -75,9 +88,9 @@ describe("GapMoves", () => {
    * this surface.
    */
   it("puts an empty reason on the field's own helper line, in the error tone", () => {
-    const { container } = show(gap(), "reason-required");
+    const { container } = show(gap(), accepted("reason-required"));
 
-    expect(screen.getByText(t.item.gapMove["reason-required"])).not.toBeNull();
+    expect(screen.getByText(t.item.gapMove.accept["reason-required"])).not.toBeNull();
     expect(screen.getByLabelText(t.item.gapAcceptReason).getAttribute("aria-invalid")).toBe("true");
     expect(container.innerHTML).toMatch(/text-danger/);
   });
@@ -92,11 +105,36 @@ describe("GapMoves", () => {
     // refuses to say it about a gap that is still open.
     const { container } = show(
       gap({ disposition: "accepted", resolvedBy: { kind: "other" }, resolutionNote: "n" }),
-      "not-open",
+      accepted("not-open"),
     );
 
-    expect(screen.getByText(t.item.gapMove["not-open"])).not.toBeNull();
+    expect(screen.getByText(t.item.gapMove.accept["not-open"])).not.toBeNull();
     expect(container.innerHTML).not.toMatch(/danger/);
+  });
+
+  /**
+   * **One token, two moves, two sentences.**
+   *
+   * `not-decider` is the answer to both `accept_gap` and `reopen_gap`. Told to
+   * someone who pressed *reopen*, "accepting a Must is the Decider's call" names
+   * a move they did not make — so the intent travels with the outcome and the
+   * dictionary is keyed by move first.
+   */
+  it("names the move the person actually made when one token serves both", () => {
+    const settled = gap({
+      disposition: "accepted",
+      resolvedBy: { kind: "other" },
+      resolutionNote: "n",
+    });
+
+    const { unmount } = show(settled, reopened("not-decider"));
+    expect(screen.getByText(t.item.gapMove.reopen["not-decider"])).not.toBeNull();
+    expect(screen.queryByText(t.item.gapMove.accept["not-decider"])).toBeNull();
+    unmount();
+
+    show(gap(), accepted("not-decider"));
+    expect(screen.getByText(t.item.gapMove.accept["not-decider"])).not.toBeNull();
+    expect(screen.queryByText(t.item.gapMove.reopen["not-decider"])).toBeNull();
   });
 
   /**
@@ -111,25 +149,25 @@ describe("GapMoves", () => {
   it("says nothing the row no longer supports", () => {
     // The URL claims this was accepted; the gap is open. Someone reopened it,
     // or the link is old.
-    show(gap({ disposition: "open" }), "accepted");
-    expect(screen.queryByText(t.item.gapMove.accepted)).toBeNull();
+    show(gap({ disposition: "open" }), accepted("accepted"));
+    expect(screen.queryByText(t.item.gapMove.accept.accepted)).toBeNull();
   });
 
   it("confirms an acceptance only to the person whose name is on it", () => {
     const { unmount } = show(
       gap({ disposition: "accepted", resolvedBy: { kind: "self" }, resolutionNote: "n" }),
-      "accepted",
+      accepted("accepted"),
     );
-    expect(screen.getByText(t.item.gapMove.accepted)).not.toBeNull();
+    expect(screen.getByText(t.item.gapMove.accept.accepted)).not.toBeNull();
     unmount();
 
     // Same URL, different reader: the debt is someone else's, so "accepted"
     // said to them would be a claim about a request they never made.
     show(
       gap({ disposition: "accepted", resolvedBy: { kind: "other" }, resolutionNote: "n" }),
-      "accepted",
+      accepted("accepted"),
     );
-    expect(screen.queryByText(t.item.gapMove.accepted)).toBeNull();
+    expect(screen.queryByText(t.item.gapMove.accept.accepted)).toBeNull();
   });
 
   /**
@@ -159,14 +197,58 @@ describe("GapMoves", () => {
     expect(form?.hasAttribute("enctype")).toBe(false);
   });
 
-  // The disclosure reopens on a failure so the reason is one keystroke from
-  // being fixed, and closes on success because the work is done.
+  /**
+   * **The disclosure decides whether the *form* is open, never whether a
+   * sentence is readable.**
+   *
+   * A move that landed closes it — the work is done — and that is exactly why
+   * no message may live inside it: "Reopened." rendered into a collapsed
+   * `<details>` reached nobody, and the assertion that was supposed to catch it
+   * passed `null` for the landed case, which is no move at all.
+   */
   it("reopens the form on a failure and closes it on a move that landed", () => {
-    const { container, unmount } = show(gap(), "reason-required");
-    expect(container.querySelector("details")?.hasAttribute("open")).toBe(true);
-    unmount();
+    const failed = show(gap(), accepted("reason-required"));
+    expect(failed.container.querySelector("details")?.hasAttribute("open")).toBe(true);
+    failed.unmount();
 
-    const after = show(gap(), null);
-    expect(after.container.querySelector("details")?.hasAttribute("open")).toBe(false);
+    // A reopen that landed leaves the gap open, so this component renders the
+    // accept form again — closed, because there is nothing to fix.
+    const landed = show(gap({ disposition: "open" }), reopened("reopened"));
+    expect(landed.container.querySelector("details")?.hasAttribute("open")).toBe(false);
+    landed.unmount();
+
+    const quiet = show(gap(), null);
+    expect(quiet.container.querySelector("details")?.hasAttribute("open")).toBe(false);
+  });
+
+  /**
+   * §1 law 4's undo has to be *visible* to be an undo. The gap is open again,
+   * so the accept form is what renders — and the sentence has to sit outside
+   * it, because the same outcome that produced the sentence closes the form.
+   */
+  it("shows the reversal's confirmation outside the disclosure that closes", () => {
+    const { container } = show(gap({ disposition: "open" }), reopened("reopened"));
+
+    const message = screen.getByText(t.item.gapMove.reopen.reopened);
+    const details = container.querySelector("details");
+
+    expect(details?.hasAttribute("open")).toBe(false);
+    // Rendered *and* reachable. Inside a closed `<details>` it would be neither.
+    expect(details?.contains(message)).toBe(false);
+  });
+
+  /**
+   * The mirror of the above, on the branch that already got it right: an
+   * accepted gap's confirmation is a sibling of the reopen form, not a child of
+   * any disclosure. Both branches state the rule so neither can regress alone.
+   */
+  it("shows the acceptance's confirmation outside every disclosure too", () => {
+    const { container } = show(
+      gap({ disposition: "accepted", resolvedBy: { kind: "self" }, resolutionNote: "n" }),
+      accepted("accepted"),
+    );
+
+    const message = screen.getByText(t.item.gapMove.accept.accepted);
+    expect([...container.querySelectorAll("details")].some((d) => d.contains(message))).toBe(false);
   });
 });

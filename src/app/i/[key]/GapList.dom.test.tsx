@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { getDictionary } from "@/i18n";
+import type { GapMoveClaim } from "@/lib/gap-move";
 
 // The card now carries §5's third move, so it reaches the server action and the
 // query layer behind it. Mocked the way `SignInForm.dom.test.tsx` mocks its
@@ -182,8 +183,15 @@ describe("GapList", () => {
    * §0 law 1 and law 2: a gap never renders in Danger, and neither does a move
    * on it. Accepting is not destructive and reopening is not either — both have
    * standing reversals, so neither is the "destructive action" Danger is for.
+   *
+   * **Staged with a move that actually answered.** `outcome={null}` is no move,
+   * so it can reach no message and no field state — a version of this that
+   * passed it would go green over a `MoveMessage` painted `--danger`. The two
+   * outcomes below are the two that reach a surface: one that speaks about the
+   * request, which must stay neutral, and one that speaks about the field,
+   * where §8 puts the only danger this page is allowed.
    */
-  it("uses no danger tone on a gap or on either move", () => {
+  it("uses no danger tone for an outcome that is not about a field", () => {
     const { container } = render(
       <GapList
         gaps={[
@@ -192,12 +200,34 @@ describe("GapList", () => {
         ]}
         t={t}
         itemKey="soc-12"
-        outcome={null}
+        outcome={{ intent: "accept", kind: "not-decider", gapId: "g1" } satisfies GapMoveClaim}
         scored
       />,
     );
 
+    expect(screen.getByText(t.item.gapMove.accept["not-decider"])).not.toBeNull();
     expect(container.innerHTML).not.toMatch(/danger/);
+  });
+
+  /** §8's one sanctioned exception, and it stays inside the field it is about. */
+  it("keeps the field's own error tone on the field and nowhere else", () => {
+    const { container } = render(
+      <GapList
+        gaps={[gap({ id: "g1", disposition: "open" })]}
+        t={t}
+        itemKey="soc-12"
+        outcome={{ intent: "accept", kind: "reason-required", gapId: "g1" } satisfies GapMoveClaim}
+        scored
+      />,
+    );
+
+    expect(screen.getByText(t.item.gapMove.accept["reason-required"])).not.toBeNull();
+    // Every element wearing a danger class sits inside the reason field's
+    // composite — §8's border and its helper line, and nothing else.
+    const composite = container.querySelector(".field");
+    const danger = [...container.querySelectorAll('[class*="danger"]')];
+    expect(danger.length).toBeGreaterThan(0);
+    expect(danger.every((node) => composite?.contains(node))).toBe(true);
   });
 
   // No gaps yet is the ordinary case — scoring has not run — so it reads as

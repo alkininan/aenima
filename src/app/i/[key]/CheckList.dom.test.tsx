@@ -303,4 +303,80 @@ describe("CheckList", () => {
     expect(screen.queryAllByRole("textbox")).toEqual([]);
     expect(screen.queryAllByRole("link")).toEqual([]);
   });
+
+  /**
+   * **The anchor a move redirects to, on the one surface that can carry it.**
+   *
+   * §13's narrowing files an open Should under the score, so `gapOutcomeHref`'s
+   * `#gap-<id>` has no card to land on and this line takes it instead. A gap
+   * that *does* have a card must not take it here as well: two elements sharing
+   * an id makes the fragment mean whichever the browser reached first.
+   */
+  it("anchors the gap §13 files here, and leaves a carded gap's anchor alone", () => {
+    const should: MoveableGap = {
+      id: "g-should",
+      checkId: "prd-8",
+      tag: "should",
+      disposition: "open",
+      resolvedBy: null,
+      resolutionNote: null,
+    };
+    const must: MoveableGap = {
+      id: "g-must",
+      checkId: "prd-10",
+      tag: "must",
+      disposition: "open",
+      resolvedBy: null,
+      resolutionNote: null,
+    };
+
+    const { container } = render(
+      <CheckList
+        checks={[unclear("prd-10", "must", "A."), unclear("prd-8", "should", "B.")]}
+        t={t}
+        itemKey="soc-12"
+        gapsByCheck={
+          new Map([
+            ["prd-8", should],
+            ["prd-10", must],
+          ])
+        }
+        outcome={null}
+      />,
+    );
+
+    // The open Should has nowhere else to be reached by name.
+    expect(container.querySelector("#gap-g-should")).not.toBeNull();
+    // The open Must is on the card, which is where its anchor lives.
+    expect(container.querySelector("#gap-g-must")).toBeNull();
+  });
+
+  /** An accepted gap has a card too, so the expansion does not claim its id. */
+  it("leaves a settled gap's anchor to the card that shows it", () => {
+    const { container } = render(
+      <CheckList
+        checks={[unclear("prd-16", "must", "C.")]}
+        t={t}
+        itemKey="soc-12"
+        gapsByCheck={
+          new Map<string, MoveableGap>([
+            [
+              "prd-16",
+              {
+                id: "g-accepted",
+                checkId: "prd-16",
+                tag: "must",
+                disposition: "accepted",
+                resolvedBy: { kind: "self" },
+                resolutionNote: "For V1.",
+              },
+            ],
+          ])
+        }
+        outcome={null}
+      />,
+    );
+
+    expect(container.querySelector("#gap-g-accepted")).toBeNull();
+  });
 });

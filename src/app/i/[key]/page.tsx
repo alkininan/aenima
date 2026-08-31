@@ -8,7 +8,7 @@ import { getSessionUser } from "@/db/queries/session";
 import { getCurrentWorkspace } from "@/db/queries/workspace";
 import { getDictionary } from "@/i18n";
 import { describeActor } from "@/lib/actor";
-import { isGapMoveOutcome } from "@/lib/gap-move";
+import { readGapMove } from "@/lib/gap-move";
 import { GAP_PARAMS, ROUTES } from "@/lib/routes";
 import { composeRunView } from "@/lib/scoring/run-view";
 import { getPack } from "@/packs";
@@ -18,7 +18,7 @@ import { ArtifactList } from "./ArtifactList";
 import { DecisionList } from "./DecisionList";
 import { GapList } from "./GapList";
 import { ItemHeader } from "./ItemHeader";
-import type { MoveableGap } from "./GapMoves";
+import { MoveMessage, type MoveableGap } from "./GapMoves";
 import { ItemSection } from "./ItemSection";
 import { ReadinessPanel } from "./ReadinessPanel";
 
@@ -34,8 +34,9 @@ import { ReadinessPanel } from "./ReadinessPanel";
  * ask. Never a redirect, which would leak that the key resolves; never a 500,
  * which would leak that something threw.
  *
- * Read-only throughout. §5's three negotiation moves, park, authoring and
- * scoring are all mutations and all later — nothing on this page is a control.
+ * **§5's third negotiation move is the one control on this page**, rendered by
+ * `GapMoves` on the gap card and again on the check line the gap came from.
+ * Moves 1 and 2, park, authoring and scoring are all mutations and all later.
  */
 export default async function ItemPage({ params, searchParams }: PageProps<"/i/[key]">) {
   const t = getDictionary();
@@ -85,10 +86,11 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/i/[
    * §5's last move, as the URL reports it.
    *
    * The page has no client island, so an action's outcome comes back in search
-   * params rather than through `useActionState`. Both are validated here and
-   * neither is ever rendered: `move` is a key into `t.item.gapMove` and nothing
-   * else, so an unrecognised value renders no sentence at all rather than
-   * putting a crafted string on the page.
+   * params rather than through `useActionState`. All three are validated as one
+   * fact and none is ever rendered: the pair is a key into `t.item.gapMove` and
+   * nothing else, so an unrecognised value — or an outcome belonging to the
+   * other move — renders no sentence at all rather than putting a crafted
+   * string on the page.
    *
    * It says what a finished request answered, not what is true now — a shared
    * or bookmarked link carries it indefinitely, and a re-score can move the gap
@@ -96,12 +98,7 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/i/[
    * it.
    */
   const query = await searchParams;
-  const movedGap = query[GAP_PARAMS.gap];
-  const moveKind = query[GAP_PARAMS.move];
-  const outcome =
-    isGapMoveOutcome(moveKind) && typeof movedGap === "string"
-      ? { gapId: movedGap, kind: moveKind }
-      : null;
+  const move = readGapMove(query[GAP_PARAMS.intent], query[GAP_PARAMS.move], query[GAP_PARAMS.gap]);
 
   /**
    * What each check currently owes, by check id — the map §5's moves need in
@@ -139,6 +136,30 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/i/[
       ]),
   );
 
+  /**
+   * The answer nobody on the page can speak for — §12's missing sentence.
+   *
+   * A move that named no gap, or one whose gap this item does not hold, has no
+   * card and no check line to report on: `not-found` says exactly that, and a
+   * form that arrived without a move says less. Both used to redirect to a page
+   * that rendered nothing, which is the one outcome §12 has no copy for and the
+   * one a person cannot act on. So the page says it itself, at the top, where a
+   * redirect with no fragment lands.
+   *
+   * "Holds" is every gap but `closed`, because `closed` renders nowhere (T2.4).
+   * Every other gap has a surface: the card, or — for the open Shoulds §13 files
+   * under the score — the check line, which is unclear whenever such a gap
+   * exists, since `reconcileGaps` closes a gap the moment its check passes.
+   */
+  const heldGapIds = new Set(
+    item.gaps.filter((gap) => gap.disposition !== "closed").map((gap) => gap.id),
+  );
+  const unclaimedMove =
+    move !== null && (move.gapId === null || !heldGapIds.has(move.gapId)) ? move : null;
+
+  /** The claim a gap card or a check line may speak for, if any gap holds it. */
+  const claimedMove = move !== null && move.intent !== null && unclaimedMove === null ? move : null;
+
   /** §11: a correction is a new decision naming the one it replaced. */
   const supersededIds = new Set(
     item.decisions
@@ -165,6 +186,12 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/i/[
               lived inside the header. The meter is the summary of a disclosure
               now (T2.4), and what it opens onto is a page's worth of check
               results — which does not belong inside a `<header>`. */}
+          {/* Above everything, because a redirect that named no gap carries no
+              fragment and lands here. §0 law 1 keeps it out of Danger and §12
+              keeps it calm: nothing was destroyed, something merely did not
+              happen, and the sentence says which. */}
+          {unclaimedMove === null ? null : <MoveMessage report={unclaimedMove} t={t} />}
+
           <div className="flex flex-col gap-[16px]">
             <ItemHeader
               item={{
@@ -184,7 +211,7 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/i/[
               now={now}
               itemKey={item.key}
               gapsByCheck={gapsByCheck}
-              outcome={outcome}
+              outcome={claimedMove}
             />
           </div>
 
@@ -224,7 +251,7 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/i/[
               t={t}
               scored={run !== null}
               itemKey={item.key}
-              outcome={outcome}
+              outcome={claimedMove}
             />
           </ItemSection>
 

@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { getDictionary, type Dictionary } from "@/i18n";
+import type { GapMoveClaim } from "@/lib/gap-move";
 import { composeRunView, type RunView, type StoredRunInput } from "@/lib/scoring/run-view";
 import { featurePrdPack } from "@/packs/feature-prd";
 
@@ -360,6 +361,99 @@ describe("ReadinessPanel", () => {
 
     expect(screen.getByText(t.item.gapAccept)).not.toBeNull();
     expect(screen.getByRole("button", { name: t.item.gapAcceptSubmit })).not.toBeNull();
+  });
+
+  /**
+   * **A message inside a collapsed disclosure is not a message.**
+   *
+   * §13 files open Shoulds under the score, so the expansion is the only place
+   * §5's move exists for one — and the only place its answer can render. The
+   * redirect lands on `#gap-<id>`, which this list carries for exactly those
+   * gaps, so the panel has to be open when it arrives. Everything a failed
+   * accept says about an open Should was previously two collapsed disclosures
+   * deep, which is why an empty reason looked like nothing happening.
+   */
+  it("opens itself when a move named a gap that lives only in here", () => {
+    const should: MoveableGap = {
+      id: "g-should",
+      checkId: "prd-1",
+      tag: "should",
+      disposition: "open",
+      resolvedBy: null,
+      resolutionNote: null,
+    };
+    const run = view({
+      results: [
+        {
+          checkId: "prd-1",
+          tag: "should",
+          points: 5,
+          passed: false,
+          requirementId: null,
+          quote: null,
+          note: "Unclear.",
+        },
+      ],
+    });
+
+    const { container } = render(
+      <ReadinessPanel
+        run={run}
+        t={t}
+        now={NOW}
+        itemKey="soc-12"
+        gapsByCheck={new Map([["prd-1", should]])}
+        outcome={{ intent: "accept", kind: "reason-required", gapId: "g-should" }}
+      />,
+    );
+
+    expect(container.querySelector("details")?.hasAttribute("open")).toBe(true);
+    // And what it opened onto is readable, not merely present.
+    expect(screen.getByText(t.item.gapMove.accept["reason-required"])).not.toBeNull();
+    expect(container.querySelector("#gap-g-should")).not.toBeNull();
+  });
+
+  /**
+   * A gap with a card reports on the card, above and already on screen. Opening
+   * the whole rubric to repeat one line would be a page-sized reaction to it,
+   * so the panel stays as the person left it.
+   */
+  it("stays closed when the moved gap has a card of its own", () => {
+    const must: MoveableGap = {
+      id: "g-must",
+      checkId: "prd-1",
+      tag: "must",
+      disposition: "open",
+      resolvedBy: null,
+      resolutionNote: null,
+    };
+
+    const { container } = render(
+      <ReadinessPanel
+        run={view({
+          results: [
+            {
+              checkId: "prd-1",
+              tag: "must",
+              points: 5,
+              passed: false,
+              requirementId: null,
+              quote: null,
+              note: "Unclear.",
+            },
+          ],
+        })}
+        t={t}
+        now={NOW}
+        itemKey="soc-12"
+        gapsByCheck={new Map([["prd-1", must]])}
+        outcome={
+          { intent: "accept", kind: "reason-required", gapId: "g-must" } satisfies GapMoveClaim
+        }
+      />,
+    );
+
+    expect(container.querySelector("details")?.hasAttribute("open")).toBe(false);
   });
 
   /**

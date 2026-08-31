@@ -5,8 +5,8 @@ import { redirect } from "next/navigation";
 
 import { acceptGap, reopenGap } from "@/db/queries/gap";
 import { getSessionUser } from "@/db/queries/session";
-import { isGapIntent, type GapMoveOutcome } from "@/lib/gap-move";
-import { GAP_PARAMS, ROUTES, gapOutcomeHref, isItemKey, itemHref } from "@/lib/routes";
+import { GAP_MOVE_UNREADABLE, isGapIntent } from "@/lib/gap-move";
+import { GAP_PARAMS, ROUTES, gapOutcomeHref, isGapId, isItemKey, itemHref } from "@/lib/routes";
 
 /**
  * §5's third negotiation move, and its undo — the item page's only mutation.
@@ -52,6 +52,14 @@ import { GAP_PARAMS, ROUTES, gapOutcomeHref, isItemKey, itemHref } from "@/lib/r
  * from the cookie, the role and the Decider from the database at write time, and
  * the guard on the prior disposition from the UPDATE's own WHERE. A forged gap
  * id buys `not-found` or `not-permitted`.
+ *
+ * **Every exit reports, including the ones that did nothing.** §12 has copy for
+ * every outcome and none for silence, so a submission this function refuses
+ * before it reaches the database still leaves with a token the page can turn
+ * into a sentence — `not-found` when the gap was named and is not there,
+ * `unreadable` when the form carried no move to name. Neither is a case a
+ * person can reach through the UI; both used to redirect to a page that said
+ * nothing at all, which is the one thing a person cannot act on.
  */
 export async function settleGap(formData: FormData): Promise<void> {
   // The proxy has already turned anonymous traffic away; this re-checks rather
@@ -68,13 +76,23 @@ export async function settleGap(formData: FormData): Promise<void> {
 
   const rawGap = formData.get("gapId");
   const rawIntent = formData.get("intent");
-  const gapId = typeof rawGap === "string" ? rawGap : "";
 
-  // A form that arrived without the two fields that say *what* to do is not a
-  // move at all. It reports as a missing gap, which is what it is from here.
-  if (gapId.length === 0 || !isGapIntent(rawIntent)) {
-    redirect(`${itemHref(key)}?${GAP_PARAMS.move}=not-found`);
+  // A form that arrived without a readable move is not a move at all, and there
+  // is no intent to attribute a sentence to — so it reports as itself rather
+  // than borrowing one move's words for something that was neither move.
+  if (!isGapIntent(rawIntent)) {
+    redirect(`${itemHref(key)}?${GAP_PARAMS.move}=${GAP_MOVE_UNREADABLE}`);
   }
+
+  // Shape-checked for the same reason the key is: it is interpolated into the
+  // redirect's fragment, which `URLSearchParams` does not encode. An id that is
+  // not a uuid names no gap, which is `not-found` — reported at the top of the
+  // page, since there is no card for it to report on.
+  const rawGapId = typeof rawGap === "string" ? rawGap : "";
+  if (!isGapId(rawGapId)) {
+    redirect(gapOutcomeHref(key, rawIntent, "not-found", null));
+  }
+  const gapId = rawGapId;
 
   const rawReason = formData.get("reason");
   const reason = typeof rawReason === "string" ? rawReason : "";
@@ -82,8 +100,7 @@ export async function settleGap(formData: FormData): Promise<void> {
   // The RPC is the whole write: one transaction, RLS as this person, the
   // Decider read at write time, the guard in the UPDATE. It returns a token —
   // never a message — and it does not throw for any of §5's outcomes.
-  const outcome: GapMoveOutcome =
-    rawIntent === "accept" ? await acceptGap(gapId, reason) : await reopenGap(gapId);
+  const outcome = rawIntent === "accept" ? await acceptGap(gapId, reason) : await reopenGap(gapId);
 
   // Only when something actually moved. Revalidating to re-render unchanged data
   // would evict two caches for nothing, and it sets the flag that starts Next's
@@ -101,5 +118,5 @@ export async function settleGap(formData: FormData): Promise<void> {
   // may swallow it. `replace` because inside an action the default is `push`,
   // and this URL differs from the one before it only by a transient message —
   // Back should not re-show a sentence about something already done.
-  redirect(gapOutcomeHref(key, gapId, outcome), "replace");
+  redirect(gapOutcomeHref(key, rawIntent, outcome, gapId), "replace");
 }
