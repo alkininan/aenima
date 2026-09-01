@@ -59,8 +59,10 @@ yet." Read the plan, correct it, then let it build. A plan is cheaper to fix tha
 **A structural ticket gets a fresh-context review before it is done.** A session that did not write
 the code reads the diff against the spec. **A self-review does not count** — T2.3's passed a diff
 that a cold session then found four real defects in, and every review since has found more:
-T2.4 six, T2.5 six, and T2.5's own migration fix was itself sent back by a second cold read. Budget
-for the review finding something, because it always has.
+T2.4 six, T2.5 six, T2.5's own migration fix was itself sent back by a second cold read, and the
+fold that taught T2.3's fabrication guard to read markdown came back with two — one of them the
+guard certifying `25` as a verbatim quote of `2**5`. Budget for the review finding something,
+because it always has.
 
 **Three failed corrections on the same fix means the ticket is wrong, not the code.** The loop
 cannot see the plan it came from. Stop, say so, and ask for the ticket to be restated rather than

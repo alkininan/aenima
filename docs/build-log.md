@@ -165,6 +165,50 @@ T2.3 — the scoring run: an artifact version and a pack in, per-check verdicts 
   review's four fixes are in `19a079f` with the rest of the ticket — the cold session read the
   working tree, so there is no separate follow-up commit to name.
 
+  **The guard's first real markdown document, found while testing before Phase 3.** The fold above
+  handles typography and stops there, so on a markdown artifact it compared a model's prose against
+  the source's syntax: a quote spanning `**on the server only**` came back without the markers and
+  failed. Scoring a five-page internal spec died that way on run five of six — the run rejected,
+  nothing written, the provider already billed — and the rule was arbitrary from a reader's side,
+  since a quote wholly inside or outside an emphasis span verified and one that *spanned* one did
+  not. So the guard preferentially rejected the longer, more contextual quotes, the better ones, on
+  any document where people bold the load-bearing phrase. Emphasis markers now normalize away the
+  way whitespace does, on the same grounds: they are how a sentence was set down, not what it says.
+  `sample-juno-feature.md` scores end to end where it could not before, and that run's `prd-19`
+  failure cites `the same pair is rewarded for their first 2 dates only` — a bold span in the
+  source, quoted without its markers, the exact shape that used to abort the run. Not a new ticket:
+  this is T2.3's `normalizeForQuote`, and the four decisions it turns on are below.
+
+  `PROTOCOL_VERSION` does not move. The guard is not in the digest — `fingerprintSubject` covers
+  `PROTOCOL` and the three renderers, all in `prompt.ts`, which this does not touch — so the stamp
+  stays `1.1.0+602d20db225ee669`, §5's cache key is unchanged and no re-baseline is owed. That is
+  right in kind rather than lucky: the fingerprint versions what the model *reads*, and the model
+  reads the same bytes as before. Nor is any stored run affected: every row in the ledger was
+  accepted by the stricter guard, and this one only ever accepts more of what a model sends next.
+  (What is **not** true is that no quote which verified before can fail now — the pairing rules are
+  context-sensitive, and open question 25 holds that corner.) Both sides still normalize through the
+  one function, and `renderArtifact` was deliberately left alone: `run.ts` builds `artifactText`
+  once and hands the same variable to the scorer and to `readAnswer`, so what the model reads and
+  what the quote is checked against cannot drift apart.
+
+  Every new test negative-checked by reintroducing the defect it names — each fold removed or
+  un-paired, the folds reordered, code-span protection removed, the flanking rule dropped, the line
+  and paragraph bounds removed, the link and underscore folds added, the substring test loosened to
+  a word-subset match. **Four fixtures were found worthless that way and replaced**, which is the
+  practice earning its keep: a quote sitting *within* an italic span is a substring of the source
+  with no fold at all; a quote echoing the source's markers back verbatim is too, so it now moves
+  them instead; the line-break case needed two CSS comments rather than two paths, since flanking
+  already excluded the paths; and the paragraph-bound case needed two markers that are both flanked,
+  since nothing was pairing them otherwise. The NFKC test was negative-checked by reintroducing
+  **NFKC** rather than by breaking the italic rule: the claim it makes is that the fold did not
+  reopen that hole, so NFKC itself is the defect that has to make it red — `fd64749`.
+
+  The fresh-context review found two real defects in the first version, both recorded as decisions
+  below: the unconditional `**` deletion merging `2**5` into `25`, and a flanking rule that was only
+  half of CommonMark's, eating two globs separated by a comma. A self-review had found neither. The
+  first version's own negative checks all passed, because a mutation suite only tests the cases the
+  suite already thought of.
+
 T2.4 — the meter, and what it expands into: `/i/<key>` renders the artifact's latest run as §8's
   8h meter with its mono-readout percentage, opening into the canonical view of that run — every
   check in pack order, passes included, each failure carrying the quote T2.3 verified, and the
@@ -958,6 +1002,55 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
   detector one keystroke away from certifying `105` as a verbatim quote of `10⁵`. The five pairs are
   pinned as tests, so the docstring's promise — "whitespace and typography, and nothing else" — is
   an assertion rather than an intention.
+- **Emphasis markers are syntax, and go the way whitespace goes — which is not the way NFKC went.**
+  The artifacts are markdown and `renderArtifact` hands the model the source, so a model shown
+  `**on the server only**` quotes back `on the server only` and the guard rejected the run. The rule
+  that produced was arbitrary from a reader's side: a quote wholly inside or wholly outside an
+  emphasis span verified, one that *spanned* one did not — so the guard preferentially rejected the
+  longer, more contextual quotes, the better ones, on any document where people bold the
+  load-bearing phrase. **The category is the licence.** NFKC changed what a sentence *said*, `10⁵`
+  to `105`; removing a bold marker changes only how it was *typeset*, and every word, digit and case
+  distinction survives it. That is the test a future fold has to pass, and a fold that drops content
+  — a link's URL, an identifier's underscores — fails it exactly the way NFKC did.
+- **A marker is only typesetting when it is really a delimiter.** The first version of the fold
+  deleted `**` and `` ` `` unconditionally, on the measurement that neither is ever content in this
+  corpus. A fresh-context review broke it in one line: `2**5` normalized to `25`, because an unpaired
+  `**` is literal text in markdown and deleting it merged two digits — so the guard would certify
+  `25` as a verbatim quote of `2**5`. **That is `10⁵` → `105` arriving through a different
+  keystroke**, in the fold written to be the safe kind. The same review found the flanking rule was
+  only half of CommonMark's: two globs separated by a comma rather than a space pair through it, so
+  ``​`src/db/queries/*`, `src/db/schema/*`​`` folded to `src/db/queries/, src/db/schema/` — a false
+  accept for a quote that dropped both globs, and a false *reject* for a quote of either. Both are
+  fixed by pairing rather than deleting, and by protecting inline code: markdown does not read
+  emphasis inside a code span, and this corpus keeps its asterisks there. **The lesson is the one
+  the corpus measurement cannot give you** — a count tells you what a document contains, not what an
+  operation does to a document it has not seen, and `score:file` scores arbitrary documents by
+  design.
+- **A measurement of the corpus tells you what the documents that exist contain, never what the next
+  one will.** The unconditional deletion above was justified by a count, and every fact in the count
+  was true: no `2 ** 3`, no doublestar glob, no bare backtick, in any of the six artifacts that
+  exist. The fold was wrong anyway. **"No `2**3` in any artifact" is a fact about five files; it is
+  not a property of markdown**, and a guard runs against the document nobody has written yet —
+  `score:file` takes an arbitrary path by design, and a PRD is exactly the kind of document that
+  says `2**5` once. So a corpus count is the right way to choose *scope*, which constructs are worth
+  handling at all, and it is why no link fold shipped; it is the wrong way to establish *safety*.
+  Safety comes from the shape of the operation instead, which is why the shipped fold holds where
+  the counted one did not: every rule is a pairing rule with flanked edges, so it removes a marker
+  only where a marker really is a delimiter, on text it has never seen. **Where a rule's correctness
+  rests on a measurement, write down what the measurement cannot see.**
+- **The fold's scope came from measuring the corpus, not from the markdown spec.** Counted across the
+  two sample documents, the seed PRD and the three specs — everything the guard can be pointed at —
+  they contain 1207 bold markers, 612 inline-code spans and 83 lone-asterisk pairs; the shipped fold
+  matches 592 bold pairs and 38 italic pairs, and the rest — 23 unpaired markers and 45 asterisk
+  pairs that are content — are what the pairing, flanking and code-span rules decline. What they contain
+  none of is links (**0** — the ticket asserted otherwise and the measurement disagreed), images,
+  reference links, autolinks, underscore emphasis, strikethrough, escapes, and fenced code blocks in
+  anything that gets scored. So: inline code is unwrapped and its contents protected from the
+  emphasis rules; `**bold**` folds as a matched pair with non-space inner edges within a paragraph;
+  `*italic*` the same, within a line. The non-space inner edge is the half of CommonMark's
+  left/right-flanking rule a lone content asterisk fails — it is not the whole of that rule, and what
+  carries the rest is protecting code spans. A general markdown parser is still a bigger dependency
+  than the problem. Anyone widening this brings a count, not a format reference.
 - **An over-long answer is compliance, not corruption.** `gap.evidence` caps at 2000 characters and
   `scoring_check_result.quote` at 2000; nothing bounded a note or a quote before they got there, so
   a model that answered at length aborted the write transaction on a CHECK — throwing away nineteen
@@ -1402,6 +1495,47 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
     chosen: a documented `db:reset` that drops the schema and re-migrates, a scratch workspace
     `score:file` writes to that can be dropped whole, or simply accepting that the seed workspace
     accumulates and re-seeding a fresh database when it gets noisy.
+
+25. **A quote that begins or ends inside an emphasis span is narrower than it was — accepted, and
+    named so it is not rediscovered as a mystery.** Every rule in the fold is a *pairing* rule, so a
+    quote carrying one unbalanced marker from a span it cut through keeps that marker where the
+    source side has lost it, and fails where it passed before: `*y**z` no longer verifies against
+    `x**y**z`. It needs a model to echo a marker verbatim *and* stop mid-span, which is why it is
+    accepted rather than engineered around — the alternative is deleting markers unconditionally,
+    which is exactly the defect the review found (`2**5` → `25`) and which fails the test the fold
+    exists to pass. **The trigger to revisit is a real rejection with an unbalanced marker in the
+    quote**, which `score:file` prints in full. Until one appears this is a shape, not a defect.
+
+    Recorded honestly: the first draft of this entry claimed the `**` and backtick folds were
+    context-free deletions that could not break any quote. `replaceAll("**", "")` is a
+    two-character non-overlapping scan, not a per-character map, so that was never true even of the
+    version it described.
+
+26. **The link fold is decided and waiting for its first real case.** The ticket said the corpus
+    contains links; measuring it found **zero** — not one inline link, image, reference link or
+    autolink in any sample, any seed artifact or any doc. So no link fold shipped, and the reason is
+    the one that rejected NFKC: dropping a URL discards content, and `[policy](a.md)` and
+    `[policy](b.md)` folding to one string is two sentences becoming one, which is the property the
+    guard exists to prevent. **The answer, if a real case arrives:** fold to the visible text, since
+    that is what a model reading rendered prose echoes. A test pins the current non-folding, so
+    adding it is a deliberate edit rather than a drift. The trigger is an artifact that actually
+    contains a link — bring the count.
+
+27. **The emphasis fold is line-sensitive, so a re-wrap is no longer perfectly neutral.** An italic
+    pair is confined to one line and a bold pair to one paragraph, because a rule that crossed those
+    would pair the stray asterisks of two consecutive CSS comments and rewrite what the block says
+    (`/* app background */ /* glass */` → `/* app background / / glass */`). The cost is a
+    disagreement the function's own first paragraph says it exists to prevent: where a *source* wraps
+    mid-span and a model's one-line quote does not, the quote folds and the source does not, and the
+    two sides differ on nothing but where the line broke.
+
+    **Not fixed, because every fix is worse than the shape.** Dropping the bounds reintroduces the
+    CSS-comment rewrite; normalizing line breaks before the emphasis pass puts the whole document on
+    one line and lets stray markers pair across paragraphs, which is the same defect from the other
+    side. It is bounded in practice: bold already crosses single line breaks (only a *blank* line
+    stops it), so this is italic-only, and no artifact in the corpus wraps inside an italic span.
+    **The trigger is a rejection whose quote and source differ only in wrapping** — the same trigger
+    as q25, and the same place it would show up, so whichever arrives first should look at both.
 
 ## On the horizon
 

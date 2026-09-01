@@ -18,13 +18,16 @@
 /**
  * The comparison form of a piece of text.
  *
- * Whitespace and typography are normalized and **nothing else**. Line wrapping
- * differs between what a model echoes and what the source holds; curly quotes,
- * apostrophes and dashes survive a round trip through a model inconsistently,
- * and an em dash that came back as a hyphen is the same characters as far as a
- * reader is concerned. Every word still has to match exactly — this is the line
- * between forgiving a re-wrap and accepting a paraphrase, and it is deliberately
- * drawn tight enough that a rewritten sentence fails.
+ * Whitespace, typography and emphasis markers are normalized and **nothing
+ * else** — three kinds of thing that describe how a sentence was set down
+ * rather than what it says. Line wrapping differs between what a model echoes
+ * and what the source holds; curly quotes, apostrophes and dashes survive a
+ * round trip through a model inconsistently, and an em dash that came back as a
+ * hyphen is the same characters as far as a reader is concerned; markdown's
+ * emphasis markers are typesetting the model is not obliged to echo. Every word
+ * still has to match exactly — this is the line between forgiving a re-wrap and
+ * accepting a paraphrase, and it is deliberately drawn tight enough that a
+ * rewritten sentence fails.
  *
  * Case is **not** normalized. "MUST NOT" and "must not" are different claims in
  * a specification, and a quote that changes one into the other has changed what
@@ -41,13 +44,116 @@
  * would cite a sentence nobody wrote. That is the exact failure §1 law 3 refuses,
  * arriving through the guard meant to prevent it. `normalizeForQuote.test` pins
  * all five pairs.
+ *
+ * **Emphasis markers are syntax, and go the way whitespace goes.** The artifacts
+ * are markdown and `renderArtifact` hands the model the source, so a model shown
+ * `**on the server only**` quotes back `on the server only` — and the guard,
+ * comparing against the source, rejected the run. The rule that produced was
+ * arbitrary from a reader's side: a quote wholly inside or wholly outside an
+ * emphasis span verified, a quote that *spanned* one did not, so the longer and
+ * more contextual quotes — the better ones — failed first.
+ *
+ * **This is a different category from the NFKC fold above, and the difference is
+ * the whole licence for it.** NFKC changed what a sentence *said*: `10⁵` became
+ * `105`, a number four orders of magnitude away. Removing an emphasis marker
+ * changes only how the sentence was *typeset* — the words, and the characters
+ * inside them, are the same either side of the fold. That is the test any future
+ * fold has to pass, and it is not a general permission to loosen: a fold that
+ * drops content — a link's URL, an identifier's underscores — fails it exactly
+ * the way NFKC did.
+ *
+ * **A marker is only typesetting when it is really a delimiter, and that is why
+ * the rules below are pairing rules rather than deletions.** A cold review of
+ * the first version of this fold found `2**5` normalizing to `25`: an unpaired
+ * `**` is literal text in markdown, deleting it merged two digits, and the guard
+ * would then have certified `25` as a verbatim quote of `2**5`. That is `10⁵` →
+ * `105` arriving through a different keystroke — the same failure §1 law 3
+ * refuses, in the fold meant to be safe. Nothing here is deleted unless it is
+ * half of a matched, flanked pair.
+ *
+ * **The scope came from measuring the corpus, not from the markdown spec.**
+ * Counted across the two sample documents, the seed PRD and the three specs —
+ * everything this guard can be pointed at — what they contain is 1207 bold
+ * markers, 612 inline-code spans and 83 lone-asterisk pairs. What the fold below
+ * actually matches is 592 bold pairs and 38 italic pairs: the 23 leftover bold
+ * markers are unpaired, and 45 of the asterisk pairs are content that the
+ * flanking rule and the code-span protection decline. Those gaps are the fold
+ * working, not the fold missing. What they contain **none** of: links (0 — the
+ * ticket asserted otherwise and the measurement disagreed), images, reference
+ * links, autolinks, underscore emphasis, strikethrough, backslash escapes, and
+ * fenced code blocks in any artifact that gets scored. A general markdown parser is a bigger dependency
+ * than the problem.
+ *
+ * **A count chooses the scope; it never establishes the safety.** It says which
+ * constructs are worth handling at all — it is why no link fold shipped — and it
+ * says nothing about the document nobody has written yet, which `score:file`
+ * takes by design. "No `2 ** 3` in any artifact" was a true fact about five
+ * files and not a property of markdown, and it is how the deletions above got
+ * shipped. Safety comes from the shape of the rules instead: they are pairing
+ * rules, so they hold on text they have never seen. Anyone widening this brings
+ * both — a count for the scope, and an argument that the new rule is safe on a
+ * document that does not exist yet.
+ *
+ * - **Inline code is unwrapped, and protected.** `` `x` `` becomes `x`, and the
+ *   emphasis rules never run over what was inside it — markdown does not read
+ *   emphasis inside a code span either. This is what keeps
+ *   `` `src/db/queries/*`, `src/db/schema/*` `` intact: those asterisks are code,
+ *   so they are never delimiters, and without this the two pair through the
+ *   comma between them and both disappear.
+ * - **`**bold**` folds as a matched pair** whose inner edges are non-space,
+ *   within a paragraph. Unpaired `**` is left, which is what `2**5` needs.
+ * - **`*italic*` folds as a matched pair** whose inner edges are non-space, on
+ *   one line.
+ *
+ * The non-space inner edge is the half of CommonMark's left/right-flanking rule
+ * that a lone content asterisk fails — check the spec rather than guessing our
+ * intent. It is not the whole of that rule, and it is not a markdown parser:
+ * what carries the rest of the weight is protecting code spans, where this
+ * corpus keeps its asterisks.
+ *
+ * **Deliberately left**, each for the NFKC reason rather than for lack of time:
+ * links, because dropping a URL discards content and would fold `[policy](a.md)`
+ * and `[policy](b.md)` into one string — two sentences becoming one is the
+ * property this guard exists to prevent; underscore emphasis, because the
+ * underscores in this corpus are inside identifiers (`fast_path_used`,
+ * `workspace_id`) that the fold would corrupt; HTML tags, because the corpus's
+ * `<details>` and `<label>` are prose *about* elements and stripping them would
+ * delete words; block syntax and fences, which cost nothing because a quote is a
+ * sentence and this is a substring test; and `·` and `~`, which the author
+ * typed as content. If a link fold is ever needed the shape is *fold to the
+ * visible text*, since that is what a model reading rendered prose echoes — the
+ * answer is decided and waiting for its first real case.
+ *
+ * The order is load-bearing, and `evidence.test` asserts it rather than trusting
+ * this comment: bold before italic, or the italic rule chews a bold span's inner
+ * asterisks; the emphasis rules inside the code-span split, or a code span's
+ * asterisks become delimiters; and all of it before the whitespace collapse, so
+ * a bold span wrapped across a source line still folds and any double space a
+ * removal leaves is cleaned up after.
+ *
+ * **What the line rules cost.** An italic pair is confined to one line and a
+ * bold pair to one paragraph, because a rule that crossed those would pair the
+ * stray asterisks of two consecutive CSS comments and rewrite what the block
+ * says. The cost is that where a *source* wraps mid-span and a model's quote
+ * does not, the two sides fold differently — build log q27.
  */
+const CODE_SPAN = /(`[^`\n]+`)/gu;
+const BOLD = /\*\*(\S|\S(?:(?!\n[ \t]*\n)[^*])*?\S)\*\*/gu;
+const ITALIC = /\*(\S|\S[^*\n]*?\S)\*/gu;
+
 export function normalizeForQuote(text: string): string {
   return text
     .normalize("NFC")
     .replaceAll(/[‘’‛′]/gu, "'")
     .replaceAll(/[“”‟″]/gu, '"')
     .replaceAll(/[‐-―−]/gu, "-")
+    .split(CODE_SPAN)
+    .map((segment, i) =>
+      // Odd indices are the captured code spans: unwrapped, never folded.
+      i % 2 === 1 ? segment.slice(1, -1) : segment.replaceAll(BOLD, "$1").replaceAll(ITALIC, "$1"),
+    )
+    .join("")
+    .replaceAll("`", "")
     .replaceAll(/\s+/gu, " ")
     .trim();
 }

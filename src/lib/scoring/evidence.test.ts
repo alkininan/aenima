@@ -109,6 +109,275 @@ describe("normalizeForQuote — compatibility folds are not typography", () => {
   }
 });
 
+/**
+ * The markdown fold — a follow-up on this file's own guard, not a new ticket.
+ *
+ * The artifacts are markdown and `renderArtifact` hands the model the source, so
+ * a model shown `**on the server only**` quotes back `on the server only`. The
+ * fixture is the shape of a real spec: `sample-juno-feature.md` carries 21 bold
+ * spans across 27 lines, which is normal for a spec anyone writes.
+ */
+const MARKDOWN = `### Location — asked once, never again
+
+- Whether the two people were within ~50 m of each other is computed **on the
+  server only** — never displayed, never queryable — to time the confirmation
+  prompt and to catch fraud.
+- Scheduling is locked until the chat has **5+ messages from each person**.
+
+*A location-based dating app built on scarcity, not swiping.* The card only
+*displays* the district, never the address.
+
+The event \`fast_path_used\` fires once. Access lives in \`src/db/queries/*\` per
+CLAUDE.md, and the token block opens with /* surfaces */ above the ramp.`;
+
+describe("quoteOccursIn — emphasis is typesetting, not content", () => {
+  it("verifies a quote that spans a bold marker", () => {
+    // The reported failure, verbatim: run five of six on a five-page internal
+    // spec died here, after the provider was called and billed, because the
+    // model quoted prose from a line containing bold.
+    expect(
+      quoteOccursIn("is computed on the server only — never displayed, never queryable", MARKDOWN),
+    ).toBe(true);
+  });
+
+  it("verifies a quote that emphasizes a different span than the source", () => {
+    // A model that echoes markers but puts them somewhere else. Quoting the
+    // source's own markers back verbatim would be a plain substring of the
+    // source and would pass with no fold at all — this moves them, so only the
+    // fold reconciles the two sides.
+    expect(quoteOccursIn("is computed on the **server only** — never displayed", MARKDOWN)).toBe(
+      true,
+    );
+  });
+
+  it("verifies a quote that spans an inline-code span", () => {
+    expect(quoteOccursIn("The event fast_path_used fires once.", MARKDOWN)).toBe(true);
+  });
+
+  it("verifies a quote that spans an italic span", () => {
+    // The markers have to sit *inside* the quote for this to test the fold —
+    // a quote that merely sits within an italic span is a substring of the
+    // source either way, and would pass with no fold at all.
+    expect(quoteOccursIn("The card only displays the district, never the address.", MARKDOWN)).toBe(
+      true,
+    );
+  });
+
+  it("verifies a quote carrying a lone asterisk that is content", () => {
+    // A `*` followed by a space cannot open emphasis, so a path and a CSS
+    // comment reach the comparison with their asterisks intact. The character-
+    // level pin is `leaves a lone asterisk that cannot open emphasis` below —
+    // both sides fold through one function, so a fold that ate these asterisks
+    // would eat them symmetrically and this assertion would not notice.
+    expect(quoteOccursIn("Access lives in src/db/queries/* per CLAUDE.md", MARKDOWN)).toBe(true);
+    expect(
+      quoteOccursIn("the token block opens with /* surfaces */ above the ramp", MARKDOWN),
+    ).toBe(true);
+  });
+});
+
+describe("quoteOccursIn — what the markdown fold must still refuse", () => {
+  it("refuses a paraphrase of a bolded sentence", () => {
+    // Dropping the markers must not drop the words with them.
+    expect(
+      quoteOccursIn("the distance between the two people is worked out server-side", MARKDOWN),
+    ).toBe(false);
+  });
+
+  it("refuses a reworded sentence", () => {
+    expect(
+      quoteOccursIn("Scheduling stays locked until each person has sent 5+ messages.", MARKDOWN),
+    ).toBe(false);
+  });
+
+  it("refuses two real fragments stitched together", () => {
+    // Both halves are in the document; the sentence is not.
+    expect(quoteOccursIn("Scheduling is locked until the chat has never displayed", MARKDOWN)).toBe(
+      false,
+    );
+  });
+
+  it("refuses a sentence the document never contained", () => {
+    expect(quoteOccursIn("Precise location is retained for 30 days.", MARKDOWN)).toBe(false);
+  });
+
+  it("keeps case inside a bold span", () => {
+    expect(quoteOccursIn("5+ MESSAGES from each person", MARKDOWN)).toBe(false);
+  });
+
+  it("refuses a paraphrase of the sentence carrying a content asterisk", () => {
+    // Test 5's other half: the flanking rule buys the asterisk through, and
+    // buys nothing else.
+    expect(quoteOccursIn("Access lives in src/db/queries/* per the constitution", MARKDOWN)).toBe(
+      false,
+    );
+  });
+});
+
+/**
+ * **The most important test in this file.**
+ *
+ * A cold session once found NFKC inside this exact function: `10⁵` folded to
+ * `105`, and a gap citing a number four orders of magnitude from the one the PRD
+ * wrote would have passed the guard and reached a human as evidence. That hole
+ * is closed. This test exists because **loosening a guard is how a closed hole
+ * reopens** — the markdown fold is the first widening this function has taken
+ * since, and the thing to prove is not that bold now folds but that nothing
+ * else came with it.
+ *
+ * A compatibility fold and an emphasis fold are different in kind: NFKC changed
+ * what a sentence said, `**` changes only how it was typeset. That distinction
+ * is the whole licence for the markdown fold, so it is asserted here, inside
+ * the construct that was widened, rather than trusted from the docstring.
+ *
+ * The negative check for this test is reintroducing **NFKC**, not breaking the
+ * italic rule. The claim is "the fold did not reopen NFKC", so NFKC itself is
+ * the defect that has to make it red.
+ */
+describe("normalizeForQuote — the markdown fold did not reopen NFKC", () => {
+  const folded = [
+    ["10⁵ active members", "105 active members", "superscript digit"],
+    ["within 100 m²", "within 100 m2", "squared"],
+    ["½ hour to roll back", "1⁄2 hour to roll back", "vulgar fraction"],
+    ["№ 4 in the list", "No 4 in the list", "numero sign"],
+    ["Ⅳ. Rollout", "IV. Rollout", "roman numeral"],
+  ] as const;
+
+  for (const [artifact, retyped, what] of folded) {
+    it(`still refuses a ${what} retyped as ASCII inside a bold span`, () => {
+      const bolded = `The cap is **${artifact}** at launch.`;
+
+      // The emphasis fold reaches this text and the compatibility fold does not.
+      expect(quoteOccursIn(`The cap is ${retyped} at launch.`, bolded)).toBe(false);
+      // And the artifact's own sentence verifies without its markers, so the
+      // assertion above is the guard being strict rather than the fold being
+      // broken.
+      expect(quoteOccursIn(`The cap is ${artifact} at launch.`, bolded)).toBe(true);
+    });
+  }
+});
+
+describe("normalizeForQuote — the folds, and the order they run in", () => {
+  it("folds a bold pair", () => {
+    expect(normalizeForQuote("the **load-bearing** phrase")).toBe("the load-bearing phrase");
+  });
+
+  it("unwraps an inline-code span", () => {
+    expect(normalizeForQuote("the `prd-1` check")).toBe("the prd-1 check");
+  });
+
+  it("folds an italic pair", () => {
+    expect(normalizeForQuote("what it *displays* now")).toBe("what it displays now");
+  });
+
+  it("leaves an UNPAIRED ** alone, because deleting it would merge content", () => {
+    // The defect a cold review found in the first version of this fold, which
+    // deleted `**` unconditionally: `2**5` normalized to `25`, and the guard
+    // would then certify `25` as a verbatim quote of `2**5`. That is `10⁵` →
+    // `105` arriving through a different keystroke — the failure the NFKC
+    // decision exists to refuse, reappearing inside the fold meant to be safe.
+    expect(normalizeForQuote("The deck is capped at 2**5 cards.")).toBe(
+      "The deck is capped at 2**5 cards.",
+    );
+    expect(quoteOccursIn("capped at 25 cards.", "The deck is capped at 2**5 cards.")).toBe(false);
+  });
+
+  it("never reads a code span's asterisks as emphasis delimiters", () => {
+    // Two globs separated by a comma, not a space — the shape docs/schema.md
+    // has. Flanking alone does not save them: the first `*` is followed by `,`
+    // and the second preceded by `/`, both non-space, so they pair through the
+    // comma and both vanish. Markdown does not read emphasis inside a code
+    // span either, and protecting the span is what carries this.
+    expect(normalizeForQuote("`src/db/queries/*`, `src/db/schema/*` and nowhere else")).toBe(
+      "src/db/queries/*, src/db/schema/* and nowhere else",
+    );
+    // The false accept that would otherwise follow: two paths, minus the globs.
+    expect(
+      quoteOccursIn(
+        "src/db/queries/, src/db/schema/ and nowhere else",
+        "`src/db/queries/*`, `src/db/schema/*` and nowhere else",
+      ),
+    ).toBe(false);
+  });
+
+  it("runs bold before italic, or the italic rule chews a bold span's asterisks", () => {
+    // With the order reversed the inner pair matches first and the survivors
+    // are stray asterisks.
+    expect(normalizeForQuote("**bold** and **more**")).toBe("bold and more");
+  });
+
+  it("folds a bold span that wraps across a source line break", () => {
+    // A source wraps where a model does not, so the fold has to survive it.
+    expect(normalizeForQuote("computed **on the\nserver only** now")).toBe(
+      "computed on the server only now",
+    );
+  });
+
+  it("does not pair a bold span across a blank line", () => {
+    // A paragraph break ends emphasis in markdown, and a rule that crossed one
+    // would pair two unrelated stray markers from different paragraphs — here
+    // both are flanked, so nothing but the paragraph bound stops them, and
+    // pairing them merges four digits into two numbers nobody wrote.
+    expect(normalizeForQuote("The cap is 2**5 in Q1.\n\nThe ratio is 3**4 overall.")).toBe(
+      "The cap is 2**5 in Q1. The ratio is 3**4 overall.",
+    );
+  });
+
+  it("leaves a lone asterisk that cannot open emphasis", () => {
+    expect(normalizeForQuote("src/db/queries/* per CLAUDE.md")).toBe(
+      "src/db/queries/* per CLAUDE.md",
+    );
+    expect(normalizeForQuote("/* surfaces */")).toBe("/* surfaces */");
+  });
+
+  it("does not pair an italic span across a line break", () => {
+    // Consecutive CSS comments, the shape docs/design-spec.md's token block
+    // has. The `*` closing one comment is followed by `/` and the `*` opening
+    // the next is preceded by `/`, so flanking alone would let them pair — and
+    // a newline-tolerant rule would then eat both, rewriting what the block
+    // says. Confining the span to one line is what stops it.
+    expect(normalizeForQuote("/* app background */\n/* glass */")).toBe(
+      "/* app background */ /* glass */",
+    );
+  });
+});
+
+/**
+ * What is deliberately left, pinned so that widening it is a deliberate edit
+ * rather than a drift. Each of these fails the test the fold has to pass:
+ * dropping a URL or an identifier's underscores changes what the sentence says.
+ */
+describe("normalizeForQuote — deliberately not folded", () => {
+  it("leaves links alone, because a URL is content", () => {
+    // `[policy](a.md)` and `[policy](b.md)` folding to one string is two
+    // sentences becoming one — the property this guard exists to prevent.
+    expect(normalizeForQuote("see the [policy](a.md) for details")).toBe(
+      "see the [policy](a.md) for details",
+    );
+    expect(quoteOccursIn("see the [policy](a.md)", "see the [policy](b.md)")).toBe(false);
+  });
+
+  it("leaves underscores alone, because they are inside identifiers here", () => {
+    expect(normalizeForQuote("fast_path_used and juno_id_created")).toBe(
+      "fast_path_used and juno_id_created",
+    );
+    expect(normalizeForQuote("_emphasis_")).toBe("_emphasis_");
+  });
+
+  it("leaves strikethrough, HTML and block syntax alone", () => {
+    // The corpus's `<details>` and `<label>` are prose about elements, and a
+    // quote is a sentence, so block syntax costs nothing on a substring test.
+    expect(normalizeForQuote("native <details>/<summary>")).toBe("native <details>/<summary>");
+    expect(normalizeForQuote("~~retired~~ tokens")).toBe("~~retired~~ tokens");
+    expect(normalizeForQuote("## 10. Date & Meet")).toBe("## 10. Date & Meet");
+  });
+
+  it("leaves the separators an author typed as content", () => {
+    // `·` and `~` are in none of the three typography classes, on purpose.
+    expect(normalizeForQuote("24 hours · a cap ~50 m")).toBe("24 hours · a cap ~50 m");
+  });
+});
+
 describe("clip", () => {
   it("leaves text that already fits, and says it did not cut", () => {
     expect(clip("short enough", 50)).toEqual({ text: "short enough", clipped: false });
