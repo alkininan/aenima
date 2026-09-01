@@ -144,6 +144,16 @@ ALTER TABLE gap ADD CONSTRAINT "gap_resolution_note_len" CHECK (
 -- Definer here can only subtract — it is consumed as `AND NOT (...)`, never as a
 -- grant — and `app.role_in` is itself definer, so nesting changes nothing.
 --
+-- **That middle clause is true of this migration and stopped being true in
+-- 0013.** `app.is_product_decider`, which 0013 factors out of the EXISTS below,
+-- is consumed there as a *positive disjunct* in `gap_update` — a grant, not a
+-- subtraction. So the comfort above does not transfer to it, and 0013 argues its
+-- definer rights again from scratch rather than citing this line. Corrected here
+-- rather than left to be inherited: this file is applied and its SQL is
+-- immutable, but a comment that has become wrong is not a schema change, and the
+-- next reader of the sentence would have been the next person to widen a policy
+-- on the strength of it.
+--
 -- Takes the **item**, not the product, so a caller cannot pass a product it
 -- picked: the item id comes off the gap row, which came off the gap id.
 -- ---------------------------------------------------------------------------

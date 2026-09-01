@@ -133,6 +133,11 @@ const accept = async (tx: Tx, gapId: string, reason: string): Promise<string> =>
 const reopen = async (tx: Tx, gapId: string): Promise<string> =>
   (await tx<{ v: string }[]>`select public.reopen_gap(${gapId}) as v`)[0]!.v;
 
+/** Asserts one statement is rejected, inside a savepoint so the tx stays usable. */
+async function rejectsWith(tx: Tx, statement: (sp: Tx) => Promise<unknown>, pattern: RegExp) {
+  await expect(tx.savepoint((sp) => statement(sp as Tx))).rejects.toThrow(pattern);
+}
+
 const ledger = async (tx: Tx, gapId: string) =>
   await tx<{ action: string; shape: string; reason: string | null; undid: string | null }[]>`
     select action, jsonb_typeof(metadata) as shape,
@@ -314,6 +319,211 @@ describe.skipIf(OFFLINE)("accept_gap — §5's third move", () => {
 
       await asOwner(tx);
       expect(await ledger(tx, must)).toEqual([]);
+    });
+  });
+
+  /**
+   * **§14's Viewer row is as absolute as its Decider sentence, and which one
+   * wins is not a migration's call — open question 20.**
+   *
+   * "Viewer | Read-only | Everything else", and 0001 read that as "Viewer
+   * appears in no write policy anywhere". A product that names a Viewer as its
+   * Decider puts the two in direct conflict. Until it is answered, 0013 scopes
+   * the appointment to the roles §14 already lets write, so a Viewer-Decider
+   * stays exactly where 0004 and 0001 left them.
+   *
+   * **Asserted on all three routes, because the answer has to hold on the one
+   * the surface does not use.** The move returns `not-permitted`; the table
+   * refuses the UPDATE behind it; and `activity_insert` refuses the ledger row
+   * — which is the finding the first draft of 0013 created and this one closes
+   * by not touching that policy at all. A test that only pressed the button
+   * would go green against a policy that let a Viewer write the ledger.
+   */
+  it("gives a Viewer the product names as Decider no write on any route", async () => {
+    await rolledBack(async (tx) => {
+      const world = await seedWorld(tx);
+      await tx`update product set decider_user_id = ${USERS.viewer} where id = ${world.productId}`;
+      const must = await makeGap(tx, world, "must");
+      const should = await makeGap(tx, world, "should");
+      const accepted = await makeGap(tx, world, "must");
+
+      // One already settled, so the reversal has something to reach for.
+      await actAs(tx, USERS.owner);
+      expect(await accept(tx, accepted, "Owner took this on.")).toBe("accepted");
+      await asOwner(tx);
+
+      await actAs(tx, USERS.viewer);
+
+      // The appointment is real — this is not a test of a Viewer who is nobody.
+      expect(
+        (await tx<{ v: boolean }[]>`select app.is_product_decider(${world.productId}) as v`)[0]!.v,
+      ).toBe(true);
+
+      expect(await accept(tx, must, "r")).toBe("not-permitted");
+      expect(await accept(tx, should, "r")).toBe("not-permitted");
+      expect(await reopen(tx, accepted)).toBe("not-permitted");
+
+      // The table behind the move. `gap_update` refuses, so the UPDATE matches
+      // nothing — silently, which is why the count is what gets asserted.
+      const direct = await tx`
+        update gap set disposition = 'accepted', resolved_by_user_id = ${USERS.viewer},
+                       resolved_at = now(), resolution_note = 'By hand.'
+         where id = ${must}`;
+      expect(direct.count).toBe(0);
+
+      // And the ledger. 0001's `activity_insert` names three roles and Viewer is
+      // not one of them; 0013 adds no disjunct here, so it still raises.
+      await rejectsWith(
+        tx,
+        (sp) => sp`
+          insert into activity (workspace_id, product_id, actor_kind, actor_user_id,
+                                action, trigger_source, subject_table, subject_id)
+          values (${world.workspaceId}, ${world.productId}, 'human', ${USERS.owner},
+                  'gap.accepted', 'user', 'gap', ${must})`,
+        /row-level security/i,
+      );
+
+      await asOwner(tx);
+      const rows = await tx<{ id: string; d: string }[]>`
+        select id, disposition::text as d from gap
+         where id in (${must}, ${should}, ${accepted}) order by disposition::text`;
+      expect(rows.map((r) => r.d)).toEqual(["accepted", "open", "open"]);
+      expect(await ledger(tx, must)).toEqual([]);
+      expect(await ledger(tx, should)).toEqual([]);
+      // The Owner's acceptance, and nothing the Viewer added on top of it.
+      expect((await ledger(tx, accepted)).map((r) => r.action)).toEqual(["gap.accepted"]);
+    });
+  });
+
+  /**
+   * **What §14 gives a Decider is a settle, and RLS cannot say that.**
+   *
+   * `gap_update` is a whole-row policy: "may write this row" and "may settle
+   * this gap" are the same yes to it, so the first draft of 0013 handed a
+   * Decider `tag`, `evidence`, `check_id`, `item_id`, `excluded` and somebody
+   * else's uuid in `resolved_by_user_id` along with the acceptance. The column
+   * half of the grant lives in `app.gap_settle_shape`, a BEFORE UPDATE trigger,
+   * because a row predicate has nowhere to put it.
+   *
+   * **Pressed against the table rather than through the functions.** Going
+   * through `accept_gap` would prove nothing: it only ever issues the two
+   * statements below that succeed, so every refusal here would pass against a
+   * database with no trigger at all.
+   */
+  it("bounds a Developer-Decider's own writes to the settle transition", async () => {
+    await rolledBack(async (tx) => {
+      const world = await seedWorld(tx);
+      await tx`update product set decider_user_id = ${USERS.developer} where id = ${world.productId}`;
+      const gapId = await makeGap(tx, world, "must");
+      const [other] = await tx<{ id: string }[]>`
+        insert into item (workspace_id, product_id, type, title)
+        values (${world.workspaceId}, ${world.productId}, 'feature', 'Other') returning id`;
+
+      await actAs(tx, USERS.developer);
+
+      const rewrite = /settles a gap and does not rewrite one/;
+      const notASettle = /is not a settle the Decider may make/;
+
+      // The identity of the gap. `tag` is the one that matters most: flipping a
+      // Must to a Should retires a handover-blocking gap with no acceptance,
+      // no name and no ledger row.
+      await rejectsWith(tx, (sp) => sp`update gap set tag = 'should' where id = ${gapId}`, rewrite);
+      await rejectsWith(
+        tx,
+        (sp) => sp`update gap set evidence = 'Nothing wrong here.' where id = ${gapId}`,
+        rewrite,
+      );
+      await rejectsWith(
+        tx,
+        (sp) => sp`update gap set check_id = 'prd-1' where id = ${gapId}`,
+        rewrite,
+      );
+      await rejectsWith(
+        tx,
+        (sp) => sp`update gap set item_id = ${other!.id} where id = ${gapId}`,
+        rewrite,
+      );
+
+      // §5's first move, which §14 gives to Product ("confirm exclusions"), and
+      // the machine's disposition. Neither is an acceptance.
+      await rejectsWith(
+        tx,
+        (sp) => sp`
+          update gap set disposition = 'excluded', resolved_by_user_id = ${USERS.developer},
+                         resolved_at = now(), resolution_note = 'Not applicable.'
+           where id = ${gapId}`,
+        notASettle,
+      );
+      await rejectsWith(
+        tx,
+        (sp) => sp`
+          update gap set disposition = 'closed', resolved_at = now() where id = ${gapId}`,
+        notASettle,
+      );
+
+      // 0012's "the stamp is `auth.uid()`, never an argument" — made true of the
+      // table and not only of the function.
+      await rejectsWith(
+        tx,
+        (sp) => sp`
+          update gap set disposition = 'accepted', resolved_by_user_id = ${USERS.owner},
+                         resolved_at = now(), resolution_note = 'In your name.'
+           where id = ${gapId}`,
+        notASettle,
+      );
+      // The same property for the clock: `now()` is the transaction timestamp,
+      // so a backdated acceptance is not one `accept_gap` could have written.
+      await rejectsWith(
+        tx,
+        (sp) => sp`
+          update gap set disposition = 'accepted', resolved_by_user_id = ${USERS.developer},
+                         resolved_at = timestamptz '2001-01-01', resolution_note = 'Long ago.'
+           where id = ${gapId}`,
+        notASettle,
+      );
+
+      // Nothing above landed.
+      await asOwner(tx);
+      const [before] = await tx<{ d: string; tag: string; ev: string; item: string }[]>`
+        select disposition::text as d, tag::text as tag, evidence as ev, item_id as item
+          from gap where id = ${gapId}`;
+      expect(before).toEqual({
+        d: "open",
+        tag: "must",
+        ev: "GM-4 is prose rather than Given/When/Then.",
+        item: world.itemId,
+      });
+      await actAs(tx, USERS.developer);
+
+      // And the two that are the grant: exactly the statements the functions
+      // issue, and they land.
+      const acceptedRow = await tx`
+        update gap set disposition = 'accepted', resolved_by_user_id = ${USERS.developer},
+                       resolved_at = now(), resolution_note = 'The contract is the record.'
+         where id = ${gapId}`;
+      expect(acceptedRow.count).toBe(1);
+
+      // Editing a settled note in place is not one of the two moves either.
+      await rejectsWith(
+        tx,
+        (sp) => sp`update gap set resolution_note = 'Reworded.' where id = ${gapId}`,
+        notASettle,
+      );
+
+      const reopened = await tx`
+        update gap set disposition = 'open', resolved_by_user_id = null,
+                       resolved_at = null, resolution_note = null
+         where id = ${gapId}`;
+      expect(reopened.count).toBe(1);
+
+      // **Open question 21, pinned rather than described.** A settle written
+      // straight at the table carries no ledger row, because §2's ledger lives
+      // in the two functions and not in the table. That is 0004's shape for
+      // Owner and Product and 0013 does not widen it — but it is now true of a
+      // Developer-Decider too, and the fix is structural rather than this
+      // ticket's. This assertion is what turns red when it is made.
+      await asOwner(tx);
+      expect(await ledger(tx, gapId)).toEqual([]);
     });
   });
 

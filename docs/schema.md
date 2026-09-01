@@ -337,25 +337,42 @@ user-writable with this ticket, so it gets an upper bound — only the bound, si
 `drizzle/0013_decider_settles.sql` — T2.5's fresh-context review. §14 names a
 Decider "who approves spec patches, accepts flags, and can waive walkthroughs"
 and does not qualify it by workspace role, but 0012 asked the role first, so a
-Developer or Viewer who *was* the named Decider was refused with
-`not-permitted`. A general role table must not silently shadow an explicit
-per-product assignment, so the order is reversed: the appointment is asked
-first, and the role gate only answers for people it did not already answer for.
-Both obstacles keep their own name — someone with no gap-writing role and no
-appointment still hears about their role, and someone with the role but not the
-appointment still hears about the Decider.
+Developer who *was* the named Decider was refused with `not-permitted`. A
+general role table must not silently shadow an explicit per-product assignment,
+so the order is reversed: the appointment is asked first, and the role gate only
+answers for people it did not already answer for. Both obstacles keep their own
+name — someone with no gap-writing role and no appointment still hears about
+their role, and someone with the role but not the appointment still hears about
+the Decider.
 
-**It widens two policies, and that is the honest cost.** The functions are
-INVOKER, so a plpgsql reorder alone would have changed nothing: `gap_update`
-refuses a Developer's UPDATE and `activity_insert` refuses a Viewer's ledger
-row, and the re-read would have reported `not-permitted` anyway. So
+**It widens one policy, twice scoped.** The functions are INVOKER, so a plpgsql
+reorder alone would have changed nothing: `gap_update` refuses a Developer's
+UPDATE and the re-read would have reported `not-permitted` anyway. So
 `app.is_product_decider(product)` — DEFINER, and itself scoped to workspaces the
-caller is still a member of — is added as one disjunct to each. `gap_update`
-gains it beside `can_see_product`, which is unchanged; `activity_insert` gains
-it, which is strictly narrower than the whole-workspace insert every Developer
-already had. Nothing crosses a product boundary: the predicate answers only for
-the product that names the caller. A db test pins each half, including the one
-that proves the policy change is load-bearing rather than decorative.
+caller is still a member of — joins `gap_update` as one disjunct, beside
+`can_see_product`, which is unchanged and stays *outside* the disjunction so the
+appointment is not a way around per-product visibility.
+
+The disjunct is scoped by role to `= 'developer'`, because §14's Viewer row is
+as unqualified as its Decider sentence and which one wins is build-log open
+question 20 rather than a migration's call. It is scoped again by
+`app.gap_settle_shape`, a BEFORE UPDATE trigger: RLS has no column list, so
+"may write this row" and "may settle this gap" are one sentence to a policy, and
+the trigger is the only place that can compare OLD to NEW. A caller who reached
+the row through the appointment alone may make exactly the two transitions
+`accept_gap` and `reopen_gap` make — `open → accepted` stamped with their own
+`auth.uid()` and `now()`, and `accepted → open` — and may not touch `tag`,
+`evidence`, `check_id`, `item_id`, `workspace_id` or the row's identity, nor
+reach `excluded` or `closed`. It grants nothing and skips callers with no
+`auth.uid()`, so the direct connection that writes `gap.closed` and
+`gap.restated` is untouched.
+
+**`activity_insert` is not touched.** Once the appointment is scoped to roles
+§14 already lets write, 0001's `'developer'` arm covers the only live case, so
+the ledger row needs no new grant and the functions need no DEFINER half. Db
+tests pin each half — the Viewer refused on all three routes, the Decider's
+direct writes bounded to the settle — and the one that proves the policy change
+is load-bearing rather than decorative.
 
 ```
 pnpm db:generate   # diff the schema files into a new migration

@@ -377,22 +377,57 @@ to demand one for a pair the database cannot produce. A crafted `?intent=reopen&
 now renders nothing rather than borrowing the other move's words.
 
 **And the §14 reading was wrong, which is drizzle/0013.** T2.5 asked the role gate first, so a
-Developer or Viewer who *was* the product's named Decider was told their role does not settle gaps.
-§14 names a person, not a role — "each product names a **Decider** who approves spec patches,
-accepts flags" — and the Owner is the fallback for a Decider's *absence*, not an override of a
-present one. An explicit per-product assignment must not be shadowed by the general table. The
-ordering argument T2.5 made is still right for the case it covered and is kept.
+Developer who *was* the product's named Decider was told their role does not settle gaps. §14 names
+a person, not a role — "each product names a **Decider** who approves spec patches, accepts flags" —
+and the Owner is the fallback for a Decider's *absence*, not an override of a present one. An
+explicit per-product assignment must not be shadowed by the general table. The ordering argument
+T2.5 made is still right for the case it covered and is kept.
 
-**This is the one place the fix widened a boundary, and it needs its own cold read.** The functions
-are INVOKER, so reordering plpgsql alone would have been a comment: `gap_update` refuses a
-Developer's UPDATE and `activity_insert` refuses a Viewer's ledger row. `app.is_product_decider` is
-added as one disjunct to each — scoped to the product that names the caller, and to workspaces they
-are still a member of. Against `gap_update` it grants the gap-writing power a Product member already
-has, narrowed to one product, which is what §14 calls "accepts flags"; against `activity_insert` it
-is strictly narrower than the whole-workspace insert every Developer already had. `can_see_product`
-is untouched and no product boundary moves. A db test pins that the policy half is load-bearing:
-with the functions reordered and `gap_update` restored to 0004's text, the Developer-Decider gets
-`not-permitted` from the re-read.
+**This is the one place the fix widened a boundary, and its own cold read sent it back.** The
+paragraph that stood here defended the first draft of 0013 and was wrong twice, in the same way both
+times: each defence compared the new grant against a principal who was not the one being newly
+admitted. It is kept below, struck, because the shape of the mistake is the reusable part.
+
+> ~~`app.is_product_decider` is added as one disjunct to each. Against `gap_update` it grants the
+> gap-writing power a Product member already has, narrowed to one product, which is what §14 calls
+> "accepts flags"; against `activity_insert` it is strictly narrower than the whole-workspace insert
+> every Developer already had.~~
+
+**Against `gap_update`**, "the power a Product member already has" was true about the scope and
+silent about the power. RLS has no column list: a policy that says "may write this row" says "may
+write `tag`", so the draft let a Decider flip a Must to a Should — retiring a handover-blocking gap
+with no acceptance, no name and no ledger row — and rewrite `evidence`, `check_id`, `item_id`, set
+`excluded`, and stamp somebody else's uuid into `resolved_by_user_id`. §14 gives a Decider three
+approvals and none of those is one. **Against `activity_insert`**, "strictly narrower than every
+Developer's" is true of a Developer-Decider and false of a Viewer-Decider, who had no insert right at
+all — and that policy has no `can_see_product` gate, 0003 dropped `activity_actor_fk`, and
+`action`/`subject_table`/`subject_id` are free text, so the draft let a Viewer append rows naming
+another human, about a product they cannot see, to the append-only ledger §15 calls load-bearing.
+
+**What ships instead.** One disjunct, on `gap_update` only, scoped twice: to `= 'developer'` (open
+question 20 defers the Viewer, so the live case is the Developer-Decider), and to the settle
+transition itself by `app.gap_settle_shape`, a BEFORE UPDATE trigger — the only place in Postgres
+that can compare OLD to NEW, which is where the column half of §14's grant has to live. It grants
+nothing, runs after the policy has already admitted the row, and skips callers with no `auth.uid()`
+so `writeRun`'s `gap.closed` and `gap.restated` are untouched. **`activity_insert` is not touched at
+all**: once the appointment is scoped to roles §14 already lets write, 0001's `'developer'` arm has
+covered the only live case since T0.4, so there is nothing left for a disjunct to grant and the
+functions need no SECURITY DEFINER half. `can_see_product` still gates `gap_update` outside the
+disjunction, so the appointment is not a way around per-product visibility.
+
+Five negative checks, each observed red: the draft's `gap_update` disjunct restored, the draft's
+`activity_insert` disjunct restored, the trigger dropped, and the trigger's `tag` invariant and its
+`resolved_by_user_id = auth.uid()` and `resolved_at = now()` conjuncts each removed in turn. A db
+test also pins that the policy half is load-bearing: with the functions reordered and `gap_update`
+restored to 0004's text, the Developer-Decider gets `not-permitted` from the re-read.
+
+**0013 was unwound and reapplied rather than amended in place**, as 0012 was: the dev database is the
+only one, the draft was applied only there and only in this commit, so `gap_update`, `activity_insert`,
+`may_settle_must` and both functions were restored from 0001/0004/0012 verbatim, `app.is_product_decider`
+dropped, the `__drizzle_migrations` row deleted, and `db:migrate` run again. What ships is one correct
+migration and no repair on top of a wrong one. (drizzle-kit decides what to apply by the journal's
+`when` against `created_at`, not by hash, which is also why correcting a comment in applied 0012 does
+not re-run it.)
 
 **4. Two exits reported into silence.** `not-found` names a gap the page does not hold, so no card
 and no check line could ever render its sentence; a form missing its gap or intent redirected to
@@ -1183,6 +1218,42 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
     true outright once the two stragglers are gone or a fresh environment is seeded. If a backfill is
     ever wanted instead, it belongs in a script that loads the pack by version, not in SQL that
     hardcodes rubric prose.
+
+20. **Does a product's named Decider override §14's Viewer row? — yours to answer, and 0013 waits
+    on it.** §14 says "Each product names a **Decider** (config field) who approves spec patches,
+    accepts flags, and can waive walkthroughs", unqualified. §14's table says "Viewer | Read-only |
+    Everything else", equally unqualified, and 0001 read it as "Viewer appears in no write policy
+    anywhere". A product that names a Viewer as its Decider puts the two in direct conflict, and
+    which wins is a product decision — 0013's first draft resolved it in SQL, in the Decider's
+    favour, without saying it was resolving anything.
+
+    **Until it is answered a Viewer gains no write.** 0013 scopes the appointment disjunct in
+    `gap_update` to `= 'developer'` — the roles §14 already lets write — so a Viewer-Decider stays
+    where 0004 and 0001 left them: `not-permitted` on both tags, no gap write, no ledger row. A db
+    test asserts that on all three routes (the move, a direct UPDATE, a direct `activity` insert).
+
+    Answering "the appointment wins" costs one enum literal in that policy **and a new argument for
+    the ledger**: `activity_insert` would then need a Viewer-Decider to write `gap.accepted`, which
+    it must go on refusing by every other route, so the functions would need a SECURITY DEFINER half
+    they do not need today. That argument has to be made fresh — 0012's "definer can only subtract,
+    it is consumed as `AND NOT (...)`" is the reasoning that stopped holding the moment a definer
+    predicate became a positive disjunct, and 0012's comment has been corrected to say so.
+    Answering "the Viewer row wins" costs nothing and closes this.
+
+21. **A settle written straight at the table carries no ledger row — decide when §2's ledger stops
+    being a convention.** §2 requires an `activity` row for every mutating action, and for gaps that
+    requirement lives in `accept_gap` and `reopen_gap` rather than in the table. So an Owner or
+    Product member who PATCHes `gap` over PostgREST instead of calling the RPC changes a
+    disposition with no ledger row at all. That is 0004's shape and predates this ticket; 0013 does
+    not widen it, and bounds the one principal it newly admits to the same two transitions the
+    functions perform — but a Developer-Decider now has the same silent route the other two had.
+
+    The structural fix is to move the ledger write into an AFTER UPDATE trigger on `gap`, which
+    would make §2 true of the table rather than of the callers, cover `excluded` and the machine's
+    `closed` the same way, and let the two functions drop their INSERTs. It changes behaviour for
+    three roles and belongs in its own ticket, not in a review of a review. `gap-accept.db.test.ts`
+    asserts the empty ledger after a direct settle, so the assertion turns red the day it is fixed
+    and points here.
 
 ## On the horizon
 
