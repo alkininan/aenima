@@ -1303,10 +1303,82 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
     asserts the empty ledger after a direct settle, so the assertion turns red the day it is fixed
     and points here.
 
+22. **Applicability wobbles run to run, and it moves the denominator — a ticket, not a patch.**
+    Two `score:file` runs over the **same bytes**, three minutes apart, disagreed about which §4
+    layers entered. Nothing that is supposed to determine a score differed: same content hash
+    `9d89778f501e30e7…`, same pack `feature-prd@1.0.0`, same `PROTOCOL_VERSION`
+    `1.1.0+602d20db225ee669`, same `anthropic` / `claude-sonnet-5`.
+
+    | | `soc-10`, 19:37:46Z | `soc-11`, 19:40:11Z |
+    |---|---|---|
+    | conditions met | `list-rendering-surface`, `user-to-user-or-location` | `list-rendering-surface` |
+    | not asked | `prd-16` (Must, 6) | `prd-16` (Must, 6), `prd-20` (Must, 5) |
+    | earned / denominator | 10 / 99 | 10 / 94 |
+    | score | 10.1 | 10.6 |
+
+    The verdicts did not move — **`earned` is 10 on both**. The entire difference is `prd-20`, the
+    safety layer's Must, entering one run's denominator and not the other's: the scorer decided the
+    document carried "user-to-user visibility, interaction, or location" once and not the second
+    time. A worse document therefore scored *higher* on the run where the safety layer failed to
+    turn on, because the check it would have failed was never asked.
+
+    **What it violates:** §5, "Switching AI provider or editing a rubric triggers a quiet
+    re-baseline pass so numbers never wobble without explanation." Neither the provider nor the
+    rubric changed here and the number wobbled anyway — this is the promise's precondition failing,
+    not its remedy. It is also §1 law 3 in a second form: 99 and 94 are both interrogable, and
+    nothing can say why this document got one rather than the other.
+
+    **Why it surfaced only now.** §5's cache is keyed per artifact version, so scoring the same
+    artifact twice returned the first run and the second opinion was never taken. `score:file`
+    writes a new version per run by construction, which is what made the same bytes reachable twice
+    — the cache was not hiding a rare event, it was preventing the observation. Any surface that
+    re-scores (a re-baseline, open question 15) hits this immediately.
+
+    Candidates, none chosen:
+    - **Pin the sampling temperature.** It is not pinned today — `anthropicBody` sets `model`,
+      `max_tokens`, `system`, `messages` and `output_config` and no `temperature`, so every scoring
+      call runs at the provider's default. Cheapest to try, and it narrows the variance rather than
+      removing it: a pinned temperature is not a determinism guarantee.
+    - **Split applicability into its own pass, cached per artifact version.** Conditions and
+      verdicts come back from one call against one schema (`schema.ts`'s `conditions` object beside
+      the results array). Deciding conditions once per version and caching *that* makes the
+      denominator a property of the artifact rather than of the run — the same document always
+      brings in the same checks, and a re-score can still disagree about whether they pass, which is
+      the disagreement §5 actually permits.
+    - **Accept it and change §5's promise.** Say denominators are per-run judgments and make every
+      surface that shows one show its conditions beside it. Honest, and it gives up comparing two
+      runs of the same document, which is what a golden set is for.
+
+    The rows are gone — `soc-10` and `soc-11` were deleted with the rest of the scratch items — so
+    the table above is the record. Reproducing it is two `pnpm score:file` runs over one file
+    written with an ambiguous safety surface.
+
+23. **Passing checks cite nothing, and the protocol stays as it is until the golden set needs it.**
+    `prompt.ts` tells the scorer "A passing verdict carries none of the three. Leave all three
+    empty", so `quote` is null on every passing row in the database — **0 of 41**. `score:file`
+    prints the zero with that sentence under it rather than letting an empty list read as a defect,
+    and the loop that would print them stays because it is right the moment the sentence changes.
+
+    **Leave the protocol alone.** The half of interrogation that is missing is real — a person
+    reading a 66/99 can see what the scorer rejected and not what it accepted — but the fix is not
+    a tweak. `PROTOCOL_VERSION` is a hash of the assembled context, so editing that sentence moves
+    the version, invalidates §5's cache for every stored run, and triggers the re-baseline §5
+    requires. Paying that to add prose nothing reads yet is the wrong order.
+
+    **The trigger is the scorer eval harness** (On the horizon, Phase 2's golden set with planted
+    gaps). That harness is the first thing that needs a passing quote: measuring precision means
+    checking that a check passed *for the right reason*, and a pass with no evidence is a pass that
+    cannot be graded — a scorer that accepts every check for no stated reason measures as perfect.
+    It is also the ticket that can pay the re-baseline, because re-scoring the golden set is what it
+    does anyway. Change the sentence there, in the same change as the harness, and bump
+    `PROTOCOL_RELEASE` with it.
+
 ## On the horizon
 
 - Phase 2 gains a scorer eval harness — a golden set of artifacts with known planted gaps,
-  measuring the scorer's precision against them before meters are trusted.
+  measuring the scorer's precision against them before meters are trusted. It owns the protocol
+  change that makes a passing check cite the document (open question 23), and it is the run that
+  can pay the re-baseline that change costs.
 - Phase 5, backlog refinement (§7.5): the slicing dimension is the decision that determines whether a
   backlog is buildable. Slicing a PRD by document section produces stories that all touch the same code;
   slicing by user-visible capability produces stories that can be built independently. §7.5 requires no
