@@ -68,9 +68,9 @@ export function ReadinessPanel({
 }) {
   if (run === null) {
     return (
-      // The same 420 and the same 8 inset the summary carries, so the track sits
+      // The same 400 and the same 8 inset the summary carries, so the track sits
       // in one place whether or not there is a run behind it.
-      <div data-testid="readiness" className="flex max-w-[420px] flex-col gap-[8px] p-[8px]">
+      <div data-testid="readiness" className="flex max-w-[400px] flex-col gap-[8px] p-[8px]">
         <Meter score={null} size={8} label={t.item.readiness} emptyLabel={t.list.noScoring} />
         <span className="type-ui-footnote text-n-secondary">{t.list.noScoring}</span>
       </div>
@@ -110,7 +110,7 @@ export function ReadinessPanel({
           The marker is removed in both spellings — `list-none` for the standards
           one, the pseudo-element for WebKit's — because §8's affordance is the
           chevron, and a browser triangle beside it would be two. */}
-      <summary className="control control-edge-none type-mono-readout flex max-w-[420px] list-none flex-col gap-[8px] rounded-sm p-[8px] text-n-secondary [&::-webkit-details-marker]:hidden">
+      <summary className="control control-edge-none type-mono-readout flex max-w-[400px] list-none flex-col gap-[8px] rounded-sm p-[8px] text-n-secondary [&::-webkit-details-marker]:hidden">
         <span className="flex items-center gap-[12px]">
           <span className="min-w-0 flex-1">
             <Meter
