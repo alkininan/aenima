@@ -201,7 +201,7 @@ T2.3 — the scoring run: an artifact version and a pack in, per-check verdicts 
   already excluded the paths; and the paragraph-bound case needed two markers that are both flanked,
   since nothing was pairing them otherwise. The NFKC test was negative-checked by reintroducing
   **NFKC** rather than by breaking the italic rule: the claim it makes is that the fold did not
-  reopen that hole, so NFKC itself is the defect that has to make it red — `fd64749`.
+  reopen that hole, so NFKC itself is the defect that has to make it red — `4f9292c`.
 
   The fresh-context review found two real defects in the first version, both recorded as decisions
   below: the unconditional `**` deletion merging `2**5` into `25`, and a flanking rule that was only
