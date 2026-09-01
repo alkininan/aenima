@@ -209,6 +209,141 @@ T2.3 — the scoring run: an artifact version and a pack in, per-check verdicts 
   first version's own negative checks all passed, because a mutation suite only tests the cases the
   suite already thought of.
 
+T2.7 — how much of the wobble is sampling. **A measurement ticket, and the measurement falsified its
+  own premise before spending anything.** Eight runs of `score:file` on identical bytes had produced
+  13.1–27.3 across two denominators, and the hypothesis was a loose sampling temperature. There is no
+  temperature to loosen. Probed against the live API on `claude-sonnet-5`, this workspace's pinned
+  scorer, with the workspace's own key: `temperature: 0` and `temperature: 0.2` both return **400** —
+  "`temperature` is deprecated for this model" — as do `top_p: 0.1` and `top_k: 1`. Only
+  `temperature: 1.0` is accepted, for backwards compatibility, and it is the default. Anthropic's
+  reference says the same of everything released after Opus 4.6. **The seam sending no sampling
+  parameter was already running at the only sampling setting the model has**, so "pin the
+  temperature" was never an available move: pinning it to 1.0 is a no-op and pinning it to 0 would
+  400 every scoring run in the product.
+
+  What replaced sampling is `output_config.effort`, and `SCORER_EFFORT` in `router.ts` now pins it
+  beside `initialScorerModel` — a constant rather than a column, because §5 names no per-workspace
+  effort and AGENTS.md rules an unnamed abstraction speculation. It threads to
+  `ResolvedRequest.effort`, is set only by `callPinned`, and is deliberately absent from `AiRequest`:
+  the same structural guarantee the model pin has, that a caller cannot reach it. Anthropic takes it
+  in the `output_config` that already carried the schema; OpenAI takes it as `reasoning.effort`,
+  whose shape was read off the installed SDK's own `Shared.Reasoning` types and is **untested against
+  a live API — this project has no OpenAI key.**
+
+  **The pin sits at `high`, today's default, because the rungs above it cannot run.** Effort is
+  charged against the same `max_tokens` as the answer, so `xhigh` and `max` both spend the scorer's
+  whole 16,000-token ceiling thinking and return truncated JSON — `schema_invalid`, output exactly
+  16,000, three attempts for three. **The blocker is the wall clock, not the adapter** — a correction
+  to this entry's first draft, which claimed a streaming rewrite was needed. The SDK's "Streaming is
+  required for operations that may take longer than 10 minutes" fires only when no explicit timeout
+  is set; probed with one, non-streaming accepts 24,000 and 64,000 without complaint. Anthropic's
+  docs put `xhigh` at 64,000 max_tokens, which by the SDK's own formula is a half-hour non-streaming
+  call, and §5's meter re-scores on every edit. **Measuring a configuration the product could never
+  ship tells us nothing**, which is what stopped arm B; the ticket's own three-corrections rule is
+  what stopped it being attempted a fourth time. Pinning the current default still earns its line: it
+  is what stops every score in the product moving on the day the provider moves its default.
+
+  **Arm A — 11 runs, shipped configuration, `sample-juno-feature.md`, one pack version, one protocol
+  version (`1.1.0+602d20db225ee669`), one model.** Reported by `pnpm score:spread`, which reads the
+  stored runs rather than parsing stdout.
+
+  | | |
+  |---|---|
+  | score | min **8.6**, max **27.3**, median 19.2 — **spread 18.7 points** |
+  | denominator | 99 in 7 runs, 105 in 4 — `list-rendering-surface` held in **4 of 11** |
+  | checks | 14 of 20 held one state; **6 moved** |
+
+  The denominator is reported apart from the score on purpose: whether the model settles *which
+  checks apply* is a different question from whether it settles *the verdicts*, and one spread number
+  hides it. `prd-15` is the whole of the difference — it moved `fail 4 / not asked 7`, which is
+  §4's condition oscillating, not a verdict changing.
+
+  **The five checks whose verdicts moved are exactly the sufficiency checks**, which is the ticket's
+  hypothesis confirmed and widened: it named `prd-12`, `prd-16` and `prd-19`, and the data adds
+  `prd-14` and `prd-18`.
+
+  | check | pt | states | what it asks |
+  |---|---|---|---|
+  | `prd-12` | 4 | fail 2 / pass 9 | side effects — other flows, systems, teams this touches |
+  | `prd-14` | 8 | fail 10 / pass 1 | per story: what the user sees on failure (EARS) |
+  | `prd-16` | 6 | pass 9 / fail 2 | permission-denied, offline, degraded behavior |
+  | `prd-18` | 4 | pass 8 / fail 3 | data footprint declared, personal data flagged |
+  | `prd-19` | 8 | pass 3 / fail 8 | misreading sweep: no sentence readable two ways |
+
+  Every one asks whether what is present is *enough*. None of the fourteen stable checks does — with
+  a caveat worth keeping, because it sharpens the rule: `prd-10` ("every story has testable GWT")
+  and `prd-17` ("every user action has a named tracking event") are sufficiency questions too, and
+  they were perfectly stable. **This document contains no stories and no events at all**, so they
+  had nothing partial to weigh and answered a clean absence eleven times out of eleven. It is not
+  the check's wording that makes a verdict unstable; it is whether the document hands it a partial
+  case. That also bounds the finding: on a document with more in it, more checks would move.
+
+  **What it cost, and what that changes.** 22 provider calls, **$1.60** total, at $0.067 and ~59s
+  per successful run. Wall-clock, not money, is the binding constraint on a measurement of this
+  shape — 12 runs is twelve minutes and eighty cents — which is worth knowing before the next
+  measurement ticket asks for three runs on grounds of expense.
+
+  Three things this measurement cannot see: it is one artifact, one model, one provider, one pack;
+  arm B never ran, so **no claim is made here about whether effort moves the spread**; and the
+  OpenAI half of the pin is unexercised.
+
+  **Arm B was cancelled on the research, not on the budget.** Two findings settled it before money
+  was spent. `xhigh` needs 64,000 max_tokens per Anthropic's own guidance — a half-hour
+  non-streaming call for a meter that re-scores on edit, so it is a configuration this product
+  cannot ship and measuring it would describe a lever nobody can pull. And the hypothesis it was
+  going to test has already been tested: **Haldar and Hockenmaier (2025) find chain-of-thought does
+  not significantly improve self-consistency in LLM judges.** More thinking was the wrong lever.
+
+  **The recommendation is T2.8 — self-consistency, and the numbers say what it will and will not
+  buy.** N samples per scoring run, majority per check *and* per condition, aggregation in code
+  (§12's code node law: a majority is arithmetic, not judgment), all N quotes on a failing check
+  kept and each verified by the fabrication guard, and one `scoring_run` row with N samples beneath
+  it so §5's cache key is unchanged — the run is still one artifact version × pack × pack version ×
+  protocol version, and the samples are what it is made of rather than a second row to reconcile.
+  Precedent: majority-vote aggregation (arXiv 2510.27106) and atomic decomposition of judgments
+  (arXiv 2603.00077).
+
+  **N = 5, and the defence comes from arm A's own per-check rates rather than a rule of thumb.**
+  Taking each moving check's observed majority share as its rate, and asking how often two
+  *aggregated* runs disagree on that check:
+
+  | check | majority share | N=1 | N=3 | **N=5** | N=9 |
+  |---|---|---|---|---|---|
+  | `prd-14` | 10/11 | .165 | .045 | **.013** | .001 |
+  | `prd-12`, `prd-16` | 9/11 | .298 | .159 | **.086** | .026 |
+  | `prd-18`, `prd-19` | 8/11 | .397 | .298 | **.225** | .128 |
+  | `prd-15`'s condition | 7/11 | .463 | .420 | **.382** | .315 |
+
+  N=5 is where the cost curve and the benefit curve cross: it removes most of the disagreement on
+  the checks that were nearly stable already, and 5× cost is $0.34 and — **run in parallel** — the
+  latency of the slowest of five calls rather than five times one, so ~60–105s against arm A's
+  ~59s. N=9 buys another few points for 9× and its own rate-limit problem.
+
+  **What N=5 does not buy, and this is the part to read before funding it.** Simulating the whole
+  score from those same rates — the simulation reproduces arm A's observed 8.6–27.3 at N=1, which
+  is what makes it trustworthy — majority voting moves the 95% score interval like this:
+
+  | N | 95% of runs land in | width |
+  |---|---|---|
+  | 1 | 8.6 – 27.3 | 18.7 |
+  | 3 | 11.1 – 27.3 | 16.2 |
+  | **5** | **13.1 – 27.3** | **14.1** |
+  | 9 | 15.2 – 27.3 | 12.1 |
+
+  **Five samples cut the headline number's spread from 18.7 points to 14.1.** That is not §5's
+  promise kept; it is a wobble made smaller. The reason is visible in the first table: the two
+  checks nearest a coin flip carry 16 of the 99 points between them, and `prd-15`'s condition moves
+  6 more, and majority voting converges slowly exactly where a judgment is genuinely balanced.
+  **Sampling noise is real and is not the whole story** — which retires the ticket's original
+  hypothesis in both directions, since neither a temperature nor more thinking was ever going to
+  fix it.
+
+  **Then probes, gated on the golden set.** Majority vote makes the number repeatable; probes make
+  it right; and the second cannot be measured against a baseline that still moves 14 points. The
+  order is T2.8, then the golden-set harness that can grade a change to the checks, then probes for
+  the five sufficiency checks — `prd-12`, `prd-14`, `prd-16`, `prd-18`, `prd-19` — where the
+  ambiguity actually lives.
+
 T2.4 — the meter, and what it expands into: `/i/<key>` renders the artifact's latest run as §8's
   8h meter with its mono-readout percentage, opening into the canonical view of that run — every
   check in pack order, passes included, each failure carrying the quote T2.3 verified, and the
@@ -1051,6 +1186,19 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
   left/right-flanking rule a lone content asterisk fails — it is not the whole of that rule, and what
   carries the rest is protecting code spans. A general markdown parser is still a bigger dependency
   than the problem. Anyone widening this brings a count, not a format reference.
+- **A pinned effort changes verdicts and leaves §5's cache key untouched — the same hole 0010
+  closed for the renderers.** `PROTOCOL_VERSION` is a digest over `PROTOCOL` plus the three
+  renderers, all of `prompt.ts`. `SCORER_EFFORT` is not in it and cannot be: it is a request
+  parameter, not assembled context. But it moves the number exactly as a renderer edit does, so **a
+  run stored before the pin and a run stored after it are not comparable, and nothing marks them
+  apart** — the same artifact version, pack, pack version and protocol version, so §5's cache will
+  serve one to the other. That is the defect migration 0010 was written to close one layer up, in a
+  new layer: 0010 caught that "everything that reaches the model is versioned" had stopped at
+  `PROTOCOL` and missed `renderCheck`, `renderPack` and `renderArtifact`; this catches that it also
+  misses everything that *shapes how* the model answers rather than what it reads. Whoever writes
+  the fix should find both entries together, and should decide whether the stamp covers the request
+  parameters or whether the cache key grows a second component. **Reported, not fixed** — T2.7 was a
+  measurement ticket, and moving the stamp would have invalidated the measurement it was taking.
 - **An over-long answer is compliance, not corruption.** `gap.evidence` caps at 2000 characters and
   `scoring_check_result.quote` at 2000; nothing bounded a note or a quote before they got there, so
   a model that answered at length aborted the write transaction on a CHECK — throwing away nineteen
@@ -1536,6 +1684,43 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
     stops it), so this is italic-only, and no artifact in the corpus wraps inside an italic span.
     **The trigger is a rejection whose quote and source differ only in wrapping** — the same trigger
     as q25, and the same place it would show up, so whichever arrives first should look at both.
+
+28. **`scheduleRetry` crashed on a real retryable failure, and I could not reproduce it in
+    isolation.** T2.7's raised-`max_tokens` attempts failed as `unavailable`, which is retryable, so
+    `run.ts` called `scheduleRetry` — and that threw
+    `TypeError [ERR_INVALID_ARG_TYPE]: The "string" argument must be of type string … Received an
+    instance of Date` from inside postgres.js's `Bind`, at `src/db/queries/scoring.ts:485`. **This
+    is pre-existing** — `scoring.ts` is untouched by T2.7 and was last changed in `9e4371a`. It
+    matters because it is the one path §5 leans on during a provider outage: a retryable failure is
+    supposed to leave `next_scoring_attempt_at` and return a typed `ScoreResult`, and instead it
+    throws past all four failure shapes — the same class of defect T2.3 fixed for `writeRun`.
+
+    **Not diagnosed further, on purpose.** The obvious causes are all ruled out: `retryDelayFor`
+    returns a number for `unavailable`, so the `Date` is valid; and the exact statement shape with a
+    `Date` parameter, against the same column, on a client with the same options, succeeds when run
+    on its own. That leaves connection state or concurrency on the shared `max: 1` client, which is a
+    real investigation and not a measurement ticket's. **The trigger to pick it up is any provider
+    outage**, where it will fire on the path that exists to survive outages.
+
+29. **Open question 25's corner arrived, in twelve runs.** T2.6 accepted that a quote beginning or
+    ending mid-emphasis-span would fail, on the grounds that it needs a model to echo a marker
+    verbatim *and* cut inside the span, and filed the trigger as "a real rejection with an unbalanced
+    marker in the quote". Arm A produced one: `prd-19` quoted
+    `5+ messages from each person** and **spans at least 10 minutes`, whose `**` are space-flanked
+    and so survive the fold, against a source where both spans are balanced and fold away. The run
+    was rejected and nothing was written. **One in twelve is not the vanishing rate q25 assumed**,
+    and it costs a whole run each time. It is still not obviously worth fixing — the alternatives
+    are the ones q25 rejected — but the frequency is now measured rather than guessed, and whoever
+    revisits q25 should start from this number.
+
+30. **T2.8 — self-consistency, then the golden set, then probes.** Recommended by T2.7's
+    measurement and not started there. N=5 samples per scoring run, majority per check and per
+    condition, aggregation in code, all N quotes kept and verified, one run row with the samples
+    beneath it. The full defence of N, the cost and latency shape, and the honest limit — five
+    samples cut the score's spread from 18.7 points to 14.1, which is smaller but is not §5's
+    promise — are in the T2.7 entry above. **Probes come after, gated on the golden set**: majority
+    vote makes the number repeatable, probes make it right, and the second cannot be graded against
+    a baseline that still moves 14 points.
 
 ## On the horizon
 

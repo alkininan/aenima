@@ -11,7 +11,7 @@ import OpenAI from "openai";
 
 import * as anthropic from "@/lib/ai/anthropic";
 import * as openai from "@/lib/ai/openai";
-import { ANTHROPIC_MODELS, OPENAI_MODELS } from "@/lib/ai/router";
+import { ANTHROPIC_MODELS, OPENAI_MODELS, SCORER_EFFORT } from "@/lib/ai/router";
 import type { ResolvedRequest } from "@/lib/ai/types";
 
 /**
@@ -31,6 +31,9 @@ const request: ResolvedRequest = {
   input: "the artifact, which does not",
   jsonSchema: { type: "object", additionalProperties: false, properties: {}, required: [] },
   maxTokens: 512,
+  // The tier-routed shape: no effort, each provider's default. The pinned
+  // shape is asserted separately below.
+  effort: null,
 };
 
 describe("the Claude request", () => {
@@ -245,5 +248,56 @@ describe("what the adapters agree on", () => {
     expect(minimums[ANTHROPIC_MODELS.analysis]).toBe(1024);
     expect(minimums[ANTHROPIC_MODELS.generation]).toBe(512);
     expect(openai.CACHE_MINIMUM_TOKENS).toBe(1024);
+  });
+});
+
+/**
+ * §5's pin, second half — T2.7.
+ *
+ * The ticket that produced this went looking for a sampling temperature behind
+ * the scoring wobble. There isn't one to find: `claude-sonnet-5` rejects
+ * `temperature`, `top_p` and `top_k` with a 400, and the seam was already
+ * running at the only sampling setting the model accepts. `effort` is what
+ * replaced them, and these assertions are what stop it drifting back onto a
+ * caller's request or onto the tier-routed path.
+ */
+describe("the scorer's effort pin", () => {
+  const pinned: ResolvedRequest = { ...request, effort: SCORER_EFFORT };
+
+  it("rides in the output_config Claude already had", () => {
+    const body = anthropic.anthropicBody(pinned);
+
+    expect(body.output_config).toMatchObject({ effort: SCORER_EFFORT });
+    // And the schema it shares that object with is untouched.
+    expect(body.output_config.format.type).toBe("json_schema");
+  });
+
+  it("is spelled reasoning.effort on OpenAI, which is the same pin", () => {
+    // The seam absorbs the difference; nothing above the adapter knows there
+    // was one. Field shape from the installed SDK's `Shared.Reasoning`.
+    expect(openai.openaiBody(pinned)).toMatchObject({ reasoning: { effort: SCORER_EFFORT } });
+  });
+
+  it("is absent, not null, when the path is tier-routed", () => {
+    // `null` has to mean "send nothing" rather than "send null" — a provider
+    // reading an explicit null would not give us its default.
+    expect(anthropic.anthropicBody(request).output_config).not.toHaveProperty("effort");
+    expect(openai.openaiBody(request)).not.toHaveProperty("reasoning");
+  });
+
+  it("sends no sampling parameter on either provider, at any effort", () => {
+    // The load-bearing one. `temperature: 0` on the pinned model is a 400 —
+    // "`temperature` is deprecated for this model" — so a well-meaning later
+    // edit that adds one to buy determinism breaks every scoring run instead.
+    for (const body of [
+      anthropic.anthropicBody(pinned) as Record<string, unknown>,
+      anthropic.anthropicBody(request) as Record<string, unknown>,
+      openai.openaiBody(pinned) as Record<string, unknown>,
+      openai.openaiBody(request) as Record<string, unknown>,
+    ]) {
+      expect(body).not.toHaveProperty("temperature");
+      expect(body).not.toHaveProperty("top_p");
+      expect(body).not.toHaveProperty("top_k");
+    }
   });
 });

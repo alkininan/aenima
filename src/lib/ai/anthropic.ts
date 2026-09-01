@@ -31,6 +31,12 @@ import { NO_USAGE } from "./types";
  * The raw JSON Schema goes over the wire rather than the SDK's `zodOutputFormat`
  * helper and `messages.parse`. One validation path — ours, in `index.ts`, the
  * same for both providers — and no exposure to helper/Zod-version skew.
+ *
+ * 4. **Sampling is not a control surface on these models.** Verified against the
+ *    live API on `claude-sonnet-5`, 2026-09-02: `temperature` at any value but
+ *    1.0 returns 400 "`temperature` is deprecated for this model", as do
+ *    `top_p: 0.1` and `top_k: 1`. Nothing here sends any of the three, and
+ *    nothing should — see `SCORER_EFFORT` in `router.ts` for what replaced them.
  */
 
 /**
@@ -65,6 +71,10 @@ export function anthropicBody(request: ResolvedRequest) {
     ],
     messages: [{ role: "user" as const, content: request.input }],
     output_config: {
+      // §5's pin, on the path that has one. `output_config` already existed for
+      // the schema, so effort costs no new structure. Omitted entirely when
+      // null, which is the tier-routed path taking the provider's default.
+      ...(request.effort === null ? {} : { effort: request.effort }),
       format: {
         type: "json_schema" as const,
         schema: request.jsonSchema,

@@ -2,6 +2,8 @@ import type { z } from "zod";
 
 import type { Database } from "@/db/database.types";
 
+import type { ScorerEffort } from "./router";
+
 /**
  * The seam every AI call in the product goes through — product-spec.md §12.
  *
@@ -207,6 +209,18 @@ export type ResolvedRequest = {
   /** JSON Schema, produced from the caller's zod schema by the seam. */
   jsonSchema: Record<string, unknown>;
   maxTokens: number;
+  /**
+   * How hard the model thinks — `SCORER_EFFORT` on the pinned path, `null`
+   * everywhere else.
+   *
+   * Deliberately absent from `AiRequest`, so this is not something a caller can
+   * pass. It is the same guarantee the model pin has and for the same reason:
+   * §5 pins the scorer, and a per-call knob that moved verdicts would be a
+   * scoring model juggled by whoever wrote the call site. The tier-routed path
+   * sends `null` and gets each provider's default — T2.7 left it alone on
+   * purpose; see the build log for why it is still an open question.
+   */
+  effort: ScorerEffort | null;
 };
 
 /** Raw text plus counts. Validation happens above, in one place, for both. */

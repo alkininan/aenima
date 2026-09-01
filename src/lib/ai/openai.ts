@@ -61,6 +61,15 @@ export function openaiBody(request: ResolvedRequest) {
     // The purpose is enough: the context is the pack material for that purpose,
     // and it is the same string across the calls that reuse it.
     prompt_cache_key: `aenima:${request.purpose}`,
+    // §5's pin, spelled this provider's way — `reasoning.effort` rather than
+    // Anthropic's `output_config.effort`, the same absorption the rest of this
+    // file does. Field shape and the value set read off the installed SDK's own
+    // types (`openai@7.5.0`, `Shared.Reasoning`), which name
+    // none/minimal/low/medium/high/xhigh/max; ours is a subset of that.
+    // **Untested against the live API** — this project has no OpenAI key, so
+    // unlike the Anthropic half nothing here was probed. Recorded in the build
+    // log rather than left to look verified.
+    ...(request.effort === null ? {} : { reasoning: { effort: request.effort } }),
   };
 }
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
 import { callAtTier, callPinned, jsonSchemaOf, validate } from "@/lib/ai/call";
-import { ANTHROPIC_MODELS } from "@/lib/ai/router";
+import { ANTHROPIC_MODELS, SCORER_EFFORT } from "@/lib/ai/router";
 import type {
   AiRequest,
   CallUsage,
@@ -208,6 +208,25 @@ describe("the pinned scorer", () => {
 
     expect(result.tier).toBe("analysis");
     expect(result.ok && result.model).toBe(PINNED);
+  });
+
+  /**
+   * §5's pin has two halves, and this is the second one arriving at the wire.
+   * The adapter tests prove `effort` lands in each provider's body; this proves
+   * the pinned path is what puts it there and the tier-routed path does not.
+   */
+  it("sends the pinned effort, where a tier-routed call sends none", async () => {
+    const { provider, seen } = fakeProvider([ok('{"verdict":"pass"}')]);
+    await callPinned(provider, PINNED, scoring);
+
+    expect(seen[0]?.effort).toBe(SCORER_EFFORT);
+
+    const tiered = fakeProvider([ok('{"verdict":"pass"}')]);
+    await callAtTier(tiered.provider, "routine", { ...scoring, purpose: "classify" });
+
+    // Not "some other effort" — none at all, so the provider's default stands.
+    // T2.7 left the tier path alone deliberately; the build log says why.
+    expect(tiered.seen[0]?.effort).toBeNull();
   });
 
   it("has no tier to pass", () => {

@@ -61,6 +61,62 @@ export function initialScorerModel(provider: ProviderId): string {
 }
 
 /**
+ * The reasoning effort the pinned scorer runs at — §5's pin, second half.
+ *
+ * **There is no sampling parameter to pin, and that is the finding this
+ * constant records.** T2.7 went looking for a loose temperature behind the
+ * scoring wobble and found that the models this project pins to do not accept
+ * one. Probed against the live API on `claude-sonnet-5` with a real key:
+ * `temperature: 0` and `temperature: 0.2` both return 400 —
+ * "`temperature` is deprecated for this model" — as do `top_p: 0.1` and
+ * `top_k: 1`. Only `temperature: 1.0`, the default, is accepted, for backwards
+ * compatibility. Anthropic's reference says the same of everything released
+ * after Opus 4.6. So the seam sending nothing was already running at the only
+ * sampling setting the model has, and "pin the temperature" is not an available
+ * move on this model family.
+ *
+ * `effort` is what replaced it: how much the model thinks, `low` through `max`,
+ * GA and defaulting to `high`. It is not a sampling control and it buys no
+ * determinism — nothing on this model does — but it is the one configuration
+ * surface left that changes how a judgment check is answered, so it belongs
+ * with the model pin for §5's reason: "the scoring model is pinned per
+ * workspace and never juggled". A provider that moved its own default would
+ * otherwise move every score in the product silently, which is precisely the
+ * wobble-without-explanation §5 forbids.
+ *
+ * **Pinned at `high`, today's default, because the rungs above it do not fit.**
+ * T2.7 tried to measure `xhigh` and `max` and could run neither. Effort is
+ * charged against the same `max_tokens` as the answer, so both spend the
+ * scorer's whole 16,000-token ceiling thinking and return truncated JSON —
+ * `schema_invalid`, output exactly 16,000, three attempts for three.
+ *
+ * **The blocker is the wall clock, not the adapter.** The SDK's "Streaming is
+ * required for operations that may take longer than 10 minutes" fires only
+ * where no explicit timeout is set; probed with one, non-streaming accepts
+ * 24,000 and 64,000 without complaint. Anthropic puts `xhigh` at 64,000
+ * max_tokens, which by the SDK's own formula is a half-hour non-streaming call
+ * — and §5's meter re-scores on every edit. A scorer that answers in thirty
+ * minutes is not a lever this product can pull, whatever the adapter does.
+ * Pinning the current default is still worth the line: it is what stops the
+ * number moving on the day the provider's default does.
+ *
+ * A **constant, not a column.** `scorer_model` is a stored column because it is
+ * captured per workspace when a key is set and must not move when this file
+ * moves. No workspace has ever needed a different effort, §5 names no
+ * per-workspace choice, and AGENTS.md rules that an abstraction the spec does
+ * not name is speculation. A column is one migration away the day that changes.
+ *
+ * **Not in `PROTOCOL_VERSION`.** This changes verdicts and leaves §5's cache key
+ * untouched — see docs/build-log.md, which files it beside migration 0010's
+ * renderer gap because it is the same hole.
+ *
+ *   https://platform.claude.com/docs/en/api/messages
+ */
+export type ScorerEffort = "low" | "medium" | "high" | "xhigh" | "max";
+
+export const SCORER_EFFORT: ScorerEffort = "high";
+
+/**
  * §12's one escalation: "a routine-tier output that fails schema validation
  * retries once on mid — robustness, not optimization."
  */

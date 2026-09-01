@@ -16,7 +16,8 @@
     "score:smoke": "tsx --conditions=react-server --env-file=.env.local scripts/score-smoke.ts",
     "score:file": "tsx --conditions=react-server --env-file=.env.local scripts/score-file.ts",
     "lint": "eslint . && prettier --check .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "score:spread": "tsx --conditions=react-server --env-file=.env.local scripts/score-spread.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",

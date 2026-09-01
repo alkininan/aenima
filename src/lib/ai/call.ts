@@ -1,6 +1,7 @@
 import { z } from "zod";
 
-import { ESCALATES_TO, canEscalate } from "./router";
+import { ESCALATES_TO, SCORER_EFFORT, canEscalate } from "./router";
+import type { ScorerEffort } from "./router";
 import type {
   AiFailure,
   AiRequest,
@@ -98,6 +99,7 @@ async function attempt<T>(
   model: string,
   request: AiRequest<T> | ScorerRequest<T>,
   jsonSchema: Record<string, unknown>,
+  effort: ScorerEffort | null,
 ): Promise<Attempt<T>> {
   const response = await provider.send({
     model,
@@ -106,6 +108,7 @@ async function attempt<T>(
     input: request.input,
     jsonSchema,
     maxTokens: request.maxTokens,
+    effort,
   });
 
   if (!response.ok) return { ok: false, failure: response.failure, usage: response.usage };
@@ -142,7 +145,7 @@ export async function callAtTier<T>(
   const jsonSchema = jsonSchemaOf(request.schema);
   const model = provider.modelFor(tier);
 
-  const first = await attempt(provider, model, request, jsonSchema);
+  const first = await attempt(provider, model, request, jsonSchema, null);
   if (first.ok) {
     return {
       ok: true,
@@ -172,7 +175,7 @@ export async function callAtTier<T>(
 
   const escalatedTier: Tier = ESCALATES_TO;
   const escalatedModel = provider.modelFor(escalatedTier);
-  const second = await attempt(provider, escalatedModel, request, jsonSchema);
+  const second = await attempt(provider, escalatedModel, request, jsonSchema, null);
   const usage = addUsage(first.usage, second.usage);
 
   if (second.ok) {
@@ -229,7 +232,7 @@ export async function callPinned<T>(
   request: ScorerRequest<T>,
 ): Promise<CallOutcome<T>> {
   const jsonSchema = jsonSchemaOf(request.schema);
-  const only = await attempt(provider, pinnedModel, request, jsonSchema);
+  const only = await attempt(provider, pinnedModel, request, jsonSchema, SCORER_EFFORT);
 
   if (only.ok) {
     return {
