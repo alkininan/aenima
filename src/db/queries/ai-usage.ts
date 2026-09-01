@@ -118,7 +118,7 @@ export async function listUsage(workspaceId: string, since: Date): Promise<Usage
     select tier, model, rate_card, actor_user_id, escalated_from,
            uncached_input_tokens, cache_read_tokens, cache_write_tokens, output_tokens
       from ai_usage
-     where workspace_id = ${workspaceId} and occurred_at >= ${since}
+     where workspace_id = ${workspaceId} and occurred_at >= ${since.toISOString()}
      order by occurred_at desc
   `;
 

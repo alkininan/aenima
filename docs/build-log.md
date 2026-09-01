@@ -294,55 +294,51 @@ T2.7 — how much of the wobble is sampling. **A measurement ticket, and the mea
   going to test has already been tested: **Haldar and Hockenmaier (2025) find chain-of-thought does
   not significantly improve self-consistency in LLM judges.** More thinking was the wrong lever.
 
-  **The recommendation is T2.8 — self-consistency, and the numbers say what it will and will not
-  buy.** N samples per scoring run, majority per check *and* per condition, aggregation in code
-  (§12's code node law: a majority is arithmetic, not judgment), all N quotes on a failing check
-  kept and each verified by the fabrication guard, and one `scoring_run` row with N samples beneath
-  it so §5's cache key is unchanged — the run is still one artifact version × pack × pack version ×
-  protocol version, and the samples are what it is made of rather than a second row to reconcile.
-  Precedent: majority-vote aggregation (arXiv 2510.27106) and atomic decomposition of judgments
-  (arXiv 2603.00077).
+  **The recommendation is T2.8 — probes, and the data puts them first rather than second.** The
+  first draft of this entry had it the other way round: majority vote to make the number
+  repeatable, then probes to make it right. The numbers say the reverse.
 
-  **N = 5, and the defence comes from arm A's own per-check rates rather than a rule of thumb.**
-  Taking each moving check's observed majority share as its rate, and asking how often two
-  *aggregated* runs disagree on that check:
+  Take each moving check's observed majority share as its rate and ask how often two *aggregated*
+  runs would still disagree on that check:
 
-  | check | majority share | N=1 | N=3 | **N=5** | N=9 |
+  | check | majority share | N=1 | N=3 | N=5 | N=9 |
   |---|---|---|---|---|---|
-  | `prd-14` | 10/11 | .165 | .045 | **.013** | .001 |
-  | `prd-12`, `prd-16` | 9/11 | .298 | .159 | **.086** | .026 |
-  | `prd-18`, `prd-19` | 8/11 | .397 | .298 | **.225** | .128 |
-  | `prd-15`'s condition | 7/11 | .463 | .420 | **.382** | .315 |
+  | `prd-14` | 10/11 | .165 | .045 | .013 | .001 |
+  | `prd-12`, `prd-16` | 9/11 | .298 | .159 | .086 | .026 |
+  | `prd-18`, `prd-19` | 8/11 | .397 | .298 | .225 | .128 |
+  | `prd-15`'s condition | 7/11 | .463 | .420 | .382 | .315 |
 
-  N=5 is where the cost curve and the benefit curve cross: it removes most of the disagreement on
-  the checks that were nearly stable already, and 5× cost is $0.34 and — **run in parallel** — the
-  latency of the slowest of five calls rather than five times one, so ~60–105s against arm A's
-  ~59s. N=9 buys another few points for 9× and its own rate-limit problem.
+  **Voting fixes the checks that were nearly stable already and cannot fix the ones that are not.**
+  `prd-18` and `prd-19` sit near a coin flip, and majority voting converges slowest exactly where a
+  judgment is genuinely balanced: five samples still leave them disagreeing 22% of the time, and
+  nine leave 13%. Simulating the whole score from the same rates — the simulation reproduces arm
+  A's observed 8.6–27.3 at N=1, which is what makes it worth quoting — five samples move the 95%
+  interval from 18.7 points wide to 14.1, and nine to 12.1. **Five times the cost to shrink a
+  wobble by a quarter, with the ambiguity still there underneath.**
 
-  **What N=5 does not buy, and this is the part to read before funding it.** Simulating the whole
-  score from those same rates — the simulation reproduces arm A's observed 8.6–27.3 at N=1, which
-  is what makes it trustworthy — majority voting moves the 95% score interval like this:
+  Two of the five unstable checks being coin flips is the finding: a coin flip is not sampling
+  noise around a settled answer, it is the scorer having no settled answer to be noisy about. That
+  is what a probe addresses and what a vote cannot. **So T2.8 is probes** for the five sufficiency
+  checks — `prd-12`, `prd-14`, `prd-16`, `prd-18`, `prd-19` — and majority vote is **held in
+  reserve for the rare flippers**, where the same table says it is cheap and effective: at N=5 it
+  removes 96% of `prd-14`'s disagreement and 71% of `prd-12`'s.
 
-  | N | 95% of runs land in | width |
-  |---|---|---|
-  | 1 | 8.6 – 27.3 | 18.7 |
-  | 3 | 11.1 – 27.3 | 16.2 |
-  | **5** | **13.1 – 27.3** | **14.1** |
-  | 9 | 15.2 – 27.3 | 12.1 |
+  **Probes do not need the golden set to be measurable.** That was the other half of the first
+  draft's mistake. `pnpm score:spread` measures reliability directly — spread, per-check states,
+  denominator — on any document, with no labels and no answer key, because it asks whether the
+  scorer agrees with *itself* rather than whether it is right. A probe that turns `prd-19` from
+  3-pass/8-fail into 11-of-11 either way is visible in that table immediately. The golden set is
+  what would grade whether the new answer is the *correct* one, and it is still wanted, but it
+  gates validity, not measurability, and probes should not wait for it.
 
-  **Five samples cut the headline number's spread from 18.7 points to 14.1.** That is not §5's
-  promise kept; it is a wobble made smaller. The reason is visible in the first table: the two
-  checks nearest a coin flip carry 16 of the 99 points between them, and `prd-15`'s condition moves
-  6 more, and majority voting converges slowly exactly where a judgment is genuinely balanced.
-  **Sampling noise is real and is not the whole story** — which retires the ticket's original
-  hypothesis in both directions, since neither a temperature nor more thinking was ever going to
-  fix it.
-
-  **Then probes, gated on the golden set.** Majority vote makes the number repeatable; probes make
-  it right; and the second cannot be measured against a baseline that still moves 14 points. The
-  order is T2.8, then the golden-set harness that can grade a change to the checks, then probes for
-  the five sufficiency checks — `prd-12`, `prd-14`, `prd-16`, `prd-18`, `prd-19` — where the
-  ambiguity actually lives.
+  If T2.8's probes land and the two coin flips settle, the majority-vote ticket may not be needed
+  at all. If they settle to a stable *wrong* answer, that is what the golden set is for, and it
+  will have a repeatable baseline to be graded against — which is the ordering the first draft got
+  backwards. The shape of the vote ticket, if it comes: N=5, majority per check and per condition,
+  aggregation in code (§12's code node law — a majority is arithmetic, not judgment), all N quotes
+  on a failing check kept and each verified by the fabrication guard, and one `scoring_run` row
+  with the samples beneath it so §5's cache key is unchanged. Precedent: majority-vote aggregation
+  (arXiv 2510.27106) and atomic decomposition of judgments (arXiv 2603.00077).
 
 T2.4 — the meter, and what it expands into: `/i/<key>` renders the artifact's latest run as §8's
   8h meter with its mono-readout percentage, opening into the canonical view of that run — every
@@ -1186,6 +1182,16 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
   left/right-flanking rule a lone content asterisk fails — it is not the whole of that rule, and what
   carries the rest is protecting code spans. A general markdown parser is still a bigger dependency
   than the problem. Anyone widening this brings a count, not a format reference.
+- **`drizzle()` mutates the client it is handed, and the raw `sql` beside it is not the same
+  client afterwards.** `sharedDbClient()` returns `{ db, sql }` from one postgres.js instance, and
+  passing that instance to `drizzle()` replaces its type handlers — so postgres.js's own `Date`
+  serializer stops running on raw tagged templates and a `Date` parameter throws at the wire
+  encoder. Two queries were written against the raw handle with a `Date` and both were broken from
+  the day they shipped: §5's outage queue and §15's spend window. **The lesson is narrower than
+  "convert your dates":** `{ db, sql }` looks like two views of one connection and behaves like
+  two clients with different rules, and the db tests could not see it because they inject a handle
+  that never met `drizzle()`. A fixture that skips the wiring cannot test the wiring.
+
 - **A pinned effort changes verdicts and leaves §5's cache key untouched — the same hole 0010
   closed for the renderers.** `PROTOCOL_VERSION` is a digest over `PROTOCOL` plus the three
   renderers, all of `prompt.ts`. `SCORER_EFFORT` is not in it and cannot be: it is a request
@@ -1685,42 +1691,75 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
     **The trigger is a rejection whose quote and source differ only in wrapping** — the same trigger
     as q25, and the same place it would show up, so whichever arrives first should look at both.
 
-28. **`scheduleRetry` crashed on a real retryable failure, and I could not reproduce it in
-    isolation.** T2.7's raised-`max_tokens` attempts failed as `unavailable`, which is retryable, so
-    `run.ts` called `scheduleRetry` — and that threw
-    `TypeError [ERR_INVALID_ARG_TYPE]: The "string" argument must be of type string … Received an
-    instance of Date` from inside postgres.js's `Bind`, at `src/db/queries/scoring.ts:485`. **This
-    is pre-existing** — `scoring.ts` is untouched by T2.7 and was last changed in `9e4371a`. It
-    matters because it is the one path §5 leans on during a provider outage: a retryable failure is
-    supposed to leave `next_scoring_attempt_at` and return a typed `ScoreResult`, and instead it
-    throws past all four failure shapes — the same class of defect T2.3 fixed for `writeRun`.
+28. **~~`scheduleRetry` crashed on a real retryable failure.~~ Closed — root cause found, both
+    call sites fixed.** `drizzle(sql, { schema })` **mutates the postgres.js client it is handed**,
+    replacing its type handlers, so postgres.js's own `Date` serializer stops running on raw
+    tagged templates from that client and a `Date` reaches the wire encoder unconverted:
+    `The "string" argument must be of type string … Received an instance of Date`. Drizzle's query
+    builder is unaffected — it converts first — so this bites only the `src/db/queries/*` functions
+    that use the raw `sql` from `sharedDbClient()`.
 
-    **Not diagnosed further, on purpose.** The obvious causes are all ruled out: `retryDelayFor`
-    returns a number for `unavailable`, so the `Date` is valid; and the exact statement shape with a
-    `Date` parameter, against the same column, on a client with the same options, succeeds when run
-    on its own. That leaves connection state or concurrency on the shared `max: 1` client, which is a
-    real investigation and not a measurement ticket's. **The trigger to pick it up is any provider
-    outage**, where it will fire on the path that exists to survive outages.
+    **Two of them did.** `scheduleRetry` — §5's outage queue, which throws instead of queueing
+    exactly when a provider is down and nobody is watching — and `listUsage`, §15's spend view over
+    a time window. Both now send `.toISOString()`.
 
-29. **Open question 25's corner arrived, in twelve runs.** T2.6 accepted that a quote beginning or
-    ending mid-emphasis-span would fail, on the grounds that it needs a model to echo a marker
-    verbatim *and* cut inside the span, and filed the trigger as "a real rejection with an unbalanced
-    marker in the quote". Arm A produced one: `prd-19` quoted
-    `5+ messages from each person** and **spans at least 10 minutes`, whose `**` are space-flanked
-    and so survive the fold, against a source where both spans are balanced and fold away. The run
-    was rejected and nothing was written. **One in twelve is not the vanishing rate q25 assumed**,
-    and it costs a whole run each time. It is still not obviously worth fixing — the alternatives
-    are the ones q25 rejected — but the frequency is now measured rather than guessed, and whoever
-    revisits q25 should start from this number.
+    **Why every existing test missed it.** The `.db.test.ts` files inject a transaction handle
+    taken straight from `postgres(...)` and never passed through `drizzle()`, so the mutation that
+    causes this is absent from the fixture. The SQL was real, the schema was real, and the wiring
+    was not. `src/db/date-binding.db.test.ts` builds the client the way `sharedDbClient()` builds
+    it, and asserts the mechanism as well as the two call sites, so the `.toISOString()` calls
+    cannot be tidied away as noise later.
 
-30. **T2.8 — self-consistency, then the golden set, then probes.** Recommended by T2.7's
-    measurement and not started there. N=5 samples per scoring run, majority per check and per
-    condition, aggregation in code, all N quotes kept and verified, one run row with the samples
-    beneath it. The full defence of N, the cost and latency shape, and the honest limit — five
-    samples cut the score's spread from 18.7 points to 14.1, which is smaller but is not §5's
-    promise — are in the T2.7 entry above. **Probes come after, gated on the golden set**: majority
-    vote makes the number repeatable, probes make it right, and the second cannot be graded against
-    a baseline that still moves 14 points.
+29. **~~Open question 25's corner arrived, in twelve runs.~~ Measured at 8%, and the answer is not
+    a fold.** Arm A lost a run to it. Source line 4 of `sample-juno-feature.md`:
+
+    > Scheduling a date is locked until the chat has `**`5+ messages from each person`**` and
+    > `**`spans at least 10 minutes`**`.
+
+    and the model quoted `5+ messages from each person** and **spans at least 10 minutes` — it
+    began inside the first bold span and ended inside the last, dropping the outer markers and
+    keeping the inner ones. Source folds both pairs away; the quote's two markers are unpaired and
+    survive; the run is rejected and nothing is written.
+
+    **There is no safe fold for this, and the reason is not effort.** The tempting rule is to drop
+    a marker that can only open or only close and has no partner — which distinguishes this case
+    from `2**5`, where the run is both-flanking and ambiguous and must be kept. It fails on the
+    corpus: in `/* surfaces */` the closing `*` is preceded by punctuation and followed by a slash,
+    which makes it right-flanking-only and unpaired, so the rule would delete it and rewrite the
+    comment. **That is the unconditional-deletion defect returning under a different name**, which
+    is the test the fix has to pass and does not. The deeper reason is that the two sides carry
+    different information: on the source a marker is resolvable against its partner, and in a
+    *fragment* a lone marker is genuinely ambiguous between syntax and content. Normalizing the
+    needle differently from the haystack would resolve it and is forbidden for the reason T2.6
+    wrote down — two normalizers that agree today are the coincidence-shaped bug this project keeps
+    finding.
+
+    **So the fix is protocol-level, and it should ride with a ticket already paying for a
+    re-baseline.** Telling the scorer to quote whole sentences, or to quote without markdown
+    syntax, costs a `PROTOCOL_VERSION` move and invalidates §5's cache for every stored run — the
+    same arithmetic as open question 23, and the same conclusion: pay it once, inside the ticket
+    that was re-scoring anyway. **T2.8 is that ticket.** Until then the rate is 1 run in 12 on a
+    document with 21 bold spans, and it scales with emphasis density, so a denser document is
+    worse.
+
+    One thing this investigation did fix, because it was a false accept rather than a false
+    reject: reading the rejection showed the italic rule pairing the *leftovers* of a bold run that
+    had not matched, folding `a** and **b` to `a* and *b` — which is what `a* and *b` folds to, so
+    two different texts had one comparison form and a quote of either verified against the other.
+    Italic delimiters are now single asterisks only, a `*` touching another `*` belonging to its
+    run, as CommonMark's maximal delimiter runs already require. Strictly narrower, so it can
+    create no new acceptance.
+
+30. **T2.8 — probes for the five sufficiency checks; majority vote held in reserve.** Recommended
+    by T2.7's measurement and not started there. Arm A's per-check rates say voting fixes the
+    checks that were nearly stable already and cannot fix `prd-18` and `prd-19`, which sit near a
+    coin flip — five samples still leave those disagreeing 22% of the time, for five times the
+    cost, and move the score's spread only from 18.7 points to 14.1. A coin flip is the scorer
+    having no settled answer, which is a probe's problem and not a vote's. **Probes do not wait on
+    the golden set:** `score:spread` measures reliability with no labels and no answer key, because
+    it asks whether the scorer agrees with itself. The golden set grades whether the settled answer
+    is the *right* one and is still wanted — it gates validity, not measurability. Full numbers in
+    the T2.7 entry.
 
 ## On the horizon
 

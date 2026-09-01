@@ -103,7 +103,13 @@
  * - **`**bold**` folds as a matched pair** whose inner edges are non-space,
  *   within a paragraph. Unpaired `**` is left, which is what `2**5` needs.
  * - **`*italic*` folds as a matched pair** whose inner edges are non-space, on
- *   one line.
+ *   one line, and whose delimiters are single asterisks — a `*` touching
+ *   another `*` belongs to a `**` run and is never an italic delimiter.
+ *   CommonMark's delimiter runs are maximal for the same reason. Without that,
+ *   the italic rule pairs the leftovers of a bold run that did *not* match:
+ *   `a** and **b` folded to `a* and *b`, which is what `a* and *b` folds to,
+ *   so two different texts had one comparison form and a quote of either
+ *   verified against the other. Found by T2.7 while reading a real rejection.
  *
  * The non-space inner edge is the half of CommonMark's left/right-flanking rule
  * that a lone content asterisk fails — check the spec rather than guessing our
@@ -139,7 +145,7 @@
  */
 const CODE_SPAN = /(`[^`\n]+`)/gu;
 const BOLD = /\*\*(\S|\S(?:(?!\n[ \t]*\n)[^*])*?\S)\*\*/gu;
-const ITALIC = /\*(\S|\S[^*\n]*?\S)\*/gu;
+const ITALIC = /(?<!\*)\*([^*\s]|[^*\s][^*\n]*?[^*\s])\*(?!\*)/gu;
 
 export function normalizeForQuote(text: string): string {
   return text

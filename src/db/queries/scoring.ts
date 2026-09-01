@@ -474,6 +474,16 @@ export async function writeRun(run: RunToWrite): Promise<string> {
  * would be the error banner §5 refuses, in another form. The one mark it leaves
  * is when to try again, and the call that failed is already in `ai_usage` with
  * its outcome, which is where §15 reads failure rates.
+ *
+ * **The timestamp goes over as an ISO string, and it has to.** `drizzle()`
+ * mutates the postgres.js client it is handed, replacing the type handlers, so
+ * postgres.js's own `Date` serializer no longer runs on a raw tagged template
+ * from that client — a `Date` reaches the wire encoder unconverted and throws
+ * `The "string" argument must be of type string`. Drizzle's query builder is
+ * unaffected because it converts before it gets there; only the raw `sql` from
+ * `sharedDbClient()` is. T2.7 found this the way it would have been found in
+ * production: a provider outage made a retryable failure, and §5's queue path
+ * threw instead of queueing.
  */
 export async function scheduleRetry(
   workspaceId: string,
@@ -483,7 +493,7 @@ export async function scheduleRetry(
   const { sql } = sharedDbClient();
 
   await sql`
-    update artifact set next_scoring_attempt_at = ${nextAttemptAt}
+    update artifact set next_scoring_attempt_at = ${nextAttemptAt.toISOString()}
      where workspace_id = ${workspaceId} and id = ${artifactId}
   `;
 }

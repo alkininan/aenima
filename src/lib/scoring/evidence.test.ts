@@ -330,6 +330,18 @@ describe("normalizeForQuote — the folds, and the order they run in", () => {
     expect(normalizeForQuote("/* surfaces */")).toBe("/* surfaces */");
   });
 
+  it("never reads an asterisk touching another asterisk as an italic delimiter", () => {
+    // A bold run that does not match leaves its asterisks behind, and the
+    // italic rule used to pair *those* — folding `a** and **b` to `a* and *b`,
+    // which is exactly what `a* and *b` folds to. Two different texts, one
+    // comparison form, and a quote of either verifying against the other:
+    // §1 law 3's failure arriving through the guard that prevents it.
+    // CommonMark's delimiter runs are maximal for this reason.
+    expect(normalizeForQuote("the rate a** and **b holds")).toBe("the rate a** and **b holds");
+    expect(normalizeForQuote("the rate a* and *b holds")).toBe("the rate a* and *b holds");
+    expect(quoteOccursIn("the rate a* and *b holds", "the rate a** and **b holds")).toBe(false);
+  });
+
   it("does not pair an italic span across a line break", () => {
     // Consecutive CSS comments, the shape docs/design-spec.md's token block
     // has. The `*` closing one comment is followed by `/` and the `*` opening
