@@ -7,7 +7,7 @@
 ## Current state
 
 **Phase:** 2 — the scoring engine · phases 0 (foundation) and 1 (the spine) complete
-**Next ticket:** T2.5 — the negotiation moves: arguing with the numbers T2.4 renders (§5, §13)
+**Next ticket:** T3.1 — the author/critic loop: two-round limit, check-ID binding (§6)
 **Repo:** github.com/alkininan/aenima
 **Deployed:** yes — **aeni.ma** on Vercel
 
@@ -404,8 +404,9 @@ all — and that policy has no `can_see_product` gate, 0003 dropped `activity_ac
 `action`/`subject_table`/`subject_id` are free text, so the draft let a Viewer append rows naming
 another human, about a product they cannot see, to the append-only ledger §15 calls load-bearing.
 
-**What ships instead.** One disjunct, on `gap_update` only, scoped twice: to `= 'developer'` (open
-question 20 defers the Viewer, so the live case is the Developer-Decider), and to the settle
+**What ships instead.** One disjunct, on `gap_update` only, scoped twice: to `= 'developer'` (it
+shipped deferring the Viewer to open question 20, which has since been answered "the Viewer row
+wins", so the scope is the law and the Developer-Decider is the only case), and to the settle
 transition itself by `app.gap_settle_shape`, a BEFORE UPDATE trigger — the only place in Postgres
 that can compare OLD to NEW, which is where the column half of §14's grant has to live. It grants
 nothing, runs after the policy has already admitted the row, and skips callers with no `auth.uid()`
@@ -1219,26 +1220,35 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
     ever wanted instead, it belongs in a script that loads the pack by version, not in SQL that
     hardcodes rubric prose.
 
-20. **Does a product's named Decider override §14's Viewer row? — yours to answer, and 0013 waits
-    on it.** §14 says "Each product names a **Decider** (config field) who approves spec patches,
-    accepts flags, and can waive walkthroughs", unqualified. §14's table says "Viewer | Read-only |
+20. **~~Does a product's named Decider override §14's Viewer row?~~ Answered: the Viewer row wins.**
+    §14 says "Each product names a **Decider** (config field) who approves spec patches, accepts
+    flags, and can waive walkthroughs", unqualified. §14's table says "Viewer | Read-only |
     Everything else", equally unqualified, and 0001 read it as "Viewer appears in no write policy
-    anywhere". A product that names a Viewer as its Decider puts the two in direct conflict, and
-    which wins is a product decision — 0013's first draft resolved it in SQL, in the Decider's
-    favour, without saying it was resolving anything.
+    anywhere". A product that named a Viewer as its Decider put the two in direct conflict, and
+    0013's first draft resolved it in SQL, in the Decider's favour, without saying it was resolving
+    anything.
 
-    **Until it is answered a Viewer gains no write.** 0013 scopes the appointment disjunct in
-    `gap_update` to `= 'developer'` — the roles §14 already lets write — so a Viewer-Decider stays
-    where 0004 and 0001 left them: `not-permitted` on both tags, no gap write, no ledger row. A db
-    test asserts that on all three routes (the move, a direct UPDATE, a direct `activity` insert).
+    **The ruling: a Viewer named as Decider gets no write, ever. The appointment does not override
+    read-only.** The Decider sentence describes what a Decider *does*; the role table describes what
+    a role *may do*. The table is the narrower and more absolute of the two — "Read-only. Everything
+    else." — and a per-product config field must not be able to silently grant a workspace-level
+    write power. 0013's `= 'developer'` scope on the `gap_update` disjunct is therefore the shipped
+    law rather than a holding position, and the db test that refuses a Viewer-Decider on all three
+    routes (the move, a direct UPDATE, a direct `activity` insert) is pinning a rule and not a
+    deferral. `activity_insert` never needs the disjunct and the functions never need a SECURITY
+    DEFINER half, so 0012's corrected "definer can only subtract" comment has no successor to warn.
 
-    Answering "the appointment wins" costs one enum literal in that policy **and a new argument for
-    the ledger**: `activity_insert` would then need a Viewer-Decider to write `gap.accepted`, which
-    it must go on refusing by every other route, so the functions would need a SECURITY DEFINER half
-    they do not need today. That argument has to be made fresh — 0012's "definer can only subtract,
-    it is consumed as `AND NOT (...)`" is the reasoning that stopped holding the moment a definer
-    predicate became a positive disjunct, and 0012's comment has been corrected to say so.
-    Answering "the Viewer row wins" costs nothing and closes this.
+    **The real fix is that the configuration should not exist — and that belongs to Phase 6.**
+    Refusing a Viewer at *assignment* time is better than honouring the refusal at write time,
+    because a product whose named Decider cannot decide is a silently broken product: §14's fallback
+    ("removal or absence falls back to the Owner automatically — handover never blocks on a missing
+    human") covers an *absent* Decider, not a present one who is powerless. Phase 6 owns roles and
+    membership, so the assignment-time refusal is that ticket's: either the Decider picker excludes
+    Viewers, or demoting a member to Viewer clears every Decider field naming them. Until it ships,
+    the misconfiguration is possible to create and inert when used.
+
+    §14 is being patched to carry the law where people read it rather than leaving it in a policy;
+    that edit is the owner's, in the doc sweep, not this ticket's.
 
 21. **A settle written straight at the table carries no ledger row — decide when §2's ledger stops
     being a convention.** §2 requires an `activity` row for every mutating action, and for gaps that

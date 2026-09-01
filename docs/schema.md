@@ -353,9 +353,12 @@ caller is still a member of — joins `gap_update` as one disjunct, beside
 `can_see_product`, which is unchanged and stays *outside* the disjunction so the
 appointment is not a way around per-product visibility.
 
-The disjunct is scoped by role to `= 'developer'`, because §14's Viewer row is
-as unqualified as its Decider sentence and which one wins is build-log open
-question 20 rather than a migration's call. It is scoped again by
+The disjunct is scoped by role to `= 'developer'`, because §14's Viewer row wins
+over the appointment: the Decider sentence says what a Decider does, the role
+table says what a role may do, and a per-product config field must not silently
+grant a workspace-level write. So a Viewer named as Decider gets no write, ever
+— build-log question 20, asked by 0013 and since answered; making the
+configuration uncreatable belongs to Phase 6's roles ticket. It is scoped again by
 `app.gap_settle_shape`, a BEFORE UPDATE trigger: RLS has no column list, so
 "may write this row" and "may settle this gap" are one sentence to a policy, and
 the trigger is the only place that can compare OLD to NEW. A caller who reached

@@ -323,14 +323,17 @@ describe.skipIf(OFFLINE)("accept_gap — §5's third move", () => {
   });
 
   /**
-   * **§14's Viewer row is as absolute as its Decider sentence, and which one
-   * wins is not a migration's call — open question 20.**
+   * **§14's Viewer row beats the appointment — the ruling on open question 20.**
    *
    * "Viewer | Read-only | Everything else", and 0001 read that as "Viewer
    * appears in no write policy anywhere". A product that names a Viewer as its
-   * Decider puts the two in direct conflict. Until it is answered, 0013 scopes
-   * the appointment to the roles §14 already lets write, so a Viewer-Decider
-   * stays exactly where 0004 and 0001 left them.
+   * Decider puts that against §14's Decider sentence, and the row wins: the
+   * sentence says what a Decider *does*, the table says what a role *may do*,
+   * and a per-product config field must not silently grant a workspace-level
+   * write. So 0013's `= 'developer'` scope is the law, this test pins a rule
+   * rather than a holding position, and a Viewer-Decider stays exactly where
+   * 0004 and 0001 left them. Making the configuration uncreatable in the first
+   * place is Phase 6's roles ticket; this is the floor under it.
    *
    * **Asserted on all three routes, because the answer has to hold on the one
    * the surface does not use.** The move returns `not-permitted`; the table
@@ -527,7 +530,7 @@ describe.skipIf(OFFLINE)("accept_gap — §5's third move", () => {
     });
   });
 
-  // §5's reason is the record of why a debt was taken on  // §5's reason is the record of why a debt was taken on, so a blank one is not
+  // §5's reason is the record of why a debt was taken on, so a blank one is not
   // a decision anyone can read later. Refused before the write, so the person
   // gets a field to fill in rather than a constraint violation.
   it("refuses a blank reason without touching the gap or the ledger", async () => {

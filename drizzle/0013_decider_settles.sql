@@ -29,7 +29,8 @@
 --   product, and the Decider   settles both tags
 --   developer, and the Decider settles both tags        ← what this migration adds
 --   product, not the Decider   Should yes, Must 'not-decider'
---   viewer, and the Decider    'not-permitted', both tags — deferred, see below
+--   viewer, and the Decider    'not-permitted', both tags — §14's Viewer row
+--                              beats the appointment; see below
 --   anyone else                'not-permitted', both tags
 --
 -- ============================================================================
@@ -73,30 +74,42 @@
 --
 --      **Stated plainly, because it was asked: no, the functions do not need a
 --      SECURITY DEFINER half.** They stay INVOKER and the two policies keep the
---      last word, exactly as 0012 argued. A definer half would only become
---      necessary if the open question below is answered "the Viewer row wins
---      for everything except the appointment" — because then a Viewer-Decider
---      would need a ledger row that `activity_insert` must go on refusing them
---      by any other route. If that day comes, **the argument for it has to be
---      made fresh.** 0012's justification for definer was "it can only subtract
---      — it is consumed as `AND NOT (...)`, never as a grant", and that clause
---      stopped being true the moment a definer predicate became a positive
---      disjunct in a policy. 0012's comment has been corrected to say so rather
---      than left to be inherited.
+--      last word, exactly as 0012 argued. The one answer to the question below
+--      that would have needed one — a Viewer-Decider who may settle, and so
+--      needs a ledger row `activity_insert` must go on refusing by every other
+--      route — is the answer that did not come back, so nothing here is
+--      provisional. Whoever does reach for definer next has to argue it fresh:
+--      0012's justification was "it can only subtract — it is consumed as
+--      `AND NOT (...)`, never as a grant", and that clause stopped being true
+--      the moment a definer predicate became a positive disjunct in a policy.
+--      0012's comment has been corrected to say so rather than left to be
+--      inherited.
 --
 -- ============================================================================
--- **What is deferred, and why it is deferred rather than decided here.**
+-- **What this deferred, and how it was answered.**
 --
 -- §14's Viewer row — "Read-only | Everything else" — is exactly as unqualified
 -- as its Decider sentence, and 0001 read it as "Viewer appears in no write
 -- policy anywhere". A product that names a Viewer as its Decider puts the two
 -- in direct conflict, and which one wins is a product decision, not a
--- migration's. It is filed as open question 20 in docs/build-log.md.
+-- migration's. This shipped scoping the appointment to the roles §14 already
+-- lets write and filing the conflict as open question 20.
 --
--- Until it is answered, the appointment is scoped to the roles §14 already lets
--- write, which makes the live case the Developer-Decider and leaves a
--- Viewer-Decider exactly where 0004 and 0001 left them: `not-permitted`, no gap
--- write, no ledger row. Deferring costs one enum literal in one policy.
+-- **Answered since, and the answer is the Viewer row: a Viewer named as Decider
+-- gets no write, ever.** The Decider sentence describes what a Decider *does*;
+-- the role table describes what a role *may do*, and the table is the narrower,
+-- more absolute statement. A per-product config field must not silently grant a
+-- workspace-level write power. So `= 'developer'` below is the law and not a
+-- holding position — nothing about it is waiting on anything — and a
+-- Viewer-Decider stays exactly where 0004 and 0001 left them: `not-permitted`,
+-- no gap write, no ledger row.
+--
+-- The configuration itself should not be creatable, which is a **Phase 6**
+-- concern rather than this boundary's: the roles ticket either keeps Viewers out
+-- of the Decider picker or clears the field when a member is demoted. §14's
+-- absence fallback covers a Decider who is *gone*, not one who is present and
+-- powerless, so refusing the assignment is the fix and refusing the write is
+-- only the floor under it.
 --
 -- CLAUDE.md calls product isolation a security boundary. Nothing here crosses
 -- it: `can_see_product` still gates `gap_update` unchanged, and
@@ -170,9 +183,9 @@ $$;--> statement-breakpoint
 -- One policy, widened by exactly one disjunct, and that disjunct scoped twice:
 -- to the role, here — and to the write, by the trigger below.
 --
--- `= 'developer'` rather than "any role", for the reason in the header: the
--- Viewer conflict is open question 20 and answering it in SQL is not this
--- migration's call. `'product'` is absent from the disjunct because the first
+-- `= 'developer'` rather than "any role", for the reason in the header: §14's
+-- Viewer row beats the appointment, so read-only means read-only even for a
+-- product's named Decider. `'product'` is absent from the disjunct because the first
 -- arm already holds it, and `'owner'` because §14 makes the Owner the fallback
 -- Decider rather than an appointee.
 --
@@ -350,7 +363,8 @@ BEGIN
   -- A Viewer the product *does* name passes this gate and is then refused by
   -- `gap_update`, which is the re-read's `not-permitted` — the same sentence,
   -- reached by observation rather than by a second copy of the policy's role
-  -- list. Open question 20 is what decides whether that stays true.
+  -- list. §14's Viewer row beats the appointment, so that is the final answer
+  -- for them and not a temporary one.
   v_decides := app.may_settle_must(v_workspace, v_item);
   v_role    := app.role_in(v_workspace);
 
