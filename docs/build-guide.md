@@ -1,104 +1,159 @@
-# aenima — build guide v1.0
+# aenima — build guide v2.0
 
-How to get from two spec documents to a running product using Claude Code.
+How to run a ticket on aenima with Claude Code.
 
 The method is aenima's own thesis applied to aenima: a validated spec becomes a lean constitution
-plus self-contained ticket packs, each run in a fresh session, each ending in a report-back.
-You are hand-running the loop the platform will eventually automate.
+plus self-contained ticket packs, each run in a fresh session, each ending in a report-back. You
+are hand-running the loop the platform will eventually automate.
+
+**v2.0 is a rewrite, not a revision.** v1.0 was written before ticket 0.1 and proposed a stack, a
+setup script and a set of habits. The stack is now built, the repo exists and is deployed, and
+three phases of tickets have produced rules that no one could have guessed in advance. What follows
+is the build as it stands and what it actually cost to learn.
 
 ---
 
-## 1. Stack (proposal — confirm before ticket 0.1)
+## 1. Stack, as built
 
-| Layer | Choice | Why |
-|---|---|---|
-| Framework | Next.js 16, App Router, TypeScript strict | One deploy target, best agent support, server actions remove most API boilerplate |
-| Styling | Tailwind v4 | The design spec is already written as CSS custom properties; Tailwind v4 consumes them natively |
-| Data + auth | Supabase (Postgres, Auth, Storage) | You already know it from Sociera. Ships passwordless email OTP + Google + Apple. RLS enforces product isolation |
-| ORM | Drizzle | Typed schema in TS, migrations that read like SQL, light enough for an agent to reason about |
-| Jobs | Inngest (or Vercel cron + a `jobs` table) | Scoring runs, polling, nightly sweeps all need durable background work |
-| Tests | Vitest (unit) + Playwright (e2e) | Both scriptable, both easy for the agent to run and fix |
-| Hosting | Vercel | Zero-config for the above |
+| Layer | What shipped |
+|---|---|
+| Framework | Next.js **16.3.1**, App Router, React 19.2.8, TypeScript strict. Server Components by default; `"use client"` only where there is real interactivity |
+| Styling | Tailwind **4.3.3**. Design tokens are CSS custom properties in `src/app/globals.css`; Tailwind consumes them natively and nothing is hardcoded |
+| Data + auth | Supabase — Postgres, Auth, Storage. RLS enabled **and forced** on every table; passwordless email OTP |
+| ORM | Drizzle **0.45.2** / drizzle-kit **0.31.10**, migrations only |
+| Tests | Vitest **4.1.11** in three projects (node, dom, db) + Playwright **1.62.1** |
+| Hosting | Vercel — **aeni.ma** |
 
-Swap any of these before you start; swapping after ticket 1.1 is expensive.
+Jobs are still undecided and deliberately so: Phase 4 owns the scheduler, and building one earlier
+would have meant a cron with nothing to run.
 
----
+**`drizzle-kit push` is prohibited on this project.** The RLS policies live in
+`drizzle/0001_policies.sql` and later hand-written migrations, not in the schema DSL, so push
+cannot see them and plans to `DROP POLICY … CASCADE` every one — deleting the product isolation
+boundary. `db:generate` then `db:migrate`, always. Migrations since 0002 are hand-written for the
+same reason: what they express is a security boundary, and the DSL cannot say it.
 
-## 2. One-time setup
-
-```bash
-mkdir aenima && cd aenima
-git init
-pnpm dlx create-next-app@latest . --typescript --tailwind --app --src-dir --use-pnpm
-mkdir -p docs
-```
-
-Then:
-
-1. Copy the product spec → `docs/product-spec.md`
-2. Copy the design spec → `docs/design-spec.md`
-3. Copy `CLAUDE.md` → repo root
-4. Leave `AGENTS.md` alone — `next dev` writes and re-adds the Next.js agent-rules block
-   there, and CLAUDE.md's last line imports it with `@AGENTS.md`
-5. Add `ae-mark.svg` and the brand PNGs → `public/`; the favicon is `src/app/favicon.ico`
-6. `git add -A && git commit -m "scaffold + specs"`
-7. Open Claude Code in the repo root: `claude`
-
-Do **not** run `/init` — you already have a better constitution than it will generate.
+**Applied migrations are immutable.** The one exception is a comment that has become false, which
+is not a schema change — correct it in place and say that you did. drizzle-kit decides what to
+apply by the journal's `when` against the recorded `created_at`, never by hash, so editing prose in
+an applied file does not re-run it.
 
 ---
 
-## 3. How to run a ticket
+## 2. How to run a ticket
 
-**One ticket, one fresh session.** Start `claude`, paste the ticket, let it finish, commit, then
-`/clear` (or quit and restart) before the next one. A session that has already built three things
-reasons worse about the fourth. This is the single highest-leverage habit in the whole guide.
+**Start Claude Code from the repo root.** Not a preference. `CLAUDE.md`, `AGENTS.md` and
+`.claude/commands/` are discovered at-or-above the working directory and never below it, so a
+session started from the home directory has **no constitution at launch**, acquires it only if
+something happens to attach a project file, loses it again on every compaction, and never registers
+the project's commands at all. Everything through T2.3 was built that way and held up only because
+the tickets carried their own rules in prose.
 
-**Use plan mode for anything structural.** Press `Shift+Tab` to enter plan mode, or start the
-prompt with "plan first, don't write code yet." Read the plan, correct it, then let it build.
-Cheaper to fix a plan than a codebase.
+**One ticket, one fresh session.** Paste the ticket, let it finish, commit, then `/clear` or
+restart. A session that has already built three things reasons worse about the fourth. This is
+still the single highest-leverage habit in the guide.
 
-**Commit after every ticket that passes.** `git commit -m "T1.2 list surface"`. This gives you a
-clean rollback point when a later ticket goes sideways, which it will.
+**Plan first on anything structural.** `Shift+Tab`, or open with "plan first, don't write code
+yet." Read the plan, correct it, then let it build. A plan is cheaper to fix than a codebase.
 
-**Read the report-back.** Every ticket ends with "ACs implemented, tests written, open questions."
-The open questions are the valuable part — they are the spec gaps the agent hit. Answer them
-before moving on, and if the answer changes a rule, edit `CLAUDE.md` so it holds globally.
+**A structural ticket gets a fresh-context review before it is done.** A session that did not write
+the code reads the diff against the spec. **A self-review does not count** — T2.3's passed a diff
+that a cold session then found four real defects in, and every review since has found more:
+T2.4 six, T2.5 six, and T2.5's own migration fix was itself sent back by a second cold read. Budget
+for the review finding something, because it always has.
 
-**When it drifts:** stop, `/clear`, restate the ticket with the specific correction inlined.
-Do not argue with a long session — start a clean one.
+**Three failed corrections on the same fix means the ticket is wrong, not the code.** The loop
+cannot see the plan it came from. Stop, say so, and ask for the ticket to be restated rather than
+attempting a fourth time.
 
-**When context compacts mid-ticket:** tell it to preserve the modified-file list and the test
-commands. Better: keep tickets small enough that this never happens.
+**Answer the report-back's open questions in the spec, not in chat.** Every ticket ends with "ACs
+implemented, tests written, open questions", and the open questions are the valuable part — they
+are the spec gaps the agent hit. If the answer changes a rule, it goes in `CLAUDE.md`, the product
+spec or the design spec, where the next session will read it. A question answered only in a chat
+transcript is a question that gets asked again.
+
+**A stopgap is legal only when the build log records it as an open question with a phase owner.**
+An unrecorded stopgap is a bug. This is also the escape hatch for a fix that is correct but larger
+than the ticket: fix what the ticket names, file the rest with an owner, and leave a test that
+turns red the day it lands.
+
+**When it drifts:** stop, `/clear`, restate the ticket with the correction inlined. Do not argue
+with a long session — start a clean one.
 
 ---
 
-## 4. Build order
+## 3. Rules that keep this from going wrong
+
+1. **Never let it invent a colour, a size, or a piece of copy.** Everything is in the design spec.
+   If a value is not there, stop and ask — improvisation is a bug, not a style choice.
+2. **Never let it add a settable status field.** Status is derived from which artifacts exist and
+   what they score. The product's first law, and the easiest thing for an agent to "helpfully"
+   break.
+3. **Never let it write to an external system without a confirm step.** Agent proposes, human
+   confirms.
+4. **Regenerate `src/db/database.types.ts` with the migration that changed it, not at the next
+   opportunity.** T2.4 found that file two migrations stale, and regenerating it surfaced a *live*
+   bug that had been on screen for a ticket and a half: a closed gap rendering as "Open", telling
+   someone they owed work a run had already found done.
+5. **A test that asserts on the position of a row must order by something the database
+   guarantees.** Inside one transaction `now()` is constant, so `occurred_at` ties and any
+   assertion on "the last row" is a coin flip. Order by a column the server must honour — an id the
+   write returned, not a timestamp and not insertion luck.
+6. **Negative-check every test: reintroduce the defect it names, watch that test — and only that
+   test — go red, revert.** A CSS rule that matches nothing and a mapping that never fires both
+   pass a green suite. Pin the rule, not the pair of numbers that currently satisfies it.
+7. **Ship a walking skeleton before depth, and grow in layers.** Every ticket ends with a working
+   product. Never trade a working product for unfinished complexity.
+8. **Pre-launch, never preserve backward compatibility in code.** No compatibility layers, no
+   fallbacks, no legacy paths — remove the old path in the same change. The database is the one
+   exception, and it goes through migrations.
+
+---
+
+## 4. The ways a green suite has lied here
+
+Negative-checking proves a test *can* fail. It does not prove the test fails only when it should.
+Five distinct shapes have shipped green in this repo, none of them caught by review of the test's
+name:
+
+- **It measured a box instead of a painted glyph.** A layout e2e pinned the label sitting 1px off
+  its value and passed while describing the bug in a comment.
+- **It asserted a substring that the leak it named already satisfied.** The string it searched for
+  was present *because* of the defect, so the test was evidence for the bug.
+- **It asserted a position over a tied sort.** `occurred_at` is constant inside a transaction, so
+  the assertion passed on roughly two runs in three and closed a ticket as green.
+- **Its two rules coincided on the real data.** `prd-20` carries no `appliesWhen` of its own, so
+  "the layer's condition" and "the check's condition" were the same object, and a function reading
+  the wrong one passed every assertion. The fix was a synthetic fixture where the two differ.
+- **It passed an outcome that could not reach the branch it named.** A test called "closes it on a
+  move that landed" passed `outcome={null}`, which is no move at all — so the clause it claimed to
+  cover could be deleted and the test stayed green.
+
+The lesson, once: **a passing test is evidence about the test.** Make it fail on purpose before you
+believe what it says about the code.
+
+---
+
+## 5. Build order
 
 Phases are sequential; tickets inside a phase mostly are too.
 
-**Phase 0 — foundation** (prompts written, below)
-- 0.1 Scaffold, config, folder structure, CI-less quality gates
-- 0.2 Design tokens + primitive components
-- 0.3 Composite components
-- 0.4 Auth + workspace/product/membership
-- 0.5 Form language onto design spec v2.3, OTP responsiveness per v2.4
-- 0.6 Second form-language pass onto design spec v2.5
+**Phase 0 — foundation · complete.** Scaffold and quality gates, design tokens and primitives,
+composites, Supabase + Drizzle with RLS isolation and the three-layer append-only ledger,
+passwordless OTP and first-run bootstrap, and two form-language passes onto design spec v2.3–v2.5.
 
-**Phase 1 — the spine** (prompts written, below)
-- 1.1 Core data model: opportunities, items, artifacts, versions, gaps, decisions, activity
-- 1.2 List surface: three buckets, pipeline strip, item row
-- 1.3 Item page shell: content + chat dock + meter
+**Phase 1 — the spine · complete.** The core data model (opportunities, items, artifacts, versions,
+gaps, decisions, activity), the §13 list surface at `/app` with three buckets and the pipeline
+strip, and the item page at `/i/<key>`.
 
-**Phase 2 — scoring engine** (the heart; get prompts when you arrive)
-- 2.1 Skill-pack format; Feature PRD rubric encoded as data
-- 2.2 AI provider abstraction: BYO key, three tiers, pinned scorer, usage metering
-- 2.3 Scoring run: artifact → checks → evidence, cached per artifact version
-- 2.4 Meter UI wired to real scores, per-check expansion with quoted evidence
-- 2.5 Negotiation protocol: the three typed moves
-- 2.6 Applicability engine + conditional layers
+**Phase 2 — scoring engine · complete.** The skill-pack format with the Feature PRD rubric as data;
+one AI seam with BYO key, three tiers, a pinned scorer and usage metering; the scoring run —
+artifact version in, per-check verdicts with verified quotes out, cached per version; the meter and
+its per-check expansion; and §5's third negotiation move. **2.6 was absorbed** rather than skipped:
+applicability and conditional layers were built inside 2.3, 2.4 and migration 0011, which is
+recorded in the build log so nobody goes looking for the scope.
 
-**Phase 3 — authoring**
+**Phase 3 — authoring · next**
 - 3.1 Author/critic loop with the two-round limit and check-ID binding
 - 3.2 Chat panel: proposals, echo-confirm, decide-later
 - 3.3 Silent test: collect → score everything → meter jumps
@@ -110,6 +165,7 @@ Phases are sequential; tickets inside a phase mostly are too.
 - 4.3 Router: classify → product → type → file, with confidence policy and triage inbox
 - 4.4 Figma read + design hygiene checks + alignment map
 - 4.5 Remaining intake: Slack, Teams, Fireflies, Gmail forward-in, Drive
+- Phase 4 also owns the scheduler that §5's retry field and the nightly sweep are waiting on.
 
 **Phase 5 — handover**
 - 5.1 Backlog refinement
@@ -120,7 +176,8 @@ Phases are sequential; tickets inside a phase mostly are too.
 - 5.6 Development backlog push + completion readback
 
 **Phase 6 — edges**
-- 6.1 Roles and permissions enforcement
+- 6.1 Roles and permissions enforcement — including refusing a Viewer as a product's Decider at
+  assignment time, which §14 now states and only the database currently enforces
 - 6.2 Onboarding: connect AI, connect sources, declare state, watch it reconstruct
 - 6.3 Analytics views
 - 6.4 Daily digest email
@@ -131,17 +188,9 @@ reference real files and are dramatically better than prompts written against an
 
 ---
 
-## 5. Rules that keep this from going wrong
+## 6. Done means
 
-1. **Never let it invent a color or a size.** Everything is in the design spec. If it improvises,
-   that is a bug, not a style choice.
-2. **Never let it add a settable status field.** Status is derived. This is the product's first law
-   and the easiest thing for an agent to "helpfully" break.
-3. **Never let it write to an external system without a confirm step.** Agent proposes, human confirms.
-4. **Ship a walking skeleton before depth.** Phases 0–1 give you something you can click through
-   with fake data. Resist starting the scoring engine early; it is the most interesting part and the
-   part that will eat a week if the surface underneath is not standing.
-5. **Fake data early, real data late.** Every Phase 0–1 ticket builds against fixtures. That keeps
-   the UI honest and testable before any AI call exists.
-6. **When a ticket's report-back raises a spec question, answer it in the spec**, not just in chat.
-   The docs are the source of truth; the codebase is downstream of them.
+`pnpm lint && pnpm typecheck && pnpm test` all pass, and `pnpm e2e` for anything that touches a
+surface. New logic has tests, and each of them has been observed failing. A structural ticket also
+needs the fresh-context review above. Report back as: **ACs implemented, tests written, open
+questions.**
