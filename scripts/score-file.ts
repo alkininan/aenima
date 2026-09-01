@@ -17,9 +17,15 @@
  * **Nothing about the run is special.** Same pack, same `PROTOCOL_VERSION`, same
  * pinned model on the workspace's own key, same `scoreArtifact` the item page
  * calls — the only thing this script does that `score:smoke` does not is choose
- * the document. It creates an item and an artifact version in the seed
- * workspace the way `seed.ts` does, then hands the artifact id to the same
- * function. If the numbers here are wrong they are wrong in the product too.
+ * the document. It writes an artifact version into the seed workspace the way
+ * `seed.ts` does, then hands the artifact id to the same function. If the
+ * numbers here are wrong they are wrong in the product too.
+ *
+ * **One item per file, not one per run.** A file scored twice is two versions of
+ * one artifact — the shape of a document somebody keeps editing — rather than
+ * two items with the same title. The item is matched on its title and on the
+ * artifact having been authored by this script, so a file named after a seeded
+ * item cannot append a version to it.
  *
  * **The input is never committed.** `.gitignore` carries `sample*.md`, so a file
  * named that way stays out of the repository by construction. Anything you feed
@@ -114,33 +120,67 @@ async function main(): Promise<void> {
       process.exit(1);
     }
 
-    const itemId = randomUUID();
-    const artifactId = randomUUID();
+    // One item per file, not one per run. Re-scoring `sample-juno.md` five times
+    // is five versions of one artifact — which is what the thing being modelled
+    // actually is, a document somebody keeps editing — rather than five items
+    // named the same thing. A workspace that fills up one item per experiment is
+    // its own mess, and the seeded list surface stops being readable.
+    //
+    // Matched on title *and* on the artifact having been written by this script:
+    // a file named `Ghost mode.md` must not append a version to the seeded golden
+    // sample. `authored_by_agent` is already the provenance that says who wrote a
+    // version, so this reuses it rather than inventing a marker column.
+    const existing = await db
+      .select({ itemId: item.id, artifactId: artifact.id })
+      .from(item)
+      .innerJoin(artifact, and(eq(artifact.itemId, item.id), eq(artifact.kind, "prd")))
+      .innerJoin(
+        artifactVersion,
+        and(
+          eq(artifactVersion.artifactId, artifact.id),
+          eq(artifactVersion.authoredByAgent, "score:file"),
+        ),
+      )
+      .where(
+        and(
+          eq(item.workspaceId, workspaceId),
+          eq(item.productId, productId),
+          eq(item.title, title),
+        ),
+      )
+      .limit(1);
+
+    const reused = existing.at(0);
+    const itemId = reused?.itemId ?? randomUUID();
+    const artifactId = reused?.artifactId ?? randomUUID();
 
     // One transaction: an item with no artifact is a row nothing can score, and
     // the scorer runs on its own connection so these have to be committed first.
     await db.transaction(async (tx) => {
-      await tx.insert(item).values({
-        id: itemId,
-        workspaceId,
-        productId,
-        opportunityId: null,
-        type: "feature",
-        // Assigned by `app.assign_item_key()`; overwritten whatever is passed.
-        key: "",
-        title,
-        // Left null rather than guessed. §4 assigns flow intent by the same
-        // classification call that proposes the type, and that call is Phase 3 —
-        // an unclassified item is not a "value" item.
-        flowIntent: null,
-      });
+      if (!reused) {
+        await tx.insert(item).values({
+          id: itemId,
+          workspaceId,
+          productId,
+          opportunityId: null,
+          type: "feature",
+          // Assigned by `app.assign_item_key()`; overwritten whatever is passed.
+          key: "",
+          title,
+          // Left null rather than guessed. §4 assigns flow intent by the same
+          // classification call that proposes the type, and that call is Phase 3 —
+          // an unclassified item is not a "value" item.
+          flowIntent: null,
+        });
 
-      await tx.insert(artifact).values({ id: artifactId, workspaceId, itemId, kind: "prd" });
+        await tx.insert(artifact).values({ id: artifactId, workspaceId, itemId, kind: "prd" });
+      }
 
       await tx.insert(artifactVersion).values({
         workspaceId,
         artifactId,
-        // Assigned by trigger; Drizzle needs the column present.
+        // Assigned by trigger; Drizzle needs the column present. On a reused
+        // artifact this is the next version, not another 1.
         versionNo: 1,
         content: { body },
         // A real digest of the real bytes. The cache is keyed per version rather
@@ -161,10 +201,22 @@ async function main(): Promise<void> {
 
     const key = created.at(0)?.key ?? "?";
 
+    // The trigger chose it, so it is read back rather than assumed — on a reused
+    // artifact "v1" would be a lie, and the version is what the cache is keyed on.
+    const versions = await db
+      .select({ versionNo: artifactVersion.versionNo })
+      .from(artifactVersion)
+      .where(eq(artifactVersion.artifactId, artifactId))
+      .orderBy(desc(artifactVersion.versionNo))
+      .limit(1);
+
+    const versionNo = versions.at(0)?.versionNo ?? 1;
+
     console.log(`scoring ${path}`);
     console.log(
       `  ${words.toLocaleString()} words · ${body.length.toLocaleString()} characters` +
-        ` → ${key} "${title}" v1\n`,
+        ` → ${key} "${title}" v${versionNo}` +
+        `${reused ? " (existing item, new version)" : " (new item)"}\n`,
     );
 
     const started = new Date();

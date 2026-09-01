@@ -1349,8 +1349,12 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
       surface that shows one show its conditions beside it. Honest, and it gives up comparing two
       runs of the same document, which is what a golden set is for.
 
-    The rows are gone — `soc-10` and `soc-11` were deleted with the rest of the scratch items — so
-    the table above is the record. Reproducing it is two `pnpm score:file` runs over one file
+    **Both runs are still in the database**, and cannot be removed: `scoring_run`,
+    `scoring_check_result`, `scoring_check_not_asked` and `artifact_version` all carry
+    `app.deny_mutation()` on DELETE, so the append-only law that makes a score interrogable also
+    makes this evidence permanent. The scratch items `soc-10` and `soc-11` were meant to be cleaned
+    up and stay for that reason — see the note under open question 24. The table above is the
+    record either way. Reproducing it from scratch is two `pnpm score:file` runs over one file
     written with an ambiguous safety surface.
 
 23. **Passing checks cite nothing, and the protocol stays as it is until the golden set needs it.**
@@ -1372,6 +1376,32 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
     It is also the ticket that can pay the re-baseline, because re-scoring the golden set is what it
     does anyway. Change the sentence there, in the same change as the harness, and bump
     `PROTOCOL_RELEASE` with it.
+
+24. **Scratch rows in the seed workspace cannot be deleted, and there is no supported reset.**
+    `soc-10` and `soc-11` — two `score:file` experiments over the same throwaway document — were
+    meant to be deleted and cannot be. `scoring_run`, `scoring_check_result`,
+    `scoring_check_not_asked`, `artifact_version`, `activity`, `ai_usage` and `decision` each carry
+    `app.deny_mutation()` on `BEFORE DELETE OR UPDATE`, so the delete fails at the first scoring
+    row: *"scoring_check_result is append-only: DELETE is not permitted"*. The two items, their two
+    runs, 37 check results, 3 not-asked rows and 31 gaps stay in the seed workspace.
+
+    **That is the law working, not a defect.** A score is interrogable because the rows behind it
+    cannot be quietly revised, and §2's ledger holds what happened rather than what someone would
+    prefer had happened. The cost is that a *development* workspace has no eraser, which nobody
+    priced when the triggers went in.
+
+    **Do not reach for `ALTER TABLE … DISABLE TRIGGER`.** It is the same class of act as
+    `drizzle-kit push` dropping the RLS policies: a boundary removed by a convenience, in a
+    database where the boundary is the feature. If these rows ever have to go, the honest route is
+    dropping and rebuilding the environment — `db:migrate` then `db:seed` on an empty database —
+    not switching the guarantee off and on around a `DELETE`.
+
+    Mitigated but not answered: `score:file` now reuses one item per file, so re-scoring a document
+    adds a version rather than an item and the workspace stops growing one row per experiment. That
+    bounds the mess; it does not reverse the part already there. Candidates for the rest, none
+    chosen: a documented `db:reset` that drops the schema and re-migrates, a scratch workspace
+    `score:file` writes to that can be dropped whole, or simply accepting that the seed workspace
+    accumulates and re-seeding a fresh database when it gets noisy.
 
 ## On the horizon
 
