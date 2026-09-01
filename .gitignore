@@ -46,5 +46,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# `pnpm score:file` input. A real product document is somebody's confidential
+# work and this repository is public — scratch files never get committed.
+sample*.md
+
 # Claude Code local settings — machine-specific MCP enablement, not project config.
 .claude/settings.local.json

@@ -383,6 +383,7 @@ pnpm db:migrate    # apply pending migrations to DATABASE_URL
 pnpm db:baseline   # once per environment: record migrations already applied by hand
 pnpm db:seed       # one workspace, two products, three opportunities, eleven items
 pnpm score:smoke   # score the seeded Ghost mode PRD with the workspace's key
+pnpm score:file <path>  # score any markdown file — a real document the scorer has never seen
 ```
 
 The seed is **idempotent**: it finds the workspace by name and stops, and the
