@@ -11,7 +11,7 @@
 **Repo:** github.com/alkininan/aenima
 **Deployed:** yes — **aeni.ma** on Vercel
 
-`docs/design-spec.md` is **v2.15** and `docs/product-spec.md` is **v1.4**, both complete and
+`docs/design-spec.md` is **v2.15** and `docs/product-spec.md` is **v1.5**, both complete and
 closed, and the code matches. v1.4 landed just ahead of T2.2: §12's code node law, and the scope
 a critic objection carries (§6).
 
