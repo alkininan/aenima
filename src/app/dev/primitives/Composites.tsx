@@ -417,7 +417,7 @@ function Composites() {
           0% bar claims it was measured and failed. Everything in the product renders hollow until
           Phase 2 wires scoring; the filled ones below exist only to show the size.
         </p>
-        <div className="grid max-w-[420px] gap-[16px]">
+        <div className="grid max-w-[400px] gap-[16px]">
           <Meter score={null} size={4} label="Row, no score" emptyLabel={METER_EMPTY} />
           <Meter score={null} size={8} label="Item page, no score" emptyLabel={METER_EMPTY} />
           <Meter score={42} size={4} label="Row at 42" emptyLabel={METER_EMPTY} />
@@ -628,7 +628,7 @@ function Composites() {
           ))}
         </Row>
         <Row label="a row standing in for real content">
-          <div className="flex w-full max-w-[420px] items-center gap-[12px]" aria-busy="true">
+          <div className="flex w-full max-w-[400px] items-center gap-[12px]" aria-busy="true">
             <Skeleton shape="circle" className="size-[32px]" />
             <SkeletonText lines={2} className="flex-1" />
           </div>
