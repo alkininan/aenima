@@ -6,7 +6,7 @@
 
 ## Current state
 
-**Phase:** 2 — the scoring engine · phases 0 (foundation) and 1 (the spine) complete
+**Phase:** 3 — authoring · phases 0 (foundation), 1 (the spine) and 2 (the scoring engine) complete
 **Next ticket:** T3.1 — the author/critic loop: two-round limit, check-ID binding (§6)
 **Repo:** github.com/alkininan/aenima
 **Deployed:** yes — **aeni.ma** on Vercel
@@ -212,6 +212,44 @@ T2.4 — the meter, and what it expands into: `/i/<key>` renders the artifact's 
      the product rendered hollow, and a hollow meter has no fill element to animate. T2.4 is the
      first ticket that puts a width on one, so `.meter-fill` and the rule that switches its
      transition off arrived with it.
+
+T2.5 — §5's third negotiation move, "we accept this risk", and the first human mutation of product
+  data in the codebase: an open gap becomes a named person's accepted debt with a required reason,
+  reversibly, and no score moves. `public.accept_gap` and `public.reopen_gap` are SECURITY INVOKER
+  and called over `supabase.rpc()`, so PostgREST's one-transaction-per-request is what makes the gap
+  UPDATE and the `activity` row §2 requires atomic, and `gap_update` and `activity_insert` decide
+  what they may write. Declared outcomes return a status token; only genuine failures raise. A plain
+  `<form action={settleGap}>` in a Server Component, so the item page still has no client island.
+  Migration `0012` — `f8a4b73`.
+
+  A fresh-context review found six, all real: a confirmation rendered inside the disclosure its own
+  outcome closes, everything that speaks about an open Should having to follow it into the
+  expansion, one outcome token serving two moves so the copy named the wrong one, two exits
+  reporting into silence, three tests that could not fail, and three docstrings asserting the
+  opposite of their files — `8163065`.
+
+  The sixth finding was the §14 reading and cost migration `0013`: the appointment is asked before
+  the role table, so a Developer who *is* the product's named Decider settles a Must. **That
+  widening was itself sent back by its own cold read**, which found both defences comparing the new
+  grant against a principal who was not the one being newly admitted. `gap_update` is a whole-row
+  policy, so the disjunct had handed a Decider `tag`, `evidence`, `check_id`, `item_id`, `excluded`
+  and another person's uuid in `resolved_by_user_id` along with the acceptance; `activity_insert`
+  needed no widening at all and its own was worse. 0013 was unwound and reapplied rather than
+  repaired on top of, so what ships is one correct migration: one disjunct on `gap_update` only,
+  scoped by role and again by `app.gap_settle_shape`, a BEFORE UPDATE trigger holding the column
+  half of §14's grant that RLS has nowhere to put — `a5174e9`. Open question 20 came back "§14's
+  Viewer row beats the appointment", making that scope the law rather than a holding position, with
+  the assignment-time refusal handed to Phase 6 — `98fa70e`.
+
+T2.6 — **absorbed, no ticket of its own.** The applicability engine and conditional layers were
+  built inside the three tickets that needed them rather than after: T2.3 decides applicability in
+  the same pass that scores and renormalizes the denominator through T2.1's pure function
+  (`conditions_met` on the run, `19a079f`); T2.4 renders the checks §4 renormalized out as **not
+  asked** with the condition that did not hold, in pack order beside the verdicts (`2714aea`,
+  `9e4371a`); and `0011` gives them a table, `scoring_check_not_asked`, so a run stores what it did
+  not ask instead of the surface re-deriving it from whatever pack ships today (`1e375b7`). Nothing
+  of 2.6's scope is outstanding — recorded here so nobody goes looking for it. **Phase 2 is
+  complete.**
 
 ### T2.4's rulings
 
