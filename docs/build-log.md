@@ -1313,6 +1313,24 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
   Confirm with `/context` (both files under **Memory files**) and `/help` (both commands under
   Custom).
 
+- **Running aenima's own Development backlog on aenima produced six rulings, and product-spec
+  v1.6 carries all six.** The board's own document is `docs/guidelines.md`; the product's is
+  `docs/product-spec.md`. A ticket's status set is named — Backlog · Ready · In progress ·
+  Decision · Review · Done — with Backlog as the proposal state every aenima-written ticket is
+  born in and Backlog→Ready as the one transition aenima never makes for itself, which is law 4
+  expressed as a status rather than a badge. Decision is a ticket state, carrying Question ·
+  Where · Default in the ticket body, *Where* being §8's fault attribution. Each human answer
+  gets exactly one assessment, capped by §6's two rounds, after which aenima stops asking and
+  waits without stopping reading. The version tuple is checked when work starts and drift is
+  surfaced the way §8 surfaces a patch to a signer. The no-orphan rule runs down to the ticket:
+  every acceptance criterion names its test case and every test case names its criterion, before
+  the ticket is pushed. And agent run telemetry — one row per run, for when aenima drives the
+  coding agent itself — is named post-v1, since v1 reads completion back and never runs the
+  agent. **Notion comments stayed read-only ingest, which is what puts the Decision question in
+  the ticket body.** Asking in a comment thread would need the bidirectional Notion surface v1
+  does not have, and would split one ticket's state across two places: aenima writes the question
+  where it writes everything else, and reads the answer from a comment or from a body edit.
+
 ## Open questions
 
 1. Seed content still owed: TR formality register per product, the ~80-term universal loanword
