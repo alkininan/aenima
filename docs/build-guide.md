@@ -115,7 +115,7 @@ with a long session — start a clean one.
 ## 4. The ways a green suite has lied here
 
 Negative-checking proves a test *can* fail. It does not prove the test fails only when it should.
-Five distinct shapes have shipped green in this repo, none of them caught by review of the test's
+Six distinct shapes have shipped green in this repo, none of them caught by review of the test's
 name:
 
 - **It measured a box instead of a painted glyph.** A layout e2e pinned the label sitting 1px off
@@ -130,9 +130,47 @@ name:
 - **It passed an outcome that could not reach the branch it named.** A test called "closes it on a
   move that landed" passed `outcome={null}`, which is no move at all — so the clause it claimed to
   cover could be deleted and the test stayed green.
+- **Its fixture was not built the way production builds it.** Every `.db.test.ts` injects a
+  `postgres()` handle it constructed itself. Production hands that same handle to
+  `drizzle(sql, { schema })` first — and `drizzle()` *mutates* the client, replacing its type
+  handlers, so postgres.js stops serializing a `Date` on a raw tagged template from it. Two
+  queries bound a `Date` that way and threw on every call: §5's outage queue and §15's spend
+  window. Both were broken from the day they shipped and the suite was green over both, because
+  the fixture skipped the one line where the defect lives.
+
+The first five are lies about the assertion. **The sixth is a lie about the world the assertion
+runs in**, and no amount of care about what a test asserts will catch it. The SQL was real, the
+schema was real, the constraints and triggers were real; the client was not.
+
+**The rule: a fixture must be built the way production builds it, or it is testing a system that
+does not exist.** Where a test constructs a dependency by hand, the question is not "is this a
+faithful stand-in" but "what does production do to this object that I am not doing" — and the
+answer has to be *nothing*, or the difference has to be the thing under test. `sharedDbClient()`
+returns `{ db, sql }` from one instance, which looks like two views of a connection and behaves
+like two clients with different rules; a fixture that builds only the `sql` half has quietly
+changed the subject.
+
+**The audit that followed, recorded because a checked "nothing else" is worth having written
+down.** Every raw postgres.js tagged template on a drizzle-wrapped client — six non-test files,
+every interpolated value enumerated — against a probe of what the mutation actually breaks:
+
+- **`Date` is the only type affected.** Verified through a drizzle-wrapped client: `string`,
+  `number`, `boolean`, `null`, `string[]`, `number[]`, a `JSON.stringify(...)` string, `bigint`
+  and `Uint8Array` all bind correctly; only `Date` throws.
+- **Two sites bound one**, `scheduleRetry` and `listUsage`. Both fixed, both now covered by
+  `src/db/date-binding.db.test.ts`, which builds its client the way `sharedDbClient()` does.
+- **The only other non-primitives bound this way are `conditionsMet` (a `string[]`, in `writeRun`)
+  and `JSON.stringify(metadata)` (a string by construction).** Both checked, both fine.
+- **Everything else that touches a `Date` never reaches a raw template.** `seed.ts` and
+  `score-file.ts` go through drizzle's query builder, which converts before the wire;
+  `tables.ts` uses drizzle-orm's own `sql` DDL fragment, which is a different thing entirely.
+
+Nothing else is affected. If a future query binds a `Date` — or any type this probe did not cover —
+into the raw handle, that test file is where it belongs.
 
 The lesson, once: **a passing test is evidence about the test.** Make it fail on purpose before you
-believe what it says about the code.
+believe what it says about the code — and check that the thing it is failing against is the thing
+that ships.
 
 ---
 
