@@ -50,7 +50,9 @@ Only what differs from framework defaults:
 - Never extend scope beyond the ticket.
 - Never invent endpoints, fields, or columns the ticket does not define.
 - Never hardcode a color, size, or piece of copy that the design spec defines.
-- Never let the agent write to an external system without an explicit human confirm step.
+- Never let the agent write to an external system without an explicit human confirm step. That
+  governs aenima's runtime agent; this project's own sessions do write the dev board (Notion ›
+  dev › Admin — task status, Report sections, comments, Runs rows) — `docs/guidelines.md`.
 - Never run `drizzle-kit push` on this project. The RLS policies live in
   `drizzle/0001_policies.sql`, not in the schema DSL, so push does not know they
   exist and plans to `DROP POLICY … CASCADE` all of them — deleting the product

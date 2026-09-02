@@ -15,7 +15,10 @@ export default defineConfig({
         resolve,
         test: {
           name: "node",
-          include: ["src/**/*.{test,spec}.{ts,tsx}"],
+          // scripts/ is in here for the hook guards: they are pure decision functions with
+          // no DOM and no database, and they are the only logic in the repo that lives
+          // outside src/.
+          include: ["src/**/*.{test,spec}.{ts,tsx}", "scripts/**/*.{test,spec}.{ts,mts,mjs}"],
           exclude: ["src/**/*.dom.{test,spec}.{ts,tsx}", "src/**/*.db.{test,spec}.{ts,tsx}"],
           environment: "node",
         },

@@ -1,0 +1,11 @@
+# Gitignored files copied into every worktree Claude Code creates. .gitignore syntax;
+# only files that match AND are gitignored are copied, so nothing tracked is duplicated.
+#
+# A worktree is a fresh checkout, so without this .env.local is absent, src/test/setup-db.ts
+# finds no DATABASE_URL, and the entire `db` vitest project skips — a green suite over an
+# untested half of the repo. It is the only gitignored file the suite reads.
+#
+# Note: processed by worktrees Claude Code creates (--worktree, subagent worktrees, desktop
+# parallel sessions). A hand-run `git worktree add` copies nothing.
+
+.env.local

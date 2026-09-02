@@ -1,4 +1,8 @@
-# aenima — build guide v2.0
+<!-- build-guide.md · v2.1 · in the repo · §2 carries the hooks and the reviewer, §6 the Stop gate.
+     v2.0 was a rewrite rather than a revision: v1.0 was written before ticket 0.1 and proposed a
+     stack, a setup script and a set of habits, all of which the build has since replaced. -->
+
+# aenima — build guide v2.1
 
 How to run a ticket on aenima with Claude Code.
 
@@ -6,10 +10,9 @@ The method is aenima's own thesis applied to aenima: a validated spec becomes a 
 plus self-contained ticket packs, each run in a fresh session, each ending in a report-back. You
 are hand-running the loop the platform will eventually automate.
 
-**v2.0 is a rewrite, not a revision.** v1.0 was written before ticket 0.1 and proposed a stack, a
-setup script and a set of habits. The stack is now built, the repo exists and is deployed, and
-three phases of tickets have produced rules that no one could have guessed in advance. What follows
-is the build as it stands and what it actually cost to learn.
+The stack is built, the repo exists and is deployed, and three phases of tickets have produced
+rules that no one could have guessed in advance. What follows is the build as it stands and what it
+actually cost to learn.
 
 ---
 
@@ -63,6 +66,22 @@ T2.4 six, T2.5 six, T2.5's own migration fix was itself sent back by a second co
 fold that taught T2.3's fabrication guard to read markdown came back with two — one of them the
 guard certifying `25` as a verbatim quote of `2**5`. Budget for the review finding something,
 because it always has.
+
+**The reviewer is a subagent, not a habit.** `.claude/agents/reviewer.md` — invoke it on the diff
+once the work is done. It reads `docs/tickets/<id>.md` and the sections that ticket cites, runs
+`git diff main...HEAD` itself, checks that every criterion has a test naming it and that the report
+says each test was seen red first, runs the suite, and returns `PASS` or numbered findings. It
+cannot edit: `Edit`, `Write` and `NotebookEdit` are denied, so a finding is always a sentence and
+never a commit. Its whole value is that it did not write the code, so give it the diff and let it
+disagree with the summary — a briefing that tells it what is true has thrown away the review.
+
+**The rules that cost something are hooks, not sentences.** `.claude/settings.json` wires two.
+`scripts/hooks/guard.mjs` runs before every `Bash`, `Edit` and `Write`, and refuses `drizzle-kit
+push`, `db:migrate`, a production deploy, a force-push, a merge with `main` checked out, and any
+write to a `.env` file — each with a one-line reason naming where the rule lives. Migrations are a
+human step until T0.8 gives them a Decision-answered path, so a diff that adds one says so and
+waits. `scripts/hooks/gate.mjs` runs on `Stop`; see §6. A rule stated only in `CLAUDE.md` is a rule
+a session can read past, which is why these five moved.
 
 **Three failed corrections on the same fix means the ticket is wrong, not the code.** The loop
 cannot see the plan it came from. Stop, say so, and ask for the ticket to be restated rather than
@@ -234,3 +253,21 @@ reference real files and are dramatically better than prompts written against an
 surface. New logic has tests, and each of them has been observed failing. A structural ticket also
 needs the fresh-context review above. Report back as: **ACs implemented, tests written, open
 questions.**
+
+**The first sentence is enforced, not requested.** The `Stop` hook runs those three commands and
+refuses the stop while any is red, handing back the last 40 lines of whatever failed; red cannot
+close. Two things keep it honest. It fingerprints the working tree — the commit plus the contents
+of every changed and untracked file — and skips the run when nothing has moved since the last
+green, because `Stop` fires at the end of every turn and the suite costs about seventy seconds
+against a hosted Postgres. And three reds in one session release it, which is the
+three-failed-corrections rule wired in: a gate that kept refusing would loop a session against a
+ticket that cannot be satisfied. A released gate is the signal to restate the ticket, not to push
+harder at the code.
+
+Its hook `timeout` is 600s against a ~76s gate, and the gap is deliberate: a hook that times out
+does not refuse, it is simply ignored, so a ceiling near the measurement turns one slow run against
+a hosted Postgres into a silent release. The measurement sets the expectation; it is not the
+budget.
+
+`pnpm e2e` is not in the gate. It needs a running server, and a hook that starts one would be
+deciding on a session's behalf what the session is doing; run it yourself for surface work.
