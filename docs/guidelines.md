@@ -1,4 +1,4 @@
-<!-- guidelines.md · v1.0 · in the repo -->
+<!-- guidelines.md · v1.1 · in the repo · laws cited by name, §9 now carried into the spec -->
 
 # aenima — Dev board guidelines
 
@@ -79,8 +79,9 @@ marks the top of the body *Drafted by pipeline · run R-nnnn*, and proceeds.
 | Spec | text | | H |
 | Status | formula | Planned · Active · Done | F — all tasks Done → Done; any task past Backlog → Active; else Planned |
 
-Body: Objective. Epics are user-visible capabilities, never document sections (§7.5 horizon note):
-slicing by section produces tasks that all touch the same code.
+Body: Objective. Epics are user-visible capabilities, never document sections (§7.5; the slicing
+note is in build-log, On the horizon): slicing by section produces tasks that all touch the same
+code.
 
 ### Roadmap (phases)
 
@@ -116,7 +117,7 @@ You merge to main by hand. The next run detects the merge and writes the row. Yo
 | Duration | number (min) | | M |
 | Model | select | Fable · Opus · Fable→Opus | M — third value means the session fell back |
 | Tokens | number | input + output, cache reads excluded | M |
-| Outcome | select | Done · Decision · Stopped | M — law 5: no "Failed" |
+| Outcome | select | Done · Decision · Stopped | M — "Welcoming, never alarming" (§1): no "Failed" |
 | Findings | number | reviewer findings raised | M |
 
 Written by a script at session end from the local transcript, posted with a Notion integration
@@ -143,7 +144,8 @@ start of every run. Nobody types here.
 | Decision | Ready | M | Your comment assessed as resolving — see §4. No manual override. |
 | Review | Done | M | Next run finds the branch merged into main. Release row written. |
 
-Nothing is ever set backwards by a human. Law 1 applied to the board.
+Nothing is ever set backwards by a human. "Status is derived, never declared" (§1) applied to the
+board.
 
 ---
 
@@ -238,17 +240,17 @@ Criteria means the same thing on a task and on a phase: what must be true to be 
 
 ---
 
-## 9. Carry into the product spec
+## 9. Carried into the product spec (v1.6)
 
-Where this board goes further than §11, and might belong there:
+These six rulings are now in the spec at the sections named:
 
 1. **Decision as a ticket state**, with fault attribution in the comment and one-assessment
-   resolution. §8 has the ceremony version; the backlog has none.
+   resolution. §8 has the ceremony version; the backlog has none (§11).
 2. **Version tuple on the ticket, checked at claim.** §11 lists it as a field; nothing says what
-   happens when the tuple drifts before the ticket runs.
+   happens when the tuple drifts before the ticket runs (§11).
 3. **Agent-created tickets land unconfirmed.** Backlog as the proposal state, Ready as the confirm
-   — law 4 expressed as a status, not a badge.
-4. **Two-round cap applied to comment threads**, not only to authoring sessions.
-5. **Criteria ↔ Tests mapping as a ticket-level "no orphan" rule**, the §7.5 rule one level down.
-6. **Runs as a first-class table.** §15 analytics has no per-run record to build from;
-   recorded under §17 as post-v1.
+   — "Agent proposes, human confirms" (§1) expressed as a status, not a badge (§11 and §8).
+4. **Two-round cap applied to comment threads**, not only to authoring sessions (§11).
+5. **Criteria ↔ Tests mapping as a ticket-level "no orphan" rule**, the same rule one level down
+   (§7.5).
+6. **Runs as a first-class table.** §15 analytics has no per-run record to build from — §17 (v2).
