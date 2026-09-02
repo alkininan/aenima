@@ -1,4 +1,4 @@
-<!-- guidelines.md · v1.1 · in the repo · laws cited by name, §9 now carried into the spec -->
+<!-- guidelines.md · v1.2 · in the repo · §9 states its closed gaps in the past tense -->
 
 # aenima — Dev board guidelines
 
@@ -245,9 +245,9 @@ Criteria means the same thing on a task and on a phase: what must be true to be 
 These six rulings are now in the spec at the sections named:
 
 1. **Decision as a ticket state**, with fault attribution in the comment and one-assessment
-   resolution. §8 has the ceremony version; the backlog has none (§11).
-2. **Version tuple on the ticket, checked at claim.** §11 lists it as a field; nothing says what
-   happens when the tuple drifts before the ticket runs (§11).
+   resolution. §8 had the ceremony version; the backlog had none — §11.
+2. **Version tuple on the ticket, checked at claim.** §11 listed the tuple as a field; nothing
+   said what happened on drift — §11.
 3. **Agent-created tickets land unconfirmed.** Backlog as the proposal state, Ready as the confirm
    — "Agent proposes, human confirms" (§1) expressed as a status, not a badge (§11 and §8).
 4. **Two-round cap applied to comment threads**, not only to authoring sessions (§11).
