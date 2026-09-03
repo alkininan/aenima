@@ -826,6 +826,9 @@ T0.7 — the harness guidelines §5 assumes: a PreToolUse guard (`drizzle-kit pu
   v2.1. Eight cold-review passes, thirty-four findings acted on, one listed disagreement; the
   first pass found the gate releasing after a single refusal. Report in `docs/reports/T0.7.md`
   — `fd16091`
+T0.98 — Smoke A: `scripts/run/README.md`, one paragraph per run step, with `readme.test.mjs`
+  guarding step order, one paragraph each and every script named. The first ticket `/ticket`
+  claimed, drafted from a one-line board body, built, reviewed and closed on its own — `87bc123`.
 T0.99 — Smoke B: the Stop gate's release message reworded to build-guide §6's own sentence, the
   two release tests pinning it as a literal. The first ticket `/ticket` took through a Decision
   and back: the run asked for the wording, the human answered `default`, the next run built it —
