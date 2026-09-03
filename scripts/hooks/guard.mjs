@@ -167,13 +167,14 @@ export function writeTargets(command) {
 /**
  * True when a path lands on a `.env`-family file, whatever directory it sits in.
  *
- * `.env.example` is included, because the ticket says `.env*` and says it without a
- * carve-out. It holds no secret and .gitignore already treats it as the exception, so
- * whether it should be one here is a question for T0.8 rather than a decision to take
- * on the way past.
+ * `.env.example` is the exception, as `.gitignore` has always had it: it is tracked, public
+ * by design and holds placeholders, so a ticket that adds a variable has to be able to
+ * document it. T0.7 refused it because the ticket said `.env*` without a carve-out and
+ * inventing one was not that ticket's call; T0.8 makes the call.
  */
 export function isEnvPath(path) {
-  return basename(path).startsWith(".env");
+  const name = basename(path);
+  return name.startsWith(".env") && name !== ".env.example";
 }
 
 /**
@@ -192,6 +193,35 @@ function isForcePush(tokens) {
           (/^-[a-zA-Z]+$/.test(token) && token.includes("f")),
       )
     );
+  });
+}
+
+/**
+ * True when a refspec names `main` as the branch being written.
+ *
+ * `main`, `+main` (force by refspec), `HEAD:main`, `main:main`, `refs/heads/main` — the
+ * destination is whatever follows the last colon, and a leading `+` is a force marker
+ * rather than part of the name.
+ */
+export function namesMain(token) {
+  const destination = String(token).replace(/^\+/, "").split(":").at(-1);
+  return destination === "main" || destination === "refs/heads/main";
+}
+
+/**
+ * True when a `git push` in the line would write main: either a refspec says so, or the
+ * push carries no refspec at all while main is the branch checked out.
+ */
+function pushesMain(tokens, currentBranch) {
+  return simpleCommands(tokens).some((words) => {
+    const git = gitVerb(words);
+    if (git?.verb !== "push") return false;
+
+    const operands = git.rest.filter((token) => !token.startsWith("-"));
+    if (operands.some(namesMain)) return true;
+
+    // `git push` with a remote at most and no refspec pushes the current branch.
+    return operands.length <= 1 && currentBranch() === "main";
   });
 }
 
@@ -283,9 +313,12 @@ export function decide(input, deps = {}) {
 
   const tokens = tokenize(command);
 
-  // (d) force-push, and merging while main is checked out.
+  // (d) force-push, pushing main, and merging while main is checked out.
   if (isForcePush(tokens)) {
     return "Force-pushing is refused — it rewrites history the remote and every other checkout share. A plain git push is allowed. docs/guidelines.md §5, hard boundaries.";
+  }
+  if (pushesMain(tokens, currentBranch)) {
+    return "Pushing main is refused — a ticket goes to a branch and reaches main through a merge you make. Push the ticket branch instead. docs/guidelines.md §5, hard boundaries.";
   }
   // `merge` the verb, not `merge-base` or `merge-tree` — those are reads, and `merge-base` is
   // the one the reviewer's own `main...HEAD` diff rests on.

@@ -1,8 +1,9 @@
-<!-- build-guide.md · v2.1 · in the repo · §2 carries the hooks and the reviewer, §6 the Stop gate.
+<!-- build-guide.md · v2.2 · in the repo · §2 opens with /ticket, the manual path below it;
+     §2 carries the hooks and the reviewer, §6 the Stop gate.
      v2.0 was a rewrite rather than a revision: v1.0 was written before ticket 0.1 and proposed a
      stack, a setup script and a set of habits, all of which the build has since replaced. -->
 
-# aenima — build guide v2.1
+# aenima — build guide v2.2
 
 How to run a ticket on aenima with Claude Code.
 
@@ -45,6 +46,16 @@ an applied file does not re-run it.
 
 ## 2. How to run a ticket
 
+**Set the task to Ready on the board, then type `/ticket`.** That is the whole of it. One run
+takes the top Ready task, claims it, writes the ticket pack, branches, builds, has the reviewer
+read it cold, reports back into the task body, opens the PR and sets Review. Backlog → Ready is
+the only move left to you (`docs/guidelines.md` §3). If a run stops at Decision it has posted a
+`⟡ ` comment with a Question, a Where and a Default; answer it on the thread and type `/ticket`
+again. T0.9 puts the command on a schedule, and then even the typing goes.
+
+Everything below is the manual path — how to run a ticket by hand, which is still what you do
+when a ticket is too strange to hand over, and still what `/ticket` is doing on your behalf.
+
 **Start Claude Code from the repo root.** Not a preference. `CLAUDE.md`, `AGENTS.md` and
 `.claude/commands/` are discovered at-or-above the working directory and never below it, so a
 session started from the home directory has **no constitution at launch**, acquires it only if
@@ -76,12 +87,13 @@ never a commit. Its whole value is that it did not write the code, so give it th
 disagree with the summary — a briefing that tells it what is true has thrown away the review.
 
 **The rules that cost something are hooks, not sentences.** `.claude/settings.json` wires two.
-`scripts/hooks/guard.mjs` runs before every `Bash`, `Edit` and `Write`, and refuses `drizzle-kit
-push`, `db:migrate`, a production deploy, a force-push, a merge with `main` checked out, and any
-write to a `.env` file — each with a one-line reason naming where the rule lives. Migrations are a
-human step until T0.8 gives them a Decision-answered path, so a diff that adds one says so and
-waits. `scripts/hooks/gate.mjs` runs on `Stop`; see §6. A rule stated only in `CLAUDE.md` is a rule
-a session can read past, which is why these five moved.
+`scripts/hooks/guard.mjs` runs before every `Bash`, `Edit` and `Write`, and refuses a schema push,
+a migration apply, a production deploy, a force-push, a push that names `main` in any refspec
+shape, a merge with `main` checked out, and any write to a `.env` file except the tracked
+`.env.example` — each with a one-line reason naming where the rule lives. Migrations stay a human
+step until T0.9 gives them a Decision-answered path, so a diff that adds one sets Decision and
+waits. `scripts/hooks/gate.mjs` runs on `Stop`; see §6. A rule stated only in `CLAUDE.md` is a
+rule a session can read past, which is why these moved.
 
 **Three failed corrections on the same fix means the ticket is wrong, not the code.** The loop
 cannot see the plan it came from. Stop, say so, and ask for the ticket to be restated rather than

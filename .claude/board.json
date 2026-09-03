@@ -1,0 +1,12 @@
+{
+  "comment": "Notion dev board identity. Ids only — no secrets. docs/guidelines.md §1.",
+  "admin": "3cf79daf-d42e-801d-8c74-e9f09bff4607",
+  "tasks_ds": "193b7d6b-2ea8-4d08-8233-7634b4367f9f",
+  "epics_ds": "7c4b6319-cc2d-4f69-99b6-5f52b6e6fa46",
+  "roadmap_ds": "a2cf8441-8a34-493c-800f-3c9d2fcf8954",
+  "releases_ds": "7a496e25-4972-44d2-8c0b-bc219a8e92d7",
+  "runs_ds": "dff7570e-b726-4d9b-9163-77d29c746a59",
+  "documents": "3cf79daf-d42e-81fc-ac31-f8b94b9e20c2",
+  "guidelines": "3cf79daf-d42e-81a9-8fc0-c661ba302c74",
+  "prefix": "⟡ "
+}

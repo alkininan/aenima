@@ -1,4 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
   decide,
@@ -6,6 +10,7 @@ import {
   mergeState,
   projectState,
   RELEASE_MESSAGE,
+  resolveDir,
   STEPS,
   tail,
 } from "./gate.mjs";
@@ -213,6 +218,44 @@ describe("per-session state in one file", () => {
   it("drops a session's row once its streak is over, so the file does not grow forever", () => {
     const next = { session_id: SESSION, count: 0, greenHash: HASH };
     expect(mergeState(file, next)).toEqual({ greenHash: HASH, sessions: { "session-b": 1 } });
+  });
+});
+
+// TC6 → AC6. The gate tests the checkout the session is in, which in a worktree is `cwd`
+// and never ${CLAUDE_PROJECT_DIR}.
+describe("resolveDir", () => {
+  const root = mkdtempSync(join(tmpdir(), "aenima-gate-"));
+  const worktree = join(root, "wt");
+  const nested = join(worktree, "src", "lib");
+  // Outside `root`, so nothing above it holds a package.json and the fallback is reachable.
+  const elsewhere = mkdtempSync(join(tmpdir(), "aenima-nopkg-"));
+
+  beforeAll(() => {
+    mkdirSync(nested, { recursive: true });
+    writeFileSync(join(worktree, "package.json"), "{}\n");
+    writeFileSync(join(root, "package.json"), "{}\n");
+  });
+  afterAll(() => {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(elsewhere, { recursive: true, force: true });
+  });
+
+  it("takes cwd when it is the package root, not the project directory", () => {
+    expect(resolveDir({ cwd: worktree }, { CLAUDE_PROJECT_DIR: "/somewhere/else" })).toBe(worktree);
+  });
+
+  it("walks up from a subdirectory to the package root above it", () => {
+    expect(resolveDir({ cwd: nested }, { CLAUDE_PROJECT_DIR: "/somewhere/else" })).toBe(worktree);
+  });
+
+  it("stops at the nearest package root, not the outermost", () => {
+    expect(resolveDir({ cwd: nested }, {})).toBe(worktree);
+  });
+
+  it("falls back to the project directory only when cwd names no package at all", () => {
+    expect(resolveDir({ cwd: elsewhere }, { CLAUDE_PROJECT_DIR: "/proj" })).toBe("/proj");
+    expect(resolveDir({}, { CLAUDE_PROJECT_DIR: "/proj" })).toBe("/proj");
+    expect(resolveDir({ cwd: "" }, { CLAUDE_PROJECT_DIR: "/proj" })).toBe("/proj");
   });
 });
 
