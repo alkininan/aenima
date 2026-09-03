@@ -2,9 +2,10 @@
 
 One run is `/ticket` — `.claude/skills/ticket/SKILL.md` — executing guidelines §5 once: one
 run, one task. Everything countable in a step is a script here with a test beside it; the
-skill holds the judgment and nothing else. Every script exports a function — its effects, where it has any, injected so a test stays
-off the repo — and also runs as a command that prints JSON for the skill to read back. `cli.mjs` is the shared helper
-(stdin, `emit`, `isMain`) and is not a step. The step names and numbers below are §5's.
+skill holds the judgment and nothing else. Every script exports a function — its effects,
+where it has any, injected so a test stays off the repo — and also runs as a command that
+prints JSON for the skill to read back. `cli.mjs` is the shared helper (stdin, `emit`,
+`isMain`) and is not a step. The step names and numbers below are §5's.
 
 ## 0 Preflight
 
