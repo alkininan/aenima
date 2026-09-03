@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
  * than none: it reads as complete.
  */
 
-const dir = join(import.meta.dirname);
+const dir = import.meta.dirname;
 const readme = readFileSync(join(dir, "README.md"), "utf8");
 
 /** Guidelines §5, step numbers and names, in order. */
