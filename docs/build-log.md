@@ -826,6 +826,14 @@ T0.7 — the harness guidelines §5 assumes: a PreToolUse guard (`drizzle-kit pu
   v2.1. Eight cold-review passes, thirty-four findings acted on, one listed disagreement; the
   first pass found the gate releasing after a single refusal. Report in `docs/reports/T0.7.md`
   — `fd16091`
+T0.8 — `/ticket`: guidelines §5 as a project skill holding the judgment, with eight run scripts
+  under `scripts/run/` holding everything countable (next id, version drift, merge detection,
+  comment classification, pick-next, branch, migration check, spec sections), each with a test.
+  Guard and gate follow-ups from T0.7's review: `.env.example` excepted, push to main refused in
+  every refspec shape, the gate running in the hook's `cwd`. Reviewer findings tagged Must or
+  Should; guidelines v1.3, build-guide v2.2. The session was interrupted before its close step;
+  report written at the merge from the diff and the two fixture runs, `docs/reports/T0.8.md` —
+  `7136df3`, merged as PR #3, `1dbf9d9`.
 T0.98 — Smoke A: `scripts/run/README.md`, one paragraph per run step, with `readme.test.mjs`
   guarding step order, one paragraph each and every script named. The first ticket `/ticket`
   claimed, drafted from a one-line board body, built, reviewed and closed on its own — `87bc123`.
