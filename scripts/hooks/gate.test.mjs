@@ -4,16 +4,7 @@ import { join } from "node:path";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import {
-  decide,
-  MAX_RED,
-  mergeState,
-  projectState,
-  RELEASE_MESSAGE,
-  resolveDir,
-  STEPS,
-  tail,
-} from "./gate.mjs";
+import { decide, MAX_RED, mergeState, projectState, resolveDir, STEPS, tail } from "./gate.mjs";
 
 const SESSION = "session-a";
 const HASH = "fingerprint-1";
@@ -108,13 +99,20 @@ describe("a red run", () => {
   });
 });
 
+/**
+ * The wording T0.99 fixed, pinned as a literal rather than through RELEASE_MESSAGE: a test that
+ * compares the constant with itself would stay green whatever the constant said.
+ */
+const AGREED_WORDING =
+  "gate released after three reds — restate the ticket rather than push harder at the code";
+
 describe("the three-failed-corrections release", () => {
   it("releases on the third red rather than refusing a fourth time", () => {
     const { runStep } = redAt("test");
     const result = at({ session_id: SESSION, count: MAX_RED - 1, greenHash: null }, HASH, runStep);
 
     expect(result.exit).toBe(0);
-    expect(result.stderr).toBe(RELEASE_MESSAGE);
+    expect(result.stderr).toBe(AGREED_WORDING);
     expect(result.nextState.count).toBe(MAX_RED);
   });
 
@@ -123,7 +121,7 @@ describe("the three-failed-corrections release", () => {
     const result = at({ session_id: SESSION, count: MAX_RED, greenHash: null }, HASH, runStep);
 
     expect(result.exit).toBe(0);
-    expect(result.stderr).toBe(RELEASE_MESSAGE);
+    expect(result.stderr).toBe(AGREED_WORDING);
     expect(ran).toEqual([]);
   });
 
