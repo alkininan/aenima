@@ -1,4 +1,5 @@
-<!-- guidelines.md · v1.2 · in the repo · §9 states its closed gaps in the past tense -->
+<!-- guidelines.md · v1.3 · in the repo · §5 is /ticket as built; §4 names the prefix glyph;
+     §9 states its closed gaps in the past tense -->
 
 # aenima — Dev board guidelines
 
@@ -126,9 +127,11 @@ weight tuning.
 
 ### Documents
 
-Six sub-pages: `product-spec` · `design-spec` · `CLAUDE` · `AGENTS` · `build-guide` · `build-log`.
-Each begins *Mirror of docs/<file> @ <commit> — edit in the repo.* Refreshed from main at the
-start of every run. Nobody types here.
+Seven sub-pages: `product-spec` · `design-spec` · `CLAUDE` · `AGENTS` · `build-guide` ·
+`build-log` · `schema`. The page is headed, verbatim: **Machine-written mirrors of the repo
+documents.** *Each page is refreshed from `main` at the start of every pipeline run and headed
+with the commit it mirrors. The repo is the only editing surface; nothing typed here survives the
+next run.* Nobody types here. The refresh itself is T0.9's; T0.8 does not touch a mirror.
 
 ---
 
@@ -154,10 +157,20 @@ board.
 When a run cannot proceed it sets Decision and posts **one** comment in this shape:
 
 ```
-Question   what cannot be answered with one interpretation
-Where      product-spec §X · design-spec §Y · or: this ticket
-Default    the answer the run would take if you said "default"
+⟡ Question   what cannot be answered with one interpretation
+Where        product-spec §X · design-spec §Y · or: this ticket
+Default      the answer the run would take if you said "default"
 ```
+
+**Every comment the pipeline writes begins with `⟡ `**, and nothing else does. That glyph is how
+a run tells its own voice from yours on a thread it did not start — there is no author field it
+can trust for that. The prefix lives in `.claude/board.json`; a comment posted without it makes
+the next run misread the thread as waiting on you.
+
+**The pipeline never sets a task to Ready without a comment from you that resolves the
+question.** Backlog → Ready is the one human move (§3), and Decision → Ready is the same move
+spelled differently: your answer is the confirmation. A run that set Ready on its own reading
+would be confirming its own proposal.
 
 *Where* is fault attribution (§8): if the gap is in a spec, the answer is a spec patch, not a
 comment. Migrations use the same shape — *Question: apply migration 0013 to Frankfurt? Where: this
@@ -179,32 +192,41 @@ Answers given inside an interactive Code tab session follow the same rule, appli
 
 ## 5. Run protocol
 
-One scheduled run, fresh session, from `~/dev/aenima`, Fable, auto mode, hooks as the boundary.
+One run is `/ticket`, typed by a human from `~/dev/aenima`: fresh session, Fable, auto mode,
+hooks as the boundary. T0.9 puts it on a schedule. Everything countable in the steps below is a
+script under `scripts/run/` with a test; the skill holds the judgment and nothing else.
 
 ```
-0  Preflight    assess Decision comments (§4) · mark merged Review tasks Done and write Release
-                rows · refresh Documents and Guidelines mirrors from main
+0  Preflight    assess Decision comments (§4) · mark merged Review tasks Done (merge-base
+                --is-ancestor) and write Release rows · stop if a task is already In progress
 1  Claim        top Ready by Priority (Must first), then oldest · set In progress · assign ID and
                 Epic if missing · compare Spec versions against repo headers, note drift
 2  Inline       read every cited section · write docs/tickets/<id>.md — the pack the reviewer reads
-3  Plan         plan mode before any file changes · branch t<id>
+3  Branch       branch t<id> off origin/main · plan mode before any file changes · a primary
+                checkout is returned to main on exit, success or not
 4  Build        smallest complete implementation · new logic has tests observed failing first
 5  Review       reviewer subagent, fresh context, reads the ticket file and the diff, not the
-                author's summary · fix findings · re-review · out-of-scope findings → Backlog tasks
+                author's summary · findings are tagged Must or Should · fix every Must and
+                re-invoke, three passes maximum · a Must still standing after the third becomes
+                an open question, Shoulds are recorded · out-of-scope findings → Backlog tasks
                 (Type Fix, Epic inherited)
-6  Migration    if the diff adds a migration file: stop before db:migrate → Decision (§4)
-7  Gate         Stop hook runs pnpm lint && pnpm typecheck && pnpm test; red cannot close
+6  Migration    if the diff adds a migration file: stop → Decision (§4). Acting on the answer
+                is T0.9's; until then a human applies it
+7  Gate         Stop hook runs pnpm lint && pnpm typecheck && pnpm test in the cwd it is
+                handed, not the project dir; red cannot close
 8  Report       write docs/reports/<id>.md → mirror into the body Report section:
                 ACs implemented (each with its test) · tests written (each observed red then
                 green) · open questions · update build-log
-9  Close        commit, push branch → Review · Runs row written by the session-end script
+9  Close        commit, push branch, open the PR → Review · never merge · Runs row written by
+                the session-end script (T0.9)
 ```
 
 One run, one task. The run exits; the next scheduled run takes the next task. Chaining inside a
 session is not done: a session that built three things reasons worse about the fourth.
 
-Hard boundaries, enforced by hooks not prose: no `db:push`, no `db:migrate` without a Decision
-answer, no writes to `.env*`, no `vercel --prod`, no force-push, no merge to main.
+Hard boundaries, enforced by hooks not prose: no schema push, no migration apply, no writes to
+`.env` or `.env.*` (`.env.example` is tracked and excepted), no production deploy, no force-push,
+no push to main in any refspec shape, no merge with main checked out.
 
 ---
 
@@ -217,6 +239,8 @@ answer, no writes to `.env*`, no `vercel --prod`, no force-push, no merge to mai
 - Every Criteria line has a Tests line naming it. No orphans either way.
 - Reference spec by section. The run inlines at claim; the body stays short.
 - Rules carry only what cost something to learn. Route is the model's; destination is yours.
+- Mirror experiments go to a scratch page. Admin is written by the pipeline; a page you are
+  trying something on is not a page it should find.
 
 ---
 
@@ -233,16 +257,18 @@ Criteria means the same thing on a task and on a phase: what must be true to be 
 - Roadmap: Phase 0 Foundation … Phase 6 Edges, dates from the build log where known.
 - Epics: one per completed phase (0–2) holding its tickets as Done rows with commits; Phase 3's
   four tickets as Backlog under `E3.1 Authoring loop`.
-- Tasks: `T-A Setup` (hooks, reviewer subagent, .worktreeinclude, fallback setting, CLAUDE.md
-  carve-out) and `T-B Pipeline` (run prompt, scheduled task, Runs script) — Backlog, bodies to
-  follow.
-- Documents: six pages, headed as mirrors, content synced by T-B's first run.
+- Tasks: `T0.7 Setup` (hooks, reviewer subagent, .worktreeinclude, fallback setting, CLAUDE.md
+  carve-out) — done. `T0.8 Run` (`/ticket`: the protocol as a command, the board reads and
+  writes, the run scripts) — done. `T0.9 Schedule and telemetry` (scheduled task, mirror
+  refresh, Runs rows, stale-run detection, the answered-migration path) — next.
+- Documents: seven pages, headed as mirrors, content synced by T0.9's first run.
 
 ---
 
 ## 9. Carried into the product spec (v1.6)
 
-These six rulings are now in the spec at the sections named:
+These six rulings are now in the spec at the sections named. Sections are cited one way
+throughout this document — `(§N)`, parenthesised, no trailing prose inside the brackets:
 
 1. **Decision as a ticket state**, with fault attribution in the comment and one-assessment
    resolution. §8 had the ceremony version; the backlog had none — §11.

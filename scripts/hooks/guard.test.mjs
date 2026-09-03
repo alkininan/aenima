@@ -71,6 +71,42 @@ describe("rule (d) — force-push and merging on main", () => {
     expect(decide(...bash("git merge origin/main", "t0-7"))).toBeNull();
   });
 
+  // TC5 → AC5, second half. A ticket reaches main through a merge the human makes.
+  it("refuses a push that names main, in every refspec shape", () => {
+    for (const command of [
+      "git push origin main",
+      "git push origin +main",
+      "git push origin HEAD:main",
+      "git push origin main:main",
+      "git push origin refs/heads/main",
+      "git -C /tmp/wt push origin main",
+      "GIT_TRACE=1 git push origin main",
+      "pnpm build && git push origin main",
+    ]) {
+      expect(decide(...bash(command, "t0-8")), command).toContain("Pushing main is refused");
+    }
+  });
+
+  it("refuses a bare push while main is the branch checked out", () => {
+    expect(decide(...bash("git push", "main"))).toContain("Pushing main is refused");
+    expect(decide(...bash("git push origin", "main"))).toContain("Pushing main is refused");
+  });
+
+  it("allows a bare push from a ticket branch", () => {
+    expect(decide(...bash("git push", "t0-8"))).toBeNull();
+    expect(decide(...bash("git push -u origin t0-8", "t0-8"))).toBeNull();
+  });
+
+  it("allows a branch whose name merely contains main", () => {
+    expect(decide(...bash("git push origin maintenance", "t0-8"))).toBeNull();
+    expect(decide(...bash("git push origin main-fix", "t0-8"))).toBeNull();
+  });
+
+  it("allows reading main, which is not writing it", () => {
+    expect(decide(...bash("git fetch origin main", "t0-8"))).toBeNull();
+    expect(decide(...bash("git log origin/main..HEAD", "t0-8"))).toBeNull();
+  });
+
   it("allows git merge-base and friends on main — they read, they do not merge", () => {
     expect(decide(...bash("git merge-base main HEAD", "main"))).toBeNull();
     expect(decide(...bash("git merge-tree HEAD main", "main"))).toBeNull();
@@ -125,6 +161,18 @@ describe("rule (e) — writes to .env files", () => {
 
   it("allows an Edit anywhere else", () => {
     expect(decide(...file("Edit", "src/app/page.tsx"))).toBeNull();
+  });
+
+  // TC5 → AC5, first half. `.env.example` is tracked, public by design and holds
+  // placeholders, so a ticket that adds a variable has to be able to document it.
+  it("allows .env.example, and only that one", () => {
+    expect(decide(...file("Edit", ".env.example"))).toBeNull();
+    expect(decide(...file("Write", "/repo/.env.example"))).toBeNull();
+    expect(decide(...bash("echo KEY= >> .env.example"))).toBeNull();
+
+    expect(decide(...file("Edit", ".env.examples"))).toContain("refused");
+    expect(decide(...file("Edit", ".env.example.local"))).toContain("refused");
+    expect(decide(...file("Edit", ".env.local"))).toContain("refused");
   });
 
   it("refuses every shape of shell write", () => {

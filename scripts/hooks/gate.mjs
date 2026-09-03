@@ -32,7 +32,7 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const STEPS = ["lint", "typecheck", "test"];
@@ -97,16 +97,27 @@ export function decide({ input, state, fingerprint, runStep }) {
 }
 
 /**
- * Where to run. `${CLAUDE_PROJECT_DIR}` deliberately does not follow a worktree while the
- * hook input's `cwd` does, so a session working in a worktree would otherwise have the
- * untouched main checkout tested on its behalf and pass. Prefer `cwd` when it is a package
- * root; fall back to the project directory when Claude has cd'd somewhere below it.
+ * Where to run: the nearest package root at or above the hook's `cwd`.
+ *
+ * `${CLAUDE_PROJECT_DIR}` does not follow a worktree while `cwd` does, so a worktree session
+ * asked about the project directory would have the untouched main checkout tested on its
+ * behalf and pass over code nobody ran. Walking up from `cwd` also survives Claude `cd`-ing
+ * into a subdirectory, which is the case the project directory used to cover.
  */
-function resolveDir(input) {
-  const projectDir = process.env.CLAUDE_PROJECT_DIR || process.cwd();
-  const cwd = input?.cwd;
-  if (typeof cwd === "string" && existsSync(join(cwd, "package.json"))) return cwd;
-  return projectDir;
+export function resolveDir(input, env = process.env) {
+  const start = typeof input?.cwd === "string" && input.cwd !== "" ? input.cwd : null;
+
+  // Walk up from cwd. Claude may have cd'd into a subdirectory, and in a worktree cwd is the
+  // only field that points at the checkout being worked on.
+  for (let dir = start; dir;) {
+    if (existsSync(join(dir, "package.json"))) return dir;
+    const parent = dirname(dir);
+    dir = parent === dir ? null : parent;
+  }
+
+  // Only when cwd names no package at all. ${CLAUDE_PROJECT_DIR} does not follow a worktree,
+  // so preferring it would test the untouched main checkout on a worktree session's behalf.
+  return env.CLAUDE_PROJECT_DIR || process.cwd();
 }
 
 function git(args, cwd) {
