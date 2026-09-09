@@ -8,7 +8,7 @@
  * live test of this ticket, and the override is how it runs. Normal use never sets it.
  *
  * A run in the primary checkout is recorded as such so step 9 can return it to main whatever
- * happens; a run in a worktree leaves the worktree where it is. T0.9 moves runs to worktrees
+ * happens; a run in a worktree leaves the worktree where it is. T0.10 moves runs to worktrees
  * and this distinction goes away with it.
  */
 

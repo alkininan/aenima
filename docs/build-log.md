@@ -1836,7 +1836,9 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
     bodies as data — an unquoted body's `$(…)` and backticks read as the commands they are,
     since the shell runs them. Still past it, by design: `bash file.sh`, `python -c`, `node -e`,
     `dd of=`, `truncate`, an editor, `echo '…' | sh`, `bash -lc '…'` (only the exact token `-c`
-    is read as a nested line), a `#` comment (`git push # not -f` is refused as a force-push),
+    is read as a nested line), `eval "…"`, `xargs pnpm db:push`, `yarn workspace aenima db:push`
+    (`workspace` is not a runner verb the parser knows), a `#` comment (`git push # not -f` is
+    refused as a force-push),
     and a runner option that takes a value and is not in the parser's per-runner list — its
     value would be read as the script and the real script missed. The parser reads command
     lines; it is not a shell, and it stops here.
