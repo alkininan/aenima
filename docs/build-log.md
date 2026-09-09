@@ -841,6 +841,12 @@ T0.99 — Smoke B: the Stop gate's release message reworded to build-guide §6's
   two release tests pinning it as a literal. The first ticket `/ticket` took through a Decision
   and back: the run asked for the wording, the human answered `default`, the next run built it —
   `44459b1`.
+T0.9 — Run fixes, what three live runs taught: the guard parses commands and matches argv, never
+  prose; a run leaves a marker the guard and the next preflight read; a run that dies partway is
+  recovered by the next one with one comment and no human; §4 stops only when a wrong guess is
+  expensive and every comment is plain sentences from one composer; the reviewer runs only the
+  ticket's tests; a report is refused without its red-first record; the sign-in test reads no
+  clock. Guidelines v1.4, build-guide v2.3. Smoke C (T0.97) was the live fixture — `666f152`.
 
 ## Decisions made during the build
 

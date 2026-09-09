@@ -47,6 +47,27 @@ const RUNNERS = new Set(["pnpm", "pnpx", "npm", "npx", "yarn", "bun", "bunx"]);
 /** Runner verbs that sit between the runner and the thing it runs. */
 const RUNNER_VERBS = new Set(["run", "run-script", "exec", "dlx", "x"]);
 
+/**
+ * drizzle-kit's own commands. The verb of a drizzle-kit call is the first operand that is one
+ * of these, wherever a value-taking flag put it: `drizzle-kit --config x push` is a push, and
+ * `drizzle-kit generate --name push` is a generate whose migration happens to be called push.
+ */
+const DRIZZLE_VERBS = new Set([
+  "generate",
+  "migrate",
+  "push",
+  "pull",
+  "studio",
+  "check",
+  "up",
+  "drop",
+  "export",
+  "introspect",
+]);
+
+/** gh's global options that take a value, so `gh pr -R owner/repo merge` still reads as a merge. */
+const GH_VALUE_OPTIONS = new Set(["-R", "--repo"]);
+
 /** Shells whose `-c` string is itself a command line. */
 const SHELLS = new Set(["sh", "bash", "zsh", "dash"]);
 
@@ -363,10 +384,40 @@ export function target(argv) {
     : { name: exe, rest: [] };
 }
 
+/**
+ * What follows `wanted` — a script name or a binary — when the command runs it, directly or
+ * through a package runner; null when it does not. Through a runner the script is found
+ * among the arguments rather than at a fixed position, because a runner flag that takes a
+ * value puts that value where the script was expected: `pnpm --filter aenima db:push` and
+ * `pnpm -C . db:push` both run `db:push`. The cold review of T0.9 found the fixed position
+ * read `aenima` and `.` as the script and let the push through.
+ */
+function invocation(argv, wanted) {
+  const { exe, args } = program(argv);
+  if (exe === wanted) return args;
+  if (!RUNNERS.has(exe)) return null;
+  const at = args.findIndex((token) => !token.startsWith("-") && basename(token) === wanted);
+  return at === -1 ? null : args.slice(at + 1);
+}
+
 /** True when the command runs the `drizzle-kit` verb named, directly or through a runner. */
 function drizzleKit(argv, verb) {
-  const { name, rest } = target(argv);
-  return name === "drizzle-kit" && operands(rest)[0] === verb;
+  const rest = invocation(argv, "drizzle-kit");
+  return rest !== null && operands(rest).find((token) => DRIZZLE_VERBS.has(token)) === verb;
+}
+
+/**
+ * The words of a `gh` call with its options and their values stepped over, so the
+ * subcommand and verb are `words[0]` and `words[1]` wherever `-R owner/repo` sits.
+ */
+function ghWords(rest) {
+  const words = [];
+  for (let i = 0; i < rest.length; i += 1) {
+    const token = rest[i];
+    if (GH_VALUE_OPTIONS.has(token)) i += 1;
+    else if (!token.startsWith("-")) words.push(token);
+  }
+  return words;
 }
 
 /**
@@ -506,20 +557,20 @@ export function decide(input, deps = {}) {
 
   for (const cmd of parse(command)) {
     const { name, rest } = target(cmd.argv);
-    const { exe, args } = program(cmd.argv);
 
     // (a) push rewrites the RLS policies out of existence.
-    if (name === "db:push" || drizzleKit(cmd.argv, "push")) {
+    if (invocation(cmd.argv, "db:push") !== null || drizzleKit(cmd.argv, "push")) {
       return "drizzle-kit push is refused — the RLS policies in drizzle/0001_policies.sql are not in the schema DSL, so push plans to DROP them and take the product isolation boundary with them. Generate a migration with pnpm db:generate instead. CLAUDE.md › Prohibitions.";
     }
 
     // (b) a migration is a schema change a human approves, until T0.10 gives it a path.
-    if (name === "db:migrate" || drizzleKit(cmd.argv, "migrate")) {
+    if (invocation(cmd.argv, "db:migrate") !== null || drizzleKit(cmd.argv, "migrate")) {
       return "Applying a migration is a human step until T0.10 adds the Decision-answered path. Leave the migration in the diff and say it is waiting. docs/guidelines.md §5 step 6.";
     }
 
-    // (c) production deploys are a human step.
-    if (exe === "vercel" && args.some((a) => a.startsWith("--prod") || a === "deploy")) {
+    // (c) production deploys are a human step — `npx vercel --prod` as much as `vercel --prod`.
+    const vercel = invocation(cmd.argv, "vercel");
+    if (vercel !== null && vercel.some((a) => a.startsWith("--prod") || a === "deploy")) {
       return "Deploying to production is a human step. docs/guidelines.md §5, hard boundaries.";
     }
 
@@ -539,8 +590,8 @@ export function decide(input, deps = {}) {
 
     // (f) a pull request merged through the API writes main from any branch. While a run
     // owns the checkout, that is the run merging, which is the one move §3 keeps human.
-    const ghWords = operands(rest);
-    if (name === "gh" && ghWords[0] === "pr" && ghWords[1] === "merge" && runActive()) {
+    const gh = ghWords(rest);
+    if (name === "gh" && gh[0] === "pr" && gh[1] === "merge" && runActive()) {
       return "Merging a pull request is refused while a run is active — .claude/.run-active says a run owns this checkout, and merging to main is the human's move. docs/guidelines.md §5, hard boundaries.";
     }
   }
