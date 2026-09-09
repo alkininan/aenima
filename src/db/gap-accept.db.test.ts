@@ -40,7 +40,6 @@ afterAll(async () => {
 
 type Tx = postgres.TransactionSql;
 
-const INSTANCE = "00000000-0000-0000-0000-000000000000";
 const USERS = {
   owner: "aaaa0000-1111-4000-8000-0000000000a1",
   decider: "bbbb0000-1111-4000-8000-0000000000b2",
@@ -81,9 +80,12 @@ async function actAs(tx: Tx, user: string): Promise<void> {
                              ${JSON.stringify({ sub: user, role: "authenticated" })}, true)`;
 }
 
-/** Back to the owning role, so the test can seed and assert past RLS. */
+/**
+ * Back to the connection's own role — `service_role`, which bypasses RLS — so the test can
+ * seed and assert past the policies. docs/guidelines.md §5, the capability boundary.
+ */
 async function asOwner(tx: Tx): Promise<void> {
-  await tx`select set_config('role', 'postgres', true)`;
+  await tx`select set_config('role', 'service_role', true)`;
   await tx`select set_config('request.jwt.claims', '', true)`;
 }
 
@@ -92,11 +94,7 @@ type World = { workspaceId: string; productId: string; itemId: string };
 /** A workspace with one member per §14 role, and a product whose Decider is named. */
 async function seedWorld(tx: Tx): Promise<World> {
   for (const [who, id] of Object.entries(USERS)) {
-    await tx`
-      insert into auth.users (id, instance_id, aud, role, email, encrypted_password,
-                              email_confirmed_at, created_at, updated_at)
-      values (${id}, ${INSTANCE}, 'authenticated', 'authenticated',
-              ${`${who}@accept.test`}, '', now(), now(), now())`;
+    await tx`select app.seed_user(${id}, ${`${who}@accept.test`})`;
   }
 
   const [ws] = await tx<{ id: string }[]>`
@@ -608,10 +606,7 @@ describe.skipIf(OFFLINE)("accept_gap — §5's third move", () => {
 async function seedWorld2(tx: Tx): Promise<World> {
   const stranger = "ffff0000-1111-4000-8000-0000000000f6";
   await tx`
-    insert into auth.users (id, instance_id, aud, role, email, encrypted_password,
-                            email_confirmed_at, created_at, updated_at)
-    values (${stranger}, ${INSTANCE}, 'authenticated', 'authenticated',
-            'stranger@accept.test', '', now(), now(), now())`;
+    select app.seed_user(${stranger}, 'stranger@accept.test')`;
   const [ws] = await tx<
     { id: string }[]
   >`insert into workspace (name) values ('Theirs') returning id`;
