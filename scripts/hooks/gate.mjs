@@ -39,7 +39,7 @@ export const STEPS = ["lint", "typecheck", "test"];
 export const MAX_RED = 3;
 export const TAIL_LINES = 40;
 export const RELEASE_MESSAGE =
-  "gate released after three reds — restate the ticket rather than push harder at the code";
+  "Three reds in this session, so the gate has stepped aside. That usually means the ticket needs restating rather than the code pushing harder (build-guide §6).";
 
 /** The last `TAIL_LINES` lines of a command's output. */
 export function tail(text) {

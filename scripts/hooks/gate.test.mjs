@@ -100,11 +100,12 @@ describe("a red run", () => {
 });
 
 /**
- * The wording T0.99 fixed, pinned as a literal rather than through RELEASE_MESSAGE: a test that
- * compares the constant with itself would stay green whatever the constant said.
+ * The wording T0.97 settled on (T0.99 fixed the first one), pinned as a literal rather than
+ * through RELEASE_MESSAGE: a test that compares the constant with itself would stay green
+ * whatever the constant said.
  */
-const AGREED_WORDING =
-  "gate released after three reds — restate the ticket rather than push harder at the code";
+const RELEASE_WORDING =
+  "Three reds in this session, so the gate has stepped aside. That usually means the ticket needs restating rather than the code pushing harder (build-guide §6).";
 
 describe("the three-failed-corrections release", () => {
   it("releases on the third red rather than refusing a fourth time", () => {
@@ -112,7 +113,7 @@ describe("the three-failed-corrections release", () => {
     const result = at({ session_id: SESSION, count: MAX_RED - 1, greenHash: null }, HASH, runStep);
 
     expect(result.exit).toBe(0);
-    expect(result.stderr).toBe(AGREED_WORDING);
+    expect(result.stderr).toBe(RELEASE_WORDING);
     expect(result.nextState.count).toBe(MAX_RED);
   });
 
@@ -121,8 +122,21 @@ describe("the three-failed-corrections release", () => {
     const result = at({ session_id: SESSION, count: MAX_RED, greenHash: null }, HASH, runStep);
 
     expect(result.exit).toBe(0);
-    expect(result.stderr).toBe(AGREED_WORDING);
+    expect(result.stderr).toBe(RELEASE_WORDING);
     expect(ran).toEqual([]);
+  });
+
+  // What "friendlier" was taken to mean (T0.97): complete sentences, no dash-joined fragment, no
+  // word from the alarm register, and the rule named where it lives.
+  it("releases in plain sentences that say where the rule lives", () => {
+    const { runStep } = redAt("test");
+    const result = at({ session_id: SESSION, count: MAX_RED - 1, greenHash: null }, HASH, runStep);
+
+    for (const sentence of result.stderr.split(/(?<=\.)\s+/))
+      expect(sentence.endsWith(".")).toBe(true);
+    expect(result.stderr).not.toContain(" — ");
+    expect(result.stderr).not.toMatch(/violation|error|fail/i);
+    expect(result.stderr).toContain("build-guide §6");
   });
 
   it("does not release a different session that inherited the count", () => {

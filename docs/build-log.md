@@ -850,6 +850,12 @@ T0.9 — Run fixes, what three live runs taught: the guard parses commands and m
   Fix rows the fixture runs filed — the sign-in timeout, the skill's step 8 — closed with it.
   Three cold-review passes, the first two each finding a way a word could sit where the
   parser expected its operand — `666f152`, review fixes on the branch.
+T0.97 — Smoke C: the Stop gate's release message in plain sentences that say what happened and
+  where the rule lives, one test pinning the register. The first ticket `/ticket` took through §4
+  as it now reads: "friendlier" was not written down anywhere, but a hook's output is a developer
+  surface, so the run took a default, said so on the board, and kept going. Also the first stale-run
+  recovery: an In progress row with no marker and no branch, claimed again with one comment —
+  `df9b0a6`.
 
 ## Decisions made during the build
 
