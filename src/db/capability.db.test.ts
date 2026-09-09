@@ -88,6 +88,21 @@ describe.skipIf(OFFLINE)("the pipeline's credential", () => {
     expect(refused?.code).toBe("42501");
   });
 
+  // The two statements drizzle-orm's migrator issues before it reads the ledger
+  // (node_modules/drizzle-orm/pg-core/dialect.js, migrate). `pnpm db:migrate` with this
+  // credential dies on the first of them; drizzle-kit's renderer swallows the message.
+  it("is refused on the migrator's first statement, create schema if not exists", async () => {
+    const refused = await refusal((tx) => tx`create schema if not exists drizzle`);
+    expect(refused?.code).toBe("42501");
+  });
+
+  it("is refused on the migrator's second, create table if not exists in that schema", async () => {
+    const refused = await refusal(
+      (tx) => tx`create table if not exists drizzle.__drizzle_migrations (id serial primary key)`,
+    );
+    expect(refused?.code).toBe("42501");
+  });
+
   it("cannot become postgres", async () => {
     const refused = await refusal((tx) => tx`set local role postgres`);
     expect(refused?.code).toBe("42501");
