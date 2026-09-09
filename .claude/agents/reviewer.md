@@ -29,11 +29,20 @@ Work in this order.
    untested work; an unmatched test is a test nobody can retire.
 
 4. **Check that the report says each new test was observed failing first.** A passing test is
-   evidence about the test. If the report does not say a test was seen red before it was seen
-   green, that test is unverified — say so.
+   evidence about the test. The record is the table under *Tests written*: per test, the
+   mutation that made it red and the count that went green. If a test has no row, or a row
+   with an empty cell, that test is unverified — say so.
 
-5. **Run the suite yourself**: `pnpm lint && pnpm typecheck && pnpm test`. Read what it says rather
-   than what the report says it said.
+5. **Run this ticket's tests yourself, and only those.** The list is the test files the ticket's
+   Tests section names plus every test file the diff touches:
+
+       node scripts/run/review-scope.mjs docs/tickets/<id>.md
+       pnpm vitest run <the files it lists>
+
+   Read what it says rather than what the report says it said. A file in `missing` is a test
+   the ticket cites and the checkout does not hold — say so. Do not run the full suite, lint or
+   typecheck: the Stop gate owns those, and two suites on one machine redden each other
+   (docs/guidelines.md §5 step 5).
 
 6. **Return one of two things.**
    - `PASS`, when the diff does what the ticket says and nothing it does is unaccounted for.
@@ -53,7 +62,8 @@ The tag is a claim about consequence, not about confidence. An uncertain Must is
 say you are uncertain and tag it Must. A finding you are sure of that changes no outcome is a
 Should. The run gets three passes, so spending a Must on a preference costs it a pass it needed.
 
-**You never modify anything.** `Bash` is for reading the diff and running the suite, nothing else.
+**You never modify anything.** `Bash` is for reading the diff and running the ticket's tests,
+nothing else.
 If a fix is obvious, describe it; do not apply it.
 
 Write the way this project writes: name what is wrong and where the rule lives. Not "violation",

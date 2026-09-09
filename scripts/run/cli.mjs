@@ -4,9 +4,10 @@ import { fileURLToPath } from "node:url";
 /**
  * True when this module is the file node was asked to run, rather than one a test imported.
  *
- * Every script here exports a pure function and also runs as a command. Without this the
- * import in a test executes the CLI, which reads stdin and blocks forever — the defect
- * T0.7's gate hook shipped with and its cold review found.
+ * Every script here exports a function — its effects, where it has any, injected so a test
+ * stays off the repo — and also runs as a command. Without this the import in a test
+ * executes the CLI, which reads stdin and blocks forever — the defect T0.7's gate hook
+ * shipped with and its cold review found.
  */
 export function isMain(importMetaUrl) {
   const entry = process.argv[1];

@@ -1,9 +1,11 @@
-<!-- build-guide.md · v2.2 · in the repo · §2 opens with /ticket, the manual path below it;
+<!-- build-guide.md · v2.3 · in the repo · §2 names T0.10 as the schedule and the answered-migration
+     path, and describes a Decision comment in §4's plain sentences.
+     v2.2 · §2 opens with /ticket, the manual path below it;
      §2 carries the hooks and the reviewer, §6 the Stop gate.
      v2.0 was a rewrite rather than a revision: v1.0 was written before ticket 0.1 and proposed a
      stack, a setup script and a set of habits, all of which the build has since replaced. -->
 
-# aenima — build guide v2.2
+# aenima — build guide v2.3
 
 How to run a ticket on aenima with Claude Code.
 
@@ -49,9 +51,11 @@ an applied file does not re-run it.
 **Set the task to Ready on the board, then type `/ticket`.** That is the whole of it. One run
 takes the top Ready task, claims it, writes the ticket pack, branches, builds, has the reviewer
 read it cold, reports back into the task body, opens the PR and sets Review. Backlog → Ready is
-the only move left to you (`docs/guidelines.md` §3). If a run stops at Decision it has posted a
-`⟡ ` comment with a Question, a Where and a Default; answer it on the thread and type `/ticket`
-again. T0.9 puts the command on a schedule, and then even the typing goes.
+the only move left to you (`docs/guidelines.md` §3). A run stops at Decision only when a wrong
+guess would be expensive to undo (`docs/guidelines.md` §4); it has posted a `⟡ ` comment in plain
+sentences saying what it hit, where the gap lives and what "default" would take. Answer it on the
+thread and type `/ticket` again. T0.10 puts the command on a schedule, and then even the typing
+goes.
 
 Everything below is the manual path — how to run a ticket by hand, which is still what you do
 when a ticket is too strange to hand over, and still what `/ticket` is doing on your behalf.
@@ -91,7 +95,7 @@ disagree with the summary — a briefing that tells it what is true has thrown a
 a migration apply, a production deploy, a force-push, a push that names `main` in any refspec
 shape, a merge with `main` checked out, and any write to a `.env` file except the tracked
 `.env.example` — each with a one-line reason naming where the rule lives. Migrations stay a human
-step until T0.9 gives them a Decision-answered path, so a diff that adds one sets Decision and
+step until T0.10 gives them a Decision-answered path, so a diff that adds one sets Decision and
 waits. `scripts/hooks/gate.mjs` runs on `Stop`; see §6. A rule stated only in `CLAUDE.md` is a
 rule a session can read past, which is why these moved.
 

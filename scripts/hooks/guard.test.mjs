@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { decide, writeTargets } from "./guard.mjs";
+import { decide, parse, program, target, writeTargets } from "./guard.mjs";
 
 /** A PreToolUse payload for a Bash call, with the branch the rule (d) check would see. */
 const bash = (command, branch = "t0-7") => [
@@ -27,7 +27,7 @@ describe("rule (a) — drizzle-kit push", () => {
 
 describe("rule (b) — db:migrate", () => {
   it("refuses it and names the ticket that will lift the refusal", () => {
-    expect(decide(...bash("pnpm db:migrate"))).toContain("T0.8");
+    expect(decide(...bash("pnpm db:migrate"))).toContain("T0.10");
   });
 });
 
@@ -211,5 +211,106 @@ describe("calls the guard has no opinion about", () => {
   it("lets a malformed or empty payload through rather than refusing everything", () => {
     expect(decide({})).toBeNull();
     expect(decide({ tool_name: "Bash", tool_input: {} })).toBeNull();
+  });
+});
+
+// TC1 → AC1. Rules match on commands, never on text: the executable and its arguments,
+// after the line is parsed the way the shell would run it. T0.98 and T0.8's close were
+// both refused for *mentioning* a command in a file they were writing.
+describe("TC1 — the guard reads commands, not text", () => {
+  const marker = (command, active) => [
+    { tool_name: "Bash", tool_input: { command }, cwd: "/repo" },
+    { currentBranch: () => "t0-9", runActive: () => active },
+  ];
+
+  it("allows a heredoc that mentions db:migrate — a body is data, not a command", () => {
+    const readme =
+      "cat <<'EOF' > docs/x.md\nRun pnpm db:migrate after review.\ndrizzle-kit push is refused.\nEOF";
+    expect(decide(...bash(readme))).toBeNull();
+    expect(decide(...bash("cat <<-EOF\n\tpnpm db:push\n\tEOF"))).toBeNull();
+    expect(decide(...bash('cat <<"EOF" | tee notes.md\npnpm db:migrate\nEOF'))).toBeNull();
+    // Announced and never closed: still a body, still not a command.
+    expect(decide(...bash("cat <<EOF\npnpm db:push"))).toBeNull();
+  });
+
+  it('allows a quoted mention — echo "pnpm db:push" prints, it does not push', () => {
+    expect(decide(...bash('echo "pnpm db:push"'))).toBeNull();
+    expect(decide(...bash("git commit -m 'guard: pnpm db:push refused'"))).toBeNull();
+    expect(decide(...bash('grep -n "db:migrate" scripts/hooks/guard.mjs'))).toBeNull();
+    expect(decide(...bash("echo pnpm db:push"))).toBeNull();
+  });
+
+  it("refuses pnpm db:push itself, in every runner shape", () => {
+    for (const command of [
+      "pnpm db:push",
+      "npm run db:push",
+      "yarn db:push",
+      "pnpm -r db:push",
+      "npx drizzle-kit push",
+      "pnpm exec drizzle-kit push",
+      "./node_modules/.bin/drizzle-kit push",
+    ]) {
+      expect(decide(...bash(command)), command).toContain("drizzle-kit push is refused");
+    }
+  });
+
+  it("sees the git push behind an assignment and a -C path", () => {
+    expect(decide(...bash("FOO=1 git -C x push -f"))).toContain("Force-pushing");
+    expect(decide(...bash("sudo -u deploy git push --force"))).toContain("Force-pushing");
+    expect(decide(...bash("FOO=1 git -C x push origin t0-9"))).toBeNull();
+  });
+
+  it("refuses gh pr merge while the run marker exists, and allows it without", () => {
+    expect(decide(...marker("gh pr merge 3", true))).toContain("run is active");
+    expect(decide(...marker("gh pr merge 3 --squash", true))).toContain("run is active");
+    expect(decide(...marker("gh pr merge 3", false))).toBeNull();
+    expect(decide(...marker("gh pr create --fill --base main", true))).toBeNull();
+    expect(decide(...marker("gh pr view 3", true))).toBeNull();
+  });
+
+  it("reads the commands inside $(…), backticks and sh -c, because they run", () => {
+    expect(decide(...bash("echo $(pnpm db:push)"))).toContain("refused");
+    expect(decide(...bash('echo "`pnpm db:push`"'))).toContain("refused");
+    expect(decide(...bash('sh -c "pnpm db:push"'))).toContain("refused");
+    expect(decide(...bash("bash -c 'git push --force'"))).toContain("Force-pushing");
+  });
+
+  it("still finds a write target beside a heredoc", () => {
+    expect(writeTargets("cat <<EOF > out.txt\nhello\nEOF")).toEqual(["out.txt"]);
+    expect(decide(...bash("cat <<EOF > .env.local\nKEY=1\nEOF"))).toContain("refused");
+  });
+});
+
+describe("parse", () => {
+  it("splits on every separator and keeps quoted runs whole", () => {
+    expect(parse("a 'b c' && d | e; f || g & h\ni\n(j)").map((c) => c.argv)).toEqual([
+      ["a", "b c"],
+      ["d"],
+      ["e"],
+      ["f"],
+      ["g"],
+      ["h"],
+      ["i"],
+      ["j"],
+    ]);
+  });
+
+  it("attaches a heredoc body to the command that reads it, unparsed", () => {
+    const [cmd] = parse("cat <<EOF\npnpm db:push && rm -rf /\nEOF\n");
+    expect(cmd.argv).toEqual(["cat"]);
+    expect(cmd.heredocs).toEqual(["pnpm db:push && rm -rf /"]);
+    expect(parse("cat <<EOF\npnpm db:push\nEOF")).toHaveLength(1);
+  });
+
+  it("reads the executable's basename past assignments and wrappers", () => {
+    expect(program(["GIT_TRACE=1", "env", "X=1", "/usr/bin/git", "push"])).toEqual({
+      exe: "git",
+      args: ["push"],
+    });
+    expect(target(["pnpm", "exec", "drizzle-kit", "push"])).toEqual({
+      name: "drizzle-kit",
+      rest: ["push"],
+    });
+    expect(target(["npm", "run", "db:generate"])).toEqual({ name: "db:generate", rest: [] });
   });
 });

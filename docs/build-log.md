@@ -1805,24 +1805,27 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
 
 31. **T0.7 — the gate runs from the hook's `cwd` when it is a package root, else
     `$CLAUDE_PROJECT_DIR`.** The ticket said the latter; it does not follow a worktree, so a
-    worktree session would have had the untouched main checkout tested on its behalf. Settle as a
-    rule before T0.8 puts tickets on branches. Owner: T0.8.
+    worktree session would have had the untouched main checkout tested on its behalf. Settled by
+    T0.8: the gate walks up from `cwd` to the nearest package root.
 
 32. **T0.7 — `.worktreeinclude` carries no `.claude/settings.local.json`**, so a worktree session
     has no Supabase MCP. The ticket's criterion was "files the suite reads", and the suite does
-    not read it. Owner: T0.8, if worktree runs become the norm.
+    not read it. Owner: T0.10, which moves runs to worktrees.
 
 33. **T0.7 — `.env.example` is refused by guard rule (e)** because the ticket says `.env*` without
-    a carve-out. It holds no secret and `.gitignore` already treats it as the exception. Owner:
-    T0.8.
+    a carve-out. It holds no secret and `.gitignore` already treats it as the exception. Settled
+    by T0.8: `.env.example` is the one exception.
 
 34. **T0.7 — what the guard's tokenizer does not reach.** Rule (e) covers `>`, `>>`, `>&`, `>|`,
     `tee`, `cp`/`mv`/`install`, `sed -i`/`--in-place`. Past it: `python -c`, `dd of=…`,
     `truncate`, an editor, a subshell group `(git push --force)`, a redirect quoted inside
     `sh -c`, `sed -i --expression=…` with no script operand. Rule (d) reads only `-C`/`-c` as
     value-taking git options (not `--git-dir`, `--work-tree`, `--namespace`, `--config-env`) and
-    steps over only `env`/`command`/`exec` (not `sudo`, `time`, `nohup`, `nice`). The tokenizer
-    finds write targets; it is not a shell. Where to stop growing it is T0.8's call. Owner: T0.8.
+    steps over only `env`/`command`/`exec` (not `sudo`, `time`, `nohup`, `nice`). T0.9 replaced
+    the tokenizer with a parser that reads `$(…)`, backticks and `sh -c` as the commands they
+    run, steps over `sudo`/`time`/`nohup`/`nice` and the long git options, and keeps heredoc
+    bodies as data. Still past it, by design: `bash file.sh`, `python -c`, `node -e`, `dd of=`,
+    `truncate`, an editor. The parser reads command lines; it is not a shell, and it stops here.
 
 35. **T0.7 — subagent types register at session start**, not on file creation; T0.7 invoked its
     own reviewer through `claude -p --agent reviewer` from Bash until the type appeared. Worth a
@@ -1831,19 +1834,20 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
 36. **T0.7 — guard rules (a)–(d) read the Bash command text, in both directions.** A script file
     containing `drizzle-kit push`, run as `bash file.sh`, is not refused; a *read* whose text
     contains the words (`grep -n "db:migrate" …`, `git log --grep=…`) is. The ticket asked for
-    "containing … always" and got it. Closing either direction needs a rule about what a hook may
-    inspect. Owner: T0.8.
+    "containing … always" and got it. Settled by T0.9: rules match argv, never text, so a read
+    that mentions a command is allowed and a script file that contains one is not inspected —
+    the second direction is the parser's stated edge (34).
 
 37. **T0.7 — `--fallback-model` is documented "(only works with --print)".** Whether the
     `fallbackModel` settings key shares that scope is unstated. Guidelines §5's scheduled run is
-    headless, but T0.8 decides the session mode and should confirm the fallback fires in it.
-    Owner: T0.8.
+    headless, but the scheduled run has to be a Desktop task (`docs/reports/T0.8.md`, open
+    question 4), and whether `fallbackModel` fires there is unconfirmed. Owner: T0.10.
 
 38. **T0.7 — rule (d) reads the branch of the hook's `cwd`.** For `git -C <path> merge …` the
-    checkout that matters is `<path>`. Owner: T0.8, with the branch flow.
+    checkout that matters is `<path>`. Owner: T0.10, with worktrees.
 
 39. **T0.7 — `git push origin +main` forces by refspec**, with neither `--force` nor `-f`. The
-    ticket named the two flags. Belongs with the direct-to-main rule T0.8 adds. Owner: T0.8.
+    ticket named the two flags. Settled by T0.8: `namesMain` strips the leading `+`.
 
 ## On the horizon
 
