@@ -20,6 +20,17 @@ vi.mock("next/navigation", () => ({
 const { SignInForm } = await import("./SignInForm");
 
 /**
+ * Every step change here waits on a server action, and every wait below is a
+ * synchronous query straight after the click. userEvent dispatches inside
+ * `act`, so by the time `user.click` resolves the transition has committed —
+ * the heading, the message, the re-enabled inputs, all of it. The `findBy`
+ * polls this file used to make added nothing to that except a real one-second
+ * clock, and a machine running three suites at once can hold a worker past a
+ * second doing nothing wrong: that was the red T0.98 filed and the one T0.9
+ * reproduced. A query with no clock is the same on a slow machine.
+ */
+
+/**
  * The §8 (v2.7) step header, on the step that needs a backend to reach.
  *
  * The browser pass covers step one — alignment, the focus split, the absent
@@ -35,8 +46,7 @@ async function reachCodeStep() {
 
   await user.type(screen.getByLabelText("Email"), "someone@example.com");
   await user.click(screen.getByRole("button", { name: "Send code" }));
-
-  await screen.findByRole("heading", { name: "Enter your code" });
+  screen.getByRole("heading", { name: "Enter your code" });
   return user;
 }
 
@@ -169,8 +179,7 @@ describe("sign-in field language", () => {
 
     await user.type(screen.getByLabelText("Email"), "someone@example.com");
     await user.click(screen.getByRole("button", { name: "Send code" }));
-
-    const message = await screen.findByText("Sign-in is unavailable right now.");
+    const message = screen.getByText("Sign-in is unavailable right now.");
     expect(message).not.toBeNull();
 
     await user.type(screen.getByLabelText("Email"), "m");
@@ -219,7 +228,7 @@ describe("sign-in resend", () => {
 
     await user.type(screen.getByLabelText("Email"), "someone@example.com");
     await user.click(screen.getByRole("button", { name: "Send code" }));
-    await screen.findByRole("heading", { name: "Enter your code" });
+    screen.getByRole("heading", { name: "Enter your code" });
     return user;
   }
 
@@ -270,7 +279,7 @@ describe("sign-in resend", () => {
 
     await user.click(screen.getByRole("button", { name: "Back" }));
     await user.click(screen.getByRole("button", { name: "Send code" }));
-    await screen.findByRole("heading", { name: "Enter your code" });
+    screen.getByRole("heading", { name: "Enter your code" });
 
     // A second code went out, so the clock is that code's, not the first's.
     expect(cooling()!.textContent).toBe("Send a new code (1:00)");
@@ -291,7 +300,7 @@ describe("sign-in resend", () => {
     await user.click(resting()!);
 
     // §12: states the cause, does not scold.
-    const message = await screen.findByRole("status");
+    const message = screen.getByRole("status");
     expect(message.textContent).toBe(
       "Too many requests. Wait a moment before asking for another code.",
     );
@@ -345,7 +354,7 @@ describe("sign-in resend", () => {
     expect(requestCode).toHaveBeenCalledTimes(1);
 
     await user.click(resting()!);
-    await screen.findByRole("status");
+    screen.getByRole("status");
     expect(requestCode).toHaveBeenCalledTimes(2);
 
     await user.click(cooling()!);
@@ -384,7 +393,7 @@ describe("sign-in code errors", () => {
 
     await user.type(screen.getByLabelText("Email"), "someone@example.com");
     await user.click(screen.getByRole("button", { name: "Send code" }));
-    await screen.findByRole("heading", { name: "Enter your code" });
+    screen.getByRole("heading", { name: "Enter your code" });
     return user;
   }
 
@@ -404,8 +413,7 @@ describe("sign-in code errors", () => {
     verifyCode.mockResolvedValue({ status: "code-rejected" });
 
     await submitCode(user);
-
-    expect(await screen.findByText(WRONG)).not.toBeNull();
+    expect(screen.getByText(WRONG)).not.toBeNull();
     expect(screen.queryByText(EXPIRED)).toBeNull();
   });
 
@@ -419,8 +427,7 @@ describe("sign-in code errors", () => {
       vi.advanceTimersByTime(OTP_EXPIRY_SECONDS * 1000);
     });
     await submitCode(user);
-
-    expect(await screen.findByText(EXPIRED)).not.toBeNull();
+    expect(screen.getByText(EXPIRED)).not.toBeNull();
     expect(screen.queryByText(WRONG)).toBeNull();
   });
 
@@ -445,8 +452,7 @@ describe("sign-in code errors", () => {
 
     verifyCode.mockResolvedValue({ status: "code-rejected" });
     await submitCode(user);
-
-    expect(await screen.findByText(WRONG)).not.toBeNull();
+    expect(screen.getByText(WRONG)).not.toBeNull();
     expect(screen.queryByText(EXPIRED)).toBeNull();
   });
 
@@ -456,8 +462,7 @@ describe("sign-in code errors", () => {
     verifyCode.mockResolvedValue({ status: "unavailable" });
 
     await submitCode(user);
-
-    expect(await screen.findByText("Sign-in is unavailable right now.")).not.toBeNull();
+    expect(screen.getByText("Sign-in is unavailable right now.")).not.toBeNull();
     expect(screen.queryByText(WRONG)).toBeNull();
     expect(screen.queryByText(EXPIRED)).toBeNull();
   });

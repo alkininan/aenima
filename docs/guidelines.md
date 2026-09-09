@@ -1,5 +1,6 @@
-<!-- guidelines.md · v1.3 · in the repo · §5 is /ticket as built; §4 names the prefix glyph;
-     §9 states its closed gaps in the past tense -->
+<!-- guidelines.md · v1.4 · in the repo · §4 stops only when a wrong guess is expensive and speaks
+     in plain sentences; §5 carries the run marker, stale-run recovery, the reviewer's scope and
+     the red-first record; §9 states its closed gaps in the past tense -->
 
 # aenima — Dev board guidelines
 
@@ -131,7 +132,7 @@ Seven sub-pages: `product-spec` · `design-spec` · `CLAUDE` · `AGENTS` · `bui
 `build-log` · `schema`. The page is headed, verbatim: **Machine-written mirrors of the repo
 documents.** *Each page is refreshed from `main` at the start of every pipeline run and headed
 with the commit it mirrors. The repo is the only editing surface; nothing typed here survives the
-next run.* Nobody types here. The refresh itself is T0.9's; T0.8 does not touch a mirror.
+next run.* Nobody types here. The refresh itself is T0.10's; no run before it touches a mirror.
 
 ---
 
@@ -145,6 +146,7 @@ next run.* Nobody types here. The refresh itself is T0.9's; T0.8 does not touch 
 | In progress | Review | M | Branch pushed, Report written. |
 | In progress | Decision | M | Run stopped on a question, or a migration awaits your apply. |
 | Decision | Ready | M | Your comment assessed as resolving — see §4. No manual override. |
+| In progress | Ready | M | A stale run recovered while another stale task was claimed first — see §5 step 0. |
 | Review | Done | M | Next run finds the branch merged into main. Release row written. |
 
 Nothing is ever set backwards by a human. "Status is derived, never declared" (§1) applied to the
@@ -154,13 +156,30 @@ board.
 
 ## 4. Decision protocol
 
-When a run cannot proceed it sets Decision and posts **one** comment in this shape:
+**A run stops only when a wrong guess is expensive to undo.** A choice is expensive if it touches
+the database schema or stored data, a public surface — a route, copy a product user sees, an API
+shape — or would need a spec to record it. Everything else is cheap: the run takes the stated
+default, says so in one comment, and keeps building. A developer surface — a hook's output, a
+script's message, a document the run itself owns — is not public. Smoke B's release-message
+wording would not have stopped under this rule; the guard's first refusal text would not either.
+
+When a run does stop it sets Decision and posts **one** comment, in plain sentences and with no
+labels: two or three of them — what it hit, why it could not pick alone, what it would choose.
+Where the gap lives is said in words ("this isn't written down anywhere", "§7.2 says both
+things"), never as a field:
 
 ```
-⟡ Question   what cannot be answered with one interpretation
-Where        product-spec §X · design-spec §Y · or: this ticket
-Default      the answer the run would take if you said "default"
+⟡ I've stopped on the release wording. The body asks for "the agreed wording" and that isn't
+written down anywhere, not in the ticket and not in the specs. If you say "default" I'll use
+build-guide §6's own sentence.
 ```
+
+The same voice carries every comment the pipeline writes — a stop, a clarifying round, a migration
+waiting, a stale run recovered, a default taken — and `scripts/run/comments.mjs` composes all
+five, so the voice is one place and tested. A migration reads: *This change adds a migration,
+`drizzle/0013_….sql`, and applying it to the shared database is your call. I've left it in the
+diff and stopped here.* A default taken reads: *…A wrong guess here costs nothing to change, so I
+went with "…" and kept going. Say the word if you'd rather something else.*
 
 **Every comment the pipeline writes begins with `⟡ `**, and nothing else does. That glyph is how
 a run tells its own voice from yours on a thread it did not start — there is no author field it
@@ -168,21 +187,23 @@ can trust for that. The prefix lives in `.claude/board.json`; a comment posted w
 the next run misread the thread as waiting on you.
 
 **The pipeline never sets a task to Ready without a comment from you that resolves the
-question.** Backlog → Ready is the one human move (§3), and Decision → Ready is the same move
+question.** The one exception is §3's return of a task to Ready whose Ready you already gave: a
+preflight that recovers two stale runs claims one and returns the other, and your go at Backlog →
+Ready is not withdrawn by a run dying. Backlog → Ready is the one human move (§3), and Decision → Ready is the same move
 spelled differently: your answer is the confirmation. A run that set Ready on its own reading
 would be confirming its own proposal.
 
-*Where* is fault attribution (§8): if the gap is in a spec, the answer is a spec patch, not a
-comment. Migrations use the same shape — *Question: apply migration 0013 to Frankfurt? Where: this
-ticket. Default: apply.*
+Where the gap lives is fault attribution (§8): if it is in a spec, the answer is a spec patch, not
+a comment.
 
 At the start of every run, before claiming anything, the pipeline reads Decision tasks for a new
 comment from you since its own last comment. Each new comment gets **exactly one assessment**:
 
-- Resolves the question with one interpretation → status Ready. If *Where* was a spec, the run's
-  first act after claim is patching that section in the repo and bumping the version. The answer
-  lives in the document; the comment is where you said it.
-- Does not → one clarifying comment; status stays Decision.
+- Resolves the question with one interpretation → status Ready. If the gap was placed in a spec,
+  the run's first act after claim is patching that section in the repo and bumping the version.
+  The answer lives in the document; the comment is where you said it.
+- Does not → one clarifying comment, in the same voice, naming the two readings it cannot pick
+  between; status stays Decision.
 - After two clarifying rounds on the same question the pipeline stops asking and waits. It never
   stops assessing: your next comment is read like any other. Two-round cap, §6, applied to itself.
 
@@ -193,40 +214,55 @@ Answers given inside an interactive Code tab session follow the same rule, appli
 ## 5. Run protocol
 
 One run is `/ticket`, typed by a human from `~/dev/aenima`: fresh session, Fable, auto mode,
-hooks as the boundary. T0.9 puts it on a schedule. Everything countable in the steps below is a
+hooks as the boundary. T0.10 puts it on a schedule. Everything countable in the steps below is a
 script under `scripts/run/` with a test; the skill holds the judgment and nothing else.
 
 ```
 0  Preflight    assess Decision comments (§4) · mark merged Review tasks Done (merge-base
-                --is-ancestor) and write Release rows · stop if a task is already In progress
-1  Claim        top Ready by Priority (Must first), then oldest · set In progress · assign ID and
-                Epic if missing · compare Spec versions against repo headers, note drift
+                --is-ancestor) and write Release rows · a task In progress whose marker in this
+                checkout is fresh is a live run: exit · with no marker here, or one older than
+                three hours, it is stale: keep its branch as t<id>-stale-<HHMM>, post one
+                comment, re-claim it from origin/main and continue — no human needed
+1  Claim        top Ready by Priority (Must first), then oldest · set In progress · write the
+                marker .claude/.run-active (task, page, branch, started, session) · assign ID
+                and Epic if missing · compare Spec versions against repo headers, note drift
 2  Inline       read every cited section · write docs/tickets/<id>.md — the pack the reviewer reads
 3  Branch       branch t<id> off origin/main · plan mode before any file changes · a primary
                 checkout is returned to main on exit, success or not
-4  Build        smallest complete implementation · new logic has tests observed failing first
+4  Build        smallest complete implementation · stop only when a wrong guess is expensive
+                (§4), otherwise take the default and say so · new logic has tests observed
+                failing first, the mutation and the count recorded per test
 5  Review       reviewer subagent, fresh context, reads the ticket file and the diff, not the
-                author's summary · findings are tagged Must or Should · fix every Must and
-                re-invoke, three passes maximum · a Must still standing after the third becomes
-                an open question, Shoulds are recorded · out-of-scope findings → Backlog tasks
-                (Type Fix, Epic inherited)
+                author's summary · runs only the tests the ticket names plus the test files the
+                diff touches; the Stop gate owns the full suite · findings are tagged Must or
+                Should · fix every Must and re-invoke, three passes maximum · a Must still
+                standing after the third becomes an open question, Shoulds are recorded ·
+                out-of-scope findings → Backlog tasks (Type Fix, Epic inherited)
 6  Migration    if the diff adds a migration file: stop → Decision (§4). Acting on the answer
-                is T0.9's; until then a human applies it
+                is T0.10's; until then a human applies it
 7  Gate         Stop hook runs pnpm lint && pnpm typecheck && pnpm test in the cwd it is
                 handed, not the project dir; red cannot close
-8  Report       write docs/reports/<id>.md → mirror into the body Report section:
-                ACs implemented (each with its test) · tests written (each observed red then
-                green) · open questions · update build-log
-9  Close        commit, push branch, open the PR → Review · never merge · Runs row written by
-                the session-end script (T0.9)
+8  Report       write docs/reports/<id>.md — refused without the red-first record: per test,
+                the mutation that made it red and the count that went green — then mirror it
+                into the body Report section: ACs implemented (each with its test) · tests
+                written · open questions · update build-log
+9  Close        commit, push branch, open the PR → Review · remove the marker · never merge ·
+                Runs row written by the session-end script (T0.10)
 ```
 
 One run, one task. The run exits; the next scheduled run takes the next task. Chaining inside a
 session is not done: a session that built three things reasons worse about the fourth.
 
+The marker is the run's footprint and nothing more. It is written at claim and removed on every
+exit — Review, Decision, and error through the SessionEnd hook; a hard kill leaves it behind,
+which is what the three-hour age is for. Only scripts read it; the skill never reasons about it.
+A stale run recovers by default because the branch is preserved: a wrong guess costs nothing.
+
 Hard boundaries, enforced by hooks not prose: no schema push, no migration apply, no writes to
 `.env` or `.env.*` (`.env.example` is tracked and excepted), no production deploy, no force-push,
-no push to main in any refspec shape, no merge with main checked out.
+no push to main in any refspec shape, no merge with main checked out, no `gh pr merge` while a
+run marker exists. The guard reads commands, never text: prose inside a heredoc or a quoted
+string matches no rule.
 
 ---
 
@@ -259,9 +295,11 @@ Criteria means the same thing on a task and on a phase: what must be true to be 
   four tickets as Backlog under `E3.1 Authoring loop`.
 - Tasks: `T0.7 Setup` (hooks, reviewer subagent, .worktreeinclude, fallback setting, CLAUDE.md
   carve-out) — done. `T0.8 Run` (`/ticket`: the protocol as a command, the board reads and
-  writes, the run scripts) — done. `T0.9 Schedule and telemetry` (scheduled task, mirror
-  refresh, Runs rows, stale-run detection, the answered-migration path) — next.
-- Documents: seven pages, headed as mirrors, content synced by T0.9's first run.
+  writes, the run scripts) — done. `T0.9 Run fixes` (the guard on commands, the run marker,
+  stale-run recovery, §4 as it now reads, the reviewer's scope, the red-first record) — this
+  version. `T0.10 Schedule and telemetry` (scheduled task, mirror refresh, Runs rows, the
+  answered-migration path, worktrees) — next.
+- Documents: seven pages, headed as mirrors, content synced by T0.10's first run.
 
 ---
 

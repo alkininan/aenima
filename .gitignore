@@ -57,5 +57,8 @@ sample*.md
 # machine, never shared.
 .claude/.gate-count
 
+# A `/ticket` run's footprint in this checkout, from claim to exit. scripts/run/claim.mjs.
+.claude/.run-active
+
 # Worktrees Claude Code creates for isolated sessions and subagents.
 .claude/worktrees/
