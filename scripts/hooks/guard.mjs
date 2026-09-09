@@ -47,6 +47,77 @@ const RUNNERS = new Set(["pnpm", "pnpx", "npm", "npx", "yarn", "bun", "bunx"]);
 /** Runner verbs that sit between the runner and the thing it runs. */
 const RUNNER_VERBS = new Set(["run", "run-script", "exec", "dlx", "x"]);
 
+/**
+ * drizzle-kit's own commands. The verb of a drizzle-kit call is the first operand that is one
+ * of these, wherever a value-taking flag put it: `drizzle-kit --config x push` is a push, and
+ * `drizzle-kit generate --name push` is a generate whose migration happens to be called push.
+ */
+const DRIZZLE_VERBS = new Set([
+  "generate",
+  "migrate",
+  "push",
+  "pull",
+  "studio",
+  "check",
+  "up",
+  "drop",
+  "export",
+  "introspect",
+]);
+
+/** gh's global options that take a value, so `gh pr -R owner/repo merge` still reads as a merge. */
+const GH_VALUE_OPTIONS = new Set(["-R", "--repo"]);
+
+/**
+ * Runner options that take a value, per runner, so the value is never read as the script:
+ * `pnpm -C . db:push` and `npm -w aenima run db:push` both run `db:push`. `-w` is the reason
+ * the list is per runner — a value for npm, a boolean for pnpm. An option that takes a value
+ * and is not listed here would have its value read as the script and the real script missed;
+ * build-log open question 34 says so.
+ */
+const RUNNER_VALUE_FLAGS = {
+  pnpm: new Set([
+    "-C",
+    "--dir",
+    "-F",
+    "--filter",
+    "--filter-prod",
+    "--workspace-concurrency",
+    "--reporter",
+    "--loglevel",
+    "-p",
+    "--package",
+  ]),
+  pnpx: new Set(["-p", "--package"]),
+  npm: new Set(["-C", "--prefix", "-w", "--workspace", "--loglevel", "--registry"]),
+  npx: new Set(["-p", "--package", "--registry"]),
+  yarn: new Set(["--cwd"]),
+  bun: new Set(["--cwd", "-F", "--filter"]),
+  bunx: new Set(["--cwd"]),
+};
+
+/**
+ * Words that open or close a compound command and are never the command itself:
+ * `if true; then pnpm db:push; fi` runs `pnpm db:push`. Stepped over only at the start of a
+ * simple command, where the shell reads them as reserved.
+ */
+const RESERVED = new Set([
+  "if",
+  "then",
+  "else",
+  "elif",
+  "fi",
+  "while",
+  "until",
+  "for",
+  "do",
+  "done",
+  "case",
+  "esac",
+  "select",
+  "function",
+]);
+
 /** Shells whose `-c` string is itself a command line. */
 const SHELLS = new Set(["sh", "bash", "zsh", "dash"]);
 
@@ -85,6 +156,28 @@ function closingParen(text, open) {
 }
 
 /**
+ * The command substitutions — `$(…)` and backticks — in a stretch of text the shell would
+ * expand. An unquoted heredoc body is one such stretch: its `$(pnpm db:push)` runs.
+ */
+function expansions(text) {
+  const found = [];
+  for (let i = 0; i < text.length; i += 1) {
+    if (text[i] === "\\") {
+      i += 1;
+    } else if (text[i] === "$" && text[i + 1] === "(") {
+      const close = closingParen(text, i + 1);
+      found.push(text.slice(i + 2, close));
+      i = close;
+    } else if (text[i] === "`") {
+      const close = text.indexOf("`", i + 1);
+      found.push(text.slice(i + 1, close === -1 ? text.length : close));
+      i = close === -1 ? text.length : close;
+    }
+  }
+  return found;
+}
+
+/**
  * Lexes a command line into words, separators, redirects, heredoc bodies and nested command
  * lines. Not a shell — it is only good enough to know *which* commands the line runs and
  * what they write to, which is all the rules ask of it.
@@ -95,13 +188,15 @@ function lex(text) {
   let hasWord = false;
   let quote = null;
   let awaitingDelimiter = null; // Set after `<<`: the next word names the heredoc's end.
+  let delimiterQuoted = false; // Any quoting in that word makes the body literal.
   const pending = []; // Heredocs whose bodies begin at the next newline.
 
   const flush = () => {
     if (hasWord) {
       if (awaitingDelimiter) {
-        pending.push({ delimiter: word, strip: awaitingDelimiter.strip });
+        pending.push({ delimiter: word, strip: awaitingDelimiter.strip, quoted: delimiterQuoted });
         awaitingDelimiter = null;
+        delimiterQuoted = false;
       } else {
         tokens.push({ kind: "word", value: word });
       }
@@ -118,7 +213,7 @@ function lex(text) {
   /** Consumes the bodies of every pending heredoc from `start`; returns where they end. */
   const readHeredocs = (start) => {
     let at = start;
-    for (const { delimiter, strip } of pending) {
+    for (const { delimiter, strip, quoted } of pending) {
       const lines = [];
       let closed = false;
       while (at < text.length) {
@@ -131,7 +226,14 @@ function lex(text) {
         }
         lines.push(line);
       }
-      tokens.push({ kind: "heredoc", value: lines.join("\n"), closed });
+      const body = lines.join("\n");
+      tokens.push({ kind: "heredoc", value: body, closed });
+      // With an unquoted delimiter the shell expands the body: its `$(…)` and backticks run,
+      // so they are read as the commands they are. The rest of the body stays data. A quoted
+      // delimiter — `<<'EOF'` — makes the whole body literal.
+      if (!quoted) {
+        for (const inner of expansions(body)) tokens.push({ kind: "nested", value: inner });
+      }
     }
     pending.length = 0;
     return at;
@@ -168,6 +270,7 @@ function lex(text) {
     if (char === "'" || char === '"') {
       quote = char;
       hasWord = true;
+      if (awaitingDelimiter) delimiterQuoted = true;
       continue;
     }
     if (char === "\\") {
@@ -178,6 +281,7 @@ function lex(text) {
       } else if (i + 1 < text.length) {
         word += text[i + 1];
         hasWord = true;
+        if (awaitingDelimiter) delimiterQuoted = true;
         i += 1;
       }
       continue;
@@ -300,6 +404,8 @@ export function parse(command) {
     } else if (redirect) {
       redirect.target = token.value;
       redirect = null;
+    } else if (current.argv.length === 0 && RESERVED.has(token.value)) {
+      // The word that opens a compound command is not the command; what follows it is.
     } else if (token.value !== "{" && token.value !== "}" && token.value !== "!") {
       current.argv.push(token.value);
     }
@@ -356,17 +462,61 @@ export function target(argv) {
   const { exe, args } = program(argv);
   if (exe === null) return { name: null, rest: [] };
   if (!RUNNERS.has(exe)) return { name: exe, rest: args };
-  let i = 0;
-  while (i < args.length && (args[i].startsWith("-") || RUNNER_VERBS.has(args[i]))) i += 1;
+  const i = scriptAt(exe, args);
   return i < args.length
     ? { name: basename(args[i]), rest: args.slice(i + 1) }
     : { name: exe, rest: [] };
 }
 
+/**
+ * Where a runner's script sits in its arguments: past its verbs and its options, and past
+ * the value of every option that takes one. The script is at a position, not anywhere in
+ * the arguments — `pnpm vitest run -t "db:push"` runs vitest, and a session testing this
+ * guard types exactly that (review pass 2).
+ */
+function scriptAt(exe, args) {
+  const values = RUNNER_VALUE_FLAGS[exe] ?? new Set();
+  let i = 0;
+  while (i < args.length && (args[i].startsWith("-") || RUNNER_VERBS.has(args[i]))) {
+    i += values.has(args[i]) ? 2 : 1;
+  }
+  return i;
+}
+
+/**
+ * What follows `wanted` — a script name or a binary — when the command runs it, directly or
+ * through a package runner; null when it does not. Through a runner the script is read at
+ * its position with every value-taking option stepped over: `pnpm --filter aenima db:push`
+ * and `pnpm -C . db:push` both run `db:push`, and `pnpm exec grep "db:push" f` runs grep.
+ * T0.9's review found first a fixed position that read `aenima` as the script, then an
+ * anywhere-match that read a quoted argument as one; this is the shape between them.
+ */
+function invocation(argv, wanted) {
+  const { exe, args } = program(argv);
+  if (exe === wanted) return args;
+  if (!RUNNERS.has(exe)) return null;
+  const i = scriptAt(exe, args);
+  return i < args.length && basename(args[i]) === wanted ? args.slice(i + 1) : null;
+}
+
 /** True when the command runs the `drizzle-kit` verb named, directly or through a runner. */
 function drizzleKit(argv, verb) {
-  const { name, rest } = target(argv);
-  return name === "drizzle-kit" && operands(rest)[0] === verb;
+  const rest = invocation(argv, "drizzle-kit");
+  return rest !== null && operands(rest).find((token) => DRIZZLE_VERBS.has(token)) === verb;
+}
+
+/**
+ * The words of a `gh` call with its options and their values stepped over, so the
+ * subcommand and verb are `words[0]` and `words[1]` wherever `-R owner/repo` sits.
+ */
+function ghWords(rest) {
+  const words = [];
+  for (let i = 0; i < rest.length; i += 1) {
+    const token = rest[i];
+    if (GH_VALUE_OPTIONS.has(token)) i += 1;
+    else if (!token.startsWith("-")) words.push(token);
+  }
+  return words;
 }
 
 /**
@@ -506,20 +656,20 @@ export function decide(input, deps = {}) {
 
   for (const cmd of parse(command)) {
     const { name, rest } = target(cmd.argv);
-    const { exe, args } = program(cmd.argv);
 
     // (a) push rewrites the RLS policies out of existence.
-    if (name === "db:push" || drizzleKit(cmd.argv, "push")) {
+    if (invocation(cmd.argv, "db:push") !== null || drizzleKit(cmd.argv, "push")) {
       return "drizzle-kit push is refused — the RLS policies in drizzle/0001_policies.sql are not in the schema DSL, so push plans to DROP them and take the product isolation boundary with them. Generate a migration with pnpm db:generate instead. CLAUDE.md › Prohibitions.";
     }
 
     // (b) a migration is a schema change a human approves, until T0.10 gives it a path.
-    if (name === "db:migrate" || drizzleKit(cmd.argv, "migrate")) {
+    if (invocation(cmd.argv, "db:migrate") !== null || drizzleKit(cmd.argv, "migrate")) {
       return "Applying a migration is a human step until T0.10 adds the Decision-answered path. Leave the migration in the diff and say it is waiting. docs/guidelines.md §5 step 6.";
     }
 
-    // (c) production deploys are a human step.
-    if (exe === "vercel" && args.some((a) => a.startsWith("--prod") || a === "deploy")) {
+    // (c) production deploys are a human step — `npx vercel --prod` as much as `vercel --prod`.
+    const vercel = invocation(cmd.argv, "vercel");
+    if (vercel !== null && vercel.some((a) => a.startsWith("--prod") || a === "deploy")) {
       return "Deploying to production is a human step. docs/guidelines.md §5, hard boundaries.";
     }
 
@@ -539,8 +689,8 @@ export function decide(input, deps = {}) {
 
     // (f) a pull request merged through the API writes main from any branch. While a run
     // owns the checkout, that is the run merging, which is the one move §3 keeps human.
-    const ghWords = operands(rest);
-    if (name === "gh" && ghWords[0] === "pr" && ghWords[1] === "merge" && runActive()) {
+    const gh = ghWords(rest);
+    if (name === "gh" && gh[0] === "pr" && gh[1] === "merge" && runActive()) {
       return "Merging a pull request is refused while a run is active — .claude/.run-active says a run owns this checkout, and merging to main is the human's move. docs/guidelines.md §5, hard boundaries.";
     }
   }

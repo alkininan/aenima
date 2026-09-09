@@ -281,6 +281,92 @@ describe("TC1 — the guard reads commands, not text", () => {
   });
 });
 
+// The cold review of T0.9 probed the parser and found three holes of one shape: a flag that
+// takes a value, sitting between the runner and its script, between `gh pr` and `merge`, or
+// between `drizzle-kit` and its verb, read as the operand the rule looked for. Each was
+// refused by the v1.3 text rule; item 1 says the rules carry over in effect.
+describe("the review's bypasses — a value-taking flag before the operand", () => {
+  const marker = (command, active) => [
+    { tool_name: "Bash", tool_input: { command }, cwd: "/repo" },
+    { currentBranch: () => "t0-9", runActive: () => active },
+  ];
+
+  it("refuses db:push behind a runner flag that takes a value", () => {
+    for (const command of [
+      "pnpm -C . db:push",
+      "pnpm --dir . db:push",
+      "pnpm --filter aenima db:push",
+      "pnpm --filter aenima exec drizzle-kit push",
+    ]) {
+      expect(decide(...bash(command)), command).toContain("drizzle-kit push is refused");
+    }
+    expect(decide(...bash("pnpm --filter aenima db:migrate"))).toContain("T0.10");
+  });
+
+  it("refuses drizzle-kit push behind --config, and allows a generate whose name says push", () => {
+    expect(decide(...bash("drizzle-kit --config drizzle.config.ts push"))).toContain("refused");
+    expect(decide(...bash("pnpm exec drizzle-kit --config x migrate"))).toContain("T0.10");
+    expect(decide(...bash("drizzle-kit generate --name push"))).toBeNull();
+  });
+
+  it("refuses a production deploy that goes through a runner", () => {
+    for (const command of [
+      "npx vercel --prod",
+      "pnpm exec vercel deploy --prod",
+      "pnpm dlx vercel --prod",
+      "vercel --prod",
+    ]) {
+      expect(decide(...bash(command)), command).toContain("human step");
+    }
+    expect(decide(...bash("npx vercel env ls"))).toBeNull();
+  });
+
+  it("refuses gh pr merge with a repo flag between pr and merge", () => {
+    expect(decide(...marker("gh pr -R alkininan/aenima merge 3", true))).toContain("run is active");
+    expect(decide(...marker("gh pr --repo alkininan/aenima merge 3 --squash", true))).toContain(
+      "run is active",
+    );
+    expect(decide(...marker("gh pr --repo=alkininan/aenima merge 3", true))).toContain(
+      "run is active",
+    );
+    expect(decide(...marker("gh pr -R alkininan/aenima merge 3", false))).toBeNull();
+  });
+});
+
+// Pass 2 of the same review: three more places where a word sat where the rule expected its
+// operand — a shell reserved word, an unquoted heredoc body the shell expands, and a quoted
+// argument to a runner's script.
+describe("the review's bypasses, pass 2", () => {
+  it("steps over a shell reserved word to the command it introduces", () => {
+    expect(decide(...bash("if true; then pnpm db:push; fi"))).toContain(
+      "drizzle-kit push is refused",
+    );
+    expect(decide(...bash("for x in a; do pnpm db:migrate; done"))).toContain("T0.10");
+    expect(decide(...bash("while true; do git push --force; done"))).toContain("Force-pushing");
+    expect(decide(...bash("if true; then git push origin t0-9; fi"))).toBeNull();
+  });
+
+  it("reads $(…) and backticks inside an unquoted heredoc body, which the shell expands", () => {
+    expect(decide(...bash("cat <<EOF > x.md\n$(pnpm db:push)\nEOF"))).toContain("refused");
+    expect(decide(...bash("cat <<EOF > x.md\n`pnpm db:push`\nEOF"))).toContain("refused");
+    expect(decide(...bash("cat <<EOF > x.md\n$(git push --force)\nEOF"))).toContain(
+      "Force-pushing",
+    );
+    // A quoted delimiter makes the body literal: still data, still not a command.
+    expect(decide(...bash("cat <<'EOF' > x.md\n$(pnpm db:push)\nEOF"))).toBeNull();
+    expect(decide(...bash('cat <<"EOF" > x.md\n$(pnpm db:push)\nEOF'))).toBeNull();
+  });
+
+  it("does not read a quoted argument to a runner's script as the script", () => {
+    expect(decide(...bash('pnpm vitest run -t "db:push"'))).toBeNull();
+    expect(decide(...bash("pnpm vitest run scripts/hooks/guard.test.mjs -t 'db:push'"))).toBeNull();
+    expect(decide(...bash('pnpm exec grep -n "db:push" scripts/hooks/guard.mjs'))).toBeNull();
+    expect(decide(...bash("pnpm --filter aenima db:push"))).toContain(
+      "drizzle-kit push is refused",
+    );
+  });
+});
+
 describe("parse", () => {
   it("splits on every separator and keeps quoted runs whole", () => {
     expect(parse("a 'b c' && d | e; f || g & h\ni\n(j)").map((c) => c.argv)).toEqual([

@@ -841,6 +841,15 @@ T0.99 — Smoke B: the Stop gate's release message reworded to build-guide §6's
   two release tests pinning it as a literal. The first ticket `/ticket` took through a Decision
   and back: the run asked for the wording, the human answered `default`, the next run built it —
   `44459b1`.
+T0.9 — Run fixes, what three live runs taught: the guard parses commands and matches argv, never
+  prose; a run leaves a marker the guard and the next preflight read; a run that dies partway is
+  recovered by the next one with one comment and no human; §4 stops only when a wrong guess is
+  expensive and every comment is plain sentences from one composer; the reviewer runs only the
+  ticket's tests; a report is refused without its red-first record; the sign-in test reads no
+  clock. Guidelines v1.4, build-guide v2.3. Smoke C (T0.97) was the live fixture, and the two
+  Fix rows the fixture runs filed — the sign-in timeout, the skill's step 8 — closed with it.
+  Three cold-review passes, the first two each finding a way a word could sit where the
+  parser expected its operand — `666f152`, review fixes on the branch.
 T0.97 — Smoke C: the Stop gate's release message in plain sentences that say what happened and
   where the rule lives, one test pinning the register. The first ticket `/ticket` took through §4
   as it now reads: "friendlier" was not written down anywhere, but a hook's output is a developer
@@ -1830,8 +1839,15 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
     steps over only `env`/`command`/`exec` (not `sudo`, `time`, `nohup`, `nice`). T0.9 replaced
     the tokenizer with a parser that reads `$(…)`, backticks and `sh -c` as the commands they
     run, steps over `sudo`/`time`/`nohup`/`nice` and the long git options, and keeps heredoc
-    bodies as data. Still past it, by design: `bash file.sh`, `python -c`, `node -e`, `dd of=`,
-    `truncate`, an editor. The parser reads command lines; it is not a shell, and it stops here.
+    bodies as data — an unquoted body's `$(…)` and backticks read as the commands they are,
+    since the shell runs them. Still past it, by design: `bash file.sh`, `python -c`, `node -e`,
+    `dd of=`, `truncate`, an editor, `echo '…' | sh`, `bash -lc '…'` (only the exact token `-c`
+    is read as a nested line), `eval "…"`, `xargs pnpm db:push`, `yarn workspace aenima db:push`
+    (`workspace` is not a runner verb the parser knows), a `#` comment (`git push # not -f` is
+    refused as a force-push),
+    and a runner option that takes a value and is not in the parser's per-runner list — its
+    value would be read as the script and the real script missed. The parser reads command
+    lines; it is not a shell, and it stops here.
 
 35. **T0.7 — subagent types register at session start**, not on file creation; T0.7 invoked its
     own reviewer through `claude -p --agent reviewer` from Bash until the type appeared. Worth a

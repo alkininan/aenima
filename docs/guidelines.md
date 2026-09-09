@@ -187,7 +187,9 @@ can trust for that. The prefix lives in `.claude/board.json`; a comment posted w
 the next run misread the thread as waiting on you.
 
 **The pipeline never sets a task to Ready without a comment from you that resolves the
-question.** Backlog → Ready is the one human move (§3), and Decision → Ready is the same move
+question.** The one exception is §3's return of a task to Ready whose Ready you already gave: a
+preflight that recovers two stale runs claims one and returns the other, and your go at Backlog →
+Ready is not withdrawn by a run dying. Backlog → Ready is the one human move (§3), and Decision → Ready is the same move
 spelled differently: your answer is the confirmation. A run that set Ready on its own reading
 would be confirming its own proposal.
 

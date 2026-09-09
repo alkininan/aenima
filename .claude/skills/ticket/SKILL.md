@@ -49,9 +49,9 @@ Releases row, create one Releases row: Name `YYYY-MM-DD <short hash>`, Commit, D
 `https://aeni.ma`, Tasks the newly Done ones, Specs the four header versions at that commit.
 
 **c. Stale runs.** Query Tasks for `Status = 'In progress'`. With none, go on. Otherwise hand the
-rows and this checkout's marker to the script:
+rows to the script; it reads this checkout's marker itself:
 
-    echo "{\"inProgress\":[…],\"marker\":$(cat .claude/.run-active 2>/dev/null || echo null)}" | node scripts/run/stale.mjs
+    echo '{"inProgress":[…]}' | node scripts/run/stale.mjs
 
 - `live` names a task → report `a run is in progress: <name>` and exit. Claim nothing.
 - Each `stale` task is a run that died partway. Recover it, no human needed — the branch is

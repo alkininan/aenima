@@ -18,6 +18,7 @@
 import { spawnSync } from "node:child_process";
 
 import { branchName } from "./branch.mjs";
+import { readMarker } from "./claim.mjs";
 import { emit, isMain, readStdin } from "./cli.mjs";
 
 /** A marker older than this belongs to a run that is not coming back. */
@@ -103,9 +104,12 @@ export function recover(id, { cwd = process.cwd(), run, now = () => new Date() }
   let remote = null;
   const pushed = g(["rev-parse", "--verify", "--quiet", `refs/remotes/origin/${branch}`]);
   if (pushed.status === 0) {
+    // `--atomic`: the create and the delete land together or not at all, so a rejected
+    // create cannot leave origin without either copy (review pass 2).
     const moved = g([
       "push",
       "--quiet",
+      "--atomic",
       "origin",
       `refs/remotes/origin/${branch}:refs/heads/${stale}`,
       `:refs/heads/${branch}`,
@@ -117,8 +121,10 @@ export function recover(id, { cwd = process.cwd(), run, now = () => new Date() }
 }
 
 /**
- * CLI. Assess: `{ "inProgress": [rows], "marker": {…} | null }` on stdin. Recover:
- * `node stale.mjs --recover T0.97`, run from the checkout.
+ * CLI. Assess: `{ "inProgress": [rows] }` on stdin — the marker is read from this checkout by
+ * the script, never handed over by the skill (the skill does not read it: T0.9 item 2); a
+ * `"marker"` field, when present, is taken as given so a test can drive `assess` from stdin.
+ * Recover: `node stale.mjs --recover T0.97`, run from the checkout.
  */
 async function main() {
   const i = process.argv.indexOf("--recover");
@@ -127,7 +133,8 @@ async function main() {
     return;
   }
   const input = JSON.parse(await readStdin());
-  emit(assess({ inProgress: input.inProgress ?? [], marker: input.marker ?? null }));
+  const marker = input.marker === undefined ? readMarker(process.cwd()) : input.marker;
+  emit(assess({ inProgress: input.inProgress ?? [], marker }));
 }
 
 if (isMain(import.meta.url)) await main();
