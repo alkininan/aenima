@@ -846,7 +846,10 @@ T0.9 — Run fixes, what three live runs taught: the guard parses commands and m
   recovered by the next one with one comment and no human; §4 stops only when a wrong guess is
   expensive and every comment is plain sentences from one composer; the reviewer runs only the
   ticket's tests; a report is refused without its red-first record; the sign-in test reads no
-  clock. Guidelines v1.4, build-guide v2.3. Smoke C (T0.97) was the live fixture — `666f152`.
+  clock. Guidelines v1.4, build-guide v2.3. Smoke C (T0.97) was the live fixture, and the two
+  Fix rows the fixture runs filed — the sign-in timeout, the skill's step 8 — closed with it.
+  Three cold-review passes, the first two each finding a way a word could sit where the
+  parser expected its operand — `666f152`, review fixes on the branch.
 
 ## Decisions made during the build
 
@@ -1830,8 +1833,13 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
     steps over only `env`/`command`/`exec` (not `sudo`, `time`, `nohup`, `nice`). T0.9 replaced
     the tokenizer with a parser that reads `$(…)`, backticks and `sh -c` as the commands they
     run, steps over `sudo`/`time`/`nohup`/`nice` and the long git options, and keeps heredoc
-    bodies as data. Still past it, by design: `bash file.sh`, `python -c`, `node -e`, `dd of=`,
-    `truncate`, an editor. The parser reads command lines; it is not a shell, and it stops here.
+    bodies as data — an unquoted body's `$(…)` and backticks read as the commands they are,
+    since the shell runs them. Still past it, by design: `bash file.sh`, `python -c`, `node -e`,
+    `dd of=`, `truncate`, an editor, `echo '…' | sh`, `bash -lc '…'` (only the exact token `-c`
+    is read as a nested line), a `#` comment (`git push # not -f` is refused as a force-push),
+    and a runner option that takes a value and is not in the parser's per-runner list — its
+    value would be read as the script and the real script missed. The parser reads command
+    lines; it is not a shell, and it stops here.
 
 35. **T0.7 — subagent types register at session start**, not on file creation; T0.7 invoked its
     own reviewer through `claude -p --agent reviewer` from Bash until the type appeared. Worth a

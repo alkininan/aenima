@@ -333,6 +333,40 @@ describe("the review's bypasses — a value-taking flag before the operand", () 
   });
 });
 
+// Pass 2 of the same review: three more places where a word sat where the rule expected its
+// operand — a shell reserved word, an unquoted heredoc body the shell expands, and a quoted
+// argument to a runner's script.
+describe("the review's bypasses, pass 2", () => {
+  it("steps over a shell reserved word to the command it introduces", () => {
+    expect(decide(...bash("if true; then pnpm db:push; fi"))).toContain(
+      "drizzle-kit push is refused",
+    );
+    expect(decide(...bash("for x in a; do pnpm db:migrate; done"))).toContain("T0.10");
+    expect(decide(...bash("while true; do git push --force; done"))).toContain("Force-pushing");
+    expect(decide(...bash("if true; then git push origin t0-9; fi"))).toBeNull();
+  });
+
+  it("reads $(…) and backticks inside an unquoted heredoc body, which the shell expands", () => {
+    expect(decide(...bash("cat <<EOF > x.md\n$(pnpm db:push)\nEOF"))).toContain("refused");
+    expect(decide(...bash("cat <<EOF > x.md\n`pnpm db:push`\nEOF"))).toContain("refused");
+    expect(decide(...bash("cat <<EOF > x.md\n$(git push --force)\nEOF"))).toContain(
+      "Force-pushing",
+    );
+    // A quoted delimiter makes the body literal: still data, still not a command.
+    expect(decide(...bash("cat <<'EOF' > x.md\n$(pnpm db:push)\nEOF"))).toBeNull();
+    expect(decide(...bash('cat <<"EOF" > x.md\n$(pnpm db:push)\nEOF'))).toBeNull();
+  });
+
+  it("does not read a quoted argument to a runner's script as the script", () => {
+    expect(decide(...bash('pnpm vitest run -t "db:push"'))).toBeNull();
+    expect(decide(...bash("pnpm vitest run scripts/hooks/guard.test.mjs -t 'db:push'"))).toBeNull();
+    expect(decide(...bash('pnpm exec grep -n "db:push" scripts/hooks/guard.mjs'))).toBeNull();
+    expect(decide(...bash("pnpm --filter aenima db:push"))).toContain(
+      "drizzle-kit push is refused",
+    );
+  });
+});
+
 describe("parse", () => {
   it("splits on every separator and keeps quoted runs whole", () => {
     expect(parse("a 'b c' && d | e; f || g & h\ni\n(j)").map((c) => c.argv)).toEqual([

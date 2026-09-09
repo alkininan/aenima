@@ -68,6 +68,56 @@ const DRIZZLE_VERBS = new Set([
 /** gh's global options that take a value, so `gh pr -R owner/repo merge` still reads as a merge. */
 const GH_VALUE_OPTIONS = new Set(["-R", "--repo"]);
 
+/**
+ * Runner options that take a value, per runner, so the value is never read as the script:
+ * `pnpm -C . db:push` and `npm -w aenima run db:push` both run `db:push`. `-w` is the reason
+ * the list is per runner — a value for npm, a boolean for pnpm. An option that takes a value
+ * and is not listed here would have its value read as the script and the real script missed;
+ * build-log open question 34 says so.
+ */
+const RUNNER_VALUE_FLAGS = {
+  pnpm: new Set([
+    "-C",
+    "--dir",
+    "-F",
+    "--filter",
+    "--filter-prod",
+    "--workspace-concurrency",
+    "--reporter",
+    "--loglevel",
+    "-p",
+    "--package",
+  ]),
+  pnpx: new Set(["-p", "--package"]),
+  npm: new Set(["-C", "--prefix", "-w", "--workspace", "--loglevel", "--registry"]),
+  npx: new Set(["-p", "--package", "--registry"]),
+  yarn: new Set(["--cwd"]),
+  bun: new Set(["--cwd", "-F", "--filter"]),
+  bunx: new Set(["--cwd"]),
+};
+
+/**
+ * Words that open or close a compound command and are never the command itself:
+ * `if true; then pnpm db:push; fi` runs `pnpm db:push`. Stepped over only at the start of a
+ * simple command, where the shell reads them as reserved.
+ */
+const RESERVED = new Set([
+  "if",
+  "then",
+  "else",
+  "elif",
+  "fi",
+  "while",
+  "until",
+  "for",
+  "do",
+  "done",
+  "case",
+  "esac",
+  "select",
+  "function",
+]);
+
 /** Shells whose `-c` string is itself a command line. */
 const SHELLS = new Set(["sh", "bash", "zsh", "dash"]);
 
@@ -106,6 +156,28 @@ function closingParen(text, open) {
 }
 
 /**
+ * The command substitutions — `$(…)` and backticks — in a stretch of text the shell would
+ * expand. An unquoted heredoc body is one such stretch: its `$(pnpm db:push)` runs.
+ */
+function expansions(text) {
+  const found = [];
+  for (let i = 0; i < text.length; i += 1) {
+    if (text[i] === "\\") {
+      i += 1;
+    } else if (text[i] === "$" && text[i + 1] === "(") {
+      const close = closingParen(text, i + 1);
+      found.push(text.slice(i + 2, close));
+      i = close;
+    } else if (text[i] === "`") {
+      const close = text.indexOf("`", i + 1);
+      found.push(text.slice(i + 1, close === -1 ? text.length : close));
+      i = close === -1 ? text.length : close;
+    }
+  }
+  return found;
+}
+
+/**
  * Lexes a command line into words, separators, redirects, heredoc bodies and nested command
  * lines. Not a shell — it is only good enough to know *which* commands the line runs and
  * what they write to, which is all the rules ask of it.
@@ -116,13 +188,15 @@ function lex(text) {
   let hasWord = false;
   let quote = null;
   let awaitingDelimiter = null; // Set after `<<`: the next word names the heredoc's end.
+  let delimiterQuoted = false; // Any quoting in that word makes the body literal.
   const pending = []; // Heredocs whose bodies begin at the next newline.
 
   const flush = () => {
     if (hasWord) {
       if (awaitingDelimiter) {
-        pending.push({ delimiter: word, strip: awaitingDelimiter.strip });
+        pending.push({ delimiter: word, strip: awaitingDelimiter.strip, quoted: delimiterQuoted });
         awaitingDelimiter = null;
+        delimiterQuoted = false;
       } else {
         tokens.push({ kind: "word", value: word });
       }
@@ -139,7 +213,7 @@ function lex(text) {
   /** Consumes the bodies of every pending heredoc from `start`; returns where they end. */
   const readHeredocs = (start) => {
     let at = start;
-    for (const { delimiter, strip } of pending) {
+    for (const { delimiter, strip, quoted } of pending) {
       const lines = [];
       let closed = false;
       while (at < text.length) {
@@ -152,7 +226,14 @@ function lex(text) {
         }
         lines.push(line);
       }
-      tokens.push({ kind: "heredoc", value: lines.join("\n"), closed });
+      const body = lines.join("\n");
+      tokens.push({ kind: "heredoc", value: body, closed });
+      // With an unquoted delimiter the shell expands the body: its `$(…)` and backticks run,
+      // so they are read as the commands they are. The rest of the body stays data. A quoted
+      // delimiter — `<<'EOF'` — makes the whole body literal.
+      if (!quoted) {
+        for (const inner of expansions(body)) tokens.push({ kind: "nested", value: inner });
+      }
     }
     pending.length = 0;
     return at;
@@ -189,6 +270,7 @@ function lex(text) {
     if (char === "'" || char === '"') {
       quote = char;
       hasWord = true;
+      if (awaitingDelimiter) delimiterQuoted = true;
       continue;
     }
     if (char === "\\") {
@@ -199,6 +281,7 @@ function lex(text) {
       } else if (i + 1 < text.length) {
         word += text[i + 1];
         hasWord = true;
+        if (awaitingDelimiter) delimiterQuoted = true;
         i += 1;
       }
       continue;
@@ -321,6 +404,8 @@ export function parse(command) {
     } else if (redirect) {
       redirect.target = token.value;
       redirect = null;
+    } else if (current.argv.length === 0 && RESERVED.has(token.value)) {
+      // The word that opens a compound command is not the command; what follows it is.
     } else if (token.value !== "{" && token.value !== "}" && token.value !== "!") {
       current.argv.push(token.value);
     }
@@ -377,27 +462,41 @@ export function target(argv) {
   const { exe, args } = program(argv);
   if (exe === null) return { name: null, rest: [] };
   if (!RUNNERS.has(exe)) return { name: exe, rest: args };
-  let i = 0;
-  while (i < args.length && (args[i].startsWith("-") || RUNNER_VERBS.has(args[i]))) i += 1;
+  const i = scriptAt(exe, args);
   return i < args.length
     ? { name: basename(args[i]), rest: args.slice(i + 1) }
     : { name: exe, rest: [] };
 }
 
 /**
+ * Where a runner's script sits in its arguments: past its verbs and its options, and past
+ * the value of every option that takes one. The script is at a position, not anywhere in
+ * the arguments — `pnpm vitest run -t "db:push"` runs vitest, and a session testing this
+ * guard types exactly that (review pass 2).
+ */
+function scriptAt(exe, args) {
+  const values = RUNNER_VALUE_FLAGS[exe] ?? new Set();
+  let i = 0;
+  while (i < args.length && (args[i].startsWith("-") || RUNNER_VERBS.has(args[i]))) {
+    i += values.has(args[i]) ? 2 : 1;
+  }
+  return i;
+}
+
+/**
  * What follows `wanted` — a script name or a binary — when the command runs it, directly or
- * through a package runner; null when it does not. Through a runner the script is found
- * among the arguments rather than at a fixed position, because a runner flag that takes a
- * value puts that value where the script was expected: `pnpm --filter aenima db:push` and
- * `pnpm -C . db:push` both run `db:push`. The cold review of T0.9 found the fixed position
- * read `aenima` and `.` as the script and let the push through.
+ * through a package runner; null when it does not. Through a runner the script is read at
+ * its position with every value-taking option stepped over: `pnpm --filter aenima db:push`
+ * and `pnpm -C . db:push` both run `db:push`, and `pnpm exec grep "db:push" f` runs grep.
+ * T0.9's review found first a fixed position that read `aenima` as the script, then an
+ * anywhere-match that read a quoted argument as one; this is the shape between them.
  */
 function invocation(argv, wanted) {
   const { exe, args } = program(argv);
   if (exe === wanted) return args;
   if (!RUNNERS.has(exe)) return null;
-  const at = args.findIndex((token) => !token.startsWith("-") && basename(token) === wanted);
-  return at === -1 ? null : args.slice(at + 1);
+  const i = scriptAt(exe, args);
+  return i < args.length && basename(args[i]) === wanted ? args.slice(i + 1) : null;
 }
 
 /** True when the command runs the `drizzle-kit` verb named, directly or through a runner. */
