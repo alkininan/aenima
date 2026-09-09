@@ -1,6 +1,9 @@
-<!-- guidelines.md · v1.4 · in the repo · §4 stops only when a wrong guess is expensive and speaks
-     in plain sentences; §5 carries the run marker, stale-run recovery, the reviewer's scope and
-     the red-first record; §9 states its closed gaps in the past tense -->
+<!-- guidelines.md · v1.5 · in the repo · §5 puts /ticket on a schedule and says how it is turned
+     on and off and what it costs idle; the marker and the gate's fingerprint move to the shared
+     .git directory; worktrees, the capability boundary, per-ticket logs; §8 names T0.10 and T0.11
+     as they now are. v1.4 · §4 stops only when a wrong guess is expensive and speaks in plain
+     sentences; §5 carries the run marker, stale-run recovery, the reviewer's scope and the
+     red-first record; §9 states its closed gaps in the past tense -->
 
 # aenima — Dev board guidelines
 
@@ -12,7 +15,7 @@ any customer sees one. Four surfaces, four jobs:
 | Notion · `dev` teamspace | Queue and conversation. Where tasks wait, where questions are asked and answered. |
 | Repo · `~/dev/aenima` | Record. Specs, tickets as claimed, reports, build log. The only editing surface for documents. |
 | Claude chat · this project | Discussion and ticket authoring. Writes tasks into the board through the Notion connector. |
-| Claude Code · Desktop Code tab | Execution. One scheduled run claims one task, builds it, reviews it, reports. |
+| Claude Code · Desktop Code tab | Execution. One scheduled run an hour claims one task, builds it, reviews it, reports. |
 
 Two copies both claiming truth is the failure aenima exists to prevent. Notion never holds a
 document; it holds machine-written mirrors of documents, each headed with the commit it mirrors.
@@ -132,7 +135,7 @@ Seven sub-pages: `product-spec` · `design-spec` · `CLAUDE` · `AGENTS` · `bui
 `build-log` · `schema`. The page is headed, verbatim: **Machine-written mirrors of the repo
 documents.** *Each page is refreshed from `main` at the start of every pipeline run and headed
 with the commit it mirrors. The repo is the only editing surface; nothing typed here survives the
-next run.* Nobody types here. The refresh itself is T0.10's; no run before it touches a mirror.
+next run.* Nobody types here. The refresh itself is T0.11's; no run before it touches a mirror.
 
 ---
 
@@ -213,22 +216,25 @@ Answers given inside an interactive Code tab session follow the same rule, appli
 
 ## 5. Run protocol
 
-One run is `/ticket`, typed by a human from `~/dev/aenima`: fresh session, Fable, auto mode,
-hooks as the boundary. T0.10 puts it on a schedule. Everything countable in the steps below is a
-script under `scripts/run/` with a test; the skill holds the judgment and nothing else.
+One run is `/ticket`: fresh session, Fable, hooks as the boundary. A Desktop scheduled task types
+it once an hour; a person can still type it from any checkout. Everything countable in the steps
+below is a script under `scripts/run/` with a test; the skill holds the judgment and nothing else.
 
 ```
-0  Preflight    assess Decision comments (§4) · mark merged Review tasks Done (merge-base
-                --is-ancestor) and write Release rows · a task In progress whose marker in this
-                checkout is fresh is a live run: exit · with no marker here, or one older than
-                three hours, it is stale: keep its branch as t<id>-stale-<HHMM>, post one
-                comment, re-claim it from origin/main and continue — no human needed
+0  Preflight    stamp this worktree as a run's and remove the ones earlier runs left (prune.mjs) ·
+                install when node_modules is absent · assess Decision comments (§4) · mark
+                merged Review tasks Done (merge-base --is-ancestor) and write Release rows · a
+                task In progress whose marker is fresh is a live run: exit · with no marker, or
+                one older than three hours, it is stale: keep its branch as t<id>-stale-<HHMM>,
+                post one comment, re-claim it from origin/main and continue — no human needed
 1  Claim        top Ready by Priority (Must first), then oldest · set In progress · write the
-                marker .claude/.run-active (task, page, branch, started, session) · assign ID
-                and Epic if missing · compare Spec versions against repo headers, note drift
+                marker aenima-run-active in the repository's shared .git directory (task, page,
+                branch, started, session) · assign ID and Epic if missing · compare Spec
+                versions against repo headers, note drift
 2  Inline       read every cited section · write docs/tickets/<id>.md — the pack the reviewer reads
 3  Branch       branch t<id> off origin/main · plan mode before any file changes · a primary
-                checkout is returned to main on exit, success or not
+                checkout is returned to main on exit, success or not; a worktree is left where
+                it is for the next run's step 0
 4  Build        smallest complete implementation · stop only when a wrong guess is expensive
                 (§4), otherwise take the default and say so · new logic has tests observed
                 failing first, the mutation and the count recorded per test
@@ -238,25 +244,88 @@ script under `scripts/run/` with a test; the skill holds the judgment and nothin
                 Should · fix every Must and re-invoke, three passes maximum · a Must still
                 standing after the third becomes an open question, Shoulds are recorded ·
                 out-of-scope findings → Backlog tasks (Type Fix, Epic inherited)
-6  Migration    if the diff adds a migration file: stop → Decision (§4). Acting on the answer
-                is T0.10's; until then a human applies it
+6  Migration    if the diff adds a migration file: stop → Decision (§4). A human applies it from
+                the primary checkout with the admin URL; acting on the answer is T0.11's
 7  Gate         Stop hook runs pnpm lint && pnpm typecheck && pnpm test in the cwd it is
                 handed, not the project dir; red cannot close
 8  Report       write docs/reports/<id>.md — refused without the red-first record: per test,
                 the mutation that made it red and the count that went green — then mirror it
                 into the body Report section: ACs implemented (each with its test) · tests
-                written · open questions · update build-log
+                written · open questions · write docs/log/<id>.md and regenerate the build
+                log's list from the directory (log-index.mjs)
 9  Close        commit, push branch, open the PR → Review · remove the marker · never merge ·
-                Runs row written by the session-end script (T0.10)
+                Runs row written by the session-end script (T0.11)
 ```
 
 One run, one task. The run exits; the next scheduled run takes the next task. Chaining inside a
 session is not done: a session that built three things reasons worse about the fourth.
 
-The marker is the run's footprint and nothing more. It is written at claim and removed on every
+**The schedule.** Routines › `aenima-ticket` in the Desktop Code tab: prompt `/ticket`, folder
+`~/dev/aenima`, hourly, Bypass permissions, Fable, worktree on. Bypass rather than Auto because the
+hooks and the credential boundary below are the design, and a classifier refusing a probe at three
+in the morning is worse than no classifier. *On:* set the task's Status to Active, turn on **Keep
+computer awake** (Settings › Desktop app › General), leave the app open and the lid up — a closed
+lid sleeps the machine, a run that falls in sleep is skipped, and one catch-up run fires on wake.
+*Off:* Status Paused; the task keeps its history and its saved approvals. Delete only from its
+detail page. *Cadence:* every hour on the hour plus a fixed stagger of a few minutes; Desktop skips
+a run while the previous one is still going, so two runs of the task never overlap, and the marker
+covers a `/ticket` typed by hand meanwhile. *Idle:* a fresh worktree costs one `pnpm install`,
+six seconds from the store; the preflight reads the board and exits; the gate's fingerprint is
+shared across worktrees, so a run at a commit the suite already passed costs seconds, and a run
+at a new main commit costs one suite. The two idle runs measured at T0.10's close are in its
+report. `AENIMA_RUN_BASE` in `.claude/settings.local.json` must be unset for the schedule: it is a
+fixture's override, and a scheduled run reads that file too.
+
+**The marker** is the run's footprint and nothing more: `aenima-run-active` in the repository's
+shared `.git` directory, the same file from the primary checkout and from every worktree, which is
+what lets a run in one worktree see a run in another. It is written at claim and removed on every
 exit — Review, Decision, and error through the SessionEnd hook; a hard kill leaves it behind,
 which is what the three-hour age is for. Only scripts read it; the skill never reasons about it.
 A stale run recovers by default because the branch is preserved: a wrong guess costs nothing.
+The Stop gate's green fingerprint, `aenima-gate-count`, lives beside it for the same reason: a
+fresh worktree of a commit the suite already passed inherits the green.
+
+**Worktrees.** A scheduled run works in a worktree Desktop makes for it, branched from
+`origin/main`, with `.env.local` carried in by `.worktreeinclude` and nothing else. Desktop does
+not remove the worktree when the run ends; it goes with the session's archive, and an idle run
+opens no pull request for auto-archive to notice. So step 0 stamps the worktree it is in as a
+run's, and removes every stamped worktree that is clean, unlocked, not its own, and either merged
+into `origin/main` or older than three days. A worktree without the stamp is a person's and is
+never touched; a dirty one holds work nobody committed and is left for a person to look at.
+
+**The capability boundary.** Two credentials in two files, and a run is handed only one.
+`.env.local`'s `DATABASE_URL` is `aenima_pipeline`, a member of `service_role` that starts every
+connection as it: it reads and writes every row, bypasses RLS as the app's direct connection
+always has, cannot create, alter or own anything, and cannot reach the `drizzle` schema. Every
+script, test, dev server and run — human or scheduled — uses it. `.env.migrate` holds the admin
+URL; only `pnpm db:migrate` and `pnpm db:baseline` read it, it is gitignored, and
+`.worktreeinclude` does not carry it. So the credential a run is handed cannot change schema, and
+the admin credential is on no path a run follows. That is a real boundary and not a wall: a
+session in a worktree can read any file on the disk, the primary checkout's `.env.migrate`
+included, if it goes looking. The guard's rule (b) stays as the second layer for exactly that
+reason. Deploys: there is no Vercel CLI on the machine and no login to it; production deploys
+come from `main` through the Vercel Git integration, and the guard's rule (c) stays as the
+second layer there too. The role is created once per project, in the Supabase SQL editor:
+
+```sql
+create role aenima_pipeline login password '…';   -- the password lives only in .env.local
+grant service_role to aenima_pipeline;
+alter role aenima_pipeline set role = service_role;
+grant authenticated to aenima_pipeline;             -- the RLS tests impersonate PostgREST's roles
+grant anon to aenima_pipeline;
+```
+
+Database tests seed and delete users through `app.seed_user` and `app.delete_user`
+(`drizzle/0014_test_users.sql`): `service_role` holds no privilege on `auth.users`, and
+`postgres` can grant only SELECT there, so two definer functions carry exactly those two
+statements.
+
+**Per-ticket logs.** A ticket's build-log entry is `docs/log/<id>.md` — first line `# <title>`,
+second line the UTC timestamp in italics, with the commit in code font after a middle dot when
+there is one, then the entry. The build log's
+Tickets done section is a list written from that directory by `scripts/run/log-index.mjs`, and
+its test refuses a stale copy. Two open pull requests each add a file and never edit the same
+lines; a merge that meets two new list lines is settled by running the script again.
 
 Hard boundaries, enforced by hooks not prose: no schema push, no migration apply, no writes to
 `.env` or `.env.*` (`.env.example` is tracked and excepted), no production deploy, no force-push,
@@ -297,9 +366,11 @@ Criteria means the same thing on a task and on a phase: what must be true to be 
   carve-out) — done. `T0.8 Run` (`/ticket`: the protocol as a command, the board reads and
   writes, the run scripts) — done. `T0.9 Run fixes` (the guard on commands, the run marker,
   stale-run recovery, §4 as it now reads, the reviewer's scope, the red-first record) — this
-  version. `T0.10 Schedule and telemetry` (scheduled task, mirror refresh, Runs rows, the
-  answered-migration path, worktrees) — next.
-- Documents: seven pages, headed as mirrors, content synced by T0.10's first run.
+  version. `T0.10 Schedule` (the scheduled task, the shared marker, worktrees and their
+  pruning, the capability boundary, per-ticket logs) — this version. `T0.11 Telemetry and
+  mirror` (Runs rows from the transcript, the Documents and Guidelines mirror refresh, the
+  answered-migration path) — next.
+- Documents: seven pages, headed as mirrors, content synced by T0.11's first run.
 
 ---
 

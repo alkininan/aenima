@@ -12,12 +12,12 @@ const markerAt = (task, iso) => ({ task, page: "p", branch: "b", started: iso, s
 
 // TC3 → AC3. Absent marker → stale; fresh marker → not; old marker → stale.
 describe("assess", () => {
-  it("reads an In progress task with no marker in this checkout as stale", () => {
+  it("reads an In progress task with no marker in this repository as stale", () => {
     const result = assess({ inProgress: [row("T0.97 Smoke C")], marker: null, now: NOW });
     expect(result.markerState).toBe("absent");
     expect(result.live).toBeNull();
     expect(result.stale.map((t) => t.Name)).toEqual(["T0.97 Smoke C"]);
-    expect(result.stale[0].reason).toBe("no run marker in this checkout");
+    expect(result.stale[0].reason).toBe("no run marker in this repository");
   });
 
   it("reads a fresh marker as a live run and claims nothing", () => {

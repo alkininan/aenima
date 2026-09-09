@@ -8,8 +8,8 @@
  * live test of this ticket, and the override is how it runs. Normal use never sets it.
  *
  * A run in the primary checkout is recorded as such so step 9 can return it to main whatever
- * happens; a run in a worktree leaves the worktree where it is. T0.10 moves runs to worktrees
- * and this distinction goes away with it.
+ * happens; a run in a worktree — every scheduled run, in the worktree Desktop made for it
+ * (docs/guidelines.md §5) — leaves the worktree where it is for `prune.mjs` to remove later.
  */
 
 import { spawnSync } from "node:child_process";

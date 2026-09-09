@@ -35,6 +35,16 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { commonDir } from "../run/repo.mjs";
+
+/**
+ * The state file's name in the repository's shared `.git` directory. One file for every
+ * worktree of the repository: a scheduled run in a fresh worktree of an unchanged commit
+ * inherits the green fingerprint the last run recorded, and an idle run costs seconds
+ * rather than a suite. Git never tracks a file there.
+ */
+export const STATE_FILE = "aenima-gate-count";
+
 export const STEPS = ["lint", "typecheck", "test"];
 export const MAX_RED = 3;
 export const TAIL_LINES = 40;
@@ -158,9 +168,10 @@ function treeFingerprint(dir) {
 
 /**
  * The state file holds one shared green fingerprint and one count per session. A green tree
- * is green for every session that sees it; a red streak belongs to the session that ran it,
- * and a sibling `claude -p` run stopping in the same checkout must not reset it — that would
- * move the three-strikes release out to the runtime's own cap.
+ * is green for every session that sees it, in any worktree of the repository; a red streak
+ * belongs to the session that ran it, and a sibling `claude -p` run stopping in the same
+ * repository must not reset it — that would move the three-strikes release out to the
+ * runtime's own cap.
  */
 export function projectState(file, sessionId) {
   return {
@@ -218,7 +229,10 @@ async function main() {
   }
 
   const dir = resolveDir(input);
-  const statePath = join(process.env.CLAUDE_PROJECT_DIR || dir, ".claude", ".gate-count");
+  // No repository, no state path: `readState` reads nothing and `writeState` writes nothing,
+  // and a gate that cannot record its own count still gates.
+  const common = commonDir(dir);
+  const statePath = common === null ? null : join(common, STATE_FILE);
   const file = readState(statePath);
   const state = projectState(file, input.session_id ?? null);
 

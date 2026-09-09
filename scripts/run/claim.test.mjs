@@ -1,13 +1,34 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { claim, marker, markerPath, readMarker } from "./claim.mjs";
+import { claim, MARKER, marker, markerPath, readMarker } from "./claim.mjs";
 import { release } from "./release.mjs";
 
-// TC2 → AC2. The marker exists from claim to exit and is gone after each of the three
+const git = (cwd, ...args) => spawnSync("git", args, { cwd, encoding: "utf8" });
+
+/** A temporary repository with one commit, so a worktree can be added to it. */
+function repository() {
+  const dir = mkdtempSync(join(tmpdir(), "aenima-marker-"));
+  git(dir, "init", "-q", "-b", "main");
+  git(
+    dir,
+    "-c",
+    "user.name=t",
+    "-c",
+    "user.email=t@t",
+    "commit",
+    "-q",
+    "--allow-empty",
+    "-m",
+    "base",
+  );
+  return dir;
+}
+
+// TC2 → AC2 (T0.9). The marker exists from claim to exit and is gone after each of the three
 // exits: Review, Decision, and the error path through the SessionEnd hook.
 describe("the run marker", () => {
   let cwd;
@@ -15,7 +36,7 @@ describe("the run marker", () => {
   const fields = { task: "T0.97", page: "3d07-page", branch: "t0-97" };
 
   beforeEach(() => {
-    cwd = mkdtempSync(join(tmpdir(), "aenima-marker-"));
+    cwd = repository();
   });
   afterEach(() => rmSync(cwd, { recursive: true, force: true }));
 
@@ -81,5 +102,53 @@ describe("the run marker", () => {
     claim(fields, { cwd, env });
     writeFileSync(markerPath(cwd), "not json");
     expect(readMarker(cwd)).toBeNull();
+  });
+});
+
+// TC1 → AC1 (T0.10). One repository, two worktrees, one marker: what a scheduled run in its
+// own worktree writes, a run in any other worktree of the repository reads.
+describe("the marker is shared across worktrees", () => {
+  let primary;
+  let other;
+  const env = { CLAUDE_CODE_SESSION_ID: "sess-1" };
+  const fields = { task: "T0.96", page: "p", branch: "t0-96" };
+
+  beforeEach(() => {
+    primary = repository();
+    other = mkdtempSync(join(tmpdir(), "aenima-worktree-"));
+    rmSync(other, { recursive: true });
+    expect(git(primary, "worktree", "add", "-q", other, "-b", "wt").status).toBe(0);
+  });
+  afterEach(() => {
+    rmSync(other, { recursive: true, force: true });
+    rmSync(primary, { recursive: true, force: true });
+  });
+
+  it("resolves to the same path from both worktrees", () => {
+    expect(markerPath(other)).toBe(markerPath(primary));
+    expect(markerPath(primary)).toBe(join(realpathSync(primary), ".git", MARKER));
+  });
+
+  it("is read from the other worktree after a claim in one, and released from there", () => {
+    claim(fields, { cwd: primary, env });
+    expect(readMarker(other)).toMatchObject({ task: "T0.96", session: "sess-1" });
+    expect(release({ session: "sess-1" }, { cwd: other }).released).toBe(true);
+    expect(readMarker(primary)).toBeNull();
+  });
+
+  it("is never something git could track, from either side", () => {
+    claim(fields, { cwd: other, env });
+    expect(git(primary, "status", "--porcelain").stdout).toBe("");
+    expect(git(other, "status", "--porcelain").stdout).toBe("");
+  });
+
+  it("has no path outside a repository, rather than a guessed one", () => {
+    const nowhere = mkdtempSync(join(tmpdir(), "aenima-norepo-"));
+    try {
+      expect(() => markerPath(nowhere)).toThrow(/not inside a git repository/);
+      expect(readMarker(nowhere)).toBeNull();
+    } finally {
+      rmSync(nowhere, { recursive: true, force: true });
+    }
   });
 });

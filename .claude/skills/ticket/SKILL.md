@@ -29,6 +29,16 @@ without a human comment that resolves its question.
 
 ## 0 Preflight
 
+**Worktree first.** Stamp this checkout as a run's and remove the worktrees earlier runs left —
+merged, or older than three days, clean and unlocked; a person's worktree carries no stamp and
+is never touched:
+
+    node scripts/run/prune.mjs
+
+A fresh worktree has no `node_modules`; the gate and the suite need them:
+
+    test -d node_modules || pnpm install --frozen-lockfile
+
 **a. Decision comments.** Query Tasks for `Status = 'Decision'`. For each, `get-comments`, then:
 
     echo '{"comments":[{"text":"…","created_time":"…"}],"prefix":"⟡ "}' | node scripts/run/comments.mjs
@@ -49,7 +59,7 @@ Releases row, create one Releases row: Name `YYYY-MM-DD <short hash>`, Commit, D
 `https://aeni.ma`, Tasks the newly Done ones, Specs the four header versions at that commit.
 
 **c. Stale runs.** Query Tasks for `Status = 'In progress'`. With none, go on. Otherwise hand the
-rows to the script; it reads this checkout's marker itself:
+rows to the script; it reads the repository's marker itself — one file for every worktree:
 
     echo '{"inProgress":[…]}' | node scripts/run/stale.mjs
 
@@ -64,7 +74,7 @@ rows to the script; it reads this checkout's marker itself:
   and continue from step 1's marker with it. With several stale tasks, order them with
   `pick-next.mjs` over those rows alone: the first is yours, the rest go back to `Ready`.
 
-Do not refresh the Documents or Guidelines mirrors. That is T0.10's.
+Do not refresh the Documents or Guidelines mirrors. That is T0.11's.
 
 ## 1 Claim
 
@@ -73,8 +83,9 @@ Query Tasks and pick:
     node scripts/run/pick-next.mjs --file <rows.json>
 
 Nothing back → report `nothing to do` and exit, with no writes. Otherwise set it `In progress`
-and write the marker — the run's footprint in this checkout, which the guard and the next
-preflight read and you never reason about:
+and write the marker — the run's footprint, in the repository's shared `.git` directory so every
+worktree sees the same file, which the guard and the next preflight read and you never reason
+about:
 
     node scripts/run/claim.mjs --task <id> --page <page id> --branch t<id-lowercase-hyphen>
 
@@ -107,7 +118,8 @@ cites something that is not there — say so in the ticket file rather than inli
     node scripts/run/branch.mjs <id>
 
 Record `primary` from its output. If true, this is the shared checkout and step 9 returns it to
-`main` however the run ends. T0.10 moves runs to worktrees and this goes away.
+`main` however the run ends. A scheduled run is in a worktree Desktop made for it; it stays on
+its branch and the next run's step 0 removes the worktree once the branch is merged.
 
 ## 4 Build
 
@@ -141,8 +153,9 @@ Type `Fix`, the same Epic, body headed `Drafted by pipeline`.
     node scripts/run/migration-check.mjs
 
 `waiting: true` → write the Report so far, release the marker (`node scripts/run/release.mjs`),
-set `Decision`, post one `migration` comment naming the file, and exit. The guard hook already
-refuses the migrate command; acting on the answer is T0.10's.
+set `Decision`, post one `migration` comment naming the file, and exit. The credential this run
+holds cannot apply a migration and the guard hook refuses the command besides; a human applies it
+from the primary checkout, and acting on the answer is T0.11's.
 
 ## 7 Gate
 
@@ -158,8 +171,15 @@ step 4 · reviewer passes and findings · changed since this ticket was cut · o
     node scripts/run/report-check.mjs docs/reports/<id>.md
 
 A refused report is not written to the board: fill the record it names and run the check again.
-Once it passes, mirror the report into the task body's `Report` section and add one line to
-`docs/build-log.md` under Tickets done.
+Once it passes, mirror the report into the task body's `Report` section, then write the ticket's
+build-log entry as its own file, `docs/log/<id>.md` — first line `# <id> — <title>`, second line
+`_<UTC timestamp>_` (the commit is the board row's; leave it off), then the entry, a paragraph or
+two in the build log's register — and regenerate the list in `docs/build-log.md` from the
+directory:
+
+    node scripts/run/log-index.mjs
+
+Never edit that list by hand; its test refuses a stale copy.
 
 ## 9 Close
 
@@ -173,4 +193,4 @@ Status to `Review`. Release the marker: `node scripts/run/release.mjs`. If step 
 `primary`, `git checkout main`. Exit.
 
 **Never merge.** Merging to main is the human's move, and the guard hook refuses `gh pr merge`
-while the marker exists. The Runs row is T0.10's.
+while the marker exists. The Runs row is T0.11's.
