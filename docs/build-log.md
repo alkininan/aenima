@@ -841,6 +841,12 @@ T0.99 — Smoke B: the Stop gate's release message reworded to build-guide §6's
   two release tests pinning it as a literal. The first ticket `/ticket` took through a Decision
   and back: the run asked for the wording, the human answered `default`, the next run built it —
   `44459b1`.
+T0.97 — Smoke C: the Stop gate's release message in plain sentences that say what happened and
+  where the rule lives, one test pinning the register. The first ticket `/ticket` took through §4
+  as it now reads: "friendlier" was not written down anywhere, but a hook's output is a developer
+  surface, so the run took a default, said so on the board, and kept going. Also the first stale-run
+  recovery: an In progress row with no marker and no branch, claimed again with one comment —
+  `df9b0a6`.
 
 ## Decisions made during the build
 
