@@ -35,9 +35,11 @@ is never touched:
 
     node scripts/run/prune.mjs
 
-A fresh worktree has no `node_modules`; the gate and the suite need them:
+A fresh worktree has no `node_modules`; the gate and the suite need them. It has no
+`.next/types` either, and the gate's typecheck reads Next's route types from there:
 
     test -d node_modules || pnpm install --frozen-lockfile
+    test -d .next/types || pnpm next typegen
 
 **a. Decision comments.** Query Tasks for `Status = 'Decision'`. For each, `get-comments`, then:
 

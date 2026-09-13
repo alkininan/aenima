@@ -270,10 +270,14 @@ lid sleeps the machine, a run that falls in sleep is skipped, and one catch-up r
 detail page. *Cadence:* every hour on the hour plus a fixed stagger of a few minutes; Desktop skips
 a run while the previous one is still going, so two runs of the task never overlap, and the marker
 covers a `/ticket` typed by hand meanwhile. *Idle:* a fresh worktree costs one `pnpm install`,
-six seconds from the store; the preflight reads the board and exits; the gate's fingerprint is
-shared across worktrees, so a run at a commit the suite already passed costs seconds, and a run
-at a new main commit costs one suite. The two idle runs measured at T0.10's close are in its
-report. `AENIMA_RUN_BASE` in `.claude/settings.local.json` must be unset for the schedule: it is a
+six seconds from the store, and one `pnpm next typegen` for the route types under `.next/types`
+that the gate's typecheck reads; the preflight reads the board and exits; the gate's fingerprint
+is shared across worktrees, so a run at a tree the suite already passed costs seconds, and a run
+at a new tree costs one suite. Measured at T0.10's close on an empty queue: the first idle run, in
+a fresh worktree at a tree the gate had not seen, was 2 min 8 s of session over 35 model turns and
+21k tokens in and out plus 341k written to cache, and one gate run; the second, at the same tree,
+1 min 39 s over 25 turns and 16k tokens plus 306k to cache, and no gate at all. The transcripts
+are read in T0.10's report. `AENIMA_RUN_BASE` in `.claude/settings.local.json` must be unset for the schedule: it is a
 fixture's override, and a scheduled run reads that file too.
 
 **The marker** is the run's footprint and nothing more: `aenima-run-active` in the repository's
