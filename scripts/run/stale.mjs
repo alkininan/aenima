@@ -3,8 +3,9 @@
  * Step 0c — a run that died partway, found and recovered.
  *
  * A task at In progress is a claim that a run is working on it. The run's footprint is the
- * marker `claim.mjs` writes in the checkout; a task whose marker is absent here, or whose
- * marker is older than three hours, is a run that stopped without reaching an exit. The
+ * marker `claim.mjs` writes in the repository's shared `.git` directory, the same file from
+ * every worktree; a task whose marker is absent there, or whose marker is older than three
+ * hours, is a run that stopped without reaching an exit. The
  * reviewer's 529s during the fixture runs are the concrete case (docs/reports/T0.8.md, open
  * question 3): a session that dies mid-step-5 leaves In progress behind, and until T0.9 the
  * next run reported "a run is in progress" and claimed nothing until a human reset the row.
@@ -46,7 +47,7 @@ export function assess({ inProgress = [], marker = null, now = Date.now() } = {}
 
   const reason =
     markerState === "absent"
-      ? "no run marker in this checkout"
+      ? "no run marker in this repository"
       : markerState === "old"
         ? `the run marker is ${Math.round(age / 60000)} minutes old`
         : "the run marker names another task";
@@ -121,8 +122,8 @@ export function recover(id, { cwd = process.cwd(), run, now = () => new Date() }
 }
 
 /**
- * CLI. Assess: `{ "inProgress": [rows] }` on stdin — the marker is read from this checkout by
- * the script, never handed over by the skill (the skill does not read it: T0.9 item 2); a
+ * CLI. Assess: `{ "inProgress": [rows] }` on stdin — the marker is read from the repository
+ * by the script, never handed over by the skill (the skill does not read it: T0.9 item 2); a
  * `"marker"` field, when present, is taken as given so a test can drive `assess` from stdin.
  * Recover: `node stale.mjs --recover T0.97`, run from the checkout.
  */

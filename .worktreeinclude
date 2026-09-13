@@ -5,7 +5,12 @@
 # finds no DATABASE_URL, and the entire `db` vitest project skips — a green suite over an
 # untested half of the repo. It is the only gitignored file the suite reads.
 #
+# `.env.migrate` — the admin URL `pnpm db:migrate` reads — is deliberately not here. It exists
+# in the primary checkout only, so a run in a worktree has no admin credential on any path it
+# reads. docs/guidelines.md §5, the capability boundary.
+#
 # Note: processed by worktrees Claude Code creates (--worktree, subagent worktrees, desktop
-# parallel sessions). A hand-run `git worktree add` copies nothing.
+# parallel sessions, scheduled tasks with the worktree toggle). A hand-run `git worktree add`
+# copies nothing.
 
 .env.local

@@ -29,6 +29,8 @@ import { existsSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { MARKER } from "../run/claim.mjs";
+import { commonDir } from "../run/repo.mjs";
 import { resolveDir } from "./gate.mjs";
 
 /** Words that run their remaining argv as the command. */
@@ -624,9 +626,13 @@ function branchAt(cwd) {
   }
 }
 
-/** True while a `/ticket` run owns the checkout the hook was called from. */
+/**
+ * True while a `/ticket` run owns the repository the hook was called from — any worktree of
+ * it, since the marker lives in the shared `.git` directory (`scripts/run/claim.mjs`).
+ */
 function runActiveAt(input) {
-  return existsSync(join(resolveDir(input), ".claude", ".run-active"));
+  const common = commonDir(resolveDir(input));
+  return common !== null && existsSync(join(common, MARKER));
 }
 
 /**
@@ -662,9 +668,11 @@ export function decide(input, deps = {}) {
       return "drizzle-kit push is refused — the RLS policies in drizzle/0001_policies.sql are not in the schema DSL, so push plans to DROP them and take the product isolation boundary with them. Generate a migration with pnpm db:generate instead. CLAUDE.md › Prohibitions.";
     }
 
-    // (b) a migration is a schema change a human approves, until T0.10 gives it a path.
+    // (b) a migration is a schema change a human approves, until T0.11 gives it a path. The
+    // credential a run is handed cannot apply one anyway (docs/guidelines.md §5, the capability
+    // boundary); this rule is the second layer, and it stays.
     if (invocation(cmd.argv, "db:migrate") !== null || drizzleKit(cmd.argv, "migrate")) {
-      return "Applying a migration is a human step until T0.10 adds the Decision-answered path. Leave the migration in the diff and say it is waiting. docs/guidelines.md §5 step 6.";
+      return "Applying a migration is a human step until T0.11 adds the Decision-answered path. Leave the migration in the diff and say it is waiting. docs/guidelines.md §5 step 6.";
     }
 
     // (c) production deploys are a human step — `npx vercel --prod` as much as `vercel --prod`.
@@ -688,10 +696,10 @@ export function decide(input, deps = {}) {
     }
 
     // (f) a pull request merged through the API writes main from any branch. While a run
-    // owns the checkout, that is the run merging, which is the one move §3 keeps human.
+    // owns the repository, that is the run merging, which is the one move §3 keeps human.
     const gh = ghWords(rest);
     if (name === "gh" && gh[0] === "pr" && gh[1] === "merge" && runActive()) {
-      return "Merging a pull request is refused while a run is active — .claude/.run-active says a run owns this checkout, and merging to main is the human's move. docs/guidelines.md §5, hard boundaries.";
+      return "Merging a pull request is refused while a run is active — the run marker in the repository's .git directory says a run owns it, and merging to main is the human's move. docs/guidelines.md §5, hard boundaries.";
     }
   }
 

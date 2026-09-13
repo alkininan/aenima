@@ -2,26 +2,43 @@
 /**
  * Step 1 — the run marker.
  *
- * `.claude/.run-active` is a run's footprint in the checkout it owns: task id, page id,
- * branch, when it started, which session wrote it. It exists from claim until the run exits
- * — Review, Decision or error — and `release.mjs` removes it on each of those paths, the
- * error path through the SessionEnd hook. Two readers, neither the skill: the guard refuses
- * `gh pr merge` while it exists (docs/guidelines.md §5, hard boundaries), and the next
- * run's preflight reads an In progress task with no marker, or a marker older than three
- * hours, as a run that died (`stale.mjs`). The skill never reasons about it.
+ * `aenima-run-active` in the repository's shared `.git` directory is a run's footprint: task
+ * id, page id, branch, when it started, which session wrote it. It exists from claim until
+ * the run exits — Review, Decision or error — and `release.mjs` removes it on each of those
+ * paths, the error path through the SessionEnd hook. Two readers, neither the skill: the
+ * guard refuses `gh pr merge` while it exists (docs/guidelines.md §5, hard boundaries), and
+ * the next run's preflight reads an In progress task with no marker, or a marker older than
+ * three hours, as a run that died (`stale.mjs`). The skill never reasons about it.
  *
- * Gitignored; per checkout, never shared.
+ * It lives in the git common dir (`repo.mjs`) rather than in the checkout because a
+ * scheduled run may get a worktree of its own, and a marker one worktree wrote must be
+ * visible from every other: that is the whole of the never-overlap rule. Git never tracks
+ * a file there, so nothing gitignores it and no worktree has to copy it.
  */
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { emit, isMain } from "./cli.mjs";
+import { commonDir } from "./repo.mjs";
 
-export const MARKER = join(".claude", ".run-active");
+export const MARKER = "aenima-run-active";
 
-/** Where the marker lives for a checkout. */
-export const markerPath = (cwd) => join(cwd, MARKER);
+/**
+ * Where the marker lives for the repository containing `cwd`: the same path from every
+ * worktree of it. Throws when `cwd` is in no repository — a run outside one has nothing to
+ * claim and nothing to read.
+ */
+export function markerPath(cwd) {
+  const common = commonDir(cwd);
+  if (common === null) throw new Error(`not inside a git repository: ${cwd}`);
+  return join(common, MARKER);
+}
+
+/** Remove the marker file. */
+export function unlinkMarker(cwd) {
+  unlinkSync(markerPath(cwd));
+}
 
 /** The marker's content, or null when there is none or it cannot be read as one. */
 export function readMarker(cwd) {
@@ -43,12 +60,10 @@ export function marker({ task, page, branch }, { now = () => new Date(), env = {
   };
 }
 
-/** Write the marker for this checkout. Returns what was written. */
+/** Write the marker for the repository containing `cwd`. Returns what was written. */
 export function claim(fields, { cwd = process.cwd(), env = process.env, now } = {}) {
   const record = marker(fields, { env, now });
-  const path = markerPath(cwd);
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, `${JSON.stringify(record, null, 2)}\n`);
+  writeFileSync(markerPath(cwd), `${JSON.stringify(record, null, 2)}\n`);
   return record;
 }
 

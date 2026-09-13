@@ -9,15 +9,13 @@
  * in `stale.mjs` is for.
  *
  * The marker is removed only by the session that wrote it. A SessionEnd from some other
- * session in the same checkout — a sibling tab closing — must not erase a live run's
- * footprint, or the next preflight would read that run as dead and recover it from under
- * itself.
+ * session of the same repository — a sibling tab closing, in this checkout or any worktree
+ * of it — must not erase a live run's footprint, or the next preflight would read that run
+ * as dead and recover it from under itself.
  */
 
-import { unlinkSync } from "node:fs";
-
+import { readMarker, unlinkMarker } from "./claim.mjs";
 import { emit, isMain, readStdin } from "./cli.mjs";
-import { markerPath, readMarker } from "./claim.mjs";
 
 /**
  * Remove the marker if this session owns it. `session` is the caller's session id; null
@@ -29,7 +27,7 @@ export function release({ session = null } = {}, { cwd = process.cwd() } = {}) {
   if ((found.session ?? null) !== (session ?? null)) {
     return { released: false, reason: "another session's marker", marker: found };
   }
-  unlinkSync(markerPath(cwd));
+  unlinkMarker(cwd);
   return { released: true, marker: found };
 }
 

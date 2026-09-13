@@ -1,5 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { claim } from "../run/claim.mjs";
+import { release } from "../run/release.mjs";
 import { decide, parse, program, target, writeTargets } from "./guard.mjs";
 
 /** A PreToolUse payload for a Bash call, with the branch the rule (d) check would see. */
@@ -27,7 +33,7 @@ describe("rule (a) — drizzle-kit push", () => {
 
 describe("rule (b) — db:migrate", () => {
   it("refuses it and names the ticket that will lift the refusal", () => {
-    expect(decide(...bash("pnpm db:migrate"))).toContain("T0.10");
+    expect(decide(...bash("pnpm db:migrate"))).toContain("T0.11");
   });
 });
 
@@ -300,12 +306,12 @@ describe("the review's bypasses — a value-taking flag before the operand", () 
     ]) {
       expect(decide(...bash(command)), command).toContain("drizzle-kit push is refused");
     }
-    expect(decide(...bash("pnpm --filter aenima db:migrate"))).toContain("T0.10");
+    expect(decide(...bash("pnpm --filter aenima db:migrate"))).toContain("T0.11");
   });
 
   it("refuses drizzle-kit push behind --config, and allows a generate whose name says push", () => {
     expect(decide(...bash("drizzle-kit --config drizzle.config.ts push"))).toContain("refused");
-    expect(decide(...bash("pnpm exec drizzle-kit --config x migrate"))).toContain("T0.10");
+    expect(decide(...bash("pnpm exec drizzle-kit --config x migrate"))).toContain("T0.11");
     expect(decide(...bash("drizzle-kit generate --name push"))).toBeNull();
   });
 
@@ -341,7 +347,7 @@ describe("the review's bypasses, pass 2", () => {
     expect(decide(...bash("if true; then pnpm db:push; fi"))).toContain(
       "drizzle-kit push is refused",
     );
-    expect(decide(...bash("for x in a; do pnpm db:migrate; done"))).toContain("T0.10");
+    expect(decide(...bash("for x in a; do pnpm db:migrate; done"))).toContain("T0.11");
     expect(decide(...bash("while true; do git push --force; done"))).toContain("Force-pushing");
     expect(decide(...bash("if true; then git push origin t0-9; fi"))).toBeNull();
   });
@@ -398,5 +404,50 @@ describe("parse", () => {
       rest: ["push"],
     });
     expect(target(["npm", "run", "db:generate"])).toEqual({ name: "db:generate", rest: [] });
+  });
+});
+
+// TC3 → AC3 (T0.10). Rule (f) reads the marker where `claim.mjs` now writes it — the
+// repository's shared `.git` directory — so a merge attempted from any worktree is refused
+// while a run in any other worktree owns the repository. No injected `runActive` here: the
+// test is that the guard finds the real file.
+describe("TC3 — rule (f) reads the shared marker", () => {
+  let primary;
+  let worktree;
+  const git = (cwd, ...args) => spawnSync("git", args, { cwd, encoding: "utf8" });
+  const merge = (cwd) => [
+    { tool_name: "Bash", tool_input: { command: "gh pr merge 3" }, cwd },
+    { currentBranch: () => "t0-9" },
+  ];
+
+  beforeAll(() => {
+    primary = mkdtempSync(join(tmpdir(), "aenima-guard-"));
+    git(primary, "init", "-q", "-b", "main");
+    // `resolveDir` walks up to the nearest package root, so each checkout needs one.
+    writeFileSync(join(primary, "package.json"), "{}\n");
+    git(primary, "add", "-A");
+    git(primary, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "base");
+    worktree = mkdtempSync(join(tmpdir(), "aenima-guard-wt-"));
+    rmSync(worktree, { recursive: true });
+    git(primary, "worktree", "add", "-q", worktree, "-b", "wt");
+  });
+  afterAll(() => {
+    rmSync(worktree, { recursive: true, force: true });
+    rmSync(primary, { recursive: true, force: true });
+  });
+
+  it("refuses a merge from a worktree while the marker written in the primary exists", () => {
+    claim(
+      { task: "T0.96", page: "p", branch: "t0-96" },
+      { cwd: primary, env: { CLAUDE_CODE_SESSION_ID: "s" } },
+    );
+    expect(decide(...merge(worktree))).toContain("refused while a run is active");
+    expect(decide(...merge(primary))).toContain("refused while a run is active");
+  });
+
+  it("allows it again once the marker is released, from either side", () => {
+    expect(release({ session: "s" }, { cwd: worktree }).released).toBe(true);
+    expect(decide(...merge(worktree))).toBeNull();
+    expect(decide(...merge(primary))).toBeNull();
   });
 });

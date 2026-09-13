@@ -63,7 +63,6 @@ afterAll(async () => {
 });
 
 const USER = "cccccccc-4444-4000-8000-00000000000c";
-const INSTANCE = "00000000-0000-0000-0000-000000000000";
 
 async function rolledBack(fn: (tx: Tx) => Promise<void>): Promise<void> {
   if (!sql) throw new Error("no database");
@@ -92,10 +91,7 @@ type World = {
 
 async function seedWorld(tx: Tx): Promise<World> {
   await tx`
-    insert into auth.users (id, instance_id, aud, role, email, encrypted_password,
-                            email_confirmed_at, created_at, updated_at)
-    values (${USER}, ${INSTANCE}, 'authenticated', 'authenticated',
-            'write-path@example.test', '', now(), now(), now())`;
+    select app.seed_user(${USER}, 'write-path@example.test')`;
 
   const [ws] = await tx<{ id: string }[]>`
     insert into workspace (name) values ('Write path') returning id`;

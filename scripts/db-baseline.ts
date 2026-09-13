@@ -31,7 +31,9 @@ type JournalEntry = { idx: number; when: number; tag: string };
 async function main() {
   const url = process.env.DATABASE_URL;
   if (!url) {
-    console.error("baseline: DATABASE_URL is not set. Copy .env.example to .env.local.");
+    console.error(
+      "baseline: DATABASE_URL is not set. It is read from .env.migrate — .env.example says what goes there.",
+    );
     process.exit(1);
   }
 

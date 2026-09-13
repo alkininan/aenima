@@ -32,7 +32,6 @@ afterAll(async () => {
 });
 
 const USER = "cccccccc-1111-4000-8000-00000000000c";
-const INSTANCE = "00000000-0000-0000-0000-000000000000";
 
 type Tx = postgres.TransactionSql;
 
@@ -57,10 +56,7 @@ async function rolledBack<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
 /** A signed-in human who has never had a workspace. */
 async function freshUser(tx: Tx) {
   await tx`
-    insert into auth.users (id, instance_id, aud, role, email, encrypted_password,
-                            email_confirmed_at, created_at, updated_at)
-    values (${USER}, ${INSTANCE}, 'authenticated', 'authenticated',
-            'bootstrap@example.test', '', now(), now(), now())`;
+    select app.seed_user(${USER}, 'bootstrap@example.test')`;
 }
 
 /** Becomes `user` for the rest of the transaction, exactly as PostgREST does. */
@@ -169,8 +165,18 @@ describe.skipIf(OFFLINE)("bootstrap_workspace", () => {
   it("refuses a caller with no identity", async () => {
     await rolledBack(async (tx) => {
       await freshUser(tx);
-      // No actAs: `auth.uid()` is null, exactly as for an anonymous request.
+      // An anonymous request runs as `anon`, which holds no EXECUTE on the function at all:
+      // refused before the body runs.
+      await tx`select set_config('role', 'anon', true)`;
+      await expect(bootstrap(tx, "Acme")).rejects.toMatchObject({ code: "42501" });
+    });
 
+    await rolledBack(async (tx) => {
+      await freshUser(tx);
+      // A signed-in role whose token carries no subject: `auth.uid()` is null and the
+      // function's own check is what refuses.
+      await tx`select set_config('role', 'authenticated', true)`;
+      await tx`select set_config('request.jwt.claims', '', true)`;
       await expect(bootstrap(tx, "Acme")).rejects.toThrow(/requires an authenticated caller/);
     });
   });

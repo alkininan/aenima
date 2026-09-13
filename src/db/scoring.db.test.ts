@@ -35,7 +35,6 @@ afterAll(async () => {
 
 const USER_A = "aaaaaaaa-3333-4000-8000-00000000000a";
 const USER_B = "bbbbbbbb-3333-4000-8000-00000000000b";
-const INSTANCE = "00000000-0000-0000-0000-000000000000";
 
 type Tx = postgres.TransactionSql;
 
@@ -82,10 +81,7 @@ async function seedTwoWorkspaces(tx: Tx): Promise<Record<string, Seeded>> {
     [USER_B, "score-b@example.test"],
   ] as const) {
     await tx`
-      insert into auth.users (id, instance_id, aud, role, email, encrypted_password,
-                              email_confirmed_at, created_at, updated_at)
-      values (${id}, ${INSTANCE}, 'authenticated', 'authenticated', ${email}, '',
-              now(), now(), now())`;
+      select app.seed_user(${id}, ${email})`;
   }
 
   const made: Record<string, Seeded> = {};

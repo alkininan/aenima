@@ -31,7 +31,6 @@ afterAll(async () => {
 });
 
 const USER = "eeeeeeee-1111-4000-8000-00000000000e";
-const INSTANCE = "00000000-0000-0000-0000-000000000000";
 
 type Tx = postgres.TransactionSql;
 
@@ -59,10 +58,7 @@ async function rolledBack<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
  */
 async function userWhoHasActed(tx: Tx) {
   await tx`
-    insert into auth.users (id, instance_id, aud, role, email, encrypted_password,
-                            email_confirmed_at, created_at, updated_at)
-    values (${USER}, ${INSTANCE}, 'authenticated', 'authenticated',
-            'deletion@example.test', '', now(), now(), now())`;
+    select app.seed_user(${USER}, 'deletion@example.test')`;
 
   const [ws] = await tx<{ id: string }[]>`
     insert into workspace (name) values ('Deletion') returning id`;
@@ -105,11 +101,13 @@ describe.skipIf(OFFLINE)("deleting an auth user", () => {
 
       // The whole bug in one statement: this used to raise
       // "activity is append-only: UPDATE is not permitted".
-      await expect(tx`delete from auth.users where id = ${USER}`).resolves.toBeDefined();
+      await expect(tx`select app.delete_user(${USER})`).resolves.toBeDefined();
 
-      const left = await tx<{ n: number }[]>`
-        select count(*)::int as n from auth.users where id = ${USER}`;
-      expect(left[0]!.n).toBe(0);
+      // Gone: `service_role` cannot read auth.users, but seeding the same id again would
+      // collide on its primary key if the row were still there.
+      await expect(
+        tx`select app.seed_user(${USER}, 'deletion@example.test')`,
+      ).resolves.toBeDefined();
     });
   });
 
@@ -117,7 +115,7 @@ describe.skipIf(OFFLINE)("deleting an auth user", () => {
     await rolledBack(async (tx) => {
       const seeded = await userWhoHasActed(tx);
 
-      await tx`delete from auth.users where id = ${USER}`;
+      await tx`select app.delete_user(${USER})`;
 
       const events = await tx<{ id: string; actor_user_id: string; action: string }[]>`
         select id, actor_user_id, action from activity where workspace_id = ${seeded.workspace}`;
@@ -140,7 +138,7 @@ describe.skipIf(OFFLINE)("deleting an auth user", () => {
     await rolledBack(async (tx) => {
       const seeded = await userWhoHasActed(tx);
 
-      await tx`delete from auth.users where id = ${USER}`;
+      await tx`select app.delete_user(${USER})`;
 
       const members = await tx<{ n: number }[]>`
         select count(*)::int as n from membership where workspace_id = ${seeded.workspace}`;

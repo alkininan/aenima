@@ -53,12 +53,5 @@ sample*.md
 # Claude Code local settings — machine-specific MCP enablement, not project config.
 .claude/settings.local.json
 
-# The Stop gate's red-attempt counter and last-green fingerprint — per session and per
-# machine, never shared.
-.claude/.gate-count
-
-# A `/ticket` run's footprint in this checkout, from claim to exit. scripts/run/claim.mjs.
-.claude/.run-active
-
 # Worktrees Claude Code creates for isolated sessions and subagents.
 .claude/worktrees/

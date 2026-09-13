@@ -1,11 +1,13 @@
-<!-- build-guide.md · v2.3 · in the repo · §2 names T0.10 as the schedule and the answered-migration
-     path, and describes a Decision comment in §4's plain sentences.
+<!-- build-guide.md · v2.4 · in the repo · §2 opens with the schedule: set Ready, the timer does the
+     rest; the hooks paragraph names the capability boundary and T0.11.
+     v2.3 · §2 names T0.10 as the schedule and the answered-migration path, and describes a
+     Decision comment in §4's plain sentences.
      v2.2 · §2 opens with /ticket, the manual path below it;
      §2 carries the hooks and the reviewer, §6 the Stop gate.
      v2.0 was a rewrite rather than a revision: v1.0 was written before ticket 0.1 and proposed a
      stack, a setup script and a set of habits, all of which the build has since replaced. -->
 
-# aenima — build guide v2.3
+# aenima — build guide v2.4
 
 How to run a ticket on aenima with Claude Code.
 
@@ -48,14 +50,15 @@ an applied file does not re-run it.
 
 ## 2. How to run a ticket
 
-**Set the task to Ready on the board, then type `/ticket`.** That is the whole of it. One run
-takes the top Ready task, claims it, writes the ticket pack, branches, builds, has the reviewer
-read it cold, reports back into the task body, opens the PR and sets Review. Backlog → Ready is
-the only move left to you (`docs/guidelines.md` §3). A run stops at Decision only when a wrong
-guess would be expensive to undo (`docs/guidelines.md` §4); it has posted a `⟡ ` comment in plain
-sentences saying what it hit, where the gap lives and what "default" would take. Answer it on the
-thread and type `/ticket` again. T0.10 puts the command on a schedule, and then even the typing
-goes.
+**Set the task to Ready; the timer does the rest.** A Desktop scheduled task types `/ticket`
+once an hour (`docs/guidelines.md` §5 says how it is turned on and off, and what it costs idle).
+One run takes the top Ready task, claims it, writes the ticket pack, branches in its own worktree,
+builds, has the reviewer read it cold, reports back into the task body, opens the PR and sets
+Review. Backlog → Ready is the only move left to you (`docs/guidelines.md` §3); in the morning you
+read Review and Decision. A run stops at Decision only when a wrong guess would be expensive to
+undo (`docs/guidelines.md` §4); it has posted a `⟡ ` comment in plain sentences saying what it
+hit, where the gap lives and what "default" would take. Answer it on the thread and the next run
+picks it up. Typing `/ticket` yourself from any checkout still works and is the same run.
 
 Everything below is the manual path — how to run a ticket by hand, which is still what you do
 when a ticket is too strange to hand over, and still what `/ticket` is doing on your behalf.
@@ -94,10 +97,13 @@ disagree with the summary — a briefing that tells it what is true has thrown a
 `scripts/hooks/guard.mjs` runs before every `Bash`, `Edit` and `Write`, and refuses a schema push,
 a migration apply, a production deploy, a force-push, a push that names `main` in any refspec
 shape, a merge with `main` checked out, and any write to a `.env` file except the tracked
-`.env.example` — each with a one-line reason naming where the rule lives. Migrations stay a human
-step until T0.10 gives them a Decision-answered path, so a diff that adds one sets Decision and
-waits. `scripts/hooks/gate.mjs` runs on `Stop`; see §6. A rule stated only in `CLAUDE.md` is a
-rule a session can read past, which is why these moved.
+`.env.example` — each with a one-line reason naming where the rule lives. Behind the migration
+rule stands a credential a run cannot migrate with: `.env.local`'s `DATABASE_URL` reads and
+writes rows and cannot change schema, and the admin URL in `.env.migrate` is read by
+`pnpm db:migrate` alone and never copied into a worktree (`docs/guidelines.md` §5). Migrations
+stay a human step until T0.11 gives them a Decision-answered path, so a diff that adds one sets
+Decision and waits. `scripts/hooks/gate.mjs` runs on `Stop`; see §6. A rule stated only in
+`CLAUDE.md` is a rule a session can read past, which is why these moved.
 
 **Three failed corrections on the same fix means the ticket is wrong, not the code.** The loop
 cannot see the plan it came from. Stop, say so, and ask for the ticket to be restated rather than
