@@ -13,7 +13,8 @@ Before anything else the run tends the ground it stands on: `prune.mjs` stamps t
 it is in as a run's and removes every stamped worktree earlier runs left that is clean,
 unlocked, not its own, and either merged into `origin/main` or older than three days — a
 person's worktree carries no stamp and is never touched — and a fresh worktree gets its
-`node_modules` installed. Then the run reads the board. `comments.mjs` splits a Decision task's
+`node_modules` installed and its `.next/types` generated (`pnpm next typegen`), which the gate's
+typecheck reads. Then the run reads the board. `comments.mjs` splits a Decision task's
 thread into the pipeline's prefixed comments and the human's, says which human comment is
 still unanswered, and whether the two-round clarifying cap allows another post; deciding
 whether an answer resolves the question is the skill's. The same script composes every
