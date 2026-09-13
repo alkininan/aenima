@@ -8,7 +8,7 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PROJECT_DIR}/scripts/hooks/guard.mjs\"",
-            "timeout": 10
+            "timeout": 60
           }
         ]
       },

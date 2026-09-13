@@ -1,5 +1,5 @@
 ---
-description: Run one dev-board ticket end to end, per docs/guidelines.md §5 — recover a stale run, assess Decision comments, claim the top Ready task, build it on a branch, review it, report, set Review, exit. One run, one ticket.
+description: Run one dev-board ticket end to end, per docs/guidelines.md §5 — recover a stale run, assess every task's comments (change, new work, merge, apply, an answer), claim the top Ready task, build it on a branch, review it, report, set Review, exit. One run, one ticket.
 disable-model-invocation: true
 ---
 
@@ -24,8 +24,11 @@ the gap lives, in words — and the script supplies the shape:
     echo '{"compose":{"kind":"stale","date":"9 September","branch":"t0-97-stale-1607"},"prefix":"⟡ "}' | node scripts/run/comments.mjs
 
 Kinds: `decision` (stopped, gap, fallback) · `clarifying` (readings, fallback) · `migration`
-(file) · `stale` (date, branch or null) · `default` (gap, choice). Never set a task to Ready
-without a human comment that resolves its question.
+(file) · `stale` (date, branch or null) · `default` (gap, choice) · `change` · `newWork` (name,
+url) · `merged` (commit) · `applied` (file) · `noted` · `setup` (step, where) · `resolved`.
+Never set a task to Ready without a human comment that asks for it — an answer that resolves a
+question, or a change request at Review. Every reply you assess ends with one ⟡ comment: that
+comment is how the next run knows the reply was read.
 
 ## 0 Preflight
 
@@ -41,18 +44,70 @@ A fresh worktree has no `node_modules`; the gate and the suite need them. It has
     test -d node_modules || pnpm install --frozen-lockfile
     test -d .next/types || pnpm next typegen
 
-**a. Decision comments.** Query Tasks for `Status = 'Decision'`. For each, `get-comments`, then:
+**a. A live run?** Query Tasks for `Status = 'In progress'`. With none, go on. Otherwise:
 
-    echo '{"comments":[{"text":"…","created_time":"…"}],"prefix":"⟡ "}' | node scripts/run/comments.mjs
+    echo '{"inProgress":[…]}' | node scripts/run/stale.mjs
 
-Act on `unanswered` only, and give each **exactly one** assessment:
+`live` names a task → report `a run is in progress: <name>` and exit. Claim nothing, read
+nothing. Keep the `stale` list for step d. (`claim.mjs` refuses to overwrite a live run's
+marker besides, so a claim made in error here stops rather than clobbers.)
 
-- It resolves the question with a single interpretation → set Status `Ready`. If the question
-  named a spec section, note that patching that section is your first act after claim.
-- It does not → post one `clarifying` comment, and leave Status at `Decision`.
-- `mayPost` is false → post nothing. Two clarifying rounds is the cap; keep reading, stay silent.
+**b. Every task's comments.** One command reads the whole board over the API:
 
-**b. Merged tickets.** Query Tasks for `Status = 'Review'`, then:
+    node scripts/run/threads.mjs
+
+`token: false` means `NOTION_TOKEN` is not in `.env.local`: say so in your report line and go
+on to c — nothing else reads comments. Otherwise each `threads` entry is a task with a human
+reply newer than the pipeline's last ⟡ comment, with its `Status`, the `unanswered` replies,
+`mayPost`, and `shape`. Give each task **exactly one** assessment, and end it with one ⟡
+comment on that task — except where `mayPost` is false: two clarifying rounds is the cap;
+keep reading, post nothing.
+
+- `shape: merge` (Review, the newest reply begins with *merge*). Claim it so the guard knows
+  the task — `node scripts/run/claim.mjs --task <id> --page <page id> --branch t<id>` — then
+
+      gh pr merge t<id> --merge
+
+  The guard reads the thread itself before it lets that through; if it refuses, the reason
+  says which of the four things was missing — quote it in your report and post nothing. On
+  success post one `merged` comment with the merge commit's short hash. Either way, then:
+  `node scripts/run/release.mjs`. Step c fetches, sets Done and writes the Release row; the
+  remote branch is left for GitHub's own deletion and the worktree for `prune.mjs`.
+- `shape: apply` (Decision waiting on a migration, the newest reply begins with *apply*). Only
+  where `.env.migrate` exists — the primary checkout; a worktree has no admin URL and leaves
+  the reply for a run that does, and says so in its report line. Claim it the same way, then
+  check the ticket's branch out — `node scripts/run/branch.mjs <id>` reuses origin's copy,
+  which is where the migration file is; the primary sits on `main` until then — and only then
+  `pnpm db:migrate`; the guard reads the thread first. If it refuses, release the marker and
+  post nothing. On success post one `applied` comment naming the file, set the task
+  `In progress`, and continue from step 1's marker with this task: skip the pick, step 3 is
+  already done, and the ticket carries on from where it stopped.
+- `shape: assess`, task at **Review** — read the reply:
+  - It asks for a change to what was built → append to the body an `# Addendum` section:
+    the date, then the reply verbatim as a quote. Set `Ready`. Post one `change` comment. The
+    next claim reuses the branch and the pull request.
+  - It asks for work beyond this ticket → **New work**, below.
+  - It asks for nothing → one `noted` comment.
+  - Otherwise → one `clarifying` comment naming the two readings; status stays.
+- `shape: assess`, task at **Decision** — the answer to the question:
+  - It resolves the question with a single interpretation → set `Ready` and post one
+    `resolved` comment. If the question named a spec section, note that patching that section
+    is your first act after claim.
+  - It asks for work beyond this ticket → **New work**.
+  - It does not resolve it → one `clarifying` comment; status stays `Decision`.
+- `shape: assess`, any other status — a reply on a Backlog, Ready, In progress or Done task:
+  - It asks for work → **New work**.
+  - It asks for nothing → one `noted` comment.
+  - Otherwise → one `clarifying` comment.
+
+**New work.** Draft the body — `echo '{"request":"<the reply>","from":{"name":"<task
+name>","url":"<task url>"},"date":"<YYYY-MM-DD>","prefix":"⟡ "}' | node scripts/run/draft.mjs`
+— and create one Tasks row at `Backlog`: Name an imperative of six words at most and no ID
+(claim assigns it), the original's Epic, Priority `Should`, the Type from product-spec §4 the
+reply describes. Never Ready. Then post one `newWork` comment on the original with the new
+task's name and URL.
+
+**c. Merged tickets.** Query Tasks for `Status = 'Review'`, then:
 
     echo '{"tasks":[{"Name":"…","Commit":"…","url":"…"}]}' | node scripts/run/merge-detect.mjs
 
@@ -60,12 +115,9 @@ Set every `merged` task to `Done`. If any became Done *and* `origin/main` is ahe
 Releases row, create one Releases row: Name `YYYY-MM-DD <short hash>`, Commit, Date, Deploy
 `https://aeni.ma`, Tasks the newly Done ones, Specs the four header versions at that commit.
 
-**c. Stale runs.** Query Tasks for `Status = 'In progress'`. With none, go on. Otherwise hand the
-rows to the script; it reads the repository's marker itself — one file for every worktree:
+**d. Stale runs.** Step a's `stale` list, from the script that reads the repository's marker
+itself — one file for every worktree:
 
-    echo '{"inProgress":[…]}' | node scripts/run/stale.mjs
-
-- `live` names a task → report `a run is in progress: <name>` and exit. Claim nothing.
 - Each `stale` task is a run that died partway. Recover it, no human needed — the branch is
   preserved, so a wrong guess costs nothing:
 
@@ -76,7 +128,7 @@ rows to the script; it reads the repository's marker itself — one file for eve
   and continue from step 1's marker with it. With several stale tasks, order them with
   `pick-next.mjs` over those rows alone: the first is yours, the rest go back to `Ready`.
 
-Do not refresh the Documents or Guidelines mirrors. That is T0.11's.
+Do not refresh the Documents or Guidelines mirrors. That is a later ticket's.
 
 ## 1 Claim
 
@@ -84,7 +136,11 @@ Query Tasks and pick:
 
     node scripts/run/pick-next.mjs --file <rows.json>
 
-Nothing back → report `nothing to do` and exit, with no writes. Otherwise set it `In progress`
+Nothing back → report `nothing to do` and exit. An idle run writes one thing at most: if
+step 0 itself went red — a script that failed, a gate that refused, a worktree that could not
+be removed — draft one task with `draft.mjs` (`from` null, `reason` the one sentence on what
+went red) and create it at `Backlog`, Type `Fix`, Epic E0.2 Pipeline, Priority `Should`. A
+preflight that met nothing wrong writes nothing. Otherwise set the picked task `In progress`
 and write the marker — the run's footprint, in the repository's shared `.git` directory so every
 worktree sees the same file, which the guard and the next preflight read and you never reason
 about:
@@ -114,14 +170,20 @@ spec section verbatim from
 
 This file is the whole of what the reviewer reads. A `missing: true` section means the ticket
 cites something that is not there — say so in the ticket file rather than inlining nothing.
+A body with an `# Addendum` section is a task sent back from Review by a reply: the ticket
+file already exists, so add an `## Addendum` section to it with the reply, and the addendum
+is what this round builds — the Criteria it names, or the reply read as one.
 
 ## 3 Branch
 
     node scripts/run/branch.mjs <id>
 
-Record `primary` from its output. If true, this is the shared checkout and step 9 returns it to
-`main` however the run ends. A scheduled run is in a worktree Desktop made for it; it stays on
-its branch and the next run's step 0 removes the worktree once the branch is merged.
+Record `primary` and `reused` from its output. If `primary` is true, this is the shared
+checkout and step 9 returns it to `main` however the run ends. A scheduled run is in a
+worktree Desktop made for it; it stays on its branch and the next run's step 0 removes the
+worktree once the branch is merged. `reused` true means the branch was already on origin —
+an addendum round, or a ticket continuing after its migration was applied — and the pull
+request is already open: build on it, and step 9 pushes to it rather than opening another.
 
 ## 4 Build
 
@@ -129,10 +191,13 @@ Plan first. Then the smallest complete implementation that satisfies the Criteri
 
 **Where the ticket is silent, stop only when a wrong guess is expensive to undo** (§4). A choice
 is expensive if it touches the database schema or stored data, a public surface — a route, copy
-a product user sees, an API shape — or would need a spec to record it. Then release the marker
-(`node scripts/run/release.mjs`), post one `decision` comment, set `Decision`, and exit.
-Everything else: take the stated default, post one `default` comment saying what you chose and
-why you could pick alone, and keep building.
+a product user sees, an API shape — or would need a spec to record it. Then commit what you
+have and push the branch (`git push -u origin <branch>`) so the next run finds it, release the
+marker (`node scripts/run/release.mjs`), post one `decision` comment, set `Decision`, and
+exit. Everything else: take the stated default, post one `default` comment saying what you
+chose and why you could pick alone, and keep building. A step only a human can do — a
+credential to create, a page to share — is not a guess: finish everything that does not need
+it, and say exactly where it goes in one `setup` comment at close.
 
 New logic gets a test, and **each test is observed failing before it passes**. Keep the record
 as you go, per test: the mutation or missing file that made it red, and the count that went
@@ -154,10 +219,12 @@ Type `Fix`, the same Epic, body headed `Drafted by pipeline`.
 
     node scripts/run/migration-check.mjs
 
-`waiting: true` → write the Report so far, release the marker (`node scripts/run/release.mjs`),
-set `Decision`, post one `migration` comment naming the file, and exit. The credential this run
-holds cannot apply a migration and the guard hook refuses the command besides; a human applies it
-from the primary checkout, and acting on the answer is T0.11's.
+`waiting: true` → write the Report so far, commit and push the branch, release the marker
+(`node scripts/run/release.mjs`), set `Decision`, post one `migration` comment naming the
+file, and exit. The credential this run holds cannot apply a migration, and the guard refuses
+the command until it has itself read the word *apply* from you on this task's thread. The
+human answers with that one word; the next run in the primary checkout applies it (step 0a)
+and carries the ticket on from here.
 
 ## 7 Gate
 
@@ -188,11 +255,13 @@ Never edit that list by hand; its test refuses a stale copy.
 Commit on the branch, then:
 
     git push -u origin <branch>
-    gh pr create --fill --base main
+    gh pr view <branch> --json url --jq .url || gh pr create --fill --base main
 
-No `gh` → put the compare URL in the report instead. Set the task's Commit to the short hash and
+One ticket, one pull request: a reused branch already has one, and the push updated it. No
+`gh` → put the compare URL in the report instead. Set the task's Commit to the short hash and
 Status to `Review`. Release the marker: `node scripts/run/release.mjs`. If step 3 said
 `primary`, `git checkout main`. Exit.
 
-**Never merge.** Merging to main is the human's move, and the guard hook refuses `gh pr merge`
-while the marker exists. The Runs row is T0.11's.
+**Never merge on your own word.** Merging to main is the human's move, made with one reply —
+*merge* — on the task at Review, and the guard refuses `gh pr merge` until it has read that
+reply from the board itself. The Runs row is a later ticket's.

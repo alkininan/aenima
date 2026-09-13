@@ -20,17 +20,21 @@
  * never matches: T0.98 and T0.8's close were both refused for *mentioning* a command in a
  * file they were writing, which is what T0.9 replaces.
  *
+ * Two rules — (b) a migration apply and (f) a pull-request merge — are allowed on one
+ * condition only: the human said the word on the board. Before `decide()` runs, `judge()`
+ * asks `scripts/run/permission.mjs` to read the claimed task's thread over the Notion API
+ * with the integration token, and hands the answer in as `deps.permission`. The guard
+ * verifies; the model never asserts (docs/guidelines.md §4).
+ *
  * `decide()` is pure and exported so scripts/hooks/guard.test.mjs can cover every rule and,
  * more importantly, every neighbouring call that must stay allowed.
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { MARKER } from "../run/claim.mjs";
-import { commonDir } from "../run/repo.mjs";
+import { verify } from "../run/permission.mjs";
 import { resolveDir } from "./gate.mjs";
 
 /** Words that run their remaining argv as the command. */
@@ -627,24 +631,62 @@ function branchAt(cwd) {
 }
 
 /**
- * True while a `/ticket` run owns the repository the hook was called from — any worktree of
- * it, since the marker lives in the shared `.git` directory (`scripts/run/claim.mjs`).
+ * The head branch of the pull request `gh pr merge` names — a number, a URL, a branch, or
+ * nothing for the checked-out branch — read from gh itself; null when gh cannot say.
  */
-function runActiveAt(input) {
-  const common = commonDir(resolveDir(input));
-  return common !== null && existsSync(join(common, MARKER));
+function prBranchAt(selector, cwd) {
+  try {
+    const args = ["pr", "view", ...(selector ? [selector] : []), "--json", "headRefName"];
+    const view = execFileSync("gh", [...args, "--jq", ".headRefName"], {
+      cwd,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    return view === "" ? null : view;
+  } catch {
+    return null;
+  }
 }
+
+/**
+ * True when a `gh pr merge` says `--merge` and nothing else about the method. A flagless
+ * merge takes the repository's setting, which nothing here can see; a squash or a rebase
+ * rewrites the hash the board carries.
+ */
+const mergeCommit = (rest) =>
+  rest.some((token) => token === "--merge" || token === "-m") &&
+  !rest.some((token) => ["--squash", "-s", "--rebase", "-r"].includes(token));
+
+/** The words a command line would need the board's permission for, in the order met. */
+export function wanted(command) {
+  const words = [];
+  for (const cmd of parse(command)) {
+    const { name, rest } = target(cmd.argv);
+    if (invocation(cmd.argv, "db:migrate") !== null || drizzleKit(cmd.argv, "migrate")) {
+      words.push("apply");
+    }
+    const gh = ghWords(rest);
+    if (name === "gh" && gh[0] === "pr" && gh[1] === "merge") words.push("merge");
+  }
+  return [...new Set(words)];
+}
+
+/** When nothing read the board, nothing is granted. */
+const UNREAD = { ok: false, why: "the board was not read" };
 
 /**
  * The whole decision. Returns the refusal reason, or null to let the call through.
  *
- * `deps.currentBranch` and `deps.runActive` are injected so the rules that depend on where
- * HEAD points and whether a run marker exists can be tested without a repository standing
- * in a particular state.
+ * `deps.currentBranch`, `deps.permission` and `deps.prBranch` are injected so the rules that
+ * depend on where HEAD points, on what the board's thread says, and on which branch a pull
+ * request carries can be tested without a repository or a board standing in a particular
+ * state. Without `deps.permission` nothing is granted: the hook's `judge()` is what reads
+ * the board.
  */
 export function decide(input, deps = {}) {
   const currentBranch = deps.currentBranch ?? (() => branchAt(input?.cwd ?? process.cwd()));
-  const runActive = deps.runActive ?? (() => runActiveAt(input));
+  const permission = deps.permission ?? (() => UNREAD);
+  const prBranch = deps.prBranch ?? ((selector) => prBranchAt(selector, resolveDir(input)));
   const tool = input?.tool_name;
 
   if (tool === "Edit" || tool === "Write") {
@@ -668,11 +710,15 @@ export function decide(input, deps = {}) {
       return "drizzle-kit push is refused — the RLS policies in drizzle/0001_policies.sql are not in the schema DSL, so push plans to DROP them and take the product isolation boundary with them. Generate a migration with pnpm db:generate instead. CLAUDE.md › Prohibitions.";
     }
 
-    // (b) a migration is a schema change a human approves, until T0.11 gives it a path. The
-    // credential a run is handed cannot apply one anyway (docs/guidelines.md §5, the capability
-    // boundary); this rule is the second layer, and it stays.
+    // (b) a migration is a schema change a human approves — with the word "apply" on the
+    // task's thread, which the guard reads from the board itself (permission.mjs). The
+    // credential a run is handed cannot apply one anyway (docs/guidelines.md §5, the
+    // capability boundary); this rule is the second layer, and it stays.
     if (invocation(cmd.argv, "db:migrate") !== null || drizzleKit(cmd.argv, "migrate")) {
-      return "Applying a migration is a human step until T0.11 adds the Decision-answered path. Leave the migration in the diff and say it is waiting. docs/guidelines.md §5 step 6.";
+      const granted = permission("apply");
+      if (!granted.ok) {
+        return `Applying a migration needs your word on the board — a reply beginning with "apply" on the task's thread, newer than the run's question — and the guard could not find it: ${granted.why}. Leave the migration in the diff and say it is waiting. docs/guidelines.md §4.`;
+      }
     }
 
     // (c) production deploys are a human step — `npx vercel --prod` as much as `vercel --prod`.
@@ -695,11 +741,32 @@ export function decide(input, deps = {}) {
       return "Merging while main is checked out is refused — merges to main are made by hand. docs/guidelines.md §5, hard boundaries.";
     }
 
-    // (f) a pull request merged through the API writes main from any branch. While a run
-    // owns the repository, that is the run merging, which is the one move §3 keeps human.
+    // (f) a pull request merged through the API writes main from any branch. Merging is the
+    // human's move (§3), and since T0.11 the human makes it with one word on the task at
+    // Review: the guard reads the claimed task's thread from the board, and the pull request
+    // must be that task's branch — derived from the task's name on the board, never from the
+    // marker the run wrote — merged with a merge commit, said as --merge: a squash rewrites
+    // the hash and `merge-detect.mjs` would never see the task land.
     const gh = ghWords(rest);
-    if (name === "gh" && gh[0] === "pr" && gh[1] === "merge" && runActive()) {
-      return "Merging a pull request is refused while a run is active — the run marker in the repository's .git directory says a run owns it, and merging to main is the human's move. docs/guidelines.md §5, hard boundaries.";
+    if (name === "gh" && gh[0] === "pr" && gh[1] === "merge") {
+      const granted = permission("merge");
+      if (!granted.ok) {
+        return `Merging a pull request needs your word on the board — a reply beginning with "merge" on the task at Review — and the guard could not find it: ${granted.why}. docs/guidelines.md §4.`;
+      }
+      if (!mergeCommit(rest)) {
+        return "Merging is refused unless it says --merge — a squash or a rebase rewrites the commit the board carries, a flagless merge takes whatever the repository is set to, and either way the task would never be seen to land. scripts/run/merge-detect.mjs.";
+      }
+      const branch = granted.task?.branch ?? null;
+      if (branch === null) {
+        return "Merging is refused — the claimed task's name on the board carries no T<n>.<n> ID, so its branch is unknown and the pull request cannot be matched to it. docs/guidelines.md §4.";
+      }
+      const head = prBranch(gh[2] ?? null);
+      if (head === null) {
+        return "Merging is refused — gh could not say which branch the pull request carries, so it cannot be matched to the claimed task. docs/guidelines.md §4.";
+      }
+      if (head !== branch) {
+        return `Merging is refused — the pull request is for ${head} and the claimed task's branch is ${branch}; the word on one task's thread does not merge another's. docs/guidelines.md §4.`;
+      }
     }
   }
 
@@ -718,6 +785,23 @@ async function readStdin() {
   return Buffer.concat(chunks).toString("utf8");
 }
 
+/**
+ * `decide` with the board read first: for each word the command would need, the claimed
+ * task's thread is fetched once, and the answers are what the rules see. A command that
+ * needs no word reads nothing.
+ */
+export async function judge(input, { dir = resolveDir(input), deps = {} } = {}) {
+  const command = input?.tool_name === "Bash" ? input?.tool_input?.command : null;
+  const answers = {};
+  for (const word of typeof command === "string" ? wanted(command) : []) {
+    answers[word] = await verify(word, { dir, deps });
+  }
+  return decide(input, {
+    permission: (word) => answers[word] ?? UNREAD,
+    ...(deps.prBranch ? { prBranch: deps.prBranch } : {}),
+  });
+}
+
 async function main() {
   let input;
   try {
@@ -728,7 +812,19 @@ async function main() {
     process.exit(0);
   }
 
-  const reason = decide(input);
+  let reason;
+  try {
+    reason = await judge(input);
+  } catch (error) {
+    // A guard that cannot finish judging a merge or an apply refuses it: the board was not
+    // read, and an exit other than 2 would let the call through. Anything else proceeds.
+    const command = input?.tool_input?.command;
+    const needed = typeof command === "string" ? wanted(command) : [];
+    reason =
+      needed.length === 0
+        ? null
+        : `The guard could not read the board before this ${needed.join(" and ")} (${error.message}); a word it has not read grants nothing. docs/guidelines.md §4.`;
+  }
   if (reason) {
     process.stderr.write(`${reason}\n`);
     process.exit(2);

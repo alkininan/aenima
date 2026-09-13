@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { claim } from "../run/claim.mjs";
 import { release } from "../run/release.mjs";
-import { decide, parse, program, target, writeTargets } from "./guard.mjs";
+import { decide, judge, parse, program, target, wanted, writeTargets } from "./guard.mjs";
 
 /** A PreToolUse payload for a Bash call, with the branch the rule (d) check would see. */
 const bash = (command, branch = "t0-7") => [
@@ -32,8 +32,8 @@ describe("rule (a) — drizzle-kit push", () => {
 });
 
 describe("rule (b) — db:migrate", () => {
-  it("refuses it and names the ticket that will lift the refusal", () => {
-    expect(decide(...bash("pnpm db:migrate"))).toContain("T0.11");
+  it("refuses it without the human's word, and says which word and where", () => {
+    expect(decide(...bash("pnpm db:migrate"))).toContain('reply beginning with "apply"');
   });
 });
 
@@ -224,9 +224,9 @@ describe("calls the guard has no opinion about", () => {
 // after the line is parsed the way the shell would run it. T0.98 and T0.8's close were
 // both refused for *mentioning* a command in a file they were writing.
 describe("TC1 — the guard reads commands, not text", () => {
-  const marker = (command, active) => [
+  const pr = (command) => [
     { tool_name: "Bash", tool_input: { command }, cwd: "/repo" },
-    { currentBranch: () => "t0-9", runActive: () => active },
+    { currentBranch: () => "t0-9" },
   ];
 
   it("allows a heredoc that mentions db:migrate — a body is data, not a command", () => {
@@ -266,12 +266,11 @@ describe("TC1 — the guard reads commands, not text", () => {
     expect(decide(...bash("FOO=1 git -C x push origin t0-9"))).toBeNull();
   });
 
-  it("refuses gh pr merge while the run marker exists, and allows it without", () => {
-    expect(decide(...marker("gh pr merge 3", true))).toContain("run is active");
-    expect(decide(...marker("gh pr merge 3 --squash", true))).toContain("run is active");
-    expect(decide(...marker("gh pr merge 3", false))).toBeNull();
-    expect(decide(...marker("gh pr create --fill --base main", true))).toBeNull();
-    expect(decide(...marker("gh pr view 3", true))).toBeNull();
+  it("refuses gh pr merge on the model's word alone, and lets create and view through", () => {
+    expect(decide(...pr("gh pr merge 3 --merge"))).toContain('reply beginning with "merge"');
+    expect(decide(...pr("gh pr merge 3 --squash"))).toContain('reply beginning with "merge"');
+    expect(decide(...pr("gh pr create --fill --base main"))).toBeNull();
+    expect(decide(...pr("gh pr view 3"))).toBeNull();
   });
 
   it("reads the commands inside $(…), backticks and sh -c, because they run", () => {
@@ -292,9 +291,9 @@ describe("TC1 — the guard reads commands, not text", () => {
 // between `drizzle-kit` and its verb, read as the operand the rule looked for. Each was
 // refused by the v1.3 text rule; item 1 says the rules carry over in effect.
 describe("the review's bypasses — a value-taking flag before the operand", () => {
-  const marker = (command, active) => [
+  const pr = (command) => [
     { tool_name: "Bash", tool_input: { command }, cwd: "/repo" },
-    { currentBranch: () => "t0-9", runActive: () => active },
+    { currentBranch: () => "t0-9" },
   ];
 
   it("refuses db:push behind a runner flag that takes a value", () => {
@@ -306,12 +305,16 @@ describe("the review's bypasses — a value-taking flag before the operand", () 
     ]) {
       expect(decide(...bash(command)), command).toContain("drizzle-kit push is refused");
     }
-    expect(decide(...bash("pnpm --filter aenima db:migrate"))).toContain("T0.11");
+    expect(decide(...bash("pnpm --filter aenima db:migrate"))).toContain(
+      'reply beginning with "apply"',
+    );
   });
 
   it("refuses drizzle-kit push behind --config, and allows a generate whose name says push", () => {
     expect(decide(...bash("drizzle-kit --config drizzle.config.ts push"))).toContain("refused");
-    expect(decide(...bash("pnpm exec drizzle-kit --config x migrate"))).toContain("T0.11");
+    expect(decide(...bash("pnpm exec drizzle-kit --config x migrate"))).toContain(
+      'reply beginning with "apply"',
+    );
     expect(decide(...bash("drizzle-kit generate --name push"))).toBeNull();
   });
 
@@ -328,14 +331,10 @@ describe("the review's bypasses — a value-taking flag before the operand", () 
   });
 
   it("refuses gh pr merge with a repo flag between pr and merge", () => {
-    expect(decide(...marker("gh pr -R alkininan/aenima merge 3", true))).toContain("run is active");
-    expect(decide(...marker("gh pr --repo alkininan/aenima merge 3 --squash", true))).toContain(
-      "run is active",
-    );
-    expect(decide(...marker("gh pr --repo=alkininan/aenima merge 3", true))).toContain(
-      "run is active",
-    );
-    expect(decide(...marker("gh pr -R alkininan/aenima merge 3", false))).toBeNull();
+    const word = 'reply beginning with "merge"';
+    expect(decide(...pr("gh pr -R alkininan/aenima merge 3 --merge"))).toContain(word);
+    expect(decide(...pr("gh pr --repo alkininan/aenima merge 3 --squash"))).toContain(word);
+    expect(decide(...pr("gh pr --repo=alkininan/aenima merge 3"))).toContain(word);
   });
 });
 
@@ -347,7 +346,9 @@ describe("the review's bypasses, pass 2", () => {
     expect(decide(...bash("if true; then pnpm db:push; fi"))).toContain(
       "drizzle-kit push is refused",
     );
-    expect(decide(...bash("for x in a; do pnpm db:migrate; done"))).toContain("T0.11");
+    expect(decide(...bash("for x in a; do pnpm db:migrate; done"))).toContain(
+      'reply beginning with "apply"',
+    );
     expect(decide(...bash("while true; do git push --force; done"))).toContain("Force-pushing");
     expect(decide(...bash("if true; then git push origin t0-9; fi"))).toBeNull();
   });
@@ -407,18 +408,161 @@ describe("parse", () => {
   });
 });
 
-// TC3 → AC3 (T0.10). Rule (f) reads the marker where `claim.mjs` now writes it — the
-// repository's shared `.git` directory — so a merge attempted from any worktree is refused
-// while a run in any other worktree owns the repository. No injected `runActive` here: the
-// test is that the guard finds the real file.
-describe("TC3 — rule (f) reads the shared marker", () => {
+// TC3 → AC3. Since T0.11 a merge is the human's word on the board, verified by the guard in
+// code: `deps.permission` is what `permission.mjs` answers, and the pull request must be the
+// claimed task's branch, merged with a merge commit. Without a grant nothing merges — the
+// model's own word, with a marker or without one, is refused the same way.
+describe("TC3 — rule (f) merges only on the human's word", () => {
+  const granted = {
+    ok: true,
+    why: null,
+    marker: { task: "T0.11", branch: "t0-11" },
+    task: { name: "T0.11 Comments", branch: "t0-11" },
+  };
+  const missing = {
+    ok: false,
+    why: 'the guard read the thread of T0.11 Comments at Review and did not find "merge" as your newest reply since the run\'s last comment',
+  };
+  const merge = (command, permission, prBranch = () => "t0-11") => [
+    { tool_name: "Bash", tool_input: { command }, cwd: "/repo" },
+    { currentBranch: () => "t0-11", permission: () => permission, prBranch },
+  ];
+
+  it("refuses a merge the board did not grant, and repeats what was missing", () => {
+    const reason = decide(...merge("gh pr merge t0-11 --merge --delete-branch", missing));
+    expect(reason).toContain('reply beginning with "merge"');
+    expect(reason).toContain(missing.why);
+  });
+
+  it("refuses the model's word alone — a decide with nothing having read the board", () => {
+    expect(decide(...bash("gh pr merge 3 --merge"))).toContain("the board was not read");
+  });
+
+  it("allows a merge commit on the claimed task's branch once the word is on the thread", () => {
+    expect(decide(...merge("gh pr merge t0-11 --merge --delete-branch", granted))).toBeNull();
+    expect(decide(...merge("gh pr merge --merge", granted))).toBeNull();
+    expect(decide(...merge("gh pr merge 7 -m", granted))).toBeNull();
+  });
+
+  // A flagless merge takes the repository's setting, which the guard cannot see (review pass
+  // 1, Should 5); a squash or a rebase rewrites the hash the board carries.
+  it("refuses a merge that does not say --merge, even with the word", () => {
+    expect(decide(...merge("gh pr merge 7", granted))).toContain("unless it says --merge");
+    expect(decide(...merge("gh pr merge t0-11 --squash", granted))).toContain("squash");
+    expect(decide(...merge("gh pr merge t0-11 -r", granted))).toContain("rebase");
+    expect(decide(...merge("gh pr merge t0-11 --merge --squash", granted))).toContain("squash");
+  });
+
+  it("refuses a pull request that is not the claimed task's branch", () => {
+    const reason = decide(...merge("gh pr merge 9 --merge", granted, () => "t0-12"));
+    expect(reason).toContain("the pull request is for t0-12");
+    expect(reason).toContain("t0-11");
+  });
+
+  // The branch to match is the board's, from the task's name; a marker that names another
+  // branch changes nothing (review pass 2, Should 5).
+  it("matches the pull request to the branch the board's name gives, not the marker's", () => {
+    const lying = { ...granted, marker: { task: "T0.11", branch: "t0-12" } };
+    expect(decide(...merge("gh pr merge 9 --merge", lying, () => "t0-12"))).toContain(
+      "the pull request is for t0-12",
+    );
+    expect(decide(...merge("gh pr merge 9 --merge", lying, () => "t0-11"))).toBeNull();
+  });
+
+  it("refuses when the task's name on the board carries no ID to derive a branch from", () => {
+    const nameless = { ...granted, task: { name: "Restrict Vercel's role", branch: null } };
+    expect(decide(...merge("gh pr merge 9 --merge", nameless))).toContain("carries no T<n>.<n> ID");
+  });
+
+  it("refuses when gh cannot say which branch the pull request carries", () => {
+    expect(decide(...merge("gh pr merge 9 --merge", granted, () => null))).toContain(
+      "could not say which branch",
+    );
+  });
+
+  it("asks gh about the selector it was given, or about the checked-out branch with none", () => {
+    const asked = [];
+    const prBranch = (selector) => {
+      asked.push(selector);
+      return "t0-11";
+    };
+    decide(...merge("gh pr merge 42 --merge", granted, prBranch));
+    decide(...merge("gh pr merge --merge", granted, prBranch));
+    decide(...merge("gh pr -R alkininan/aenima merge t0-11 --merge", granted, prBranch));
+    expect(asked).toEqual(["42", null, "t0-11"]);
+  });
+});
+
+// TC4 → AC4. A migration applies on the word "apply", read from the board the same way.
+describe("TC4 — rule (b) applies only on the human's word", () => {
+  const apply = (command, permission) => [
+    { tool_name: "Bash", tool_input: { command }, cwd: "/repo" },
+    { currentBranch: () => "t0-11", permission: () => permission },
+  ];
+  const granted = {
+    ok: true,
+    why: null,
+    marker: { task: "T0.11", branch: "t0-11" },
+    task: { name: "T0.11 Comments", branch: "t0-11" },
+  };
+
+  it("allows pnpm db:migrate once the word is on the thread, in every runner shape", () => {
+    for (const command of [
+      "pnpm db:migrate",
+      "pnpm --filter aenima db:migrate",
+      "pnpm exec drizzle-kit --config x migrate",
+    ]) {
+      expect(decide(...apply(command, granted)), command).toBeNull();
+    }
+  });
+
+  it("refuses it with the reason the board gave when the word is not there", () => {
+    const why = "NOTION_TOKEN is not in .env.local, so the board cannot be read";
+    const reason = decide(...apply("pnpm db:migrate", { ok: false, why }));
+    expect(reason).toContain('reply beginning with "apply"');
+    expect(reason).toContain(why);
+  });
+
+  it("grants apply and merge separately — one word does not stand for the other", () => {
+    const only = (word) => (asked) => (asked === word ? granted : { ok: false, why: "no" });
+    const input = (command) => ({ tool_name: "Bash", tool_input: { command }, cwd: "/repo" });
+    const deps = (word) => ({
+      currentBranch: () => "t0-11",
+      permission: only(word),
+      prBranch: () => "t0-11",
+    });
+    expect(decide(input("pnpm db:migrate"), deps("merge"))).toContain("apply");
+    expect(decide(input("gh pr merge --merge"), deps("apply"))).toContain("merge");
+    expect(decide(input("pnpm db:migrate"), deps("apply"))).toBeNull();
+    expect(decide(input("gh pr merge --merge"), deps("merge"))).toBeNull();
+  });
+});
+
+// TC3 → AC3 and TC4 → AC4, the hook's entry: which words a command line needs before the
+// board is read.
+describe("wanted — the words a command line would need", () => {
+  it("lists apply for a migrate, merge for a pr merge, nothing otherwise", () => {
+    expect(wanted("pnpm db:migrate")).toEqual(["apply"]);
+    expect(wanted("gh pr merge 3 --merge")).toEqual(["merge"]);
+    expect(wanted("pnpm db:migrate && gh pr merge 3")).toEqual(["apply", "merge"]);
+    expect(wanted("git push origin t0-11")).toEqual([]);
+    expect(wanted('echo "pnpm db:migrate"')).toEqual([]);
+    expect(wanted("")).toEqual([]);
+  });
+});
+
+// TC3 → AC3, the whole path from the hook's input to the board: `judge` reads the real marker in the
+// repository's shared `.git` directory and the real `.env.local`, and asks the (stubbed) API
+// for the claimed page's thread. From a worktree as from the primary.
+describe("judge — reads the marker and the token file, then the thread", () => {
   let primary;
   let worktree;
   const git = (cwd, ...args) => spawnSync("git", args, { cwd, encoding: "utf8" });
-  const merge = (cwd) => [
-    { tool_name: "Bash", tool_input: { command: "gh pr merge 3" }, cwd },
-    { currentBranch: () => "t0-9" },
-  ];
+  const merge = (cwd) => ({
+    tool_name: "Bash",
+    tool_input: { command: "gh pr merge t0-96 --merge" },
+    cwd,
+  });
 
   beforeAll(() => {
     primary = mkdtempSync(join(tmpdir(), "aenima-guard-"));
@@ -430,24 +574,42 @@ describe("TC3 — rule (f) reads the shared marker", () => {
     worktree = mkdtempSync(join(tmpdir(), "aenima-guard-wt-"));
     rmSync(worktree, { recursive: true });
     git(primary, "worktree", "add", "-q", worktree, "-b", "wt");
+    writeFileSync(join(worktree, ".env.local"), "NOTION_TOKEN=ntn_t\n");
   });
   afterAll(() => {
     rmSync(worktree, { recursive: true, force: true });
     rmSync(primary, { recursive: true, force: true });
   });
 
-  it("refuses a merge from a worktree while the marker written in the primary exists", () => {
+  it("refuses with no marker, then with no token, then allows from the worktree on the word", async () => {
+    const board = () => ({ prefix: "⟡ " });
+    const thread = async () => [{ text: "merge", created_time: "2026-09-13T11:00:00Z" }];
+    const page = async () => ({ Name: "T0.96 Smoke D", Status: "Review" });
+    const deps = { board, comments: thread, page, prBranch: () => "t0-96" };
+
+    expect(await judge(merge(worktree), { deps })).toContain("no run marker");
+
     claim(
       { task: "T0.96", page: "p", branch: "t0-96" },
       { cwd: primary, env: { CLAUDE_CODE_SESSION_ID: "s" } },
     );
-    expect(decide(...merge(worktree))).toContain("refused while a run is active");
-    expect(decide(...merge(primary))).toContain("refused while a run is active");
+    // The primary has no .env.local in this fixture: the marker is found, the token is not.
+    expect(await judge(merge(primary), { deps })).toContain("NOTION_TOKEN is not in .env.local");
+    expect(await judge(merge(worktree), { deps })).toBeNull();
   });
 
-  it("allows it again once the marker is released, from either side", () => {
+  it("refuses again once the word is consumed by the pipeline's own reply", async () => {
+    const thread = async () => [
+      { text: "merge", created_time: "2026-09-13T11:00:00Z" },
+      { text: "⟡ Merged into main at x.", created_time: "2026-09-13T12:00:00Z" },
+    ];
+    const deps = {
+      board: () => ({ prefix: "⟡ " }),
+      comments: thread,
+      page: async () => ({ Name: "T0.96 Smoke D", Status: "Review" }),
+      prBranch: () => "t0-96",
+    };
+    expect(await judge(merge(worktree), { deps })).toContain('did not find "merge"');
     expect(release({ session: "s" }, { cwd: worktree }).released).toBe(true);
-    expect(decide(...merge(worktree))).toBeNull();
-    expect(decide(...merge(primary))).toBeNull();
   });
 });

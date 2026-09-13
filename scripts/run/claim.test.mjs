@@ -51,6 +51,29 @@ describe("the run marker", () => {
     });
   });
 
+  // T0.11 review pass 2, Must 2 (and pass 3, Should 10): a claim never lands on a live run's
+  // marker — the never-overlap rule from the claiming side.
+  it("refuses to overwrite a fresh marker another session wrote, and names the task", () => {
+    claim(fields, { cwd, env: { CLAUDE_CODE_SESSION_ID: "other" } });
+    expect(() => claim({ ...fields, task: "T0.98" }, { cwd, env })).toThrow(
+      "a live run owns this repository: T0.97",
+    );
+    expect(readMarker(cwd).task).toBe("T0.97");
+  });
+
+  it("overwrites another session's marker once it is older than three hours, and its own always", () => {
+    const old = () => new Date(Date.now() - 4 * 60 * 60 * 1000);
+    claim(fields, { cwd, env: { CLAUDE_CODE_SESSION_ID: "other" }, now: old });
+    expect(claim({ ...fields, task: "T0.99" }, { cwd, env }).task).toBe("T0.99");
+    expect(claim({ ...fields, task: "T0.98" }, { cwd, env }).task).toBe("T0.98");
+    expect(readMarker(cwd).session).toBe("sess-1");
+  });
+
+  it("reads two markers with no session id as two sessions, not one", () => {
+    claim(fields, { cwd, env: {} });
+    expect(() => claim({ ...fields, task: "T0.98" }, { cwd, env: {} })).toThrow("a live run");
+  });
+
   it("is present between claim and exit", () => {
     expect(readMarker(cwd)).toBeNull();
     claim(fields, { cwd, env });

@@ -1,4 +1,6 @@
-<!-- build-guide.md · v2.4 · in the repo · §2 opens with the schedule: set Ready, the timer does the
+<!-- build-guide.md · v2.5 · in the repo · the hooks paragraph: a migration applies and a pull
+     request merges on one word from you on the board, read by the guard over the API.
+     v2.4 · §2 opens with the schedule: set Ready, the timer does the
      rest; the hooks paragraph names the capability boundary and T0.11.
      v2.3 · §2 names T0.10 as the schedule and the answered-migration path, and describes a
      Decision comment in §4's plain sentences.
@@ -7,7 +9,7 @@
      v2.0 was a rewrite rather than a revision: v1.0 was written before ticket 0.1 and proposed a
      stack, a setup script and a set of habits, all of which the build has since replaced. -->
 
-# aenima — build guide v2.4
+# aenima — build guide v2.5
 
 How to run a ticket on aenima with Claude Code.
 
@@ -100,10 +102,13 @@ shape, a merge with `main` checked out, and any write to a `.env` file except th
 `.env.example` — each with a one-line reason naming where the rule lives. Behind the migration
 rule stands a credential a run cannot migrate with: `.env.local`'s `DATABASE_URL` reads and
 writes rows and cannot change schema, and the admin URL in `.env.migrate` is read by
-`pnpm db:migrate` alone and never copied into a worktree (`docs/guidelines.md` §5). Migrations
-stay a human step until T0.11 gives them a Decision-answered path, so a diff that adds one sets
-Decision and waits. `scripts/hooks/gate.mjs` runs on `Stop`; see §6. A rule stated only in
-`CLAUDE.md` is a rule a session can read past, which is why these moved.
+`pnpm db:migrate` alone and never copied into a worktree (`docs/guidelines.md` §5). A diff that
+adds a migration sets Decision and waits for one word from you on the task's thread, `apply`;
+a pull request merges on the word `merge` at Review. Neither word is taken from the model: the
+guard reads the thread itself, over the Notion API with the integration token in `.env.local`,
+and refuses the command until the reply is there and newer than the run's own last comment
+(`docs/guidelines.md` §4). `scripts/hooks/gate.mjs` runs on `Stop`; see §6. A rule stated
+only in `CLAUDE.md` is a rule a session can read past, which is why these moved.
 
 **Three failed corrections on the same fix means the ticket is wrong, not the code.** The loop
 cannot see the plan it came from. Stop, say so, and ask for the ticket to be restated rather than
