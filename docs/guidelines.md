@@ -222,7 +222,8 @@ below is a script under `scripts/run/` with a test; the skill holds the judgment
 
 ```
 0  Preflight    stamp this worktree as a run's and remove the ones earlier runs left (prune.mjs) ·
-                install when node_modules is absent · assess Decision comments (§4) · mark
+                install when node_modules is absent, typegen when .next/types is · assess
+                Decision comments (§4) · mark
                 merged Review tasks Done (merge-base --is-ancestor) and write Release rows · a
                 task In progress whose marker is fresh is a live run: exit · with no marker, or
                 one older than three hours, it is stale: keep its branch as t<id>-stale-<HHMM>,
