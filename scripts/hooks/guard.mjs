@@ -648,9 +648,14 @@ function prBranchAt(selector, cwd) {
   }
 }
 
-/** True when a `gh pr merge` asks for anything but a merge commit. */
-const notAMergeCommit = (rest) =>
-  rest.some((token) => ["--squash", "-s", "--rebase", "-r"].includes(token));
+/**
+ * True when a `gh pr merge` says `--merge` and nothing else about the method. A flagless
+ * merge takes the repository's setting, which nothing here can see; a squash or a rebase
+ * rewrites the hash the board carries.
+ */
+const mergeCommit = (rest) =>
+  rest.some((token) => token === "--merge" || token === "-m") &&
+  !rest.some((token) => ["--squash", "-s", "--rebase", "-r"].includes(token));
 
 /** The words a command line would need the board's permission for, in the order met. */
 export function wanted(command) {
@@ -743,12 +748,12 @@ export function decide(input, deps = {}) {
     // `merge-detect.mjs` would never see the task land.
     const gh = ghWords(rest);
     if (name === "gh" && gh[0] === "pr" && gh[1] === "merge") {
-      if (notAMergeCommit(rest)) {
-        return "Merging with a squash or a rebase is refused — it rewrites the commit the board carries, and the task would never be seen to land. Merge with --merge. scripts/run/merge-detect.mjs.";
-      }
       const granted = permission("merge");
       if (!granted.ok) {
         return `Merging a pull request needs your word on the board — a reply beginning with "merge" on the task at Review — and the guard could not find it: ${granted.why}. docs/guidelines.md §4.`;
+      }
+      if (!mergeCommit(rest)) {
+        return "Merging is refused unless it says --merge — a squash or a rebase rewrites the commit the board carries, a flagless merge takes whatever the repository is set to, and either way the task would never be seen to land. scripts/run/merge-detect.mjs.";
       }
       const head = prBranch(gh[2] ?? null);
       if (head === null) {

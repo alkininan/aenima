@@ -289,8 +289,9 @@ below is a script under `scripts/run/` with a test; the skill holds the judgment
                 standing after the third becomes an open question, Shoulds are recorded ·
                 out-of-scope findings → Backlog tasks (Type Fix, Epic inherited)
 6  Migration    if the diff adds a migration file: commit, push, stop → Decision (§4). You
-                answer `apply` on the thread; the next run in the primary checkout applies it,
-                the guard having read your word from the board, and carries the ticket on
+                answer `apply` on the thread; a run in the primary checkout — a person's
+                `/ticket` there, until `.env.migrate` rides into worktrees — applies it, the
+                guard having read your word from the board, and carries the ticket on
 7  Gate         Stop hook runs pnpm lint && pnpm typecheck && pnpm test in the cwd it is
                 handed, not the project dir; red cannot close
 8  Report       write docs/reports/<id>.md — refused without the red-first record: per test,
@@ -354,8 +355,10 @@ call per task; and the guard reads the claimed task's thread before it lets a me
 migration apply through (§4). The token is read from the file and never printed; an API error
 names the endpoint and the status and nothing else. Without it a run says so in its report line
 and reads no comments — a merge or an apply is then refused on that ground, which is the honest
-answer: nothing read the board. The comments the pipeline posts still go through the connector,
-which posts as you; the prefix is what tells the two voices apart on a thread, as §4 says.
+answer: nothing read the board. The API lists open threads only, so resolve nothing on a task
+until the run has answered it: a resolved `merge` is a merge nobody will see. The comments the
+pipeline posts still go through the connector, which posts as you; the prefix is what tells the
+two voices apart on a thread, as §4 says.
 
 **The capability boundary.** Two credentials in two files, and a run is handed only one.
 `.env.local`'s `DATABASE_URL` is `aenima_pipeline`, a member of `service_role` that starts every

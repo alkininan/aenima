@@ -63,7 +63,7 @@ keep reading, post nothing.
   The guard reads the thread itself before it lets that through; if it refuses, the reason
   says which of the four things was missing — quote it in your report and post nothing. On
   success post one `merged` comment with the merge commit's short hash, then
-  `node scripts/run/release.mjs`. Step b sets Done and writes the Release row.
+  `node scripts/run/release.mjs`. Step b fetches, sets Done and writes the Release row.
 - `shape: apply` (Decision waiting on a migration, the reply begins with *apply*). Only where
   `.env.migrate` exists — the primary checkout; a worktree has no admin URL and leaves the
   reply for a run that does, and says so in its report line. Claim it the same way, then

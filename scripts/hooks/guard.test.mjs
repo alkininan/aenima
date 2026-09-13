@@ -224,9 +224,9 @@ describe("calls the guard has no opinion about", () => {
 // after the line is parsed the way the shell would run it. T0.98 and T0.8's close were
 // both refused for *mentioning* a command in a file they were writing.
 describe("TC1 — the guard reads commands, not text", () => {
-  const marker = (command, active) => [
+  const pr = (command) => [
     { tool_name: "Bash", tool_input: { command }, cwd: "/repo" },
-    { currentBranch: () => "t0-9", runActive: () => active },
+    { currentBranch: () => "t0-9" },
   ];
 
   it("allows a heredoc that mentions db:migrate — a body is data, not a command", () => {
@@ -267,11 +267,10 @@ describe("TC1 — the guard reads commands, not text", () => {
   });
 
   it("refuses gh pr merge on the model's word alone, and lets create and view through", () => {
-    expect(decide(...marker("gh pr merge 3", true))).toContain('reply beginning with "merge"');
-    expect(decide(...marker("gh pr merge 3 --squash", true))).toContain("squash");
-    expect(decide(...marker("gh pr merge 3", false))).toContain('reply beginning with "merge"');
-    expect(decide(...marker("gh pr create --fill --base main", true))).toBeNull();
-    expect(decide(...marker("gh pr view 3", true))).toBeNull();
+    expect(decide(...pr("gh pr merge 3 --merge"))).toContain('reply beginning with "merge"');
+    expect(decide(...pr("gh pr merge 3 --squash"))).toContain('reply beginning with "merge"');
+    expect(decide(...pr("gh pr create --fill --base main"))).toBeNull();
+    expect(decide(...pr("gh pr view 3"))).toBeNull();
   });
 
   it("reads the commands inside $(…), backticks and sh -c, because they run", () => {
@@ -292,9 +291,9 @@ describe("TC1 — the guard reads commands, not text", () => {
 // between `drizzle-kit` and its verb, read as the operand the rule looked for. Each was
 // refused by the v1.3 text rule; item 1 says the rules carry over in effect.
 describe("the review's bypasses — a value-taking flag before the operand", () => {
-  const marker = (command, active) => [
+  const pr = (command) => [
     { tool_name: "Bash", tool_input: { command }, cwd: "/repo" },
-    { currentBranch: () => "t0-9", runActive: () => active },
+    { currentBranch: () => "t0-9" },
   ];
 
   it("refuses db:push behind a runner flag that takes a value", () => {
@@ -333,12 +332,9 @@ describe("the review's bypasses — a value-taking flag before the operand", () 
 
   it("refuses gh pr merge with a repo flag between pr and merge", () => {
     const word = 'reply beginning with "merge"';
-    expect(decide(...marker("gh pr -R alkininan/aenima merge 3", true))).toContain(word);
-    expect(decide(...marker("gh pr --repo alkininan/aenima merge 3 --squash", true))).toContain(
-      "squash",
-    );
-    expect(decide(...marker("gh pr --repo=alkininan/aenima merge 3", true))).toContain(word);
-    expect(decide(...marker("gh pr -R alkininan/aenima merge 3", false))).toContain(word);
+    expect(decide(...pr("gh pr -R alkininan/aenima merge 3 --merge"))).toContain(word);
+    expect(decide(...pr("gh pr --repo alkininan/aenima merge 3 --squash"))).toContain(word);
+    expect(decide(...pr("gh pr --repo=alkininan/aenima merge 3"))).toContain(word);
   });
 });
 
@@ -440,12 +436,16 @@ describe("TC3 — rule (f) merges only on the human's word", () => {
   it("allows a merge commit on the claimed task's branch once the word is on the thread", () => {
     expect(decide(...merge("gh pr merge t0-11 --merge --delete-branch", granted))).toBeNull();
     expect(decide(...merge("gh pr merge --merge", granted))).toBeNull();
-    expect(decide(...merge("gh pr merge 7", granted))).toBeNull();
+    expect(decide(...merge("gh pr merge 7 -m", granted))).toBeNull();
   });
 
-  it("refuses a squash or a rebase even with the word, since the board would never see it land", () => {
+  // A flagless merge takes the repository's setting, which the guard cannot see (review pass
+  // 1, Should 5); a squash or a rebase rewrites the hash the board carries.
+  it("refuses a merge that does not say --merge, even with the word", () => {
+    expect(decide(...merge("gh pr merge 7", granted))).toContain("unless it says --merge");
     expect(decide(...merge("gh pr merge t0-11 --squash", granted))).toContain("squash");
-    expect(decide(...merge("gh pr merge t0-11 -r", granted))).toContain("squash or a rebase");
+    expect(decide(...merge("gh pr merge t0-11 -r", granted))).toContain("rebase");
+    expect(decide(...merge("gh pr merge t0-11 --merge --squash", granted))).toContain("squash");
   });
 
   it("refuses a pull request that is not the claimed task's branch", () => {

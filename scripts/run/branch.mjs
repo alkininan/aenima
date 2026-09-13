@@ -62,6 +62,32 @@ export function createBranch(id, { cwd = process.cwd(), env = process.env, run }
   const primary = isPrimaryCheckout(g);
   const remote = `origin/${branch}`;
   const reused = g(["rev-parse", "--verify", "--quiet", `refs/remotes/${remote}`]).status === 0;
+
+  // The run that took the task to Review left its worktree on the branch, and `prune.mjs`
+  // keeps an unmerged worktree for three days; git refuses to check a branch out twice. That
+  // worktree is clean by construction — every exit pushes — so it is removed first. A dirty
+  // one holds work nobody pushed and stops the run here rather than losing it.
+  let freed = null;
+  if (reused) {
+    const held = heldBy(branch, g);
+    if (held !== null) {
+      const removed = g(["worktree", "remove", held]);
+      if (removed.status !== 0) {
+        return {
+          branch,
+          base: remote,
+          reused,
+          freed,
+          primary,
+          fetched: fetched.status === 0,
+          ok: false,
+          detail: `${branch} is checked out in ${held} and it could not be removed: ${`${removed.stdout ?? ""}${removed.stderr ?? ""}`.trim()}`,
+        };
+      }
+      freed = held;
+    }
+  }
+
   const created = reused
     ? g(["checkout", "-B", branch, remote])
     : g(["checkout", "-b", branch, base]);
@@ -70,11 +96,25 @@ export function createBranch(id, { cwd = process.cwd(), env = process.env, run }
     branch,
     base: reused ? remote : base,
     reused,
+    freed,
     primary,
     fetched: fetched.status === 0,
     ok: created.status === 0,
     detail: created.status === 0 ? null : `${created.stdout ?? ""}${created.stderr ?? ""}`.trim(),
   };
+}
+
+/** The path of another worktree that has `branch` checked out, or null when none has. */
+export function heldBy(branch, run) {
+  const list = run(["worktree", "list", "--porcelain"]);
+  if (list.status !== 0) return null;
+  const own = String(run(["rev-parse", "--show-toplevel"]).stdout ?? "").trim();
+  let path = null;
+  for (const line of String(list.stdout ?? "").split("\n")) {
+    if (line.startsWith("worktree ")) path = line.slice("worktree ".length).trim();
+    else if (line === `branch refs/heads/${branch}` && path !== null && path !== own) return path;
+  }
+  return null;
 }
 
 /** CLI: `node branch.mjs <ticket-id>`. */

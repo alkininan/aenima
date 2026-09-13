@@ -49,11 +49,20 @@ export function mergeDetect(tasks = [], run, ref = "origin/main") {
   return { merged, open };
 }
 
-/** CLI: `{ "tasks": [...], "ref": "origin/main" }` on stdin, run from the repo. */
+/**
+ * CLI: `{ "tasks": [...], "ref": "origin/main" }` on stdin, run from the repo. Fetches first:
+ * a merge made a moment ago in step 0a — on the human's word — is on origin and not yet in
+ * this checkout's `origin/main`, and the task it landed is set Done in the run that merged
+ * it, not an hour later (review pass 1, Must 2).
+ */
 async function main() {
   const input = JSON.parse(await readStdin());
   const run = defaultRunner(input.cwd ?? process.cwd());
-  emit(mergeDetect(input.tasks ?? [], run, input.ref ?? "origin/main"));
+  const fetched = run(["fetch", "--quiet", "origin"]);
+  emit({
+    fetched: fetched.status === 0,
+    ...mergeDetect(input.tasks ?? [], run, input.ref ?? "origin/main"),
+  });
 }
 
 if (isMain(import.meta.url)) await main();
