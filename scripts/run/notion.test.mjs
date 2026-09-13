@@ -52,6 +52,7 @@ describe("envValue and readToken", () => {
   });
 });
 
+// TC3 → AC3 and TC4 → AC4, the board as the guard and the preflight read it.
 describe("comment and task", () => {
   it("flattens rich text to the text the thread reader sees", () => {
     const raw = {
@@ -90,6 +91,7 @@ describe("comment and task", () => {
   });
 });
 
+// TC3 → AC3 and TC4 → AC4, the API client both readers go through.
 describe("client", () => {
   it("refuses to exist without a token", () => {
     expect(() => client(null)).toThrow("NOTION_TOKEN");

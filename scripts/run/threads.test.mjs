@@ -6,8 +6,9 @@ const P = "⟡ ";
 const c = (text, created_time) => ({ text, created_time });
 const row = (id, Name, Status) => ({ id, url: `https://n/${id}`, Name, Status });
 
-// Step 0a since T0.11: every task's thread, one command. Only tasks with a reply the
-// pipeline has not answered come back, each with the shape the words settle.
+// T0.11 Build 1 — the preflight read behind TC1, TC2, TC3 and TC4: every task's thread, one
+// command. Only tasks with a reply the pipeline has not answered come back, each with the
+// shape the words settle.
 describe("scan", () => {
   const threads = {
     review: [c("print JSON instead", "2026-09-13T11:00:00Z")],

@@ -159,6 +159,7 @@ describe("compose", () => {
       step: "a Notion internal integration",
       where: "Its token goes in .env.local as NOTION_TOKEN.",
     },
+    resolved: {},
   };
 
   it("has a fixture for every kind, so a kind added without a voice is caught here", () => {
@@ -211,7 +212,8 @@ describe("compose", () => {
     );
   });
 
-  // T0.11: the shapes a reply on any task can take, each with a voice of its own.
+  // TC1 → AC1 (change), TC2 → AC2 (newWork), TC3 → AC3 (merged), TC4 → AC4 (applied): the
+  // shapes a reply on any task can take, each with a voice of its own.
   it("says a change was folded in and where the task went", () => {
     expect(compose("change", {}, P)).toBe(
       `${P}I've read that as a change to this ticket and folded it into the body as an addendum. The task is back at Ready; the next run builds it on the same branch and pull request and brings it back to Review.`,
@@ -230,6 +232,14 @@ describe("compose", () => {
     );
     expect(compose("applied", all.applied, P)).toBe(
       `${P}Applied drizzle/0015_x.sql to the shared database. The ticket picks up from where it stopped.`,
+    );
+  });
+
+  // Review pass 3, Must 3: a Decision answer that sets Ready needs its own ⟡ comment too, or
+  // every later run reads the same answer as unanswered.
+  it("says an answer was read as the answer, so the reply is not assessed twice", () => {
+    expect(compose("resolved", {}, P)).toBe(
+      `${P}Read that as the answer, thanks. The task is back at Ready and the next run picks it up from there.`,
     );
   });
 

@@ -18,7 +18,7 @@
 import { branchName } from "./branch.mjs";
 import { readMarker } from "./claim.mjs";
 import { emit, isMain } from "./cli.mjs";
-import { permitted } from "./comments.mjs";
+import { readThread, shapeOf } from "./comments.mjs";
 import { client, readBoard, readToken, TOKEN_VAR } from "./notion.mjs";
 import { idOf } from "./stale.mjs";
 
@@ -26,8 +26,8 @@ export const WORDS = ["merge", "apply"];
 
 /**
  * `{ ok, why, marker, comment, task }` for `word` on the claimed task. `task` is what the
- * board says the claimed page is — `{ name, branch }`, the branch derived from the ID in the
- * name, null when the name carries none. Effects injected: `marker`, `token`, `board`,
+ * board says the claimed page is — `{ name, status, branch }`, the branch derived from the ID
+ * in the name, null when the name carries none. Effects injected: `marker`, `token`, `board`,
  * `comments` and `page` default to the real ones for `dir`.
  */
 export async function verify(word, { dir = process.cwd(), deps = {} } = {}) {
@@ -65,9 +65,30 @@ export async function verify(word, { dir = process.cwd(), deps = {} } = {}) {
   }
 
   const id = idOf(row?.Name);
-  const task = { name: row?.Name ?? "", branch: id === null ? null : branchName(id) };
-  const found = permitted(word, comments, board.prefix ?? "⟡ ");
-  return { ok: found.ok, why: found.why, marker, comment: found.comment, task };
+  const task = {
+    name: row?.Name ?? "",
+    status: row?.Status ?? null,
+    branch: id === null ? null : branchName(id),
+  };
+
+  // The same test the preflight reads: the word, as the newest reply, at the state the word
+  // is for — `merge` on a task at Review, `apply` on a Decision waiting on a migration. A
+  // "merge the two helpers" on a task In progress is a change request, not a merge (review
+  // pass 3).
+  const thread = readThread(comments, board.prefix ?? "⟡ ");
+  const shape = shapeOf(task.status, thread);
+  const ok = shape === word;
+  const state =
+    word === "merge" ? "a task at Review" : "a task at Decision waiting on a migration question";
+  return {
+    ok,
+    why: ok
+      ? null
+      : `the guard read the thread of ${task.name || "the claimed task"} at ${task.status ?? "no status"} and did not find "${word}" as your newest reply since the run's last comment — "${word}" is the word for ${state}`,
+    marker,
+    comment: ok ? thread.unanswered.at(-1) : null,
+    task,
+  };
 }
 
 /** CLI: `node permission.mjs merge` — what the guard would find, for a person to check. */

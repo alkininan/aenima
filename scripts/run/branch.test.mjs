@@ -84,8 +84,8 @@ describe("createBranch", () => {
     expect(result).toMatchObject({ reused: false, base: "origin/main" });
   });
 
-  // The run that took the task to Review left its worktree on the branch, and git refuses
-  // to check a branch out in two worktrees at once (review pass 1, Must 1).
+  // TC1 → AC1, second half (T0.11 review pass 1, Must 1): the run that took the task to Review
+  // left its worktree on the branch, and git refuses to check a branch out in two worktrees.
   const porcelain = [
     "worktree /repo",
     "HEAD aaaa",

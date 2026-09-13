@@ -812,7 +812,19 @@ async function main() {
     process.exit(0);
   }
 
-  const reason = await judge(input);
+  let reason;
+  try {
+    reason = await judge(input);
+  } catch (error) {
+    // A guard that cannot finish judging a merge or an apply refuses it: the board was not
+    // read, and an exit other than 2 would let the call through. Anything else proceeds.
+    const command = input?.tool_input?.command;
+    const needed = typeof command === "string" ? wanted(command) : [];
+    reason =
+      needed.length === 0
+        ? null
+        : `The guard could not read the board before this ${needed.join(" and ")} (${error.message}); a word it has not read grants nothing. docs/guidelines.md §4.`;
+  }
   if (reason) {
     process.stderr.write(`${reason}\n`);
     process.exit(2);

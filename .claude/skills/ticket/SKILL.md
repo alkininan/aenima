@@ -1,5 +1,5 @@
 ---
-description: Run one dev-board ticket end to end, per docs/guidelines.md §5 — recover a stale run, assess Decision comments, claim the top Ready task, build it on a branch, review it, report, set Review, exit. One run, one ticket.
+description: Run one dev-board ticket end to end, per docs/guidelines.md §5 — recover a stale run, assess every task's comments (change, new work, merge, apply, an answer), claim the top Ready task, build it on a branch, review it, report, set Review, exit. One run, one ticket.
 disable-model-invocation: true
 ---
 
@@ -25,10 +25,10 @@ the gap lives, in words — and the script supplies the shape:
 
 Kinds: `decision` (stopped, gap, fallback) · `clarifying` (readings, fallback) · `migration`
 (file) · `stale` (date, branch or null) · `default` (gap, choice) · `change` · `newWork` (name,
-url) · `merged` (commit) · `applied` (file) · `noted` · `setup` (step, where). Never set a task
-to Ready without a human comment that asks for it — an answer that resolves a question, or a
-change request at Review. Every reply you assess ends with one ⟡ comment: that comment is how
-the next run knows the reply was read.
+url) · `merged` (commit) · `applied` (file) · `noted` · `setup` (step, where) · `resolved`.
+Never set a task to Ready without a human comment that asks for it — an answer that resolves a
+question, or a change request at Review. Every reply you assess ends with one ⟡ comment: that
+comment is how the next run knows the reply was read.
 
 ## 0 Preflight
 
@@ -76,10 +76,12 @@ keep reading, post nothing.
 - `shape: apply` (Decision waiting on a migration, the newest reply begins with *apply*). Only
   where `.env.migrate` exists — the primary checkout; a worktree has no admin URL and leaves
   the reply for a run that does, and says so in its report line. Claim it the same way, then
+  check the ticket's branch out — `node scripts/run/branch.mjs <id>` reuses origin's copy,
+  which is where the migration file is; the primary sits on `main` until then — and only then
   `pnpm db:migrate`; the guard reads the thread first. If it refuses, release the marker and
   post nothing. On success post one `applied` comment naming the file, set the task
-  `In progress`, and continue from step 1's marker with this task: skip the pick, its branch
-  is reused at step 3, and the ticket carries on from where it stopped.
+  `In progress`, and continue from step 1's marker with this task: skip the pick, step 3 is
+  already done, and the ticket carries on from where it stopped.
 - `shape: assess`, task at **Review** — read the reply:
   - It asks for a change to what was built → append to the body an `# Addendum` section:
     the date, then the reply verbatim as a quote. Set `Ready`. Post one `change` comment. The
@@ -88,9 +90,9 @@ keep reading, post nothing.
   - It asks for nothing → one `noted` comment.
   - Otherwise → one `clarifying` comment naming the two readings; status stays.
 - `shape: assess`, task at **Decision** — the answer to the question:
-  - It resolves the question with a single interpretation → set `Ready`. If the question named
-    a spec section, note that patching that section is your first act after claim. The Ready
-    is the comment; post nothing more.
+  - It resolves the question with a single interpretation → set `Ready` and post one
+    `resolved` comment. If the question named a spec section, note that patching that section
+    is your first act after claim.
   - It asks for work beyond this ticket → **New work**.
   - It does not resolve it → one `clarifying` comment; status stays `Decision`.
 - `shape: assess`, any other status — a reply on a Backlog, Ready, In progress or Done task:

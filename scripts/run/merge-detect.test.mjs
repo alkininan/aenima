@@ -106,7 +106,8 @@ describe("mergeDetect over a temporary repository", () => {
   });
 });
 
-// A merge made in step 0a on the human's word is on origin and not yet in this checkout's
+// T0.11 review pass 1, Must 2 (TC3 → AC3, the Done that follows a merge): a merge made in
+// step 0 on the human's word is on origin and not yet in this checkout's
 // `origin/main`; the fetch comes first so the task is set Done in the run that merged it.
 describe("mergeDetect fetches before it asks git", () => {
   it("calls fetch first, and reports whether it succeeded", () => {

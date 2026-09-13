@@ -121,6 +121,7 @@ export const KINDS = [
   "applied",
   "noted",
   "setup",
+  "resolved",
 ];
 
 /** A sentence ends in one full stop, whatever the caller handed in. */
@@ -150,6 +151,7 @@ const clause = (text) =>
  *   applied     { file }                    — the human's "apply", done
  *   noted       {}                          — a reply that asks for nothing
  *   setup       { step, where }             — a step only a human can do, said exactly
+ *   resolved    {}                          — a Decision answer read as resolving: Ready
  */
 export function compose(kind, fields = {}, prefix = "⟡ ") {
   switch (kind) {
@@ -177,6 +179,8 @@ export function compose(kind, fields = {}, prefix = "⟡ ") {
       return `${prefix}Applied ${clause(fields.file)} to the shared database. The ticket picks up from where it stopped.`;
     case "noted":
       return `${prefix}Read that, thanks. Nothing for me to do here, so I've left the ticket as it is.`;
+    case "resolved":
+      return `${prefix}Read that as the answer, thanks. The task is back at Ready and the next run picks it up from there.`;
     case "setup":
       return `${prefix}I've stopped on a step only you can do: ${clause(fields.step)}. ${sentence(fields.where)} Say "done" on this thread once it's in place and the next run carries on.`;
     default:

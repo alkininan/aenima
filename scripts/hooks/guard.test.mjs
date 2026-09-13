@@ -421,7 +421,7 @@ describe("TC3 — rule (f) merges only on the human's word", () => {
   };
   const missing = {
     ok: false,
-    why: 'no reply beginning with "merge" as the newest reply since the run\'s last comment on the thread',
+    why: 'the guard read the thread of T0.11 Comments at Review and did not find "merge" as your newest reply since the run\'s last comment',
   };
   const merge = (command, permission, prBranch = () => "t0-11") => [
     { tool_name: "Bash", tool_input: { command }, cwd: "/repo" },
@@ -538,6 +538,8 @@ describe("TC4 — rule (b) applies only on the human's word", () => {
   });
 });
 
+// TC3 → AC3 and TC4 → AC4, the hook's entry: which words a command line needs before the
+// board is read.
 describe("wanted — the words a command line would need", () => {
   it("lists apply for a migrate, merge for a pr merge, nothing otherwise", () => {
     expect(wanted("pnpm db:migrate")).toEqual(["apply"]);
@@ -549,7 +551,7 @@ describe("wanted — the words a command line would need", () => {
   });
 });
 
-// The whole path from the hook's input to the board: `judge` reads the real marker in the
+// TC3 → AC3, the whole path from the hook's input to the board: `judge` reads the real marker in the
 // repository's shared `.git` directory and the real `.env.local`, and asks the (stubbed) API
 // for the claimed page's thread. From a worktree as from the primary.
 describe("judge — reads the marker and the token file, then the thread", () => {
@@ -582,7 +584,7 @@ describe("judge — reads the marker and the token file, then the thread", () =>
   it("refuses with no marker, then with no token, then allows from the worktree on the word", async () => {
     const board = () => ({ prefix: "⟡ " });
     const thread = async () => [{ text: "merge", created_time: "2026-09-13T11:00:00Z" }];
-    const page = async () => ({ Name: "T0.96 Smoke D" });
+    const page = async () => ({ Name: "T0.96 Smoke D", Status: "Review" });
     const deps = { board, comments: thread, page, prBranch: () => "t0-96" };
 
     expect(await judge(merge(worktree), { deps })).toContain("no run marker");
@@ -604,10 +606,10 @@ describe("judge — reads the marker and the token file, then the thread", () =>
     const deps = {
       board: () => ({ prefix: "⟡ " }),
       comments: thread,
-      page: async () => ({ Name: "T0.96 Smoke D" }),
+      page: async () => ({ Name: "T0.96 Smoke D", Status: "Review" }),
       prBranch: () => "t0-96",
     };
-    expect(await judge(merge(worktree), { deps })).toContain('reply beginning with "merge"');
+    expect(await judge(merge(worktree), { deps })).toContain('did not find "merge"');
     expect(release({ session: "s" }, { cwd: worktree }).released).toBe(true);
   });
 });

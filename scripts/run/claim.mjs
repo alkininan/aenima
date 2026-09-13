@@ -70,12 +70,15 @@ export function marker({ task, page, branch }, { now = () => new Date(), env = {
  * some worktree of this repository, and a claim on top of it would make the next preflight
  * read that run as dead and rename its branch from under it (review pass 2). The claim
  * throws instead, naming the task; a marker of this session's, or one older than three
- * hours, is overwritten as before.
+ * hours, is overwritten as before. Two markers with no session id are two sessions: a null
+ * pair proves nothing about who wrote them.
  */
 export function claim(fields, { cwd = process.cwd(), env = process.env, now } = {}) {
   const record = marker(fields, { env, now });
   const existing = readMarker(cwd);
-  if (existing !== null && (existing.session ?? null) !== record.session) {
+  const sameSession =
+    existing !== null && existing.session != null && existing.session === record.session;
+  if (existing !== null && !sameSession) {
     const age = Date.parse(record.started) - Date.parse(existing.started);
     if (Number.isFinite(age) && age < STALE_AFTER_MS) {
       throw new Error(

@@ -12,6 +12,8 @@ const c = (text, created_time) => ({ text, created_time });
 const board = () => ({ prefix: P, tasks_ds: "ds" });
 const marker = () => ({ task: "T0.11", page: "page-1", branch: "t0-11" });
 const page = async () => ({ Name: "T0.11 Comments", Status: "Review" });
+const decision = async () => ({ Name: "T0.11 Comments", Status: "Decision" });
+const MIGRATION = `${P}This change adds a migration, drizzle/0015_x.sql, and applying it is your call.`;
 const stub = (comments, extra = {}) => ({
   marker,
   token: () => "t",
@@ -26,14 +28,40 @@ const stub = (comments, extra = {}) => ({
 describe("verify", () => {
   it("grants the word when the human's newest reply begins with it, after the run's last comment", async () => {
     const result = await verify("apply", {
-      deps: stub([
-        c(`${P}I've stopped on the migration.`, "2026-09-13T10:00:00Z"),
-        c("apply", "2026-09-13T11:00:00Z"),
-      ]),
+      deps: stub([c(MIGRATION, "2026-09-13T10:00:00Z"), c("apply", "2026-09-13T11:00:00Z")], {
+        page: decision,
+      }),
     });
     expect(result.ok).toBe(true);
     expect(result.comment.text).toBe("apply");
     expect(result.marker.task).toBe("T0.11");
+  });
+
+  // Review pass 3, Must 2: the word is granted at the state it is for, the same test the
+  // preflight's `shapeOf` reads — never on the word alone.
+  it("refuses the word at a state it is not for — merge on a task In progress, apply on a wording question", async () => {
+    const inProgress = async () => ({ Name: "T0.12 Helpers", Status: "In progress" });
+    const merge = await verify("merge", {
+      deps: stub(
+        [c("Merge the two helpers into one, they duplicate each other", "2026-09-13T11:00:00Z")],
+        { page: inProgress },
+      ),
+    });
+    expect(merge.ok).toBe(false);
+    expect(merge.why).toContain("at In progress");
+    expect(merge.why).toContain("a task at Review");
+
+    const apply = await verify("apply", {
+      deps: stub(
+        [
+          c(`${P}I've stopped on the wording.`, "2026-09-13T10:00:00Z"),
+          c("apply", "2026-09-13T11:00:00Z"),
+        ],
+        { page: decision },
+      ),
+    });
+    expect(apply.ok).toBe(false);
+    expect(apply.why).toContain("waiting on a migration question");
   });
 
   it("refuses the same word from the pipeline's own comment — the model cannot grant itself", async () => {
@@ -41,7 +69,7 @@ describe("verify", () => {
       deps: stub([c(`${P}merge`, "2026-09-13T11:00:00Z")]),
     });
     expect(result.ok).toBe(false);
-    expect(result.why).toContain('no reply beginning with "merge"');
+    expect(result.why).toContain('did not find "merge"');
   });
 
   it("refuses a human reply older than the run's last comment — a word once consumed", async () => {
@@ -73,13 +101,13 @@ describe("verify", () => {
       }),
     });
     expect(result.ok).toBe(true);
-    expect(result.task).toEqual({ name: "T0.11 Comments", branch: "t0-11" });
+    expect(result.task).toEqual({ name: "T0.11 Comments", status: "Review", branch: "t0-11" });
   });
 
   it("says the branch is unknown when the task's name carries no ID", async () => {
     const result = await verify("merge", {
       deps: stub([c("merge", "2026-09-13T11:00:00Z")], {
-        page: async () => ({ Name: "Restrict Vercel's database role" }),
+        page: async () => ({ Name: "Restrict Vercel's database role", Status: "Review" }),
       }),
     });
     expect(result.ok).toBe(true);

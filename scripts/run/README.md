@@ -29,8 +29,8 @@ names the two countable shapes — `merge` on a task at Review, `apply` on a Dec
 a migration — leaving `assess` for the skill: a change to the ticket, new work, an answer
 that resolves a question, a note, or a clarifying round. The same script composes every
 comment the run posts — decision, clarifying, migration, stale, default, change, newWork,
-merged, applied, noted, setup — in plain sentences with the prefix, from the sentences the
-skill supplies. `merge-detect.mjs` takes the Review tasks with their commits and asks `git
+merged, applied, noted, setup, resolved — in plain sentences with the prefix, from the
+sentences the skill supplies. `merge-detect.mjs` takes the Review tasks with their commits and asks `git
 merge-base --is-ancestor` against `origin/main` after a fetch, which is the only honest test of
 "merged" — whether the human merged by hand or a run merged on the human's word a moment
 earlier; every task it returns
@@ -108,8 +108,9 @@ sets Decision and posts one migration comment naming the file. The human answers
 word, `apply`, on the thread, and the next run applies it: the guard lets `db:migrate`
 through only when `permission.mjs` has itself found that word on the claimed task's thread
 over the API — the marker names the task, the token opens the board, the reply must be the
-human's and newer than the pipeline's question — and the same check gates `gh pr merge` on
-the word `merge`. The guard verifies; the model never asserts.
+human's newest since the pipeline's question, and the task must be at the state the word is
+for, the same `shapeOf` the preflight reads — and the same check gates `gh pr merge` on the
+word `merge` at Review. The guard verifies; the model never asserts.
 
 ## 7 Gate
 
