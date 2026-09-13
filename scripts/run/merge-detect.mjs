@@ -32,6 +32,10 @@ export function defaultRunner(cwd) {
  * close did not finish.
  */
 export function mergeDetect(tasks = [], run, ref = "origin/main") {
+  // Fetch first: a merge made a moment ago in step 0a — on the human's word — is on origin
+  // and not yet in this checkout's `origin/main`, and the task it landed is set Done in the
+  // run that merged it, not an hour later (review pass 1, Must 2).
+  const fetched = run(["fetch", "--quiet", "origin"]).status === 0;
   const merged = [];
   const open = [];
 
@@ -46,23 +50,14 @@ export function mergeDetect(tasks = [], run, ref = "origin/main") {
     else open.push({ ...task, reason: `not an ancestor of ${ref}` });
   }
 
-  return { merged, open };
+  return { fetched, merged, open };
 }
 
-/**
- * CLI: `{ "tasks": [...], "ref": "origin/main" }` on stdin, run from the repo. Fetches first:
- * a merge made a moment ago in step 0a — on the human's word — is on origin and not yet in
- * this checkout's `origin/main`, and the task it landed is set Done in the run that merged
- * it, not an hour later (review pass 1, Must 2).
- */
+/** CLI: `{ "tasks": [...], "ref": "origin/main" }` on stdin, run from the repo. */
 async function main() {
   const input = JSON.parse(await readStdin());
   const run = defaultRunner(input.cwd ?? process.cwd());
-  const fetched = run(["fetch", "--quiet", "origin"]);
-  emit({
-    fetched: fetched.status === 0,
-    ...mergeDetect(input.tasks ?? [], run, input.ref ?? "origin/main"),
-  });
+  emit(mergeDetect(input.tasks ?? [], run, input.ref ?? "origin/main"));
 }
 
 if (isMain(import.meta.url)) await main();

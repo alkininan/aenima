@@ -80,13 +80,27 @@ export function task(raw) {
   };
 }
 
+/** How long one request may take, and the most a 429 may hold a call. */
+export const TIMEOUT_MS = 4000;
+export const RETRY_CAP_MS = 2000;
+
 /**
  * A client bound to one token. Every call returns parsed JSON or throws an error naming the
  * endpoint and the status — never the token. A `429` is retried once after the `Retry-After`
- * the API asks for; the board is read at the API's ~3 requests a second and nothing here
- * needs more.
+ * the API asks for, capped; the board is read at the API's ~3 requests a second and nothing
+ * here needs more. Every request carries an abort signal: the guard runs under a hook
+ * timeout, and a call that hangs past it would let the command through with nothing having
+ * read the thread (review pass 2). A slow board fails closed, never open.
  */
-export function client(token, { fetch: doFetch = globalThis.fetch, sleep = wait } = {}) {
+export function client(
+  token,
+  {
+    fetch: doFetch = globalThis.fetch,
+    sleep = wait,
+    timeoutMs = TIMEOUT_MS,
+    retryCapMs = RETRY_CAP_MS,
+  } = {},
+) {
   if (!token) throw new Error(`${TOKEN_VAR} is not set`);
 
   async function call(method, path, body, retried = false) {
@@ -98,10 +112,11 @@ export function client(token, { fetch: doFetch = globalThis.fetch, sleep = wait 
         "Content-Type": "application/json",
       },
       body: body === undefined ? undefined : JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (response.status === 429 && !retried) {
       const after = Number(response.headers?.get?.("retry-after") ?? 1);
-      await sleep(Number.isFinite(after) ? after * 1000 : 1000);
+      await sleep(Math.min(Number.isFinite(after) ? after * 1000 : 1000, retryCapMs));
       return call(method, path, body, true);
     }
     if (!response.ok) {
@@ -133,6 +148,11 @@ export function client(token, { fetch: doFetch = globalThis.fetch, sleep = wait 
         ),
       );
       return raw.map(comment);
+    },
+
+    /** One Tasks row by page id — its Name and Status as the board holds them. */
+    async page(pageId) {
+      return task(await call("GET", `/pages/${String(pageId).replaceAll("-", "")}`));
     },
 
     /** Every row of a data source, every status. */

@@ -236,13 +236,15 @@ the reply was read. What the assessment can be depends on where the task sits:
 **The two words are verified in code.** `merge` and `apply` are the two replies with consequences
 outside the board, and neither is taken on the model's reading of the thread: before the guard
 lets `gh pr merge` or `pnpm db:migrate` through it reads the claimed task's thread itself, over
-the Notion API with the integration token, and requires a reply that *begins* with the word —
-`merge`, `Merge it`, `apply, then carry on`; not `don't merge yet`, not `after you merge` — from
-you, newer than the pipeline's last comment on that thread. A merge must also be the claimed
-task's own pull request, merged with a merge commit — a squash rewrites the hash the board
-carries and the task would never be seen to land. The model cannot fabricate a permission; the
-check reads the board, not the transcript. Once the run has answered with its ⟡ note the word is
-consumed: the same reply grants nothing twice.
+the Notion API with the integration token, and requires that your *newest* reply since the
+pipeline's last comment on that thread *begins* with the word — `merge`, `Merge it`, `apply,
+then carry on`; not `don't merge yet`, not `after you merge`. Only the newest: a `merge` followed
+by `wait, not yet` grants nothing, because the last word is the word. A merge must also be the
+task's own pull request — the branch is derived from the task's name on the board, not from
+anything the run wrote — merged with a merge commit, said outright as `--merge`: a squash
+rewrites the hash the board carries and the task would never be seen to land. The model cannot
+fabricate a permission; the check reads the board, not the transcript. Once the run has answered
+with its ⟡ note the word is consumed: the same reply grants nothing twice.
 
 Answers given inside an interactive Code tab session follow the same rule, applied by that session.
 
@@ -256,16 +258,18 @@ below is a script under `scripts/run/` with a test; the skill holds the judgment
 
 ```
 0  Preflight    stamp this worktree as a run's and remove the ones earlier runs left (prune.mjs) ·
-                install when node_modules is absent, typegen when .next/types is · read every
-                task's thread over the API in one command (threads.mjs) and give each reply
-                newer than the pipeline's last comment one assessment (§4): a change at Review
-                → addendum, Ready · merge at Review → claim, gh pr merge --merge, one comment ·
-                apply on a migration question → claim, db:migrate, carry on · new work → one
-                Backlog task, one note · an answer → Ready · else one clarifying comment · mark
-                merged Review tasks Done (merge-base --is-ancestor) and write Release rows · a
-                task In progress whose marker is fresh is a live run: exit · with no marker, or
-                one older than three hours, it is stale: keep its branch as t<id>-stale-<HHMM>,
-                post one comment, re-claim it from origin/main and continue — no human needed
+                install when node_modules is absent, typegen when .next/types is · a task In
+                progress whose marker is fresh is a live run: exit, before anything is read or
+                claimed · read every task's thread over the API in one command (threads.mjs)
+                and give each reply newer than the pipeline's last comment one assessment
+                (§4): a change at Review → addendum, Ready · merge at Review → claim, gh pr
+                merge --merge, one comment, release · apply on a migration question → claim,
+                db:migrate, carry on · new work → one Backlog task, one note · an answer →
+                Ready · else one clarifying comment · fetch, mark merged Review tasks Done
+                (merge-base --is-ancestor) and write Release rows · an In progress task with
+                no marker, or one older than three hours, is stale: keep its branch as
+                t<id>-stale-<HHMM>, post one comment, re-claim it from origin/main and
+                continue — no human needed
 1  Claim        top Ready by Priority (Must first), then oldest · set In progress · write the
                 marker aenima-run-active in the repository's shared .git directory (task, page,
                 branch, started, session) · assign ID and Epic if missing · compare Spec
@@ -360,7 +364,7 @@ until the run has answered it: a resolved `merge` is a merge nobody will see. Th
 pipeline posts still go through the connector, which posts as you; the prefix is what tells the
 two voices apart on a thread, as §4 says.
 
-**The capability boundary.** Two credentials in two files, and a run is handed only one.
+**The capability boundary.** Two database credentials in two files, and a run is handed only one.
 `.env.local`'s `DATABASE_URL` is `aenima_pipeline`, a member of `service_role` that starts every
 connection as it: it reads and writes every row, bypasses RLS as the app's direct connection
 always has, cannot create, alter or own anything, and cannot reach the `drizzle` schema. Every

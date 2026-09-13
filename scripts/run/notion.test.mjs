@@ -149,13 +149,13 @@ describe("client", () => {
     expect(error.message).not.toContain("ntn_secret");
   });
 
-  it("retries once after a 429, for the seconds the API asks", async () => {
+  it("retries once after a 429, for the seconds the API asks, capped", async () => {
     let n = 0;
     const slept = [];
     const fetch = async () => {
       n += 1;
       if (n === 1) {
-        return { ok: false, status: 429, headers: { get: () => "2" }, json: async () => ({}) };
+        return { ok: false, status: 429, headers: { get: () => "10" }, json: async () => ({}) };
       }
       return { ok: true, status: 200, json: async () => ({ results: [], has_more: false }) };
     };
@@ -163,5 +163,43 @@ describe("client", () => {
     expect(comments).toEqual([]);
     expect(slept).toEqual([2000]);
     expect(n).toBe(2);
+  });
+
+  // The guard runs under a hook timeout; a request that hangs past it would let the command
+  // through with nothing having read the thread. Every request carries an abort signal.
+  it("sends every request with an abort signal, so a hung board fails closed", async () => {
+    const { calls, fetch } = canned({
+      "GET /comments?block_id=p&page_size=100": { results: [], has_more: false },
+    });
+    const seen = [];
+    const spy = (url, init) => {
+      seen.push(init.signal);
+      return fetch(url, init);
+    };
+    await client("ntn_x", { fetch: spy }).comments("p");
+    expect(calls).toHaveLength(1);
+    expect(seen[0]).toBeInstanceOf(AbortSignal);
+    expect(seen[0].aborted).toBe(false);
+  });
+
+  it("reads one page as a Tasks row", async () => {
+    const { calls, fetch } = canned({
+      "GET /pages/abc": {
+        id: "abc",
+        url: "https://www.notion.so/abc",
+        properties: {
+          Name: { title: [{ plain_text: "T0.11 Comments" }] },
+          Status: { status: { name: "Review" } },
+        },
+      },
+    });
+    const row = await client("ntn_x", { fetch }).page("a-b-c");
+    expect(row).toEqual({
+      id: "abc",
+      url: "https://www.notion.so/abc",
+      Name: "T0.11 Comments",
+      Status: "Review",
+    });
+    expect(calls[0].method).toBe("GET");
   });
 });

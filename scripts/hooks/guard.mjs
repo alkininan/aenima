@@ -744,8 +744,9 @@ export function decide(input, deps = {}) {
     // (f) a pull request merged through the API writes main from any branch. Merging is the
     // human's move (§3), and since T0.11 the human makes it with one word on the task at
     // Review: the guard reads the claimed task's thread from the board, and the pull request
-    // must be that task's branch, merged with a merge commit — a squash rewrites the hash and
-    // `merge-detect.mjs` would never see the task land.
+    // must be that task's branch — derived from the task's name on the board, never from the
+    // marker the run wrote — merged with a merge commit, said as --merge: a squash rewrites
+    // the hash and `merge-detect.mjs` would never see the task land.
     const gh = ghWords(rest);
     if (name === "gh" && gh[0] === "pr" && gh[1] === "merge") {
       const granted = permission("merge");
@@ -755,12 +756,16 @@ export function decide(input, deps = {}) {
       if (!mergeCommit(rest)) {
         return "Merging is refused unless it says --merge — a squash or a rebase rewrites the commit the board carries, a flagless merge takes whatever the repository is set to, and either way the task would never be seen to land. scripts/run/merge-detect.mjs.";
       }
+      const branch = granted.task?.branch ?? null;
+      if (branch === null) {
+        return "Merging is refused — the claimed task's name on the board carries no T<n>.<n> ID, so its branch is unknown and the pull request cannot be matched to it. docs/guidelines.md §4.";
+      }
       const head = prBranch(gh[2] ?? null);
       if (head === null) {
         return "Merging is refused — gh could not say which branch the pull request carries, so it cannot be matched to the claimed task. docs/guidelines.md §4.";
       }
-      if (head !== granted.marker?.branch) {
-        return `Merging is refused — the pull request is for ${head} and the claimed task's branch is ${granted.marker?.branch ?? "unknown"}; the word on one task's thread does not merge another's. docs/guidelines.md §4.`;
+      if (head !== branch) {
+        return `Merging is refused — the pull request is for ${head} and the claimed task's branch is ${branch}; the word on one task's thread does not merge another's. docs/guidelines.md §4.`;
       }
     }
   }

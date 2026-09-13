@@ -105,3 +105,20 @@ describe("mergeDetect over a temporary repository", () => {
     expect(open).toHaveLength(1);
   });
 });
+
+// A merge made in step 0a on the human's word is on origin and not yet in this checkout's
+// `origin/main`; the fetch comes first so the task is set Done in the run that merged it.
+describe("mergeDetect fetches before it asks git", () => {
+  it("calls fetch first, and reports whether it succeeded", () => {
+    const calls = [];
+    const run = (args) => {
+      calls.push(args.join(" "));
+      return { status: args[0] === "fetch" ? 0 : 1 };
+    };
+    const result = mergeDetect([{ Name: "T9.1", Commit: "abc" }], run);
+    expect(calls[0]).toBe("fetch --quiet origin");
+    expect(calls[1]).toBe("merge-base --is-ancestor abc origin/main");
+    expect(result.fetched).toBe(true);
+    expect(mergeDetect([], () => ({ status: 128 })).fetched).toBe(false);
+  });
+});

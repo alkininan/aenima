@@ -285,6 +285,23 @@ describe("permitted", () => {
     expect(result.why).toContain('no reply beginning with "merge"');
   });
 
+  it("reads only the newest reply, so a word taken back grants nothing", () => {
+    const result = permitted(
+      "merge",
+      [c("merge", "2026-09-13T10:00:00Z"), c("wait, don't merge yet", "2026-09-13T11:00:00Z")],
+      P,
+    );
+    expect(result.ok).toBe(false);
+    expect(result.why).toContain("as the newest reply");
+    expect(
+      permitted(
+        "merge",
+        [c("not yet", "2026-09-13T10:00:00Z"), c("merge", "2026-09-13T11:00:00Z")],
+        P,
+      ).ok,
+    ).toBe(true);
+  });
+
   it("treats a word older than the pipeline's last comment as consumed", () => {
     const result = permitted(
       "merge",
@@ -324,7 +341,13 @@ describe("shapeOf and awaitingMigration", () => {
     expect(shapeOf("Decision", wording)).toBe("assess");
   });
 
-  it("is assess with nothing unanswered", () => {
+  it("is assess with nothing unanswered, and assess when the newest reply takes the word back", () => {
     expect(shapeOf("Review", thread([]))).toBe("assess");
+    expect(
+      shapeOf(
+        "Review",
+        thread([c("merge", "2026-09-13T10:00:00Z"), c("hold on", "2026-09-13T11:00:00Z")]),
+      ),
+    ).toBe("assess");
   });
 });

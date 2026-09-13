@@ -24,6 +24,9 @@ import { commonDir } from "./repo.mjs";
 
 export const MARKER = "aenima-run-active";
 
+/** A marker older than this belongs to a run that is not coming back (`stale.mjs`). */
+export const STALE_AFTER_MS = 3 * 60 * 60 * 1000;
+
 /**
  * Where the marker lives for the repository containing `cwd`: the same path from every
  * worktree of it. Throws when `cwd` is in no repository — a run outside one has nothing to
@@ -60,9 +63,26 @@ export function marker({ task, page, branch }, { now = () => new Date(), env = {
   };
 }
 
-/** Write the marker for the repository containing `cwd`. Returns what was written. */
+/**
+ * Write the marker for the repository containing `cwd`. Returns what was written.
+ *
+ * Never over a live run's: a fresh marker another session wrote is a run in progress in
+ * some worktree of this repository, and a claim on top of it would make the next preflight
+ * read that run as dead and rename its branch from under it (review pass 2). The claim
+ * throws instead, naming the task; a marker of this session's, or one older than three
+ * hours, is overwritten as before.
+ */
 export function claim(fields, { cwd = process.cwd(), env = process.env, now } = {}) {
   const record = marker(fields, { env, now });
+  const existing = readMarker(cwd);
+  if (existing !== null && (existing.session ?? null) !== record.session) {
+    const age = Date.parse(record.started) - Date.parse(existing.started);
+    if (Number.isFinite(age) && age < STALE_AFTER_MS) {
+      throw new Error(
+        `a live run owns this repository: ${existing.task} since ${existing.started}; claim nothing`,
+      );
+    }
+  }
   writeFileSync(markerPath(cwd), `${JSON.stringify(record, null, 2)}\n`);
   return record;
 }
@@ -79,7 +99,12 @@ function main() {
     process.stderr.write("usage: claim.mjs --task <id> [--page <page id>] [--branch <name>]\n");
     process.exit(1);
   }
-  emit(claim({ task, page: read("--page"), branch: read("--branch") }));
+  try {
+    emit(claim({ task, page: read("--page"), branch: read("--branch") }));
+  } catch (error) {
+    emit({ claimed: false, reason: error.message });
+    process.exit(1);
+  }
 }
 
 if (isMain(import.meta.url)) main();

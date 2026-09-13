@@ -44,33 +44,42 @@ A fresh worktree has no `node_modules`; the gate and the suite need them. It has
     test -d node_modules || pnpm install --frozen-lockfile
     test -d .next/types || pnpm next typegen
 
-**a. Every task's comments.** One command reads the whole board over the API:
+**a. A live run?** Query Tasks for `Status = 'In progress'`. With none, go on. Otherwise:
+
+    echo '{"inProgress":[…]}' | node scripts/run/stale.mjs
+
+`live` names a task → report `a run is in progress: <name>` and exit. Claim nothing, read
+nothing. Keep the `stale` list for step d. (`claim.mjs` refuses to overwrite a live run's
+marker besides, so a claim made in error here stops rather than clobbers.)
+
+**b. Every task's comments.** One command reads the whole board over the API:
 
     node scripts/run/threads.mjs
 
 `token: false` means `NOTION_TOKEN` is not in `.env.local`: say so in your report line and go
-on to b — nothing else reads comments. Otherwise each `threads` entry is a task with a human
+on to c — nothing else reads comments. Otherwise each `threads` entry is a task with a human
 reply newer than the pipeline's last ⟡ comment, with its `Status`, the `unanswered` replies,
 `mayPost`, and `shape`. Give each task **exactly one** assessment, and end it with one ⟡
 comment on that task — except where `mayPost` is false: two clarifying rounds is the cap;
 keep reading, post nothing.
 
-- `shape: merge` (Review, the reply begins with *merge*). Claim it so the guard knows the task
-  — `node scripts/run/claim.mjs --task <id> --page <page id> --branch t<id>` — then
+- `shape: merge` (Review, the newest reply begins with *merge*). Claim it so the guard knows
+  the task — `node scripts/run/claim.mjs --task <id> --page <page id> --branch t<id>` — then
 
-      gh pr merge t<id> --merge --delete-branch
+      gh pr merge t<id> --merge
 
   The guard reads the thread itself before it lets that through; if it refuses, the reason
   says which of the four things was missing — quote it in your report and post nothing. On
-  success post one `merged` comment with the merge commit's short hash, then
-  `node scripts/run/release.mjs`. Step b fetches, sets Done and writes the Release row.
-- `shape: apply` (Decision waiting on a migration, the reply begins with *apply*). Only where
-  `.env.migrate` exists — the primary checkout; a worktree has no admin URL and leaves the
-  reply for a run that does, and says so in its report line. Claim it the same way, then
-  `pnpm db:migrate`; the guard reads the thread first. On success post one `applied` comment
-  naming the file, leave the task `In progress`, and continue from step 1's marker with this
-  task: skip the pick, its branch is reused at step 3, and the ticket carries on from where
-  it stopped.
+  success post one `merged` comment with the merge commit's short hash. Either way, then:
+  `node scripts/run/release.mjs`. Step c fetches, sets Done and writes the Release row; the
+  remote branch is left for GitHub's own deletion and the worktree for `prune.mjs`.
+- `shape: apply` (Decision waiting on a migration, the newest reply begins with *apply*). Only
+  where `.env.migrate` exists — the primary checkout; a worktree has no admin URL and leaves
+  the reply for a run that does, and says so in its report line. Claim it the same way, then
+  `pnpm db:migrate`; the guard reads the thread first. If it refuses, release the marker and
+  post nothing. On success post one `applied` comment naming the file, set the task
+  `In progress`, and continue from step 1's marker with this task: skip the pick, its branch
+  is reused at step 3, and the ticket carries on from where it stopped.
 - `shape: assess`, task at **Review** — read the reply:
   - It asks for a change to what was built → append to the body an `# Addendum` section:
     the date, then the reply verbatim as a quote. Set `Ready`. Post one `change` comment. The
@@ -96,7 +105,7 @@ name>","url":"<task url>"},"date":"<YYYY-MM-DD>","prefix":"⟡ "}' | node script
 reply describes. Never Ready. Then post one `newWork` comment on the original with the new
 task's name and URL.
 
-**b. Merged tickets.** Query Tasks for `Status = 'Review'`, then:
+**c. Merged tickets.** Query Tasks for `Status = 'Review'`, then:
 
     echo '{"tasks":[{"Name":"…","Commit":"…","url":"…"}]}' | node scripts/run/merge-detect.mjs
 
@@ -104,12 +113,9 @@ Set every `merged` task to `Done`. If any became Done *and* `origin/main` is ahe
 Releases row, create one Releases row: Name `YYYY-MM-DD <short hash>`, Commit, Date, Deploy
 `https://aeni.ma`, Tasks the newly Done ones, Specs the four header versions at that commit.
 
-**c. Stale runs.** Query Tasks for `Status = 'In progress'`. With none, go on. Otherwise hand the
-rows to the script; it reads the repository's marker itself — one file for every worktree:
+**d. Stale runs.** Step a's `stale` list, from the script that reads the repository's marker
+itself — one file for every worktree:
 
-    echo '{"inProgress":[…]}' | node scripts/run/stale.mjs
-
-- `live` names a task → report `a run is in progress: <name>` and exit. Claim nothing.
 - Each `stale` task is a run that died partway. Recover it, no human needed — the branch is
   preserved, so a wrong guess costs nothing:
 

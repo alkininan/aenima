@@ -14,7 +14,9 @@ it is in as a run's and removes every stamped worktree earlier runs left that is
 unlocked, not its own, and either merged into `origin/main` or older than three days — a
 person's worktree carries no stamp and is never touched — and a fresh worktree gets its
 `node_modules` installed and its `.next/types` generated (`pnpm next typegen`), which the gate's
-typecheck reads. Then the run reads the board, and since T0.11 it reads all of it in one
+typecheck reads. Then the run reads the board — first whether another run owns it, through
+`stale.mjs` over the In progress rows, and a live one means exit before anything is read or
+claimed — and since T0.11 it reads all of it in one
 command: `threads.mjs` queries every task and every task's comments over the Notion API
 through `notion.mjs` — the integration token in `.env.local`, never the connector, so forty
 tasks cost forty requests rather than forty model turns — and returns the tasks with a human
@@ -29,8 +31,9 @@ that resolves a question, a note, or a clarifying round. The same script compose
 comment the run posts — decision, clarifying, migration, stale, default, change, newWork,
 merged, applied, noted, setup — in plain sentences with the prefix, from the sentences the
 skill supplies. `merge-detect.mjs` takes the Review tasks with their commits and asks `git
-merge-base --is-ancestor` against `origin/main`, which is the only honest test of "merged" —
-whether the human merged by hand or a run merged on the human's word; every task it returns
+merge-base --is-ancestor` against `origin/main` after a fetch, which is the only honest test of
+"merged" — whether the human merged by hand or a run merged on the human's word a moment
+earlier; every task it returns
 as merged becomes Done and, when main has moved past the newest release, a Releases row is
 written. `stale.mjs` reads the In progress tasks against the repository's run marker: a fresh
 marker names a live run and the run exits; a task with no marker, or a marker older than three
@@ -46,7 +49,8 @@ then oldest created. The run sets it In progress and `claim.mjs` writes `aenima-
 which `repo.mjs` locates and which is the same file from every worktree: the footprint the
 guard reads to find the claimed task's thread before it lets a merge or a migrate through,
 and the next preflight reads to tell a live run from a dead one, wherever either is running;
-the skill never reasons about it. A run with nothing to claim may still write one thing:
+the skill never reasons about it, and `claim.mjs` refuses to write over a fresh marker of
+another session's, so a claim made while a run is live stops rather than clobbers. A run with nothing to claim may still write one thing:
 `draft.mjs` composes the body of a task the pipeline proposes — from a reply asking for new
 work, from a reviewer finding outside the ticket, or from an idle run's own red — headed by
 the `Drafted by pipeline` callout with a link back to the task it came from, and it lands at

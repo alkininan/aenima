@@ -66,19 +66,22 @@ export function mentions(text, word) {
 }
 
 /**
- * The human's word, when the thread carries it: a reply beginning with `word`, newer than
- * the pipeline's last comment. The pipeline's own comments never count, whatever they say;
- * a `⟡ merged` note is the pipeline consuming the word, not repeating it.
+ * The human's word, when the thread carries it: the *newest* reply, newer than the
+ * pipeline's last comment, begins with `word`. Only the newest, so "merge" followed by
+ * "wait, don't merge yet" grants nothing — the last word is the word (review pass 2). The
+ * pipeline's own comments never count, whatever they say; a `⟡ merged` note is the pipeline
+ * consuming the word, not repeating it.
  */
 export function permitted(word, comments = [], prefix = "⟡ ") {
   const thread = readThread(comments, prefix);
-  const found = thread.unanswered.find((comment) => mentions(comment.text, word)) ?? null;
+  const newest = thread.unanswered.at(-1) ?? null;
+  const found = newest !== null && mentions(newest.text, word) ? newest : null;
   return {
     ok: found !== null,
     comment: found,
     why:
       found === null
-        ? `no reply beginning with "${word}" newer than the run's last comment on the thread`
+        ? `no reply beginning with "${word}" as the newest reply since the run's last comment on the thread`
         : null,
   };
 }
@@ -98,7 +101,8 @@ export function awaitingMigration(thread) {
  * resolves a question, a note, or a reply that needs a clarifying round — the skill's call.
  */
 export function shapeOf(status, thread) {
-  const said = (word) => (thread?.unanswered ?? []).some((c) => mentions(c.text, word));
+  const newest = thread?.unanswered?.at(-1) ?? null;
+  const said = (word) => newest !== null && mentions(newest.text, word);
   if (status === "Review" && said("merge")) return "merge";
   if (status === "Decision" && awaitingMigration(thread) && said("apply")) return "apply";
   return "assess";

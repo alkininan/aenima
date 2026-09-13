@@ -413,10 +413,15 @@ describe("parse", () => {
 // claimed task's branch, merged with a merge commit. Without a grant nothing merges — the
 // model's own word, with a marker or without one, is refused the same way.
 describe("TC3 — rule (f) merges only on the human's word", () => {
-  const granted = { ok: true, why: null, marker: { task: "T0.11", branch: "t0-11" } };
+  const granted = {
+    ok: true,
+    why: null,
+    marker: { task: "T0.11", branch: "t0-11" },
+    task: { name: "T0.11 Comments", branch: "t0-11" },
+  };
   const missing = {
     ok: false,
-    why: 'no reply beginning with "merge" newer than the run\'s last comment on the thread',
+    why: 'no reply beginning with "merge" as the newest reply since the run\'s last comment on the thread',
   };
   const merge = (command, permission, prBranch = () => "t0-11") => [
     { tool_name: "Bash", tool_input: { command }, cwd: "/repo" },
@@ -454,6 +459,21 @@ describe("TC3 — rule (f) merges only on the human's word", () => {
     expect(reason).toContain("t0-11");
   });
 
+  // The branch to match is the board's, from the task's name; a marker that names another
+  // branch changes nothing (review pass 2, Should 5).
+  it("matches the pull request to the branch the board's name gives, not the marker's", () => {
+    const lying = { ...granted, marker: { task: "T0.11", branch: "t0-12" } };
+    expect(decide(...merge("gh pr merge 9 --merge", lying, () => "t0-12"))).toContain(
+      "the pull request is for t0-12",
+    );
+    expect(decide(...merge("gh pr merge 9 --merge", lying, () => "t0-11"))).toBeNull();
+  });
+
+  it("refuses when the task's name on the board carries no ID to derive a branch from", () => {
+    const nameless = { ...granted, task: { name: "Restrict Vercel's role", branch: null } };
+    expect(decide(...merge("gh pr merge 9 --merge", nameless))).toContain("carries no T<n>.<n> ID");
+  });
+
   it("refuses when gh cannot say which branch the pull request carries", () => {
     expect(decide(...merge("gh pr merge 9 --merge", granted, () => null))).toContain(
       "could not say which branch",
@@ -479,7 +499,12 @@ describe("TC4 — rule (b) applies only on the human's word", () => {
     { tool_name: "Bash", tool_input: { command }, cwd: "/repo" },
     { currentBranch: () => "t0-11", permission: () => permission },
   ];
-  const granted = { ok: true, why: null, marker: { task: "T0.11", branch: "t0-11" } };
+  const granted = {
+    ok: true,
+    why: null,
+    marker: { task: "T0.11", branch: "t0-11" },
+    task: { name: "T0.11 Comments", branch: "t0-11" },
+  };
 
   it("allows pnpm db:migrate once the word is on the thread, in every runner shape", () => {
     for (const command of [
@@ -557,7 +582,8 @@ describe("judge — reads the marker and the token file, then the thread", () =>
   it("refuses with no marker, then with no token, then allows from the worktree on the word", async () => {
     const board = () => ({ prefix: "⟡ " });
     const thread = async () => [{ text: "merge", created_time: "2026-09-13T11:00:00Z" }];
-    const deps = { board, comments: thread, prBranch: () => "t0-96" };
+    const page = async () => ({ Name: "T0.96 Smoke D" });
+    const deps = { board, comments: thread, page, prBranch: () => "t0-96" };
 
     expect(await judge(merge(worktree), { deps })).toContain("no run marker");
 
@@ -575,7 +601,12 @@ describe("judge — reads the marker and the token file, then the thread", () =>
       { text: "merge", created_time: "2026-09-13T11:00:00Z" },
       { text: "⟡ Merged into main at x.", created_time: "2026-09-13T12:00:00Z" },
     ];
-    const deps = { board: () => ({ prefix: "⟡ " }), comments: thread, prBranch: () => "t0-96" };
+    const deps = {
+      board: () => ({ prefix: "⟡ " }),
+      comments: thread,
+      page: async () => ({ Name: "T0.96 Smoke D" }),
+      prBranch: () => "t0-96",
+    };
     expect(await judge(merge(worktree), { deps })).toContain('reply beginning with "merge"');
     expect(release({ session: "s" }, { cwd: worktree }).released).toBe(true);
   });
