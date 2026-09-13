@@ -17,7 +17,11 @@ import { isMain } from "./run/cli.mjs";
 export const BOARD_FILE = join(".claude", "board.json");
 const root = join(import.meta.dirname, "..");
 
-/** The top-level keys of a JSON object document, in file order. Anything else is refused. */
+/**
+ * The top-level keys of a JSON object document, in the order `JSON.parse` yields them: file
+ * order, except that integer-like keys come first — board.json has none, its keys are names.
+ * Anything that is not an object is refused with the file's name.
+ */
 export function boardIds(text) {
   let parsed;
   try {
