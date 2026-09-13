@@ -38,5 +38,6 @@ describe("pnpm board:ids", () => {
     expect(boardIds('{"b": 1, "a": 2}')).toEqual(["b", "a"]);
     expect(() => boardIds("[]")).toThrow(/board\.json/);
     expect(() => boardIds("nope")).toThrow(/board\.json/);
+    expect(() => boardIds("null")).toThrow(/board\.json/);
   });
 });
