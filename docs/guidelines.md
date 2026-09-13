@@ -270,16 +270,16 @@ lid sleeps the machine, a run that falls in sleep is skipped, and one catch-up r
 *Off:* Status Paused; the task keeps its history and its saved approvals. Delete only from its
 detail page. *Cadence:* every hour on the hour plus a fixed stagger of a few minutes; Desktop skips
 a run while the previous one is still going, so two runs of the task never overlap, and the marker
-covers a `/ticket` typed by hand meanwhile. *Idle:* a fresh worktree costs one `pnpm install`,
-six seconds from the store, and one `pnpm next typegen` for the route types under `.next/types`
-that the gate's typecheck reads; the preflight reads the board and exits; the gate's fingerprint
-is shared across worktrees, so a run at a tree the suite already passed costs seconds, and a run
-at a new tree costs one suite. Measured at T0.10's close on an empty queue: the first idle run, in
-a fresh worktree at a tree the gate had not seen, was 2 min 8 s of session over 35 model turns and
-21k tokens in and out plus 341k written to cache, and one gate run; the second, at the same tree,
-1 min 39 s over 25 turns and 16k tokens plus 306k to cache, and no gate at all. The transcripts
-are read in T0.10's report. `AENIMA_RUN_BASE` in `.claude/settings.local.json` must be unset for the schedule: it is a
-fixture's override, and a scheduled run reads that file too.
+covers a `/ticket` typed by hand meanwhile. *Idle:* a fresh worktree costs one `pnpm install`, six
+seconds from the store, and one `pnpm next typegen` for the route types under `.next/types` that the
+gate's typecheck reads; the preflight reads the board and exits; the gate's fingerprint is shared
+across worktrees, so a run at a tree the suite already passed costs seconds, and a run at a new tree
+costs one suite. Measured at T0.10's close on an empty queue: the first idle run, in a fresh
+worktree at a tree the gate had not seen, was 2 min 8 s of session over 35 model turns and 21k
+tokens in and out plus 341k written to cache, and one gate run; the second, at the same tree, 1 min
+39 s over 25 turns and 16k tokens plus 306k to cache, and no gate at all. The transcripts are read
+in T0.10's report. `AENIMA_RUN_BASE` in `.claude/settings.local.json` must be unset for the
+schedule: it is a fixture's override, and a scheduled run reads that file too.
 
 **The marker** is the run's footprint and nothing more: `aenima-run-active` in the repository's
 shared `.git` directory, the same file from the primary checkout and from every worktree, which is
@@ -326,11 +326,11 @@ Database tests seed and delete users through `app.seed_user` and `app.delete_use
 statements.
 
 **Per-ticket logs.** A ticket's build-log entry is `docs/log/<id>.md` — first line `# <title>`,
-second line the UTC timestamp in italics, with the commit in code font after a middle dot when
-there is one, then the entry. The build log's
-Tickets done section is a list written from that directory by `scripts/run/log-index.mjs`, and
-its test refuses a stale copy. Two open pull requests each add a file and never edit the same
-lines; a merge that meets two new list lines is settled by running the script again.
+second line the UTC timestamp in italics, with the commit in code font after a middle dot when there
+is one, then the entry. The build log's Tickets done section is a list written from that directory
+by `scripts/run/log-index.mjs`, and its test refuses a stale copy. Two open pull requests each add a
+file and never edit the same lines; a merge that meets two new list lines is settled by running the
+script again.
 
 Hard boundaries, enforced by hooks not prose: no schema push, no migration apply, no writes to
 `.env` or `.env.*` (`.env.example` is tracked and excepted), no production deploy, no force-push,
