@@ -18,7 +18,8 @@
     "lint": "eslint . && prettier --check .",
     "typecheck": "tsc --noEmit",
     "score:spread": "tsx --conditions=react-server --env-file=.env.local scripts/score-spread.ts",
-    "log:index": "node scripts/run/log-index.mjs"
+    "log:index": "node scripts/run/log-index.mjs",
+    "board:ids": "node scripts/board-ids.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",
