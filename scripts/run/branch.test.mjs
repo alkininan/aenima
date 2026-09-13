@@ -52,17 +52,37 @@ describe("isPrimaryCheckout", () => {
 });
 
 describe("createBranch", () => {
-  const record = (results) => {
+  const record = (results, { onOrigin = false } = {}) => {
     const calls = [];
     const run = (args) => {
       calls.push(args.join(" "));
       if (args.includes("--git-common-dir") || args.includes("--git-dir")) {
         return { status: 0, stdout: "/repo/.git\n" };
       }
+      if (args[0] === "rev-parse" && args.includes("--verify")) {
+        return { status: onOrigin ? 0 : 1, stdout: "" };
+      }
       return results[args[0]] ?? { status: 0, stdout: "" };
     };
     return { calls, run };
   };
+
+  // TC1 → AC1. A task sent back to Ready by a reply at Review carries its branch and its
+  // pull request: the branch is reused from origin's copy, not recreated off main.
+  it("reuses a branch already on origin, set to origin's copy, and says so", () => {
+    const { calls, run } = record({}, { onOrigin: true });
+    const result = createBranch("T0.11", { env: {}, run });
+    expect(calls).toContain("rev-parse --verify --quiet refs/remotes/origin/t0-11");
+    expect(calls.at(-1)).toBe("checkout -B t0-11 origin/t0-11");
+    expect(result).toMatchObject({ reused: true, base: "origin/t0-11", ok: true });
+  });
+
+  it("branches new off the base when origin has no copy", () => {
+    const { calls, run } = record({});
+    const result = createBranch("T0.11", { env: {}, run });
+    expect(calls.at(-1)).toBe("checkout -b t0-11 origin/main");
+    expect(result).toMatchObject({ reused: false, base: "origin/main" });
+  });
 
   it("fetches before it branches, so origin/main is not yesterday's", () => {
     const { calls, run } = record({});

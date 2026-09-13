@@ -44,7 +44,15 @@ export function isPrimaryCheckout(run) {
   return common.stdout.trim() === own.stdout.trim();
 }
 
-/** Fetch, then create and check out the ticket branch. Returns what step 9 needs to know. */
+/**
+ * Fetch, then check out the ticket branch. Returns what step 9 needs to know.
+ *
+ * A branch already on origin is reused, not recreated: a task sent back to Ready by a reply
+ * at Review, or picked up again after a migration was applied, carries its branch and its
+ * pull request with it — one ticket, one PR, however many rounds (T0.11). The local branch
+ * is set to origin's copy, which every exit pushes, so nothing a previous round did is
+ * lost. With no copy on origin the branch is new, off the base.
+ */
 export function createBranch(id, { cwd = process.cwd(), env = process.env, run } = {}) {
   const g = run ?? ((args) => git(args, cwd));
   const base = baseRef(env);
@@ -52,11 +60,16 @@ export function createBranch(id, { cwd = process.cwd(), env = process.env, run }
 
   const fetched = g(["fetch", "--quiet", "origin"]);
   const primary = isPrimaryCheckout(g);
-  const created = g(["checkout", "-b", branch, base]);
+  const remote = `origin/${branch}`;
+  const reused = g(["rev-parse", "--verify", "--quiet", `refs/remotes/${remote}`]).status === 0;
+  const created = reused
+    ? g(["checkout", "-B", branch, remote])
+    : g(["checkout", "-b", branch, base]);
 
   return {
     branch,
-    base,
+    base: reused ? remote : base,
+    reused,
     primary,
     fetched: fetched.status === 0,
     ok: created.status === 0,
