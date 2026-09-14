@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ABBREV,
   CHUNK_CHARS,
   chunk,
   decide,
   heading,
   IN_PROGRESS,
+  lastCommit,
   MIRRORED,
   MIRRORS,
   order,
@@ -70,10 +72,23 @@ describe("the two headers", () => {
     expect(parseHeader("")).toEqual({ state: "unknown", commit: null });
   });
 
-  it("reads the heading the seed wrote by hand, bold markers and all", () => {
+  // What `readPlan` meets is the API's `plain_text`, where annotations are separate and a code
+  // span has no backticks: the seed's heading arrives as bare words with a bare hash.
+  it("reads the seed's heading as the API hands it over — plain text, no markers", () => {
     const seeded =
-      "**Mirror of ****`CLAUDE.md`**** — edit in the repo.** Mirrored from `main` @ `2fbe69b` by the pipeline; refreshed at the start of every run. Nobody types here.";
+      "Mirror of CLAUDE.md — edit in the repo. Mirrored from main @ 2fbe69b by the pipeline; refreshed at the start of every run. Nobody types here.";
     expect(parseHeader(seeded)).toEqual({ state: "mirrored", commit: "2fbe69b" });
+    const ours =
+      "Mirror — refresh in progress. docs/schema.md · Started 2026-09-14T10:40:00.000Z; this page is being rewritten from main @ abc1234 and is not whole until this line says so. Edit in the repo.";
+    expect(parseHeader(ours)).toEqual({ state: "in-progress", commit: "abc1234" });
+  });
+
+  it("asks git for a seven-character hash outright, whatever core.abbrev says", () => {
+    const calls = [];
+    const run = (args) => (calls.push(args), { status: 0, stdout: "c0ffee1\n" });
+    expect(lastCommit("docs/schema.md", { run })).toBe("c0ffee1");
+    expect(calls[0]).toContain(`--abbrev=${ABBREV}`);
+    expect(ABBREV).toBe(7);
   });
 });
 

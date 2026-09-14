@@ -159,10 +159,16 @@ export function order(pages) {
 
 const git = (args, cwd) => spawnSync("git", args, { cwd, encoding: "utf8" });
 
-/** The short hash of the last commit on `base` that touched `path`, or null. */
+/**
+ * The short hash of the last commit on `base` that touched `path`, or null. Seven characters,
+ * said outright: `%h` follows `core.abbrev` and the object count, and the day it grew to eight
+ * every heading would compare unequal and one preflight would rewrite every page.
+ */
+export const ABBREV = 7;
+
 export function lastCommit(path, { cwd = process.cwd(), base = BASE, run } = {}) {
   const g = run ?? ((args) => git(args, cwd));
-  const log = g(["log", "-1", "--format=%h", base, "--", path]);
+  const log = g(["log", "-1", `--format=%h`, `--abbrev=${ABBREV}`, base, "--", path]);
   const hash = log.status === 0 ? log.stdout.trim() : "";
   return hash === "" ? null : hash;
 }

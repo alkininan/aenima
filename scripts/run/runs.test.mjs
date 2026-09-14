@@ -220,6 +220,41 @@ describe("parseTranscript", () => {
     expect(parseTranscript(lines).run).toBe(true);
   });
 
+  it("does not read a mention of /ticket in prose as the command", () => {
+    const lines = transcript().filter((l) => l !== PROMPT);
+    lines.splice(1, 0, user("what does /ticket do? and where is /ticket documented", at(22, 33)));
+    expect(parseTranscript(lines).run).toBe(false);
+  });
+
+  // One run, one task: the first claim is the run's, and a later command that happens to carry
+  // `claim.mjs --task` — a `claude -p` prompt in a live observation, say — is not.
+  it("takes the first claim as the run's and ignores a later command that mentions one", () => {
+    const lines = transcript();
+    lines.push(
+      ...assistant(
+        "msg_later",
+        "claude-fable-5-1",
+        { input_tokens: 1, output_tokens: 1 },
+        [
+          {
+            type: "tool_use",
+            id: "tu_later",
+            name: "Bash",
+            input: {
+              command:
+                'claude -p "Run: node scripts/run/claim.mjs --task T9.9 --page p --branch t9-9" --model haiku',
+            },
+          },
+        ],
+        at(39, 30),
+      ),
+    );
+    const summary = parseTranscript(lines);
+    expect(summary.task).toBe("T0.96");
+    expect(summary.page).toBe("3d679daf-d42e-813f-af58-f5f053219a57");
+    expect(summary.outcome).toBe("Done");
+  });
+
   // A subagent's transcript is beside the session's, every line a sidechain: its usage and model
   // are the run's, its prompt (the ticket path) and its tool calls are not.
   it("counts a subagent's tokens and model towards the run, and nothing else of it", () => {

@@ -41,11 +41,12 @@ import { client, readBoard, readToken, TOKEN_VAR } from "./notion.mjs";
 export const RUN_PROMPT = "/ticket";
 
 /**
- * `/ticket` as a command — at the start of a line, after a space, or after a `>` as the skill
- * expansion writes it — and not the `/ticket` inside `docs/tickets/T0.12.md`, which any session
- * that mentions a ticket file carries.
+ * `/ticket` as a command: alone on its line, as the scheduled task's prompt ends, or between
+ * tags, as `<command-name>/ticket</command-name>` when a person types it. Not the `/ticket`
+ * inside `docs/tickets/T0.12.md`, and not a mention in prose — "what does /ticket do?" is a
+ * question, not a run.
  */
-export const RUN_PATTERN = /(^|[\s>])\/ticket(?![\w/])/;
+export const RUN_PATTERN = /(^|>)\s*\/ticket\s*($|<)/m;
 
 /** The model names the board's `Model` select knows. */
 export const MODELS = ["Fable", "Opus", "Fable→Opus"];
@@ -198,6 +199,8 @@ export function parseTranscript(lines, sidechains = []) {
     }
   }
 
+  // The first claim is the run's: one run, one task (docs/guidelines.md §5). A later command
+  // that carries `claim.mjs --task` — a `claude -p` prompt, an echo, a test — is not a claim.
   let task = null;
   let page = null;
   for (const use of toolUses) {
@@ -207,6 +210,7 @@ export function parseTranscript(lines, sidechains = []) {
     if (!claimed) continue;
     task = claimed[1];
     page = command.match(/claim\.mjs\b[^\n;&|]*?--page\s+([0-9a-f-]{32,36})/)?.[1] ?? null;
+    break;
   }
 
   const statuses = [];
