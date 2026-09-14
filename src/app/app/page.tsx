@@ -14,6 +14,7 @@ import { STAGES, type Stage } from "@/lib/stage";
 
 import { BucketSection } from "./BucketSection";
 import { PIPELINE_STAGES, PipelineStrip } from "./PipelineStrip";
+import { RowWalker } from "./RowWalker";
 import type { ItemRowData } from "./ItemRow";
 
 export const metadata: Metadata = {
@@ -58,6 +59,9 @@ function toRowData(item: ItemListRow, input: BucketInput): ItemRowData {
       .sort((a, b) => (a.tag === b.tag ? 0 : a.tag === "must" ? -1 : 1))
       .map((gap) => ({ id: gap.id, checkId: gap.checkId, tag: gap.tag })),
     lastActivityAt: input.lastActivityAt,
+    // §10's clock, in the row's own unit; the retry rides with the run it is for.
+    scoredAt: item.scoredAt === null ? null : Date.parse(item.scoredAt),
+    retrying: item.nextScoringAttemptAt !== null,
     /**
      * §13: "Idle items dim relative to their stage baseline". Read from the
      * same table the at-risk rule uses, against last activity rather than stage
@@ -162,7 +166,9 @@ export default async function AppPage({ searchParams }: PageProps<"/app">) {
           {filtered ? t.list.emptyFilteredTitle : t.list.emptyTitle}
         </EmptyState>
       ) : (
-        <div className="flex flex-col gap-[24px]">
+        // §11: arrow keys walk the rows, across buckets. The one client island
+        // on this page; the rows inside it stay Server Components.
+        <RowWalker className="flex flex-col gap-[24px]">
           {BUCKETS.map((bucket) => (
             <BucketSection
               key={bucket}
@@ -175,7 +181,7 @@ export default async function AppPage({ searchParams }: PageProps<"/app">) {
               now={now}
             />
           ))}
-        </div>
+        </RowWalker>
       )}
     </main>
   );

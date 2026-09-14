@@ -216,6 +216,18 @@ export type ItemListRow = {
   stageEnteredAt: string;
   /** The newest thing this request saw — see the note in the mapper. ISO-8601. */
   lastActivityAt: string;
+  /**
+   * The newest scoring run's clock, ISO-8601 — §10's "scored 6 h ago". Null
+   * when nothing has ever scored the item, which is §10's hollow track and not
+   * an error.
+   */
+  scoredAt: string | null;
+  /**
+   * §5's queue on the artifact that run scored, ISO-8601 — a retry is waiting.
+   * Null when none is, and always null while `scoredAt` is: the item page shows
+   * the retry beside a number, never on its own, and the row says the same.
+   */
+  nextScoringAttemptAt: string | null;
 };
 
 /**
@@ -242,12 +254,24 @@ export type ItemListRow = {
  * `product(...)` — a workspace-wide list crosses products, so a row has to be
  * able to say which one it belongs to. A to-one embed, so it joins in the same
  * statement rather than costing a request.
+ *
+ * `scoring_run(scored_at, artifact(next_scoring_attempt_at))` — §10's clock:
+ * "scored 6 h ago", and "— retrying" with the `--warning` dot while §5's queue
+ * holds a retry. The item page has read both since T2.4 (`getLatestRunForItem`),
+ * and build-log open question 6 left the row on last activity because giving
+ * every row its newest run looked like a second read across the workspace. It
+ * is not: the embed is ordered newest-first and capped at one below, which is
+ * the ordered `limit(1)` shape the version note above names, and it rides
+ * `scoring_run_item_idx` as the item page's read does. The retry flag comes
+ * through the run's own artifact for the reason the item page gives — an item
+ * may hold several artifacts, and only one of them is this run's.
  */
 const ITEM_ROW = `id, key, title, type, flow_intent, opportunity_id, product_id,
    created_at, updated_at,
    product(name, slug),
    artifact(kind, artifact_version(created_at)),
-   gap(id, check_id, tag, created_at)`;
+   gap(id, check_id, tag, created_at),
+   scoring_run(scored_at, artifact(next_scoring_attempt_at))`;
 
 type VersionRow = { created_at: string };
 
@@ -327,6 +351,10 @@ export async function listItemsForWorkspace(workspaceId: string): Promise<ItemLi
     .select(ITEM_ROW)
     .eq("workspace_id", workspaceId)
     .eq("gap.disposition", "open")
+    // The newest run only — §10's clock is one instant per row. Ordered on the
+    // embed and capped there, so the cap is per item rather than on the list.
+    .order("scored_at", { referencedTable: "scoring_run", ascending: false })
+    .limit(1, { referencedTable: "scoring_run" })
     // A tiebreaker only: `src/lib/buckets.ts` re-ranks all of this. Stable and
     // boring, so that a list of otherwise-identical items is reproducible.
     .order("created_at", { ascending: true });
@@ -380,6 +408,18 @@ export async function listItemsForWorkspace(workspaceId: string): Promise<ItemLi
       // schema/tables.ts is `withTimezone` and CLAUDE.md stores UTC throughout.
       .reduce<string>((newest, at) => (at !== null && at > newest ? at : newest), row.updated_at);
 
+    // The embed asks for one row, newest first. It is still scanned rather than
+    // indexed into, for `versionRange`'s reason: an order a plan happened to
+    // drop would otherwise put an old run's clock on the row without a test
+    // noticing.
+    let newestRun: {
+      scored_at: string;
+      artifact: { next_scoring_attempt_at: string | null } | null;
+    } | null = null;
+    for (const run of row.scoring_run ?? []) {
+      if (newestRun === null || run.scored_at > newestRun.scored_at) newestRun = run;
+    }
+
     return {
       id: row.id,
       key: row.key,
@@ -396,6 +436,8 @@ export async function listItemsForWorkspace(workspaceId: string): Promise<ItemLi
       stage: deriveStage({ artifacts }),
       stageEnteredAt: deriveStageEntry({ artifacts, createdAt: row.created_at }),
       lastActivityAt,
+      scoredAt: newestRun?.scored_at ?? null,
+      nextScoringAttemptAt: newestRun?.artifact?.next_scoring_attempt_at ?? null,
     };
   });
 
