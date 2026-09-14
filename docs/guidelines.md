@@ -136,17 +136,19 @@ You merge to main by hand. The next run detects the merge and writes the row. Yo
 | Findings | number | reviewer findings raised | M |
 
 Written by a script at session end from the local transcript, posted with a Notion integration
-token. No model call. This is the data for park rate, findings per ticket, and the four-week
-weight tuning. Since T0.12 the script is `scripts/run/runs.mjs`, run by the SessionEnd hook over
-the transcript Claude Code wrote: the task from the claim command the skill ran, Started and
-Duration from the first and last timestamps, Model from the assistant messages (`Fable→Opus`
-when both appear), Tokens as input plus output, cache reads and cache writes both excluded, counted once per API
-message — a message written as several content-block lines repeats its usage on each, and
-T0.10's table counted lines —
-Outcome from the last Status the run wrote on its task (Review is Done, Decision is Decision,
-anything else is Stopped, an idle run included), Findings from the reviewer's replies. A run
-that claimed nothing is `R-nnnn` alone with no Task. A session that was not a `/ticket` writes
-no row.
+token. No model call. This is the data for park rate, findings per ticket, and the four-week weight
+tuning. Since T0.12 the script is `scripts/run/runs.mjs`, run by the SessionEnd hook over the
+transcript Claude Code wrote: the task from the claim command the skill ran, Started and Duration
+from the first and last timestamps, Model from the assistant messages (`Fable→Opus` when both
+appear), Tokens as input plus output, cache reads and cache writes both excluded, counted once per
+API message — a message written as several content-block lines repeats its usage on each, and
+T0.10's table counted lines — Outcome from the last Status the run wrote on its task (Review is
+Done, Decision is Decision, anything else is Stopped, an idle run included), Findings from the
+reviewer's replies. A subagent's transcript — the reviewer's passes, written beside the session's
+under `<session>/subagents/` — counts towards Tokens and Model and nothing else, since the reviewer
+is about half of what a real run spends. A run that claimed nothing is `R-nnnn` alone with no Task.
+A session that was not a `/ticket` writes no row.
+
 
 ### Documents
 
@@ -289,8 +291,9 @@ below is a script under `scripts/run/` with a test; the skill holds the judgment
                 no marker, or one older than three hours, is stale: keep its branch as
                 t<id>-stale-<HHMM>, post one comment, re-claim it from origin/main and
                 continue — no human needed · refresh the Documents and Guidelines mirrors
-                behind main (mirror.mjs): a stopped refresh first, each page header-last
-                under a refresh-in-progress sentinel, allow_async false on every write
+                behind main (mirror.mjs plans; the skill writes through the connector): a
+                stopped refresh first, each page header-last under a refresh-in-progress
+                sentinel, allow_async false on every write
 1  Claim        top Ready by Priority (Must first), then oldest · set In progress · write the
                 marker aenima-run-active in the repository's shared .git directory (task, page,
                 branch, started, session) · assign ID and Epic if missing · compare Spec
@@ -377,19 +380,20 @@ state.
 `.env.local`, an internal integration's token, the integration shared with the `dev` teamspace,
 created once by hand (Notion › Settings › Integrations › Develop or manage integrations › New
 internal integration; `.env.example` says where). Two readers use it and neither is the model:
-`threads.mjs` reads every task's comments at the start of a run, one request per task at the
-API's ~3 a second, so an idle run reads the whole board in one command rather than one connector
-call per task; and the guard reads the claimed task's thread before it lets a merge or a
-migration apply through (§4). Since T0.12 two more use it, still without a model: `mirror.mjs`
-reads each mirror page's first block before a refresh, and `runs.mjs` posts the Runs row at
-session end — so the integration needs insert-content capability besides read and comment. The
-token is read from the file and never printed; an API error names the endpoint and the status
-and nothing else. Without it a run says so in its report line and reads no comments — a merge
-or an apply is then refused on that ground, which is the honest answer: nothing read the board
-— and refreshes no mirror and writes no Runs row. The API lists open threads only, so resolve nothing on a task
-until the run has answered it: a resolved `merge` is a merge nobody will see. The comments the
-pipeline posts still go through the connector, which posts as you; the prefix is what tells the
-two voices apart on a thread, as §4 says.
+`threads.mjs` reads every task's comments at the start of a run, one request per task at the API's
+~3 a second, so an idle run reads the whole board in one command rather than one connector call per
+task; and the guard reads the claimed task's thread before it lets a merge or a migration apply
+through (§4). Since T0.12 two more use it, still without a model: `mirror.mjs` reads each mirror
+page's first block before a refresh, and `runs.mjs` posts the Runs row at session end — so the
+integration needs insert-content capability besides read and comment. The token is read from the
+file and never printed; an API error names the endpoint and the status and nothing else. Without it
+a run says so in its report line and reads no comments — a merge or an apply is then refused on that
+ground, which is the honest answer: nothing read the board — and refreshes no mirror and writes no
+Runs row. The API lists open threads only, so resolve nothing on a task until the run has answered
+it: a resolved `merge` is a merge nobody will see. The comments the pipeline posts still go through
+the connector, which posts as you; the prefix is what tells the two voices apart on a thread, as §4
+says.
+
 
 **The capability boundary.** Two database credentials in two files, and a run is handed only one.
 `.env.local`'s `DATABASE_URL` is `aenima_pipeline`, a member of `service_role` that starts every

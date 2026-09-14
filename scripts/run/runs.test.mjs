@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -11,7 +11,9 @@ import {
   post,
   rowProperties,
   runName,
+  sidechainsOf,
   STOPPED,
+  summarize,
 } from "./runs.mjs";
 
 // T0.12 — the Runs row, read from the transcript and nothing else. A synthetic transcript in
@@ -206,6 +208,58 @@ describe("parseTranscript", () => {
     expect(parseTranscript(lines).run).toBe(false);
   });
 
+  it("does not read the /ticket inside a ticket file's path as the command", () => {
+    const lines = transcript().filter((l) => l !== PROMPT);
+    lines.splice(
+      1,
+      0,
+      user("please look at docs/tickets/T0.12.md and tell me what it says", at(22, 33)),
+    );
+    expect(parseTranscript(lines).run).toBe(false);
+    lines.splice(1, 0, user("<command-name>/ticket</command-name>", at(22, 34)));
+    expect(parseTranscript(lines).run).toBe(true);
+  });
+
+  // A subagent's transcript is beside the session's, every line a sidechain: its usage and model
+  // are the run's, its prompt (the ticket path) and its tool calls are not.
+  it("counts a subagent's tokens and model towards the run, and nothing else of it", () => {
+    const reviewer = [
+      user("docs/tickets/T0.96.md", at(30, 1)),
+      ...assistant(
+        "msg_side_1",
+        "claude-opus-5",
+        { input_tokens: 100, output_tokens: 1000, cache_read_input_tokens: 5000 },
+        [
+          { type: "text", text: "Reviewing." },
+          {
+            type: "tool_use",
+            id: "tu_side",
+            name: "mcp__abc__notion-update-page",
+            input: {
+              page_id: "3d679daf-d42e-813f-af58-f5f053219a57",
+              properties: { Status: "Decision" },
+            },
+          },
+        ],
+        at(31, 0),
+      ),
+    ].map((line) => line.replace('"type":"assistant"', '"isSidechain":true,"type":"assistant"'));
+    const main = transcript({ statuses: ["In progress", "Review"] });
+    const alone = parseTranscript(main);
+    const withSide = parseTranscript(main, [reviewer]);
+    expect(withSide.tokens).toEqual({
+      input: alone.tokens.input + 100,
+      output: alone.tokens.output + 1000,
+      total: alone.tokens.total + 1100,
+    });
+    expect(withSide.model).toBe("Fable→Opus");
+    expect(withSide.outcome).toBe("Done");
+    expect(withSide.turns).toBe(alone.turns + 1);
+    expect(withSide.run).toBe(true);
+    // The subagent's lines alone are not a run: the ticket path is not the command.
+    expect(parseTranscript(reviewer).run).toBe(false);
+  });
+
   it("names the model family, and the fallback when the session changed model", () => {
     expect(parseTranscript(transcript()).model).toBe("Fable");
     expect(modelLabel(["Fable", "Fable", "Opus"])).toBe("Fable→Opus");
@@ -216,6 +270,33 @@ describe("parseTranscript", () => {
   it("skips lines that are not JSON rather than failing the whole transcript", () => {
     const lines = ["not json", ...transcript()];
     expect(parseTranscript(lines).run).toBe(true);
+  });
+});
+
+// The layout on disk: `<dir>/<session>.jsonl` and `<dir>/<session>/subagents/agent-*.jsonl`.
+describe("summarize", () => {
+  it("reads the subagent transcripts beside the session's, and none where there are none", () => {
+    const dir = mkdtempSync(join(tmpdir(), "aenima-runs-"));
+    try {
+      const main = join(dir, "sess-1.jsonl");
+      writeFileSync(main, transcript().join("\n"));
+      expect(sidechainsOf(main)).toEqual([]);
+      expect(summarize(main).tokens.total).toBe(529);
+      mkdirSync(join(dir, "sess-1", "subagents"), { recursive: true });
+      const side = assistant(
+        "msg_side",
+        "claude-fable-5-1",
+        { input_tokens: 7, output_tokens: 70 },
+        [{ type: "text", text: "x" }],
+        at(31, 0),
+      );
+      writeFileSync(join(dir, "sess-1", "subagents", "agent-a1.jsonl"), side.join("\n"));
+      writeFileSync(join(dir, "sess-1", "subagents", "agent-a1.meta.json"), "{}");
+      expect(sidechainsOf(main)).toEqual([join(dir, "sess-1", "subagents", "agent-a1.jsonl")]);
+      expect(summarize(main).tokens.total).toBe(529 + 77);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

@@ -20,20 +20,32 @@
  *   - the claimed task is the `claim.mjs --task … --page …` the skill ran, read from the Bash
  *     tool call; the outcome is the last Status the skill wrote on that page through the
  *     connector — Review is Done, Decision is Decision, anything else is Stopped;
- *   - findings are counted from the reviewer subagent's replies, `Must` and `Should` tags.
+ *   - findings are counted from the reviewer subagent's replies, `Must` and `Should` tags;
+ *   - a subagent's transcript is written beside the session's, under
+ *     `<transcript dir>/<session id>/subagents/agent-*.jsonl`, every line a sidechain; its
+ *     usage and model count towards the run's — the reviewer is half a real run's spend — and
+ *     nothing else in it does, since its first user message is the ticket path, not `/ticket`.
  *
  * `parseTranscript` is pure over the lines; `post` takes the client injected so a test never
  * reaches the network. Tokens are input + output, cache reads and cache writes excluded, as
  * §2 says.
  */
 
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 
 import { emit, isMain, readStdin } from "./cli.mjs";
 import { client, readBoard, readToken, TOKEN_VAR } from "./notion.mjs";
 
 /** What a user message must contain for the session to count as a run. */
 export const RUN_PROMPT = "/ticket";
+
+/**
+ * `/ticket` as a command — at the start of a line, after a space, or after a `>` as the skill
+ * expansion writes it — and not the `/ticket` inside `docs/tickets/T0.12.md`, which any session
+ * that mentions a ticket file carries.
+ */
+export const RUN_PATTERN = /(^|[\s>])\/ticket(?![\w/])/;
 
 /** The model names the board's `Model` select knows. */
 export const MODELS = ["Fable", "Opus", "Fable→Opus"];
@@ -131,10 +143,16 @@ export function countFindings(text) {
  * page, statuses, outcome, findings }`. `run` is false when no user message carries the
  * run prompt — a session that was not a `/ticket`, which gets no row.
  */
-export function parseTranscript(lines) {
-  const events = (Array.isArray(lines) ? lines : String(lines).split("\n"))
-    .map((line) => (typeof line === "string" ? parseLine(line) : line))
-    .filter((event) => event !== null && typeof event === "object" && !event.isSidechain);
+export function parseTranscript(lines, sidechains = []) {
+  const parse = (raw) =>
+    (Array.isArray(raw) ? raw : String(raw).split("\n"))
+      .map((line) => (typeof line === "string" ? parseLine(line) : line))
+      .filter((event) => event !== null && typeof event === "object");
+  const events = parse(lines).filter((event) => !event.isSidechain);
+  // A subagent's lines: usage and model only. Its prompt is the ticket path, its statuses none.
+  const side = sidechains
+    .flatMap((raw) => parse(raw))
+    .filter((event) => event.type === "assistant");
 
   const timestamps = events
     .map((event) => event.timestamp)
@@ -152,11 +170,12 @@ export function parseTranscript(lines) {
   const users = events.filter((event) => event.type === "user");
   const assistants = events.filter((event) => event.type === "assistant");
 
-  const run = users.some((event) => textOf(event.message?.content).includes(RUN_PROMPT));
+  const run = users.some((event) => RUN_PATTERN.test(textOf(event.message?.content)));
 
-  // One API message, one usage — whatever the number of content blocks it was written as.
+  // One API message, one usage — whatever the number of content blocks it was written as. The
+  // subagents' messages count here and nowhere else.
   const messages = new Map();
-  for (const event of assistants) {
+  for (const event of [...assistants, ...side]) {
     const id = event.message?.id ?? event.uuid;
     messages.set(id, event.message);
   }
@@ -288,9 +307,22 @@ export async function post(summary, { dir = process.cwd(), deps = {} } = {}) {
   }
 }
 
-/** Read a transcript file into its summary. */
+/** The subagent transcripts written beside `path`: `<dir>/<session>/subagents/agent-*.jsonl`. */
+export function sidechainsOf(path) {
+  const dir = join(dirname(path), basename(path, ".jsonl"), "subagents");
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((name) => name.endsWith(".jsonl"))
+    .sort()
+    .map((name) => join(dir, name));
+}
+
+/** Read a transcript file, and the subagent transcripts beside it, into its summary. */
 export function summarize(path) {
-  return parseTranscript(readFileSync(path, "utf8").split("\n"));
+  return parseTranscript(
+    readFileSync(path, "utf8").split("\n"),
+    sidechainsOf(path).map((file) => readFileSync(file, "utf8").split("\n")),
+  );
 }
 
 /**
