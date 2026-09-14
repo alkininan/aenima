@@ -6,7 +6,16 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { claim } from "../run/claim.mjs";
 import { release } from "../run/release.mjs";
-import { decide, judge, parse, program, target, wanted, writeTargets } from "./guard.mjs";
+import {
+  decide,
+  judge,
+  parse,
+  program,
+  revertOfTipAt,
+  target,
+  wanted,
+  writeTargets,
+} from "./guard.mjs";
 
 /** A PreToolUse payload for a Bash call, with the branch the rule (d) check would see. */
 const bash = (command, branch = "t0-7") => [
@@ -490,6 +499,161 @@ describe("TC3 — rule (f) merges only on the human's word", () => {
     decide(...merge("gh pr merge --merge", granted, prBranch));
     decide(...merge("gh pr -R alkininan/aenima merge t0-11 --merge", granted, prBranch));
     expect(asked).toEqual(["42", null, "t0-11"]);
+  });
+});
+
+// T0.16 TC2 → AC2 and TC3 → AC3. The second door: the reviewer's PASS on file over a diff
+// with nothing gated merges without the word — and only from the commit the guard can see.
+describe("T0.16 — rule (f)'s second door, the reviewer's PASS", () => {
+  const unread = { ok: false, why: "the board was not read" };
+  const passed = {
+    ok: true,
+    why: null,
+    marker: { task: "T0.16", branch: "t0-16" },
+    task: { name: "T0.16", branch: "t0-16" },
+    gated: [],
+  };
+  const shut = (why) => ({ ok: false, why });
+  const merge = (command, verdict, extra = {}) => [
+    { tool_name: "Bash", tool_input: { command }, cwd: "/repo" },
+    {
+      currentBranch: () => "t0-16",
+      permission: () => unread,
+      verdict: () => verdict,
+      prBranch: () => "t0-16",
+      prHead: () => "abc123def",
+      localHead: () => "abc123def",
+      ...extra,
+    },
+  ];
+
+  it("allows a merge commit on the PASS when the word is not there", () => {
+    expect(decide(...merge("gh pr merge t0-16 --merge --delete-branch", passed))).toBeNull();
+  });
+
+  it("refuses when both doors are shut, and says why each is", () => {
+    const reason = decide(
+      ...merge("gh pr merge t0-16 --merge", shut("no reviewer verdict at docs/reviews/T0.16.md")),
+    );
+    expect(reason).toContain("the board was not read");
+    expect(reason).toContain("no reviewer verdict at docs/reviews/T0.16.md");
+  });
+
+  it("refuses on the PASS when the diff touches a gated path — the verdict says so", () => {
+    const why = "the diff touches scripts/hooks/guard.mjs, which only your word merges";
+    expect(decide(...merge("gh pr merge t0-16 --merge", shut(why)))).toContain(why);
+  });
+
+  it("still wants a merge commit and the task's own branch on the second door", () => {
+    expect(decide(...merge("gh pr merge t0-16 --squash", passed))).toContain("squash");
+    expect(
+      decide(...merge("gh pr merge 9 --merge", passed, { prBranch: () => "t0-12" })),
+    ).toContain("the pull request is for t0-12");
+  });
+
+  it("refuses on the PASS when the pull request's head is not this checkout's HEAD", () => {
+    const stale = decide(
+      ...merge("gh pr merge t0-16 --merge", passed, { localHead: () => "fff000abc" }),
+    );
+    expect(stale).toContain("not the diff that would merge");
+    expect(stale).toContain("abc123d");
+    expect(stale).toContain("fff000a");
+    expect(decide(...merge("gh pr merge t0-16 --merge", passed, { prHead: () => null }))).toContain(
+      "unknown",
+    );
+  });
+
+  it("does not ask for the head binding when the human's word granted the merge", () => {
+    const granted = { ...passed, task: { name: "T0.16 Self-merge", branch: "t0-16" } };
+    const reason = decide(
+      ...merge("gh pr merge t0-16 --merge", shut("x"), {
+        permission: () => granted,
+        localHead: () => "different",
+      }),
+    );
+    expect(reason).toBeNull();
+  });
+});
+
+// T0.16 TC5 → AC5, the push half. A revert of the merge at the tip is the one push to main.
+describe("T0.16 — rule (d) lets the revert's push through, and nothing else that names main", () => {
+  const push = (command, revertOfTip, branch = "HEAD") => [
+    { tool_name: "Bash", tool_input: { command }, cwd: "/repo" },
+    { currentBranch: () => branch, revertOfTip: () => revertOfTip },
+  ];
+
+  it("allows git push origin HEAD:main when HEAD is exactly the revert of the tip", () => {
+    expect(decide(...push("git push origin HEAD:main", true))).toBeNull();
+    expect(decide(...push("git push origin HEAD:refs/heads/main", true))).toBeNull();
+  });
+
+  it("refuses the same push when HEAD is not that revert", () => {
+    expect(decide(...push("git push origin HEAD:main", false))).toContain(
+      "Pushing main is refused",
+    );
+  });
+
+  it("refuses every other shape that names main even when HEAD is the revert", () => {
+    expect(decide(...push("git push origin main", true, "main"))).toContain(
+      "Pushing main is refused",
+    );
+    expect(decide(...push("git push origin t0-16:main", true))).toContain(
+      "Pushing main is refused",
+    );
+    expect(decide(...push("git push origin HEAD:main t0-16", true))).toContain(
+      "Pushing main is refused",
+    );
+    expect(decide(...push("git push -f origin HEAD:main", true))).toContain("Force-pushing");
+  });
+});
+
+describe("revertOfTipAt over a temporary repository", () => {
+  let root;
+  const sh = (cwd, ...args) => {
+    const result = spawnSync("git", args, { cwd, encoding: "utf8" });
+    if (result.status !== 0) throw new Error(`git ${args.join(" ")}: ${result.stderr}`);
+    return result.stdout.trim();
+  };
+  const commit = (cwd, name, message) => {
+    writeFileSync(join(cwd, name), `${message}\n`);
+    sh(cwd, "add", name);
+    sh(cwd, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", message);
+  };
+
+  beforeAll(() => {
+    root = mkdtempSync(join(tmpdir(), "aenima-revert-guard-"));
+    const src = join(root, "src");
+    sh(root, "init", "-q", "-b", "main", src);
+    commit(src, "a.txt", "base");
+    sh(src, "checkout", "-q", "-b", "t9-1");
+    commit(src, "b.txt", "broken");
+    sh(src, "checkout", "-q", "main");
+    sh(
+      src,
+      "-c",
+      "user.name=t",
+      "-c",
+      "user.email=t@t",
+      "merge",
+      "--no-ff",
+      "-q",
+      "-m",
+      "Merge pull request #1 from x/t9-1",
+      "t9-1",
+    );
+    sh(root, "clone", "-q", "--bare", src, join(root, "origin.git"));
+    sh(root, "clone", "-q", join(root, "origin.git"), join(root, "work"));
+  });
+  afterAll(() => rmSync(root, { recursive: true, force: true }));
+
+  it("is true for the revert of the merge at the tip, and false for the tip itself or any other commit", () => {
+    const work = join(root, "work");
+    expect(revertOfTipAt(work)).toBe(false);
+    sh(work, "checkout", "-q", "--detach", "origin/main");
+    sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "revert", "--no-edit", "-m", "1", "HEAD");
+    expect(revertOfTipAt(work)).toBe(true);
+    commit(work, "c.txt", "one more");
+    expect(revertOfTipAt(work)).toBe(false);
   });
 });
 

@@ -1,11 +1,11 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { claim } from "./claim.mjs";
-import { verify } from "./permission.mjs";
+import { reviewed, verdictOf, verify } from "./permission.mjs";
 
 const P = "⟡ ";
 const c = (text, created_time) => ({ text, created_time });
@@ -167,5 +167,70 @@ describe("verify", () => {
       expect(result.ok).toBe(true);
       expect(result.task.branch).toBe("t0-11");
     });
+  });
+});
+
+// T0.16 TC2 → AC2 and TC3 → AC3. The guard's second door: `gh pr merge` is also allowed when
+// the claimed task's reviewer verdict is on file and ends in PASS, and the diff against
+// origin/main touches no gated path. Both are read in code; neither is the model's claim.
+describe("reviewed", () => {
+  const passing = () => "# T0.16 — review\n\nFindings: none.\n\nPASS\n";
+  const clean = () => ({ files: ["src/a.ts"], gated: [], ok: true });
+  const deps = (extra = {}) => ({ marker, verdict: passing, diff: clean, ...extra });
+
+  it("opens on a PASS verdict for the marker's task over a diff with nothing gated", () => {
+    const result = reviewed({ deps: deps() });
+    expect(result.ok).toBe(true);
+    expect(result.task).toEqual({ name: "T0.11", branch: "t0-11" });
+    expect(result.gated).toEqual([]);
+  });
+
+  it("refuses without a marker — no claimed task, no verdict to look for", () => {
+    const result = reviewed({ deps: deps({ marker: () => null }) });
+    expect(result.ok).toBe(false);
+    expect(result.why).toContain("no run marker");
+  });
+
+  it("refuses when the verdict file is not there, naming where it looked", () => {
+    const result = reviewed({ deps: deps({ verdict: () => null }) });
+    expect(result.ok).toBe(false);
+    expect(result.why).toContain("docs/reviews/T0.11.md");
+  });
+
+  it("refuses a verdict that does not end in PASS — findings, or a PASS buried mid-file", () => {
+    const findings = reviewed({ deps: deps({ verdict: () => "FINDINGS\n1. Must — x\n" }) });
+    expect(findings.ok).toBe(false);
+    expect(findings.why).toContain("rather than PASS");
+    const buried = reviewed({ deps: deps({ verdict: () => "PASS\n\nbut also this\n" }) });
+    expect(buried.ok).toBe(false);
+    const empty = reviewed({ deps: deps({ verdict: () => "" }) });
+    expect(empty.ok).toBe(false);
+  });
+
+  it("refuses a diff on a gated path even with the PASS, and names the path", () => {
+    const gated = () => ({
+      files: ["scripts/hooks/guard.mjs"],
+      gated: ["scripts/hooks/guard.mjs"],
+      ok: false,
+    });
+    const result = reviewed({ deps: deps({ diff: gated }) });
+    expect(result.ok).toBe(false);
+    expect(result.why).toContain("scripts/hooks/guard.mjs");
+    expect(result.why).toContain("your word");
+  });
+
+  it("reads the verdict from docs/reviews/<id>.md in the checkout, and the last non-blank line is the verdict", () => {
+    expect(verdictOf("a\nPASS\n\n  \n")).toBe("PASS");
+    expect(verdictOf("PASS\nFINDINGS")).toBe("FINDINGS");
+    expect(verdictOf("")).toBeNull();
+    const dir = mkdtempSync(join(tmpdir(), "aenima-verdict-"));
+    try {
+      mkdirSync(join(dir, "docs", "reviews"), { recursive: true });
+      writeFileSync(join(dir, "docs", "reviews", "T0.11.md"), "reviewed\nPASS\n");
+      const result = reviewed({ dir, deps: { marker, diff: clean } });
+      expect(result.ok).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

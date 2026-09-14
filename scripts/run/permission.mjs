@@ -17,8 +17,12 @@
 
 import { branchName } from "./branch.mjs";
 import { readMarker } from "./claim.mjs";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { emit, isMain } from "./cli.mjs";
 import { readThread, shapeOf } from "./comments.mjs";
+import { gatedDiffOf } from "./gated.mjs";
 import { client, readBoard, readToken, TOKEN_VAR } from "./notion.mjs";
 import { idOf } from "./stale.mjs";
 
@@ -89,6 +93,66 @@ export async function verify(word, { dir = process.cwd(), deps = {} } = {}) {
     comment: ok ? thread.unanswered.at(-1) : null,
     task,
   };
+}
+
+/** Where the reviewer writes its verdict, one file per ticket (T0.16). */
+export const REVIEWS_DIR = join("docs", "reviews");
+
+/** The one word a verdict file ends in when the ticket may merge itself. */
+export const VERDICT = "PASS";
+
+/** The last non-blank line of a verdict file, trimmed; null for an empty file. */
+export function verdictOf(text) {
+  const lines = String(text ?? "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return lines.at(-1) ?? null;
+}
+
+/**
+ * The guard's second door for `merge` (T0.16): `{ ok, why, marker, task, gated }`. Open
+ * when the claimed task's reviewer verdict, `docs/reviews/<id>.md`, ends in PASS and the
+ * diff against origin/main touches no gated path (`gated.mjs`). The task's branch comes
+ * from the marker's id — the file is named by it, so the two cannot name different tickets.
+ * Effects injected: `marker`, `verdict(id)` (the file's text, or null), `diff()`.
+ */
+export function reviewed({ dir = process.cwd(), deps = {} } = {}) {
+  const marker = deps.marker ? deps.marker() : readMarker(dir);
+  if (marker === null || !marker.task) {
+    return {
+      ok: false,
+      why: "no run marker names a claimed task, so there is no reviewer verdict to read",
+    };
+  }
+  const id = String(marker.task).trim();
+  const file = join(REVIEWS_DIR, `${id}.md`);
+
+  let text = null;
+  try {
+    text = deps.verdict ? deps.verdict(id) : readFileSync(join(dir, file), "utf8");
+  } catch {
+    text = null;
+  }
+  if (text === null) return { ok: false, why: `no reviewer verdict at ${file}`, marker };
+
+  const last = verdictOf(text);
+  if (last !== VERDICT) {
+    const ends = last === null ? "nothing" : `"${last}"`;
+    return { ok: false, why: `${file} ends in ${ends} rather than ${VERDICT}`, marker };
+  }
+
+  const diff = deps.diff ? deps.diff() : gatedDiffOf({ cwd: dir });
+  if (!diff.ok) {
+    return {
+      ok: false,
+      why: `the diff touches ${diff.gated.join(", ")}, which only your word merges`,
+      marker,
+      gated: diff.gated,
+    };
+  }
+
+  return { ok: true, why: null, marker, task: { name: id, branch: branchName(id) }, gated: [] };
 }
 
 /** CLI: `node permission.mjs merge` — what the guard would find, for a person to check. */

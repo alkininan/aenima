@@ -25,7 +25,8 @@ the gap lives, in words — and the script supplies the shape:
 
 Kinds: `decision` (stopped, gap, fallback) · `clarifying` (readings, fallback) · `migration`
 (file) · `stale` (date, branch or null) · `default` (gap, choice) · `change` · `newWork` (name,
-url) · `merged` (commit) · `applied` (file) · `noted` · `setup` (step, where) · `resolved`.
+url) · `merged` (commit) · `applied` (file) · `noted` · `setup` (step, where) · `resolved` ·
+`gated` (paths) · `reverted` (failed, merge, commit, name, url).
 Never set a task to Ready without a human comment that asks for it — an answer that resolves a
 question, or a change request at Review. Every reply you assess ends with one ⟡ comment: that
 comment is how the next run knows the reply was read.
@@ -128,6 +129,29 @@ itself — one file for every worktree:
   and continue from step 1's marker with it. With several stale tasks, order them with
   `pick-next.mjs` over those rows alone: the first is yours, the rest go back to `Ready`.
 
+**e. The deploy.** Main deploys with nobody watching, so once per commit of main the run asks the
+live site from outside:
+
+    node scripts/run/health.mjs
+
+`changed: false` → main is the commit last checked; go on. `ok: true` → say so in the report
+line and go on. `ok: false` → the merge at the tip is reverted, no human needed:
+
+    node scripts/run/revert.mjs
+    git push origin HEAD:main
+    git checkout <the previous branch it printed>
+
+`revert.mjs` prepares one commit on a detached HEAD — the revert of the merge at
+`origin/main`'s tip — and prints `push`, `merge`, `head`, `id` and `previous`. The push is your
+own command so the guard reads it: it lets exactly that shape through, HEAD one commit past
+`origin/main` with the tree main had before the merge, and nothing else that names main. An
+`ok: false` from `revert.mjs` (the tip is not a merge commit, the tree is dirty) means nothing
+to revert: quote its `why` in the report and go on. On success: query Tasks for the task whose
+Name begins with `id`, set it `Backlog`; draft one Fix task with `draft.mjs` (`from` that task,
+`reason` the `failedText` health printed), create it at `Backlog`, Type `Fix`, the same Epic,
+Priority `Should`; then post one `reverted` comment on the reverted task — `failed` the
+`failedText`, `merge` and `commit` the two short hashes, `name` and `url` the Fix task's.
+
 Do not refresh the Documents or Guidelines mirrors. That is a later ticket's.
 
 ## 1 Claim
@@ -208,7 +232,10 @@ green — `2 failed / 41 passed → 43 passed`. Step 8 refuses a report without 
 Invoke the `reviewer` subagent with the ticket file path and nothing else. Do not summarise the
 work for it: the delegation message is a claim, and a briefing that says what is true has thrown
 the review away. The reviewer runs only the tests the ticket names and the test files the diff
-touches (`scripts/run/review-scope.mjs`); the Stop gate owns the full suite.
+touches (`scripts/run/review-scope.mjs`); the Stop gate owns the full suite. It writes its
+verdict to `docs/reviews/<id>.md`, last line `PASS` or `FINDINGS`: that file, not anything in
+this transcript, is what the guard reads at close. Never write or edit it yourself — a verdict
+the run wrote is the model's claim, and the guard's door would be open on nothing.
 
 Each finding is tagged **Must** or **Should**. Fix every Must, then re-invoke. **Three passes
 maximum.** After the third, any remaining Must becomes an open question with owner `T-next`, and
@@ -259,9 +286,32 @@ Commit on the branch, then:
 
 One ticket, one pull request: a reused branch already has one, and the push updated it. No
 `gh` → put the compare URL in the report instead. Set the task's Commit to the short hash and
-Status to `Review`. Release the marker: `node scripts/run/release.mjs`. If step 3 said
-`primary`, `git checkout main`. Exit.
+Status to `Review`. Then ask whether this diff is the run's own to merge:
 
-**Never merge on your own word.** Merging to main is the human's move, made with one reply —
-*merge* — on the task at Review, and the guard refuses `gh pr merge` until it has read that
-reply from the board itself. The Runs row is a later ticket's.
+    node scripts/run/gated.mjs
+
+`ok: false` → the diff touches a path only the human's word merges — a migration, the product
+spec, the pipeline's own boundary. Post one `gated` comment naming the `gated` paths, joined
+with "and". The task stays at `Review`; the human's *merge* there is the merge, made by the
+next run's step 0. `ok: true`, and the reviewer's last verdict file ends in `PASS`, and no
+Must is open → the run merges its own work:
+
+    git checkout --detach
+    gh pr merge <branch> --merge --delete-branch
+
+The guard opens its second door on its own reading — the verdict file, the diff, and the pull
+request's head being this checkout's HEAD — and refuses with the reason otherwise; a refusal
+here means the task stays at `Review` with that reason in the report and no comment. Detach
+first so `--delete-branch` can remove the local branch without switching this worktree to
+`main`, which the primary checkout holds. On success: `git fetch origin`, then the merge
+commit is `git rev-parse --short origin/main`; set the task `Done`, and create one Releases
+row — Name `YYYY-MM-DD <short hash>`, Commit, Date, Deploy `https://aeni.ma`, Tasks this
+task, Specs the four header versions at that commit — and relate the task to it. The next
+run's step 0e checks the deploy.
+
+Either way, release the marker: `node scripts/run/release.mjs`. If step 3 said `primary`,
+`git checkout main`. Exit.
+
+**Never merge on your own word.** The two doors are the guard's, read in code: the human's
+*merge* on the task at Review, or the reviewer's `PASS` on file over a diff with nothing
+gated. Nothing you say in this transcript opens either. The Runs row is a later ticket's.

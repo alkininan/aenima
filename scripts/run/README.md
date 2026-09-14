@@ -39,7 +39,13 @@ written. `stale.mjs` reads the In progress tasks against the repository's run ma
 marker names a live run and the run exits; a task with no marker, or a marker older than three
 hours, is a run that died, and `stale.mjs --recover <id>` keeps its branch as
 `t<id>-stale-<HHMM>` — committing anything uncommitted onto it first — so the task can be
-claimed again from `origin/main` with one comment and no human.
+claimed again from `origin/main` with one comment and no human. Last, once per commit of
+main, `health.mjs` asks the live site from outside — `/sign-in` 200, `/app` 307 — recording the
+commit it asked about beside the marker so one outage reverts one merge; a wrong answer has
+`revert.mjs` prepare the revert of the merge at `origin/main`'s tip on a detached HEAD, one
+commit restoring the tree before the merge, which the skill pushes as `HEAD:main` — the one push
+to main the guard lets through — before filing one Fix task, returning the reverted ticket to
+Backlog and posting one comment (T0.16).
 
 ## 1 Claim
 
@@ -98,7 +104,9 @@ section names plus every test file the diff touches — and the reviewer runs on
 Stop gate owns the full suite. Findings are Must or Should; every Must is fixed and the
 reviewer re-invoked, three passes at most. A Must still standing after the third becomes an
 open question, Shoulds are recorded in the report, and a finding outside the ticket's scope
-becomes a Backlog task of Type Fix under the same Epic.
+becomes a Backlog task of Type Fix under the same Epic. The reviewer writes its verdict to
+`docs/reviews/<id>.md`, last line `PASS` or `FINDINGS`; that file is what the guard reads at
+close, and the run never writes it (T0.16).
 
 ## 6 Migration
 
@@ -131,10 +139,17 @@ requests never edit the same lines.
 
 ## 9 Close
 
-No script of its own. The run commits on the branch, pushes it, opens the PR against `main`
-unless the branch already has one, sets the task's Commit to the short hash and its Status to
-Review, removes the marker with `release.mjs`, and returns a primary checkout to `main`. It
-never merges on its own: merging is the human's move, made with the word `merge` on the task
-at Review, and the guard refuses `gh pr merge` until `permission.mjs` has read that word from
-the board. `release.mjs` also runs from the SessionEnd hook, so a run that dies leaves no
-marker behind for the next preflight to trust. The Runs row is a later ticket's.
+The run commits on the branch, pushes it, opens the PR against `main` unless the branch already
+has one, sets the task's Commit to the short hash and its Status to Review, and then asks
+`gated.mjs` whether the diff is its own to merge: the gated paths — `drizzle/`, `.claude/`,
+`scripts/hooks/`, `scripts/run/`, `docs/product-spec.md`, `.worktreeinclude`, `.gitignore`, and
+`package.json` when its scripts change — are listed there once and read by the guard and the
+skill both. A diff touching none of them, with the reviewer's `PASS` on file, is merged by the
+run itself with `gh pr merge --merge --delete-branch` from the pushed commit, and the task is
+Done with its Release row in the same run; the guard's second door (`permission.mjs`
+`reviewed`) reads the verdict file, the diff and the pull request's head before it opens. A
+gated diff stays at Review with one comment naming the path, and merging is the human's move,
+made with the word `merge` there, which the guard refuses `gh pr merge` until `permission.mjs`
+has read from the board. Either way `release.mjs` removes the marker and a primary checkout
+returns to `main`; `release.mjs` also runs from the SessionEnd hook, so a run that dies leaves
+no marker behind for the next preflight to trust. The Runs row is a later ticket's.

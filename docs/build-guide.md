@@ -1,4 +1,6 @@
-<!-- build-guide.md · v2.5 · in the repo · the hooks paragraph: a migration applies and a pull
+<!-- build-guide.md · v2.6 · in the repo · the hooks paragraph: a finished ticket merges itself
+     on the reviewer's PASS on file; your word stays for the gated paths; hooks run main's copy.
+     v2.5 · in the repo · the hooks paragraph: a migration applies and a pull
      request merges on one word from you on the board, read by the guard over the API.
      v2.4 · §2 opens with the schedule: set Ready, the timer does the
      rest; the hooks paragraph names the capability boundary and T0.11.
@@ -104,10 +106,14 @@ rule stands a credential a run cannot migrate with: `.env.local`'s `DATABASE_URL
 writes rows and cannot change schema, and the admin URL in `.env.migrate` is read by
 `pnpm db:migrate` alone and never copied into a worktree (`docs/guidelines.md` §5). A diff that
 adds a migration sets Decision and waits for one word from you on the task's thread, `apply`;
-a pull request merges on the word `merge` at Review. Neither word is taken from the model: the
-guard reads the thread itself, over the Notion API with the integration token in `.env.local`,
-and refuses the command until the reply is there and newer than the run's own last comment
-(`docs/guidelines.md` §4). `scripts/hooks/gate.mjs` runs on `Stop`; see §6. A rule stated
+a pull request on a gated path — a migration, the product spec, the pipeline's own guard, gate,
+skill or run scripts — merges on the word `merge` at Review, and any other merges at close on the
+reviewer's `PASS` in `docs/reviews/<id>.md`, which the guard reads from the very commit the pull
+request carries (`docs/guidelines.md` §4, T0.16). Neither word is taken from the model: the guard
+reads the thread itself, over the Notion API with the integration token in `.env.local`, and
+refuses the command until the reply is there and newer than the run's own last comment. The
+hooks themselves run from `origin/main`'s copy of `scripts/`, never the checkout's, so a run
+editing its own guard changes nothing until a human merges it (`docs/guidelines.md` §5). `scripts/hooks/gate.mjs` runs on `Stop`; see §6. A rule stated
 only in `CLAUDE.md` is a rule a session can read past, which is why these moved.
 
 **Three failed corrections on the same fix means the ticket is wrong, not the code.** The loop
