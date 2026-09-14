@@ -762,6 +762,32 @@ describe("judge — reads the marker and the token file, then the thread", () =>
     expect(await judge(merge(worktree), { deps })).toBeNull();
   });
 
+  // T0.16 TC2 → AC2: from the hook's entry, the word not there, the reviewer's door read
+  // through the same `deps` — the verdict and the diff injected, the pull request's head
+  // equal to the checkout's.
+  it("opens the reviewer's door from judge when the word is not there", async () => {
+    const deps = {
+      board: () => ({ prefix: "⟡ " }),
+      comments: async () => [],
+      page: async () => ({ Name: "T0.96 Smoke D", Status: "Review" }),
+      verdict: () => "# T0.96 — review\n\nPASS\n",
+      diff: () => ({ files: ["src/a.ts"], gated: [], ok: true }),
+      prBranch: () => "t0-96",
+      prHead: () => "abc",
+      localHead: () => "abc",
+    };
+    expect(await judge(merge(worktree), { deps })).toBeNull();
+    const gated = {
+      ...deps,
+      diff: () => ({ files: ["scripts/run/x.mjs"], gated: ["scripts/run/x.mjs"], ok: false }),
+    };
+    expect(await judge(merge(worktree), { deps: gated })).toContain("scripts/run/x.mjs");
+    const moved = { ...deps, localHead: () => "def" };
+    expect(await judge(merge(worktree), { deps: moved })).toContain(
+      "not the diff that would merge",
+    );
+  });
+
   it("refuses again once the word is consumed by the pipeline's own reply", async () => {
     const thread = async () => [
       { text: "merge", created_time: "2026-09-13T11:00:00Z" },
