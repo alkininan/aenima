@@ -90,7 +90,7 @@ describe("comment and task", () => {
     expect(task({ id: "t2", properties: {} }).Status).toBeNull();
   });
 
-  // T0.15 TC1 → AC1. The Tasks data source holds Status as a select property, not a status
+  // T0.16 TC1 → AC1 (carries T0.15). The Tasks data source holds Status as a select property, not a status
   // property, and the status-shaped read returned null for every row: three human merges at
   // Review went unseen by the guard. Both shapes are read; the board's is the select.
   it("reads Status from a select property, which is how the Tasks data source holds it", () => {

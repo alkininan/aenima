@@ -569,6 +569,16 @@ export function isEnvPath(path) {
 }
 
 /**
+ * True when a path is a reviewer's verdict file, `docs/reviews/<id>.md`, wherever the
+ * checkout sits. The second door reads it, so the run's own Edit and Write may not touch it
+ * (T0.16); the reviewer writes it through its Bash, which this rule does not read.
+ */
+export function isVerdictPath(path) {
+  const p = String(path ?? "").replaceAll("\\", "/");
+  return p.startsWith("docs/reviews/") || p.includes("/docs/reviews/");
+}
+
+/**
  * True when a refspec names `main` as the branch being written.
  *
  * `main`, `+main` (force by refspec), `HEAD:main`, `main:main`, `refs/heads/main` — the
@@ -763,6 +773,10 @@ export function decide(input, deps = {}) {
     const path = input?.tool_input?.file_path;
     if (typeof path === "string" && isEnvPath(path)) {
       return `Writing ${path} is refused — .env files carry secrets and are edited by hand. docs/guidelines.md §5, hard boundaries.`;
+    }
+    // (g) the reviewer's verdict is the reviewer's to write; the guard's second door reads it.
+    if (typeof path === "string" && isVerdictPath(path)) {
+      return `Writing ${path} is refused — a file under docs/reviews/ is the reviewer's to write, and the guard opens a merge on what it finds there. docs/guidelines.md §4.`;
     }
     return null;
   }

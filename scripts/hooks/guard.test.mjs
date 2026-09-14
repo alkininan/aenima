@@ -168,6 +168,21 @@ describe("rule (d) — force-push and merging on main", () => {
   });
 });
 
+// T0.16 TC2 → AC2, the verdict's half: the file the second door reads is the reviewer's to
+// write, through its own Bash, and the run's Edit and Write are refused under docs/reviews/.
+describe("rule (g) — Edit and Write under docs/reviews/", () => {
+  it("refuses a Write and an Edit of a verdict file, relative or absolute", () => {
+    expect(decide(...file("Write", "docs/reviews/T0.16.md"))).toContain("docs/reviews/");
+    expect(decide(...file("Edit", "/repo/docs/reviews/T0.16.md"))).toContain("reviewer's to write");
+  });
+
+  it("allows the report and the log beside it", () => {
+    expect(decide(...file("Write", "docs/reports/T0.16.md"))).toBeNull();
+    expect(decide(...file("Write", "docs/log/T0.16.md"))).toBeNull();
+    expect(decide(...file("Write", "docs/reviews-notes.md"))).toBeNull();
+  });
+});
+
 describe("rule (e) — writes to .env files", () => {
   it("refuses an Edit and a Write, naming the path", () => {
     expect(decide(...file("Edit", "/repo/.env.local"))).toContain(".env.local");
@@ -607,6 +622,7 @@ describe("T0.16 — rule (d) lets the revert's push through, and nothing else th
   });
 });
 
+// T0.16 TC5 → AC5, the guard's own reading of the revert, over a real repository.
 describe("revertOfTipAt over a temporary repository", () => {
   let root;
   const sh = (cwd, ...args) => {

@@ -119,7 +119,7 @@ describe("readBoardThreads", () => {
     expect(result.threads.map((t) => [t.id, t.shape])).toEqual([["a", "merge"]]);
   });
 
-  // T0.15 TC1 → AC1. The rows above are handed in already read; this one comes through the
+  // T0.16 TC1 → AC1 (carries T0.15). The rows above are handed in already read; this one comes through the
   // real client from the API's own shape, where the Tasks data source holds Status as a
   // select. Under the status-shaped read every row was at no status and a human "merge" at
   // Review shaped `assess`, which is what the preflight of 14 September found on three tasks.

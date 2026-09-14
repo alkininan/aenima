@@ -108,8 +108,9 @@ writes rows and cannot change schema, and the admin URL in `.env.migrate` is rea
 adds a migration sets Decision and waits for one word from you on the task's thread, `apply`;
 a pull request on a gated path — a migration, the product spec, the pipeline's own guard, gate,
 skill or run scripts — merges on the word `merge` at Review, and any other merges at close on the
-reviewer's `PASS` in `docs/reviews/<id>.md`, which the guard reads from the very commit the pull
-request carries (`docs/guidelines.md` §4, T0.16). Neither word is taken from the model: the guard
+reviewer's `PASS` in `docs/reviews/<id>.md`, read by the guard at the pushed commit — the pull
+request's head must be the checkout's HEAD, so the file and the gated-path check are the ones on
+the commit that merges (`docs/guidelines.md` §4, T0.16). Neither word is taken from the model: the guard
 reads the thread itself, over the Notion API with the integration token in `.env.local`, and
 refuses the command until the reply is there and newer than the run's own last comment. The
 hooks themselves run from `origin/main`'s copy of `scripts/`, never the checkout's, so a run

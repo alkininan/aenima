@@ -264,7 +264,8 @@ by the guard and the skill both. Everywhere else a finished ticket merges itself
 reviewer's verdict is a file, `docs/reviews/<id>.md`, ending in `PASS`; the gate is green; and
 the guard's second door reads that file, the diff against `origin/main` and the pull request's
 head — which must be the very commit it read — before it lets `gh pr merge` through. The model
-never asserts the PASS; the reviewer writes it and the guard reads it. A gated diff stays at
+never asserts the PASS: the reviewer writes it through its own Bash, the guard reads it, and the
+guard refuses an Edit or a Write under `docs/reviews/` from the run. A gated diff stays at
 Review with one ⟡ comment naming the path, and your `merge` lands it.
 
 Answers given inside an interactive Code tab session follow the same rule, applied by that session.
@@ -382,6 +383,9 @@ it. A wrong answer reverts: `revert.mjs` detaches at `origin/main` and reverts i
 force-push — and the run pushes it as `git push origin HEAD:main`, the one push to main the guard
 lets through, having checked in code that HEAD is exactly that revert. Then one Fix task at
 Backlog naming the reverted ticket, the ticket itself back at Backlog, and one ⟡ comment on it.
+Only the merge at the tip is reverted: two merges landing between two runs are probed together
+and the later one is reverted, and a site still red after a revert stops there — the tip is then
+a revert commit, not a merge, and `revert.mjs` says so rather than revert again.
 
 **The marker** is the run's footprint and nothing more: `aenima-run-active` in the repository's
 shared `.git` directory, the same file from the primary checkout and from every worktree, which is

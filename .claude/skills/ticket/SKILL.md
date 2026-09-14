@@ -297,13 +297,17 @@ next run's step 0. `ok: true`, and the reviewer's last verdict file ends in `PAS
 Must is open → the run merges its own work:
 
     git checkout --detach
+    git branch -D <branch>
     gh pr merge <branch> --merge --delete-branch
 
 The guard opens its second door on its own reading — the verdict file, the diff, and the pull
 request's head being this checkout's HEAD — and refuses with the reason otherwise; a refusal
-here means the task stays at `Review` with that reason in the report and no comment. Detach
-first so `--delete-branch` can remove the local branch without switching this worktree to
-`main`, which the primary checkout holds. On success: `git fetch origin`, then the merge
+here means the task stays at `Review` with that reason in the report and no comment, and
+`git checkout -B <branch> origin/<branch>` puts the local branch back. Detach and drop the
+local branch first: gh's `--delete-branch` asks which branch is checked out only while a local
+copy of the pull request's branch exists, and on a detached HEAD that question fails after the
+merge has already landed; with no local copy gh goes straight on to delete the remote one. The
+branch is on origin, so nothing is lost either way. On success: `git fetch origin`, then the merge
 commit is `git rev-parse --short origin/main`; set the task `Done`, and create one Releases
 row — Name `YYYY-MM-DD <short hash>`, Commit, Date, Deploy `https://aeni.ma`, Tasks this
 task, Specs the four header versions at that commit — and relate the task to it. The next
