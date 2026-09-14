@@ -5,10 +5,12 @@
  * Two readers need the board without a model in the loop: the guard, which allows a merge or
  * a migration only when it has itself seen the human's word on the thread (`permission.mjs`),
  * and the preflight, which reads every task's comments in one command instead of one
- * connector call per task (`threads.mjs`). Both go through here. The token is an internal
- * integration's, shared with the `dev` teamspace, and lives in `.env.local` as `NOTION_TOKEN`
- * — a file the guard refuses to write and `.worktreeinclude` carries into every worktree
- * (docs/guidelines.md §5, the capability boundary).
+ * connector call per task (`threads.mjs`). Since T0.12 two more do: the session-end script
+ * that posts a Runs row (`runs.mjs`), and the mirror, which reads each page's header block
+ * here before the skill rewrites the page (`mirror.mjs`). All go through here. The token is
+ * an internal integration's, shared with the `dev` teamspace, and lives in `.env.local` as
+ * `NOTION_TOKEN` — a file the guard refuses to write and `.worktreeinclude` carries into every
+ * worktree (docs/guidelines.md §5, the capability boundary).
  *
  * The token is read and never printed: an error carries the endpoint and the status, not
  * the header that was sent with it. `fetch` is injected so a test drives the client against
@@ -153,6 +155,33 @@ export function client(
     /** One Tasks row by page id — its Name and Status as the board holds them. */
     async page(pageId) {
       return task(await call("GET", `/pages/${String(pageId).replaceAll("-", "")}`));
+    },
+
+    /**
+     * The children of a block or page — the first `pageSize` of them, or every page when
+     * `pageSize` is null. The mirror reads a page's first block for its header and the
+     * Documents page's child pages for their ids (`mirror.mjs`).
+     */
+    async children(blockId, pageSize = null) {
+      const id = String(blockId).replaceAll("-", "");
+      if (pageSize !== null) {
+        const page = await call("GET", `/blocks/${id}/children?page_size=${pageSize}`);
+        return page.results ?? [];
+      }
+      return all((cursor) =>
+        call(
+          "GET",
+          `/blocks/${id}/children?page_size=100${cursor ? `&start_cursor=${cursor}` : ""}`,
+        ),
+      );
+    },
+
+    /** Create one row in a data source with `properties` in the API's own shapes (`runs.mjs`). */
+    async createPage(dataSourceId, properties) {
+      return call("POST", "/pages", {
+        parent: { type: "data_source_id", data_source_id: dataSourceId },
+        properties,
+      });
     },
 
     /** Every row of a data source, every status. */

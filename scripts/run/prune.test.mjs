@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   realpathSync,
@@ -11,14 +12,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { assess, listWorktrees, OLD_AFTER_MS, prune, stamp, STAMP } from "./prune.mjs";
+import { assess, listWorktrees, OLD_AFTER_MS, prune, stamp, STAMP, YOUNG_MS } from "./prune.mjs";
 
 // T0.10 — a scheduled run's worktree is removed by a later run once it is merged or old;
 // everything else on disk is somebody's and stays. Over a real repository with a bare
 // origin, because the question is what git does, not what a stub agrees to.
 
 const NOW = new Date("2026-09-10T03:00:00Z");
-const DAY = 24 * 60 * 60 * 1000;
+const HOUR = 60 * 60 * 1000;
+const DAY = 24 * HOUR;
 
 describe("assess", () => {
   const wt = (path, extra = {}) => ({
@@ -76,6 +78,16 @@ describe("assess", () => {
       "uncommitted work",
       "this run's own worktree",
     ]);
+  });
+
+  // T0.10 open question 8 → T0.12. A stamped worktree younger than the marker's three hours
+  // stays even when merged: a live run's own worktree is exactly that between its steps 0 and 2.
+  it("keeps a merged worktree stamped less than three hours ago", () => {
+    const young = run([wt("/a")], { stampedAt: () => NOW.getTime() - YOUNG_MS + 1 });
+    expect(young.remove).toEqual([]);
+    expect(young.keep[0].reason).toBe("stamped less than three hours ago");
+    const older = run([wt("/a")], { stampedAt: () => NOW.getTime() - YOUNG_MS });
+    expect(older.remove[0].reason).toBe("merged into origin/main");
   });
 
   it("never lists the main worktree as a candidate", () => {
@@ -139,11 +151,31 @@ describe("stamp and prune, over a real repository", () => {
     expect(stamp(primary)).toEqual({ stamped: false, path: null });
   });
 
+  // T0.10 open question 9 → T0.12. Linked is git's notion, not a path comparison, so a
+  // subdirectory of either checkout is read the same as its root.
+  it("stamps from a subdirectory of a linked worktree, and not from one of the primary", () => {
+    const wt = worktree("deep");
+    mkdirSync(join(wt, "src", "x"), { recursive: true });
+    expect(stamp(join(wt, "src", "x"), { now: () => NOW }).stamped).toBe(true);
+    mkdirSync(join(primary, "src"), { recursive: true });
+    expect(stamp(join(primary, "src"))).toEqual({ stamped: false, path: null });
+  });
+
+  it("knows its own worktree from a subdirectory, and leaves it alone", () => {
+    const me = worktree("me");
+    stamp(me, { now: () => new Date(NOW.getTime() - 4 * DAY) });
+    mkdirSync(join(me, "docs"), { recursive: true });
+    const result = prune({ cwd: join(me, "docs"), now: () => NOW });
+    expect(result.removed).toEqual([]);
+    expect(result.kept.map((w) => w.reason)).toEqual(["this run's own worktree"]);
+    expect(existsSync(me)).toBe(true);
+  });
+
   it("removes the merged and the old, keeps the young, the dirty, the human's and its own", () => {
     const merged = worktree("merged");
-    stamp(merged, { now: () => NOW });
+    stamp(merged, { now: () => new Date(NOW.getTime() - 4 * HOUR) });
     const young = worktree("young");
-    stamp(young, { now: () => NOW });
+    stamp(young, { now: () => new Date(NOW.getTime() - 4 * HOUR) });
     writeFileSync(join(young, "b.txt"), "b\n");
     commit(young, "unmerged work");
     const old = worktree("old");
@@ -151,7 +183,7 @@ describe("stamp and prune, over a real repository", () => {
     writeFileSync(join(old, "c.txt"), "c\n");
     commit(old, "old unmerged work");
     const dirty = worktree("dirty");
-    stamp(dirty, { now: () => NOW });
+    stamp(dirty, { now: () => new Date(NOW.getTime() - 4 * HOUR) });
     writeFileSync(join(dirty, "d.txt"), "d\n");
     const human = worktree("human");
     const me = worktree("me");
@@ -187,7 +219,7 @@ describe("stamp and prune, over a real repository", () => {
 
   it("keeps a locked worktree even when merged and stamped", () => {
     const locked = worktree("locked");
-    stamp(locked, { now: () => NOW });
+    stamp(locked, { now: () => new Date(NOW.getTime() - 4 * HOUR) });
     git(primary, "worktree", "lock", locked);
     const result = prune({ cwd: primary, now: () => NOW });
     expect(result.stamped).toBe(false);

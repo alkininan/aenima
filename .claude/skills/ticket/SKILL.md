@@ -128,7 +128,20 @@ itself — one file for every worktree:
   and continue from step 1's marker with it. With several stale tasks, order them with
   `pick-next.mjs` over those rows alone: the first is yours, the rest go back to `Ready`.
 
-Do not refresh the Documents or Guidelines mirrors. That is a later ticket's.
+**e. The mirrors.** Notion holds mirrors of the repo documents, each headed with the commit it
+mirrors (§1, §2), and this is where they catch up with `main`:
+
+    node scripts/run/mirror.mjs
+
+`token: false` → say so in your report line and go on. Otherwise every `pages` entry with
+`refresh: true` is behind `origin/main` — or a refresh that stopped partway, which comes first
+in the list — and you rewrite it, in the order given, through the connector with
+`allow_async: false` on **every** write: `replace_content` with the page's `sentinel` alone;
+then `insert_content` at the end with each chunk file's text, in order (`cat` the file, pass the
+text verbatim); then `update_content` replacing the sentinel with the page's `heading`. The
+heading goes last so a page is either whole and headed with its commit, or visibly *refresh in
+progress* — never in between. A page marked `missing` is one the Documents page does not list;
+say so in the report and write nothing for it.
 
 ## 1 Claim
 
@@ -264,4 +277,7 @@ Status to `Review`. Release the marker: `node scripts/run/release.mjs`. If step 
 
 **Never merge on your own word.** Merging to main is the human's move, made with one reply —
 *merge* — on the task at Review, and the guard refuses `gh pr merge` until it has read that
-reply from the board itself. The Runs row is a later ticket's.
+reply from the board itself. The Runs row is not yours to write: the SessionEnd hook runs
+`scripts/run/runs.mjs` over this session's transcript once you have exited, and posts it with
+the token — task, outcome, model, tokens, findings, all read from what happened, none of it
+from what you say.

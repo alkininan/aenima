@@ -20,13 +20,23 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { STALE_AFTER_MS } from "./claim.mjs";
 import { emit, isMain } from "./cli.mjs";
+import { commonDir } from "./repo.mjs";
 
 /** The file a run writes into its worktree's git directory. */
 export const STAMP = "aenima-run";
 
 /** A stamped worktree older than this goes whether or not its branch merged. */
 export const OLD_AFTER_MS = 3 * 24 * 60 * 60 * 1000;
+
+/**
+ * A stamped worktree younger than this stays whatever its merge state: a run's own worktree
+ * sits clean at `origin/main` between its step 0 and its step 2, and a `/ticket` typed by
+ * hand into another checkout inside those minutes must not remove it from under the run.
+ * The floor is the marker's own age — a run older than that is a dead one (`stale.mjs`).
+ */
+export const YOUNG_MS = STALE_AFTER_MS;
 
 const git = (args, cwd) =>
   spawnSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
@@ -75,8 +85,11 @@ export function listWorktrees(cwd) {
  */
 export function stamp(cwd = process.cwd(), { now = () => new Date() } = {}) {
   const own = gitDir(cwd);
-  const worktrees = listWorktrees(cwd);
-  const isLinked = own !== null && worktrees.length > 0 && real(worktrees[0].path) !== real(cwd);
+  // Linked is what git means by it: the checkout's own git directory is not the shared one.
+  // Comparing paths to the main worktree's would read a subdirectory of the primary as
+  // linked and a run from a worktree's subdirectory as primary (T0.10 open question 9).
+  const common = commonDir(cwd);
+  const isLinked = own !== null && common !== null && real(own) !== real(common);
   if (!isLinked) return { stamped: false, path: null };
   const path = join(own, STAMP);
   writeFileSync(path, `${now().toISOString()}\n`);
@@ -118,8 +131,13 @@ export function assess({
       say("uncommitted work");
       continue;
     }
+    const age = now - at;
+    if (age < YOUNG_MS) {
+      say("stamped less than three hours ago");
+      continue;
+    }
     const merged = isMerged(wt);
-    const old = now - at > OLD_AFTER_MS;
+    const old = age > OLD_AFTER_MS;
     if (merged) remove.push({ ...wt, reason: "merged into origin/main" });
     else if (old) remove.push({ ...wt, reason: "older than three days" });
     else say("unmerged and younger than three days");
@@ -146,9 +164,13 @@ export function prune({ cwd = process.cwd(), base = "origin/main", now = () => n
   const own = stamp(cwd, { now });
   git(["fetch", "--quiet", "origin"], cwd);
   const worktrees = listWorktrees(cwd);
+  // The run's own worktree is the checkout's root, wherever in it the run stands; `cwd`
+  // itself would not match from a subdirectory and the run would list itself as a candidate.
+  const top = git(["rev-parse", "--show-toplevel"], cwd);
+  const current = top.status === 0 ? top.stdout.trim() : cwd;
   const decision = assess({
     worktrees,
-    current: cwd,
+    current,
     now: now().getTime(),
     stampedAt: stampedAtOf,
     isMerged: (wt) => git(["merge-base", "--is-ancestor", wt.head, base], cwd).status === 0,
