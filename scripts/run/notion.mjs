@@ -69,14 +69,20 @@ export function comment(raw) {
   };
 }
 
-/** One Tasks row as the run reads it: `{ id, url, Name, Status }`. */
+/**
+ * One Tasks row as the run reads it: `{ id, url, Name, Status }`.
+ *
+ * The Tasks data source holds Status as a select property, not a status property, and the
+ * API returns it under `select` (T0.15). The status shape is read too, so a conversion of the
+ * property on the board changes nothing here; the select shape is the board's today.
+ */
 export function task(raw) {
   const props = raw?.properties ?? {};
   return {
     id: raw?.id ?? null,
     url: raw?.url ?? null,
     Name: plain(props.Name?.title),
-    Status: props.Status?.status?.name ?? null,
+    Status: props.Status?.status?.name ?? props.Status?.select?.name ?? null,
   };
 }
 

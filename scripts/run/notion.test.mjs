@@ -89,6 +89,28 @@ describe("comment and task", () => {
     });
     expect(task({ id: "t2", properties: {} }).Status).toBeNull();
   });
+
+  // T0.15 TC1 → AC1. The Tasks data source holds Status as a select property, not a status
+  // property, and the status-shaped read returned null for every row: three human merges at
+  // Review went unseen by the guard. Both shapes are read; the board's is the select.
+  it("reads Status from a select property, which is how the Tasks data source holds it", () => {
+    const raw = {
+      id: "t3",
+      url: "https://www.notion.so/t3",
+      properties: {
+        Name: { title: [{ plain_text: "T0.14 Ignore worktrees in lint" }] },
+        Status: {
+          id: "xjQi",
+          type: "select",
+          select: { id: "18159c63", name: "Review", color: "blue" },
+        },
+      },
+    };
+    expect(task(raw).Status).toBe("Review");
+    expect(
+      task({ id: "t4", properties: { Status: { type: "select", select: null } } }).Status,
+    ).toBeNull();
+  });
 });
 
 // TC3 → AC3 and TC4 → AC4, the API client both readers go through.
@@ -184,6 +206,8 @@ describe("client", () => {
     expect(seen[0].aborted).toBe(false);
   });
 
+  // The page the guard reads is a Tasks row, and the board holds its Status as a select
+  // (T0.15): this is the read behind `permission.mjs`'s "at no status".
   it("reads one page as a Tasks row", async () => {
     const { calls, fetch } = canned({
       "GET /pages/abc": {
@@ -191,7 +215,7 @@ describe("client", () => {
         url: "https://www.notion.so/abc",
         properties: {
           Name: { title: [{ plain_text: "T0.11 Comments" }] },
-          Status: { status: { name: "Review" } },
+          Status: { type: "select", select: { name: "Review", color: "blue" } },
         },
       },
     });
