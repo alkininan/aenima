@@ -52,23 +52,29 @@ export function assess({ commit = null, checked = null, results = [] } = {}) {
   return { commit, checked, changed, ok: changed ? failed.length === 0 : null, results, failed };
 }
 
-/** Each check's answer: `{ path, expected, status }`, status null when nothing answered. */
+/**
+ * Each check's answer: `{ path, expected, status }`, status null when nothing answered twice.
+ * One silence — a timeout, a DNS blip — is asked again before it counts: a revert on a blip is
+ * a merge nobody wanted undone.
+ */
 export async function probe(
   base,
   checks = CHECKS,
-  { fetch: doFetch = globalThis.fetch, timeoutMs = TIMEOUT_MS } = {},
+  { fetch: doFetch = globalThis.fetch, timeoutMs = TIMEOUT_MS, attempts = 2 } = {},
 ) {
   const results = [];
   for (const { path, status } of checks) {
     let got = null;
-    try {
-      const response = await doFetch(`${base}${path}`, {
-        redirect: "manual",
-        signal: AbortSignal.timeout(timeoutMs),
-      });
-      got = response.status;
-    } catch {
-      got = null;
+    for (let attempt = 0; attempt < attempts && got === null; attempt += 1) {
+      try {
+        const response = await doFetch(`${base}${path}`, {
+          redirect: "manual",
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+        got = response.status;
+      } catch {
+        got = null;
+      }
     }
     results.push({ path, expected: status, status: got });
   }

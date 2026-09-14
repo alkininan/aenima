@@ -235,8 +235,9 @@ Invoke the `reviewer` subagent with the ticket file path and nothing else. Do no
 work for it: the delegation message is a claim, and a briefing that says what is true has thrown
 the review away. The reviewer runs only the tests the ticket names and the test files the diff
 touches (`scripts/run/review-scope.mjs`); the Stop gate owns the full suite. It writes its
-verdict to `docs/reviews/<id>.md`, last line `PASS` or `FINDINGS`: that file, not anything in
-this transcript, is what the guard reads at close. Never write or edit it yourself — a verdict
+verdict to `docs/reviews/<id>.md`, last line `PASS` when no Must stands — Shoulds sit above it
+and are recorded in the report — and `FINDINGS` when one does: that file, not anything in this
+transcript, is what the guard reads at close. Never write or edit it yourself — a verdict
 the run wrote is the model's claim, and the guard's door would be open on nothing.
 
 Each finding is tagged **Must** or **Should**. Fix every Must, then re-invoke. **Three passes
@@ -296,10 +297,11 @@ Status to `Review`. Then ask whether this diff is the run's own to merge:
 `ok: false` → the diff touches a path only the human's word merges — a migration, the product
 spec, the pipeline's own boundary. Post one `gated` comment naming the `gated` paths, joined
 with "and". The task stays at `Review`; the human's *merge* there is the merge, made by the
-next run's step 0. `ok: true`, and the reviewer's last verdict file ends in `PASS`, and no Must is open → the run
-merges its own work. First the gate, on the pushed tree, so its green is on record:
+next run's step 0. `ok: true`, and the reviewer's last verdict file ends in `PASS` — which is the reviewer's word
+that no Must stands — → the run merges its own work. First the gate, main's copy as the hooks
+run it, on the pushed tree, so its green is on record:
 
-    printf '{"session_id":"%s","cwd":"%s"}' "$CLAUDE_CODE_SESSION_ID" "$PWD" | node scripts/hooks/gate.mjs
+    d=$(mktemp -d) && d=$(cd "$d" && pwd -P) && git archive -o "$d/scripts.tar" origin/main scripts && tar -xf "$d/scripts.tar" -C "$d" && printf '{"session_id":"%s","cwd":"%s"}' "$CLAUDE_CODE_SESSION_ID" "$PWD" | node "$d/scripts/hooks/gate.mjs"; s=$?; rm -rf "$d"; (exit $s)
 
 Exit 0 is the green, written beside the marker as this tree's fingerprint; exit 2 is the same
 red the Stop hook would give — fix it, commit, push, and run the gate again. Then:

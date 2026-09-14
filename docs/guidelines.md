@@ -60,7 +60,7 @@ Writer column: **H** human · **M** machine (pipeline) · **F** formula, nobody 
 | Property | Type | Values | Writer | Notes |
 |---|---|---|---|---|
 | Name | title | `T3.1 Slice PRD into items` | H, M | ID + imperative, six words max. ID assigned by M at claim if missing. |
-| Status | select | Backlog · Ready · In progress · Decision · Review · Done | H for Backlog→Ready; M for all else | See §3. The board holds it as a select, not a status property; `scripts/run/notion.mjs` reads either shape. |
+| Status | select | Backlog · Ready · In progress · Decision · Review · Done | H for Backlog→Ready; M for all else | See §3. The board holds it as a select, not a status property; `scripts/run/notion.mjs` reads the select alone, and a status-typed property reads null — the guard then refuses at no status. |
 | Priority | select | Must · Should · Could · Won't | H | MoSCoW. Default Should. Never used in bodies with this meaning — in bodies Must/Should mean check severity. |
 | Type | select | Feature · Enhancement · Technical · Content · Experiment · Fix · Spike | H, M | product-spec §4, exactly. |
 | Epic | relation → Epics | | H, M | Proposed by M at claim if empty. |
@@ -320,7 +320,8 @@ below is a script under `scripts/run/` with a test; the skill holds the judgment
                 Should · fix every Must and re-invoke, three passes maximum · a Must still
                 standing after the third becomes an open question, Shoulds are recorded ·
                 out-of-scope findings → Backlog tasks (Type Fix, Epic inherited) · the reviewer
-                writes its verdict to docs/reviews/<id>.md, last line PASS or FINDINGS — the
+                writes its verdict to docs/reviews/<id>.md, last line PASS when no Must stands
+                (Shoulds listed above it, recorded by the run) and FINDINGS when one does — the
                 file the guard reads at close
 6  Migration    if the diff adds a migration file: commit, push, stop → Decision (§4). You
                 answer `apply` on the thread; a run in the primary checkout — a person's

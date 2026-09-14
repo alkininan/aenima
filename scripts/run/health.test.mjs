@@ -48,7 +48,7 @@ describe("describeFailed", () => {
 });
 
 describe("probe", () => {
-  it("asks each path without following redirects, and reads a thrown fetch as no answer", async () => {
+  it("asks each path without following redirects, asks a silent one again, and reads two silences as no answer", async () => {
     const asked = [];
     const fetch = async (url, init) => {
       asked.push([url, init.redirect]);
@@ -59,11 +59,24 @@ describe("probe", () => {
     expect(asked).toEqual([
       ["https://aeni.ma/sign-in", "manual"],
       ["https://aeni.ma/app", "manual"],
+      ["https://aeni.ma/app", "manual"],
     ]);
     expect(results).toEqual([
       { path: "/sign-in", expected: 200, status: 200 },
       { path: "/app", expected: 307, status: null },
     ]);
+  });
+
+  it("takes the second answer when the first attempt was a blip", async () => {
+    let calls = 0;
+    const fetch = async () => {
+      calls += 1;
+      if (calls === 1) throw new Error("blip");
+      return { status: 307 };
+    };
+    const results = await probe("https://aeni.ma", [{ path: "/app", status: 307 }], { fetch });
+    expect(results).toEqual([{ path: "/app", expected: 307, status: 307 }]);
+    expect(calls).toBe(2);
   });
 });
 
