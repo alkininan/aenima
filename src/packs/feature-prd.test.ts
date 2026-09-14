@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { featurePrdPack, getPack, listPacks } from "@/packs";
+import { featurePrdPack, getPack, listPacks, packConditions } from "@/packs";
 import { RUBRIC_TOTAL, allChecks, validatePack } from "@/packs/validate";
 
 const safetyLayer = featurePrdPack.layers.find((layer) => layer.id === "safety");
@@ -101,7 +101,7 @@ describe("the Feature PRD pack", () => {
   // settled reading (§5: "behind each check sits an open-ended probe library").
   // Any other check gaining a probe changes what the scorer reads for a check
   // that was already stable, and would need its own measurement.
-  it("carries probes on the five sufficiency checks and on no other, at 1.1.0", () => {
+  it("carries probes on the five sufficiency checks and on no other", () => {
     const probed = allChecks(featurePrdPack).filter((check) => (check.probes ?? []).length > 0);
     expect(probed.map((check) => check.id)).toEqual([
       "prd-12",
@@ -115,7 +115,29 @@ describe("the Feature PRD pack", () => {
     }
     // §5 versions rubrics like documents: the probes are a rubric edit, and
     // the version is what makes the re-baseline findable.
-    expect(featurePrdPack.version).toBe("1.1.0");
+    expect(featurePrdPack.version).toBe("1.2.0");
+  });
+
+  // T2.7 and T2.8 measured §4's applicability answer moving on identical bytes
+  // — `prd-15`'s condition held in four runs of eleven, then three — after the
+  // checks' own verdicts had settled. §4 (v1.7): a condition may carry probes
+  // the way a check does. All three carry them, because a condition that
+  // wobbles moves a Must in and out of the denominator (build-log open
+  // question 22), and any of the three can.
+  it("carries probes on all three conditions, at 1.2.0", () => {
+    const conditions = packConditions(featurePrdPack);
+    expect(conditions.map((condition) => condition.id)).toEqual([
+      "list-rendering-surface",
+      "network-dependent-surface",
+      "user-to-user-or-location",
+    ]);
+    for (const condition of conditions) {
+      expect((condition.probes ?? []).length).toBeGreaterThan(0);
+      for (const probe of condition.probes ?? []) expect(probe.trim().length).toBeGreaterThan(0);
+    }
+    // A rubric edit, versioned like a document (§5): the version is what makes
+    // the re-baseline findable.
+    expect(featurePrdPack.version).toBe("1.2.0");
   });
 
   it("binds all twenty interview questions to real checks", () => {

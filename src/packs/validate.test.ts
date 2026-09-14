@@ -58,6 +58,24 @@ describe("validatePack", () => {
     expect(matching(pack, 'check "prd-4" carries an empty probe')).toHaveLength(1);
   });
 
+  // A condition's probes render under the condition the same way (§4, v1.7),
+  // and a blank one is the same blank line.
+  it("rejects an empty condition probe", () => {
+    const pack = broken({
+      checks: featurePrdPack.checks.map((check) =>
+        check.id === "prd-15" && check.appliesWhen
+          ? {
+              ...check,
+              appliesWhen: { ...check.appliesWhen, probes: ["Does it render a list?", ""] },
+            }
+          : check,
+      ),
+    });
+    expect(
+      matching(pack, 'condition "list-rendering-surface" carries an empty probe'),
+    ).toHaveLength(1);
+  });
+
   it("rejects points that are zero, negative or fractional", () => {
     for (const points of [0, -5, 2.5]) {
       const pack = broken({
