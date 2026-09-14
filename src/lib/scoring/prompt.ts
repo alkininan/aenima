@@ -47,7 +47,7 @@ import type { SkillPack } from "@/packs";
  * anybody remembers this number. The release is here so a human can read a
  * stamp and know which generation of the protocol produced it.
  */
-export const PROTOCOL_RELEASE = "1.1.0";
+export const PROTOCOL_RELEASE = "1.2.0";
 
 /**
  * The scoring protocol. No rubric content, no artifact content, no example
@@ -89,18 +89,34 @@ A failing verdict carries the gap:
 
 A passing verdict carries none of the three. Leave all three empty.
 
+Some checks carry probes: questions to put to the artifact before reaching that
+check's verdict. Answer each probe from the artifact alone. A check with probes
+is satisfied only when the artifact answers every one of them; the first probe
+it leaves unanswered is the gap, and the failing verdict's note names it. A
+probe is not a check: it carries no points and never gets a verdict of its own.
+
 Write every note in English.`;
 
-/** One line per check: id, tag, points, and the check itself. Pack words only. */
+/**
+ * One line per check — id, tag, points, and the check itself — then one
+ * indented line per probe beneath it. Pack words only.
+ *
+ * A probe is rendered under its check rather than in a list of its own so the
+ * scorer reads it in the check's light: the protocol says what a probe is
+ * once, and the pack says what each one asks, where it asks it.
+ */
 function renderCheck(check: {
   id: string;
   prose: string;
   tag: string;
   points: number;
   appliesWhen?: { id: string } | undefined;
+  probes?: string[] | undefined;
 }): string {
   const condition = check.appliesWhen ? ` [only when: ${check.appliesWhen.id}]` : "";
-  return `${check.id} (${check.tag}, ${check.points} points)${condition}: ${check.prose}`;
+  const line = `${check.id} (${check.tag}, ${check.points} points)${condition}: ${check.prose}`;
+  const probes = (check.probes ?? []).map((probe) => `  probe: ${probe}`);
+  return [line, ...probes].join("\n");
 }
 
 /**
@@ -194,8 +210,8 @@ function sortKeys(value: unknown): unknown {
  * A pack that exists only to be rendered.
  *
  * **Not a rubric, and never registered.** Its job is to hold one of everything
- * `renderPack` and `renderCheck` know how to draw — a plain check, a check
- * carrying a condition, a layer with a condition and a check inside it — so
+ * `renderPack` and `renderCheck` know how to draw — a check carrying a probe,
+ * a check carrying a condition, a layer with a condition and a check inside it — so
  * that the fingerprint below moves when the *rendering* moves. Drop the
  * `[only when: …]` suffix from `renderCheck`, stop printing points, reorder the
  * headings: every one of those changes what a model reads, and every one of
@@ -211,7 +227,13 @@ const FINGERPRINT_PACK: SkillPack = {
   version: "0.0.0",
   artifactKind: "prd",
   checks: [
-    { id: "f-1", prose: "A check that always applies", tag: "must", points: 1 },
+    {
+      id: "f-1",
+      prose: "A check that always applies",
+      tag: "must",
+      points: 1,
+      probes: ["A probe the check carries"],
+    },
     {
       id: "f-2",
       prose: "A check that can leave the denominator",
