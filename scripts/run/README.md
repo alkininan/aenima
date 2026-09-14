@@ -145,9 +145,10 @@ has one, sets the task's Commit to the short hash and its Status to Review, and 
 `scripts/hooks/`, `scripts/run/`, `docs/product-spec.md`, `.worktreeinclude`, `.gitignore`, and
 `package.json` when its scripts change — are listed there once and read by the guard and the
 skill both. A diff touching none of them, with the reviewer's `PASS` on file, is merged by the
-run itself with `gh pr merge --merge --delete-branch` from the pushed commit, and the task is
-Done with its Release row in the same run; the guard's second door (`permission.mjs`
-`reviewed`) reads the verdict file, the diff and the pull request's head before it opens. A
+run itself with `gh pr merge --merge --delete-branch` from the pushed commit — the gate run once
+more first, so its green for that tree is on record — and the task is Done with its Release row
+in the same run; the guard's second door (`permission.mjs` `reviewed`) reads the verdict file,
+the gate's record, the diff and the pull request's head before it opens. A
 gated diff stays at Review with one comment naming the path, and merging is the human's move,
 made with the word `merge` there, which the guard refuses `gh pr merge` until `permission.mjs`
 has read from the board. Either way `release.mjs` removes the marker and a primary checkout

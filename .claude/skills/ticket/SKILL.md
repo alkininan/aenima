@@ -134,8 +134,10 @@ live site from outside:
 
     node scripts/run/health.mjs
 
-`changed: false` → main is the commit last checked; go on. `ok: true` → say so in the report
-line and go on. `ok: false` → the merge at the tip is reverted, no human needed:
+`changed: false` → main is the commit last checked; go on. `waiting: true` → the commit is
+younger than the deploy window and the previous deployment would answer for it; say so in the
+report line and go on. `ok: true` → say so in the report line and go on. `ok: false` → the merge
+at the tip is reverted, no human needed:
 
     node scripts/run/revert.mjs
     git push origin HEAD:main
@@ -255,8 +257,9 @@ and carries the ticket on from here.
 
 ## 7 Gate
 
-Nothing to do. The Stop hook runs lint, typecheck and test, and a red suite cannot close a
-session. Do not run them again for its benefit.
+Nothing to do here. The Stop hook runs lint, typecheck and test at every stop, and a red suite
+cannot close a session. Do not run them for its benefit; step 9 runs the same gate once more,
+before a self-merge, so the green for the pushed tree is on record where the guard reads it.
 
 ## 8 Report
 
@@ -293,15 +296,21 @@ Status to `Review`. Then ask whether this diff is the run's own to merge:
 `ok: false` → the diff touches a path only the human's word merges — a migration, the product
 spec, the pipeline's own boundary. Post one `gated` comment naming the `gated` paths, joined
 with "and". The task stays at `Review`; the human's *merge* there is the merge, made by the
-next run's step 0. `ok: true`, and the reviewer's last verdict file ends in `PASS`, and no
-Must is open → the run merges its own work:
+next run's step 0. `ok: true`, and the reviewer's last verdict file ends in `PASS`, and no Must is open → the run
+merges its own work. First the gate, on the pushed tree, so its green is on record:
+
+    printf '{"session_id":"%s","cwd":"%s"}' "$CLAUDE_CODE_SESSION_ID" "$PWD" | node scripts/hooks/gate.mjs
+
+Exit 0 is the green, written beside the marker as this tree's fingerprint; exit 2 is the same
+red the Stop hook would give — fix it, commit, push, and run the gate again. Then:
 
     git checkout --detach
     git branch -D <branch>
     gh pr merge <branch> --merge --delete-branch
 
-The guard opens its second door on its own reading — the verdict file, the diff, and the pull
-request's head being this checkout's HEAD — and refuses with the reason otherwise; a refusal
+The guard opens its second door on its own reading — the verdict file, the gate's green for
+this tree, the diff, and the pull request's head being this checkout's HEAD — and refuses with
+the reason otherwise; a refusal
 here means the task stays at `Review` with that reason in the report and no comment, and
 `git checkout -B <branch> origin/<branch>` puts the local branch back. Detach and drop the
 local branch first: gh's `--delete-branch` asks which branch is checked out only while a local

@@ -792,6 +792,7 @@ describe("judge — reads the marker and the token file, then the thread", () =>
       page: async () => ({ Name: "T0.96 Smoke D", Status: "Review" }),
       verdict: () => "# T0.96 — review\n\nPASS\n",
       diff: () => ({ files: ["src/a.ts"], gated: [], ok: true }),
+      gate: () => ({ green: "h", tree: "h" }),
       prBranch: () => "t0-96",
       prHead: () => "abc",
       localHead: () => "abc",

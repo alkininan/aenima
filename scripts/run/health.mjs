@@ -38,6 +38,13 @@ export const RECORD = "aenima-deploy-checked";
 /** How long one question may take. */
 export const TIMEOUT_MS = 10_000;
 
+/**
+ * How long after a commit lands before the site is asked about it. Vercel builds main for a
+ * minute or three, and a probe before that is answered by the previous deployment — a green
+ * that says nothing about the commit. Younger than this, the check waits for the next run.
+ */
+export const DEPLOY_WINDOW_MS = 5 * 60 * 1000;
+
 /** `{ commit, checked, changed, ok, results, failed }`; `ok` is null when nothing was asked. */
 export function assess({ commit = null, checked = null, results = [] } = {}) {
   const changed = commit !== null && commit !== checked;
@@ -101,6 +108,20 @@ export async function health({ cwd = process.cwd(), base = BASE, deps = {} } = {
 
   const first = assess({ commit, checked, results: [] });
   if (!first.changed) return { base, ...first };
+
+  const when = run(["log", "-1", "--format=%ct", commit]);
+  const committedAt = when.status === 0 ? Number(String(when.stdout ?? "").trim()) * 1000 : NaN;
+  const age = (deps.now ? deps.now() : Date.now()) - committedAt;
+  const window = deps.deployWindowMs ?? DEPLOY_WINDOW_MS;
+  if (Number.isFinite(age) && age >= 0 && age < window) {
+    return {
+      base,
+      ...first,
+      ok: null,
+      waiting: true,
+      why: `origin/main moved ${Math.round(age / 1000)} s ago and a deploy takes a few minutes; asked again next run`,
+    };
+  }
 
   const results = await probe(base, CHECKS, { fetch: deps.fetch });
   try {

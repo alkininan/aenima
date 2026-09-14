@@ -20,9 +20,11 @@ import { readMarker } from "./claim.mjs";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { STATE_FILE, treeFingerprint } from "../hooks/gate.mjs";
 import { emit, isMain } from "./cli.mjs";
 import { readThread, shapeOf } from "./comments.mjs";
 import { gatedDiffOf } from "./gated.mjs";
+import { commonDir } from "./repo.mjs";
 import { client, readBoard, readToken, TOKEN_VAR } from "./notion.mjs";
 import { idOf } from "./stale.mjs";
 
@@ -111,11 +113,31 @@ export function verdictOf(text) {
 }
 
 /**
+ * The Stop gate's last green fingerprint, from `aenima-gate-count` beside the run marker, and
+ * this tree's own — the same hash the gate computes (`scripts/hooks/gate.mjs`). Equal means
+ * the suite passed exactly this tree; the run gets the green on record by running the gate
+ * before it merges (skill step 9).
+ */
+export function gateState(dir = process.cwd()) {
+  const common = commonDir(dir);
+  let green = null;
+  try {
+    const file =
+      common === null ? null : JSON.parse(readFileSync(join(common, STATE_FILE), "utf8"));
+    green = file?.greenHash ?? null;
+  } catch {
+    green = null;
+  }
+  return { green, tree: treeFingerprint(dir) };
+}
+
+/**
  * The guard's second door for `merge` (T0.16): `{ ok, why, marker, task, gated }`. Open
- * when the claimed task's reviewer verdict, `docs/reviews/<id>.md`, ends in PASS and the
- * diff against origin/main touches no gated path (`gated.mjs`). The task's branch comes
- * from the marker's id — the file is named by it, so the two cannot name different tickets.
- * Effects injected: `marker`, `verdict(id)` (the file's text, or null), `diff()`.
+ * when the claimed task's reviewer verdict, `docs/reviews/<id>.md`, ends in PASS, the diff
+ * against origin/main touches no gated path (`gated.mjs`), and the Stop gate's last green is
+ * this very tree (`gateState`). The task's branch comes from the marker's id — the file is
+ * named by it, so the two cannot name different tickets. Effects injected: `marker`,
+ * `verdict(id)` (the file's text, or null), `diff()`, `gate()`.
  */
 export function reviewed({ dir = process.cwd(), deps = {} } = {}) {
   const marker = deps.marker ? deps.marker() : readMarker(dir);
@@ -149,6 +171,16 @@ export function reviewed({ dir = process.cwd(), deps = {} } = {}) {
       why: `the diff touches ${diff.gated.join(", ")}, which only your word merges`,
       marker,
       gated: diff.gated,
+    };
+  }
+
+  const gate = deps.gate ? deps.gate() : gateState(dir);
+  if (gate.green === null || gate.green !== gate.tree) {
+    const short = (hash) => (hash === null ? "none" : String(hash).slice(0, 7));
+    return {
+      ok: false,
+      why: `the Stop gate has not passed this tree — its last green is ${short(gate.green)} and this tree is ${short(gate.tree)}; run the gate before the merge`,
+      marker,
     };
   }
 

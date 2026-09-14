@@ -78,7 +78,7 @@ describe("comment and task", () => {
       url: "https://www.notion.so/t1",
       properties: {
         Name: { title: [{ plain_text: "T0.11 " }, { plain_text: "Comments" }] },
-        Status: { status: { name: "Review" } },
+        Status: { type: "select", select: { name: "Review", color: "blue" } },
       },
     };
     expect(task(raw)).toEqual({
@@ -109,6 +109,11 @@ describe("comment and task", () => {
     expect(task(raw).Status).toBe("Review");
     expect(
       task({ id: "t4", properties: { Status: { type: "select", select: null } } }).Status,
+    ).toBeNull();
+    // A status-typed property is not the board's shape and is not read (AGENTS.md: no fallbacks).
+    expect(
+      task({ id: "t5", properties: { Status: { type: "status", status: { name: "Review" } } } })
+        .Status,
     ).toBeNull();
   });
 });

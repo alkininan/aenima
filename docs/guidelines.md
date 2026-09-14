@@ -261,9 +261,11 @@ and the ticket that carries it waits at Review for `merge` as well; a change to
 `scripts` of `package.json` — because a run must never loosen what a run is allowed to do
 unattended. Those are the gated paths, listed once in `scripts/run/gated.mjs` and read there
 by the guard and the skill both. Everywhere else a finished ticket merges itself at close: the
-reviewer's verdict is a file, `docs/reviews/<id>.md`, ending in `PASS`; the gate is green; and
-the guard's second door reads that file, the diff against `origin/main` and the pull request's
-head — which must be the very commit it read — before it lets `gh pr merge` through. The model
+reviewer's verdict is a file, `docs/reviews/<id>.md`, ending in `PASS`; the Stop gate's green for
+that very tree is on record beside the marker, the run having run the gate once more before it
+merges; and the guard's second door reads that file, that record, the diff against `origin/main`
+and the pull request's head — which must be the very commit it read — before it lets
+`gh pr merge` through. The model
 never asserts the PASS: the reviewer writes it through its own Bash, the guard reads it, and the
 guard refuses an Edit or a Write under `docs/reviews/` from the run. A gated diff stays at
 Review with one ⟡ comment naming the path, and your `merge` lands it.
@@ -333,7 +335,8 @@ below is a script under `scripts/run/` with a test; the skill holds the judgment
                 log's list from the directory (log-index.mjs)
 9  Close        commit, push branch, open the PR unless the branch has one → Review · a diff
                 on no gated path (gated.mjs) with the reviewer's PASS on file is merged by the
-                run itself, gh pr merge --merge --delete-branch from the pushed commit, then
+                run itself once the gate, run again here, has its green for this tree on
+                record — gh pr merge --merge --delete-branch from the pushed commit — then
                 Done and the Release row in the same run · a gated diff stays at Review with
                 one comment naming the path and waits for `merge` from you, made by the next
                 run's step 0 · remove the marker · Runs row written by the session-end script
@@ -378,7 +381,8 @@ once per commit of main the next run asks the live site two questions from outsi
 `e2e/production.spec.ts` asks a production build: `/sign-in` answers 200 and `/app` answers 307.
 The commit last asked about is recorded beside the run marker (`aenima-deploy-checked`), so a
 site down for a reason of its own reverts the merge at the tip once and not every merge after
-it. A wrong answer reverts: `revert.mjs` detaches at `origin/main` and reverts its tip with
+it; a commit younger than five minutes is not asked about yet — Vercel may still be building it
+and the previous deployment would answer for it — and the next run asks. A wrong answer reverts: `revert.mjs` detaches at `origin/main` and reverts its tip with
 `git revert -m 1` — one commit that restores the tree main had before the merge, never a
 force-push — and the run pushes it as `git push origin HEAD:main`, the one push to main the guard
 lets through, having checked in code that HEAD is exactly that revert. Then one Fix task at
@@ -413,8 +417,9 @@ API's ~3 a second, so an idle run reads the whole board in one command rather th
 call per task; and the guard reads the claimed task's thread before it lets a merge or a
 migration apply through (§4). The token is read from the file and never printed; an API error
 names the endpoint and the status and nothing else. Without it a run says so in its report line
-and reads no comments — a merge or an apply is then refused on that ground, which is the honest
-answer: nothing read the board. The API lists open threads only, so resolve nothing on a task
+and reads no comments — a gated merge or an apply is then refused on that ground, which is the
+honest answer: nothing read the board; a merge on the reviewer's door reads the verdict, the diff
+and the gate's record, none of which is the board. The API lists open threads only, so resolve nothing on a task
 until the run has answered it: a resolved `merge` is a merge nobody will see. The comments the
 pipeline posts still go through the connector, which posts as you; the prefix is what tells the
 two voices apart on a thread, as §4 says.
@@ -460,7 +465,7 @@ the merge at the tip, `HEAD:main`, HEAD one commit past `origin/main` with the t
 first parent had — no merge with main checked out, no migration apply until the guard has itself
 read your `apply` on the claimed task's thread over the API (§4), and no `gh pr merge` until it
 has read your `merge` there or, on a diff touching no gated path, the reviewer's `PASS` on file
-from the very commit the pull request carries; a merge must be that task's own pull request and
+and the gate's green for the very commit the pull request carries; a merge must be that task's own pull request and
 a merge commit. The guard reads commands, never text: prose inside a heredoc or a quoted string
 matches no rule.
 

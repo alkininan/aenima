@@ -79,11 +79,13 @@ describe("the hook commands in .claude/settings.json", () => {
     expect(result.stderr).toContain("could not read scripts/ from origin/main");
   });
 
-  it("runs the gate from origin/main the same way", () => {
+  it("runs the gate from origin/main the same way, and refuses to close rather than run nothing when it cannot", () => {
     const command = commandOf("Stop");
-    expect(command).toContain("archive");
-    expect(command).toContain("origin/main scripts");
     expect(command).toContain("scripts/hooks/gate.mjs");
     expect(command).not.toContain("${CLAUDE_PROJECT_DIR}/scripts/hooks/gate.mjs");
+    // origin/main was deleted by the test above: the gate must not let the session close.
+    const result = hook(command, { session_id: "s", cwd: work });
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("cannot close");
   });
 });

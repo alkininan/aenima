@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -71,8 +71,14 @@ describe("health", () => {
   let dir;
   afterEach(() => dir && rmSync(dir, { recursive: true, force: true }));
 
-  const runner = (tip) => (args) =>
-    args[0] === "rev-parse" ? { status: 0, stdout: `${tip}\n` } : { status: 0, stdout: "" };
+  const runner =
+    (tip, committedAt = 1_700_000_000) =>
+    (args) =>
+      args[0] === "rev-parse"
+        ? { status: 0, stdout: `${tip}\n` }
+        : args[0] === "log"
+          ? { status: 0, stdout: `${committedAt}\n` }
+          : { status: 0, stdout: "" };
   const green = async () => ({ status: 200 });
 
   it("probes a commit it has not seen, records it, and skips it the next time", async () => {
@@ -93,6 +99,33 @@ describe("health", () => {
     expect(result.ok).toBe(false);
     expect(result.failed.map((f) => f.path)).toEqual(["/app"]);
     expect(readFileSync(record, "utf8").trim()).toBe("c2");
+  });
+
+  it("waits, asking and recording nothing, while the commit is younger than the deploy window", async () => {
+    dir = mkdtempSync(join(tmpdir(), "aenima-health-"));
+    const record = join(dir, "checked");
+    const asked = [];
+    const fetch = async (url) => (asked.push(url), { status: 200 });
+    const now = () => 1_700_000_000_000 + 60_000; // a minute after the commit
+    const result = await health({
+      deps: { run: runner("c4", 1_700_000_000), recordPath: record, fetch, now },
+    });
+    expect(result).toMatchObject({ commit: "c4", changed: true, ok: null, waiting: true });
+    expect(result.why).toContain("60 s ago");
+    expect(asked).toEqual([]);
+    expect(existsSync(record)).toBe(false);
+    // Past the window the same commit is asked about and recorded.
+    const later = await health({
+      deps: {
+        run: runner("c4", 1_700_000_000),
+        recordPath: record,
+        fetch,
+        now: () => now() + 10 * 60_000,
+      },
+    });
+    expect(later).toMatchObject({ commit: "c4", changed: true });
+    expect(later.waiting).toBeUndefined();
+    expect(asked).toHaveLength(2);
   });
 
   it("fetches before it reads the tip, so origin/main is not an hour old", async () => {

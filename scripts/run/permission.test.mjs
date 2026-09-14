@@ -176,7 +176,8 @@ describe("verify", () => {
 describe("reviewed", () => {
   const passing = () => "# T0.16 — review\n\nFindings: none.\n\nPASS\n";
   const clean = () => ({ files: ["src/a.ts"], gated: [], ok: true });
-  const deps = (extra = {}) => ({ marker, verdict: passing, diff: clean, ...extra });
+  const green = () => ({ green: "h1", tree: "h1" });
+  const deps = (extra = {}) => ({ marker, verdict: passing, diff: clean, gate: green, ...extra });
 
   it("opens on a PASS verdict for the marker's task over a diff with nothing gated", () => {
     const result = reviewed({ deps: deps() });
@@ -219,6 +220,18 @@ describe("reviewed", () => {
     expect(result.why).toContain("your word");
   });
 
+  it("refuses while the Stop gate's last green is not this tree, naming both", () => {
+    const stale = reviewed({
+      deps: deps({ gate: () => ({ green: "aaaaaaa1", tree: "bbbbbbb2" }) }),
+    });
+    expect(stale.ok).toBe(false);
+    expect(stale.why).toContain("aaaaaaa");
+    expect(stale.why).toContain("bbbbbbb");
+    const never = reviewed({ deps: deps({ gate: () => ({ green: null, tree: "bbbbbbb2" }) }) });
+    expect(never.ok).toBe(false);
+    expect(never.why).toContain("none");
+  });
+
   it("reads the verdict from docs/reviews/<id>.md in the checkout, and the last non-blank line is the verdict", () => {
     expect(verdictOf("a\nPASS\n\n  \n")).toBe("PASS");
     expect(verdictOf("PASS\nFINDINGS")).toBe("FINDINGS");
@@ -227,8 +240,10 @@ describe("reviewed", () => {
     try {
       mkdirSync(join(dir, "docs", "reviews"), { recursive: true });
       writeFileSync(join(dir, "docs", "reviews", "T0.11.md"), "reviewed\nPASS\n");
-      const result = reviewed({ dir, deps: { marker, diff: clean } });
+      const result = reviewed({ dir, deps: { marker, diff: clean, gate: green } });
       expect(result.ok).toBe(true);
+      // Outside a repository there is no gate record: shut.
+      expect(reviewed({ dir, deps: { marker, diff: clean } }).why).toContain("Stop gate");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
