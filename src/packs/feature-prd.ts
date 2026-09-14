@@ -40,6 +40,10 @@ import type { ApplicabilityCondition, ConditionalLayer, RubricCheck, SkillPack }
 const LIST_SURFACE: ApplicabilityCondition = {
   id: "list-rendering-surface",
   when: "The feature renders a list, so it has empty and first-use states.",
+  probes: [
+    "Does the feature show a screen or section whose content is a set of items of one kind drawn from data — a feed, a list, a table, search results, a history, an inbox, a gallery — so that on first use, or with nothing to show, it would be empty? Name the screen. A fixed set of choices, one item's detail view, a form, a prompt or a notification is not such a set.",
+    "Does the artifact describe scrolling, sorting, filtering, paging or a 'no results' state for such a set? Name where.",
+  ],
 };
 
 /**
@@ -49,6 +53,10 @@ const LIST_SURFACE: ApplicabilityCondition = {
 const NETWORK_DEPENDENT: ApplicabilityCondition = {
   id: "network-dependent-surface",
   when: "The feature depends on the network or on a permission, so it can be denied, offline or degraded.",
+  probes: [
+    "Does the feature ask the person for a permission the phone or browser can refuse — location, camera, microphone, contacts, notifications, photos? Name the permission.",
+    "Does any step of the feature need the network at the moment the person uses it — a search, a send, a fetch, a map, a payment, a live update — so that being offline or on a slow connection changes what they see? Name the step.",
+  ],
 };
 
 /**
@@ -59,6 +67,11 @@ const NETWORK_DEPENDENT: ApplicabilityCondition = {
 const SAFETY_SURFACE: ApplicabilityCondition = {
   id: "user-to-user-or-location",
   when: "The feature carries user-to-user visibility, interaction, or location.",
+  probes: [
+    "Can one person see another person, or something about them — a profile, a name, a photo, a message, a rating, an answer — through this feature? Name where.",
+    "Can one person act on another through this feature — message, propose, invite, match, rate, report, block, meet? Name the action.",
+    "Does the feature read, store, show or act on a person's location, precise or coarse, at any point? Name where.",
+  ],
 };
 
 /* -------------------------------------------------------------------------- */
@@ -90,6 +103,16 @@ const SAFETY_SURFACE: ApplicabilityCondition = {
  * pointed choices a developer must pick between: a background sentence read
  * two ways produces no two implementations. It is a default taken on T2.8,
  * recorded in its report, and the row's wording is not changed here.
+ *
+ * **The three conditions carry probes too, and their `when` is unchanged.**
+ * With the verdicts settled, what still moved on identical bytes was §4's
+ * applicability answer — `prd-15`'s condition held in four runs of eleven,
+ * then three, and open question 22 saw the safety layer enter one run's
+ * denominator and not the next's, so a Must was asked or not asked on the
+ * scorer's mood. §4 (v1.7) lets a condition carry probes the way a check does;
+ * each probe here is a question the artifact answers yes or no, a yes meaning
+ * the condition holds, and the protocol decides the condition by those
+ * answers and by nothing else. T2.9 is where they were written and measured.
  */
 const CHECKS: RubricCheck[] = [
   {
@@ -363,8 +386,11 @@ export const featurePrdPack: SkillPack = {
   // the same twenty rows with probes under five of them (T2.8): §5 versions
   // rubrics like documents, a probe changes what the scorer reads for its
   // check, and the version is what makes the re-baseline findable — every run
-  // stamped 1.0.0 misses the cache and re-scores against 1.1.0.
-  version: "1.1.0",
+  // stamped 1.0.0 misses the cache and re-scores against 1.1.0. 1.2.0 is the
+  // same rows and the same five probe sets, with probes under the three
+  // conditions (T2.9, §4 v1.7): what the scorer reads to decide the
+  // denominator moved, so the version moves with it.
+  version: "1.2.0",
   artifactKind: "prd",
   checks: CHECKS,
   layers: [SAFETY_LAYER],
