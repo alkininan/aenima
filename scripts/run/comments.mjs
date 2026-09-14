@@ -9,13 +9,18 @@
  * question the pipeline stops posting and only reads — the two-round cap of §6, applied to
  * the board.
  *
- * `compose` writes the five comments a run can post, in plain sentences: what it hit, why it
+ * `compose` writes every comment a run can post, in plain sentences: what it hit, why it
  * could not pick alone, what it chose or would choose. No labels — where the gap lives is
  * said in words. The texts live here so they are one place and tested; the skill supplies
  * the sentences that need judgment and never the shape.
  *
- * Pure. Deciding whether an answer resolves the question is the skill's, and is the one
- * thing here that is not countable.
+ * Since T0.11 every task's thread is read, not only a Decision's, and a reply's shape is
+ * partly countable: `mentions` and `permitted` say whether the human's word — `merge`,
+ * `apply` — is on the thread, and the guard asks the same question of the API before it
+ * lets the command through. `shapeOf` names the countable shapes; the rest is `assess`.
+ *
+ * Pure. Deciding whether an answer resolves a question, or whether a reply is a change to
+ * the ticket or new work, is the skill's, and is the one thing here that is not countable.
  */
 
 import { emit, isMain, readStdin } from "./cli.mjs";
@@ -50,8 +55,74 @@ export function readThread(comments = [], prefix = "⟡ ") {
   };
 }
 
-/** The five things a run says on a thread. */
-export const KINDS = ["decision", "clarifying", "migration", "stale", "default"];
+/**
+ * True when a reply *begins* with the word — `merge`, `Merge it`, `apply, then carry on` —
+ * case aside and punctuation aside. "Don't merge yet" and "after you merge" do not begin
+ * with it, which is the whole of the rule: the word is the reply's point, not a mention in
+ * passing (docs/guidelines.md §4). The guard and the preflight read the same test.
+ */
+export function mentions(text, word) {
+  return new RegExp(`^\\W*${word}\\b`, "i").test(String(text ?? "").trim());
+}
+
+/**
+ * The human's word, when the thread carries it: the *newest* reply, newer than the
+ * pipeline's last comment, begins with `word`. Only the newest, so "merge" followed by
+ * "wait, don't merge yet" grants nothing — the last word is the word (review pass 2). The
+ * pipeline's own comments never count, whatever they say; a `⟡ merged` note is the pipeline
+ * consuming the word, not repeating it.
+ */
+export function permitted(word, comments = [], prefix = "⟡ ") {
+  const thread = readThread(comments, prefix);
+  const newest = thread.unanswered.at(-1) ?? null;
+  const found = newest !== null && mentions(newest.text, word) ? newest : null;
+  return {
+    ok: found !== null,
+    comment: found,
+    why:
+      found === null
+        ? `no reply beginning with "${word}" as the newest reply since the run's last comment on the thread`
+        : null,
+  };
+}
+
+/** The sentence every migration comment carries, which is how a thread says it waits on one. */
+export const MIGRATION_PHRASE = "This change adds a migration";
+
+/** True when the pipeline's last comment on the thread is the migration question. */
+export function awaitingMigration(thread) {
+  return String(thread?.pipeline?.at(-1)?.text ?? "").includes(MIGRATION_PHRASE);
+}
+
+/**
+ * The part of a reply's shape that is countable. `merge` is a Review task whose unanswered
+ * reply begins with the word; `apply` is a Decision task waiting on a migration whose reply
+ * begins with the word. Everything else is `assess`: change, new work, an answer that
+ * resolves a question, a note, or a reply that needs a clarifying round — the skill's call.
+ */
+export function shapeOf(status, thread) {
+  const newest = thread?.unanswered?.at(-1) ?? null;
+  const said = (word) => newest !== null && mentions(newest.text, word);
+  if (status === "Review" && said("merge")) return "merge";
+  if (status === "Decision" && awaitingMigration(thread) && said("apply")) return "apply";
+  return "assess";
+}
+
+/** The things a run says on a thread. */
+export const KINDS = [
+  "decision",
+  "clarifying",
+  "migration",
+  "stale",
+  "default",
+  "change",
+  "newWork",
+  "merged",
+  "applied",
+  "noted",
+  "setup",
+  "resolved",
+];
 
 /** A sentence ends in one full stop, whatever the caller handed in. */
 const sentence = (text) => {
@@ -74,6 +145,13 @@ const clause = (text) =>
  *   migration   { file }
  *   stale       { date, branch }            — branch null when the run died before making one
  *   default     { gap, choice }             — a choice cheap to undo, taken and said
+ *   change      {}                          — a Review reply folded in as an addendum
+ *   newWork     { name, url }               — a reply drafted as its own Backlog task
+ *   merged      { commit }                  — the human's "merge", done
+ *   applied     { file }                    — the human's "apply", done
+ *   noted       {}                          — a reply that asks for nothing
+ *   setup       { step, where }             — a step only a human can do, said exactly
+ *   resolved    {}                          — a Decision answer read as resolving: Ready
  */
 export function compose(kind, fields = {}, prefix = "⟡ ") {
   switch (kind) {
@@ -91,6 +169,20 @@ export function compose(kind, fields = {}, prefix = "⟡ ") {
         : `${prefix}This run stopped partway on ${clause(fields.date)} before it made a branch, so there's nothing to salvage. I've started again from main.`;
     case "default":
       return `${prefix}${sentence(fields.gap)} A wrong guess here costs nothing to change, so I went with ${clause(fields.choice)} and kept going. Say the word if you'd rather something else.`;
+    case "change":
+      return `${prefix}I've read that as a change to this ticket and folded it into the body as an addendum. The task is back at Ready; the next run builds it on the same branch and pull request and brings it back to Review.`;
+    case "newWork":
+      return `${prefix}I've read that as new work rather than a change to this ticket, so I've drafted it as its own task at Backlog: ${clause(fields.name)} (${clause(fields.url)}). Set it Ready when you want it built.`;
+    case "merged":
+      return `${prefix}Merged into main at ${clause(fields.commit)} with a merge commit, and the task is Done. The release row follows.`;
+    case "applied":
+      return `${prefix}Applied ${clause(fields.file)} to the shared database. The ticket picks up from where it stopped.`;
+    case "noted":
+      return `${prefix}Read that, thanks. Nothing for me to do here, so I've left the ticket as it is.`;
+    case "resolved":
+      return `${prefix}Read that as the answer, thanks. The task is back at Ready and the next run picks it up from there.`;
+    case "setup":
+      return `${prefix}I've stopped on a step only you can do: ${clause(fields.step)}. ${sentence(fields.where)} Say "done" on this thread once it's in place and the next run carries on.`;
     default:
       throw new Error(`unknown comment kind: ${kind}`);
   }

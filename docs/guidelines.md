@@ -1,4 +1,9 @@
-<!-- guidelines.md · v1.5 · in the repo · §5 puts /ticket on a schedule and says how it is turned
+<!-- guidelines.md · v1.6 · in the repo · a comment on the board is enough: §3 the shapes a reply
+     takes and their transitions — change, new work, merge, apply — §4 merge and apply as the
+     words, every task's thread read each run; §5 the thread read over the API, the guard's own
+     check of the word before a merge or an apply, the integration token in the capability
+     boundary, an idle run's one filing; §8 names T0.11 as it now is.
+     v1.5 · §5 puts /ticket on a schedule and says how it is turned
      on and off and what it costs idle; the marker and the gate's fingerprint move to the shared
      .git directory; worktrees, the capability boundary, per-ticket logs; §8 names T0.10 and T0.11
      as they now are. v1.4 · §4 stops only when a wrong guess is expensive and speaks in plain
@@ -135,7 +140,8 @@ Seven sub-pages: `product-spec` · `design-spec` · `CLAUDE` · `AGENTS` · `bui
 `build-log` · `schema`. The page is headed, verbatim: **Machine-written mirrors of the repo
 documents.** *Each page is refreshed from `main` at the start of every pipeline run and headed
 with the commit it mirrors. The repo is the only editing surface; nothing typed here survives the
-next run.* Nobody types here. The refresh itself is T0.11's; no run before it touches a mirror.
+next run.* Nobody types here. The refresh itself is a later ticket's; no run before it touches a
+mirror.
 
 ---
 
@@ -143,17 +149,20 @@ next run.* Nobody types here. The refresh itself is T0.11's; no run before it to
 
 | From | To | Who | Trigger |
 |---|---|---|---|
-| — | Backlog | H or M | Created. Everything starts here, including tasks the pipeline creates from findings. |
+| — | Backlog | H or M | Created. Everything starts here, including tasks the pipeline creates from findings, from a reply on any task that asks for new work, and from an idle run's own red. |
 | Backlog | Ready | **H only** | Your go. The one human move on the board. |
-| Ready | In progress | M | Run claims it. |
+| Ready | In progress | M | Run claims it. A branch already on origin is reused, with its pull request. |
 | In progress | Review | M | Branch pushed, Report written. |
 | In progress | Decision | M | Run stopped on a question, or a migration awaits your apply. |
 | Decision | Ready | M | Your comment assessed as resolving — see §4. No manual override. |
+| Decision | In progress | M | Your reply on a migration question says `apply`: the run applies it, the guard having read the word from the board, and carries the ticket on — see §4. |
+| Review | Ready | M | Your reply at Review asks for a change: folded into the body as an addendum; the next run builds it on the same branch and pull request and brings it back to Review. |
+| Review | Done | M | Your reply at Review says `merge`: the run merges the pull request with a merge commit, the guard having read the word from the board. Release row written. |
 | In progress | Ready | M | A stale run recovered while another stale task was claimed first — see §5 step 0. |
-| Review | Done | M | Next run finds the branch merged into main. Release row written. |
+| Review | Done | M | Next run finds the branch merged into main by hand. Release row written. |
 
 Nothing is ever set backwards by a human. "Status is derived, never declared" (§1) applied to the
-board.
+board. A comment is enough: you never open Claude Code or GitHub to change, merge, apply or file.
 
 ---
 
@@ -199,16 +208,43 @@ would be confirming its own proposal.
 Where the gap lives is fault attribution (§8): if it is in a spec, the answer is a spec patch, not
 a comment.
 
-At the start of every run, before claiming anything, the pipeline reads Decision tasks for a new
-comment from you since its own last comment. Each new comment gets **exactly one assessment**:
+At the start of every run, before claiming anything, the pipeline reads **every task's thread**
+for a comment from you newer than its own last comment there. Each such comment gets **exactly
+one assessment**, and the assessment ends with one ⟡ comment — that is how the next run knows
+the reply was read. What the assessment can be depends on where the task sits:
 
-- Resolves the question with one interpretation → status Ready. If the gap was placed in a spec,
-  the run's first act after claim is patching that section in the repo and bumping the version.
-  The answer lives in the document; the comment is where you said it.
-- Does not → one clarifying comment, in the same voice, naming the two readings it cannot pick
-  between; status stays Decision.
+- **At Review**, a reply that asks for a change to what was built is folded into the body as an
+  addendum and the task goes back to Ready; the next run reuses the branch and the pull request,
+  builds the change, has it reviewed, and brings the task back to Review. One ticket, one pull
+  request, however many rounds. A reply that begins with the word **`merge`** merges the pull
+  request with a merge commit, and the task is Done. A reply that asks for work beyond the
+  ticket is new work.
+- **At Decision**, a reply that resolves the question with one interpretation → status Ready. If
+  the gap was placed in a spec, the run's first act after claim is patching that section in the
+  repo and bumping the version. The answer lives in the document; the comment is where you said
+  it. On a migration question, a reply that begins with the word **`apply`** applies it and the
+  ticket carries on from where it stopped. A reply that does not resolve the question → one
+  clarifying comment, in the same voice, naming the two readings it cannot pick between; status
+  stays Decision.
+- **Anywhere**, a reply that asks for something beyond the task it is on becomes **new work**: one
+  task drafted from your words at Backlog, headed `⟡ Drafted by pipeline`, with a ⟡ note on the
+  original linking it. Never Ready — Backlog → Ready stays yours. A reply that asks for nothing
+  gets a ⟡ note and nothing else. Anything the run cannot place gets one clarifying comment.
 - After two clarifying rounds on the same question the pipeline stops asking and waits. It never
   stops assessing: your next comment is read like any other. Two-round cap, §6, applied to itself.
+
+**The two words are verified in code.** `merge` and `apply` are the two replies with consequences
+outside the board, and neither is taken on the model's reading of the thread: before the guard
+lets `gh pr merge` or `pnpm db:migrate` through it reads the claimed task's thread itself, over
+the Notion API with the integration token, and requires that your *newest* reply since the
+pipeline's last comment on that thread *begins* with the word — `merge`, `Merge it`, `apply,
+then carry on`; not `don't merge yet`, not `after you merge`. Only the newest: a `merge` followed
+by `wait, not yet` grants nothing, because the last word is the word. A merge must also be the
+task's own pull request — the branch is derived from the task's name on the board, not from
+anything the run wrote — merged with a merge commit, said outright as `--merge`: a squash
+rewrites the hash the board carries and the task would never be seen to land. The model cannot
+fabricate a permission; the check reads the board, not the transcript. Once the run has answered
+with its ⟡ note the word is consumed: the same reply grants nothing twice.
 
 Answers given inside an interactive Code tab session follow the same rule, applied by that session.
 
@@ -222,18 +258,29 @@ below is a script under `scripts/run/` with a test; the skill holds the judgment
 
 ```
 0  Preflight    stamp this worktree as a run's and remove the ones earlier runs left (prune.mjs) ·
-                install when node_modules is absent, typegen when .next/types is · assess
-                Decision comments (§4) · mark
-                merged Review tasks Done (merge-base --is-ancestor) and write Release rows · a
-                task In progress whose marker is fresh is a live run: exit · with no marker, or
-                one older than three hours, it is stale: keep its branch as t<id>-stale-<HHMM>,
-                post one comment, re-claim it from origin/main and continue — no human needed
+                install when node_modules is absent, typegen when .next/types is · a task In
+                progress whose marker is fresh is a live run: exit, before anything is read or
+                claimed · read every task's thread over the API in one command (threads.mjs)
+                and give each reply newer than the pipeline's last comment one assessment
+                (§4): a change at Review → addendum, Ready · merge at Review → claim, gh pr
+                merge --merge, one comment, release · apply on a migration question → claim,
+                db:migrate, carry on · new work → one Backlog task, one note · an answer →
+                Ready · else one clarifying comment · fetch, mark merged Review tasks Done
+                (merge-base --is-ancestor) and write Release rows · an In progress task with
+                no marker, or one older than three hours, is stale: keep its branch as
+                t<id>-stale-<HHMM>, post one comment, re-claim it from origin/main and
+                continue — no human needed
 1  Claim        top Ready by Priority (Must first), then oldest · set In progress · write the
                 marker aenima-run-active in the repository's shared .git directory (task, page,
                 branch, started, session) · assign ID and Epic if missing · compare Spec
-                versions against repo headers, note drift
-2  Inline       read every cited section · write docs/tickets/<id>.md — the pack the reviewer reads
-3  Branch       branch t<id> off origin/main · plan mode before any file changes · a primary
+                versions against repo headers, note drift · with nothing to claim, an idle run
+                that met a red in step 0 files one Fix task at Backlog (draft.mjs) and exits;
+                one that met nothing writes nothing
+2  Inline       read every cited section · write docs/tickets/<id>.md — the pack the reviewer
+                reads · an addendum round adds the reply as its own section
+3  Branch       branch t<id> off origin/main, or check out origin's copy when the branch is
+                already there — an addendum round, a ticket continuing after its migration —
+                with its pull request · plan mode before any file changes · a primary
                 checkout is returned to main on exit, success or not; a worktree is left where
                 it is for the next run's step 0
 4  Build        smallest complete implementation · stop only when a wrong guess is expensive
@@ -245,8 +292,10 @@ below is a script under `scripts/run/` with a test; the skill holds the judgment
                 Should · fix every Must and re-invoke, three passes maximum · a Must still
                 standing after the third becomes an open question, Shoulds are recorded ·
                 out-of-scope findings → Backlog tasks (Type Fix, Epic inherited)
-6  Migration    if the diff adds a migration file: stop → Decision (§4). A human applies it from
-                the primary checkout with the admin URL; acting on the answer is T0.11's
+6  Migration    if the diff adds a migration file: commit, push, stop → Decision (§4). You
+                answer `apply` on the thread; a run in the primary checkout — a person's
+                `/ticket` there, until `.env.migrate` rides into worktrees — applies it, the
+                guard having read your word from the board, and carries the ticket on
 7  Gate         Stop hook runs pnpm lint && pnpm typecheck && pnpm test in the cwd it is
                 handed, not the project dir; red cannot close
 8  Report       write docs/reports/<id>.md — refused without the red-first record: per test,
@@ -254,8 +303,10 @@ below is a script under `scripts/run/` with a test; the skill holds the judgment
                 into the body Report section: ACs implemented (each with its test) · tests
                 written · open questions · write docs/log/<id>.md and regenerate the build
                 log's list from the directory (log-index.mjs)
-9  Close        commit, push branch, open the PR → Review · remove the marker · never merge ·
-                Runs row written by the session-end script (T0.11)
+9  Close        commit, push branch, open the PR unless the branch has one → Review · remove
+                the marker · never merge on the run's own word — `merge` from you at Review is
+                the merge, made by the next run's step 0 · Runs row written by the session-end
+                script (a later ticket)
 ```
 
 One run, one task. The run exits; the next scheduled run takes the next task. Chaining inside a
@@ -298,7 +349,22 @@ run's, and removes every stamped worktree that is clean, unlocked, not its own, 
 into `origin/main` or older than three days. A worktree without the stamp is a person's and is
 never touched; a dirty one holds work nobody committed and is left for a person to look at.
 
-**The capability boundary.** Two credentials in two files, and a run is handed only one.
+**The board's token.** A third credential, and every run is handed it: `NOTION_TOKEN` in
+`.env.local`, an internal integration's token, the integration shared with the `dev` teamspace,
+created once by hand (Notion › Settings › Integrations › Develop or manage integrations › New
+internal integration; `.env.example` says where). Two readers use it and neither is the model:
+`threads.mjs` reads every task's comments at the start of a run, one request per task at the
+API's ~3 a second, so an idle run reads the whole board in one command rather than one connector
+call per task; and the guard reads the claimed task's thread before it lets a merge or a
+migration apply through (§4). The token is read from the file and never printed; an API error
+names the endpoint and the status and nothing else. Without it a run says so in its report line
+and reads no comments — a merge or an apply is then refused on that ground, which is the honest
+answer: nothing read the board. The API lists open threads only, so resolve nothing on a task
+until the run has answered it: a resolved `merge` is a merge nobody will see. The comments the
+pipeline posts still go through the connector, which posts as you; the prefix is what tells the
+two voices apart on a thread, as §4 says.
+
+**The capability boundary.** Two database credentials in two files, and a run is handed only one.
 `.env.local`'s `DATABASE_URL` is `aenima_pipeline`, a member of `service_role` that starts every
 connection as it: it reads and writes every row, bypasses RLS as the app's direct connection
 always has, cannot create, alter or own anything, and cannot reach the `drizzle` schema. Every
@@ -332,11 +398,12 @@ by `scripts/run/log-index.mjs`, and its test refuses a stale copy. Two open pull
 file and never edit the same lines; a merge that meets two new list lines is settled by running the
 script again.
 
-Hard boundaries, enforced by hooks not prose: no schema push, no migration apply, no writes to
-`.env` or `.env.*` (`.env.example` is tracked and excepted), no production deploy, no force-push,
-no push to main in any refspec shape, no merge with main checked out, no `gh pr merge` while a
-run marker exists. The guard reads commands, never text: prose inside a heredoc or a quoted
-string matches no rule.
+Hard boundaries, enforced by hooks not prose: no schema push, no writes to `.env` or `.env.*`
+(`.env.example` is tracked and excepted), no production deploy, no force-push, no push to main in
+any refspec shape, no merge with main checked out, and no migration apply and no `gh pr merge`
+until the guard has itself read your word — `apply`, `merge` — on the claimed task's thread over
+the API (§4); a merge must be that task's own pull request and a merge commit. The guard reads
+commands, never text: prose inside a heredoc or a quoted string matches no rule.
 
 ---
 
@@ -372,10 +439,12 @@ Criteria means the same thing on a task and on a phase: what must be true to be 
   writes, the run scripts) — done. `T0.9 Run fixes` (the guard on commands, the run marker,
   stale-run recovery, §4 as it now reads, the reviewer's scope, the red-first record) — this
   version. `T0.10 Schedule` (the scheduled task, the shared marker, worktrees and their
-  pruning, the capability boundary, per-ticket logs) — this version. `T0.11 Telemetry and
-  mirror` (Runs rows from the transcript, the Documents and Guidelines mirror refresh, the
-  answered-migration path) — next.
-- Documents: seven pages, headed as mirrors, content synced by T0.11's first run.
+  pruning, the capability boundary, per-ticket logs) — v1.5. `T0.11 Comments` (every task's
+  thread read each run, the four shapes a reply takes, merge and apply as words the guard
+  verifies over the API, the integration token, an idle run's one filing) — this version.
+  Telemetry and the mirror (Runs rows from the transcript, the Documents and Guidelines mirror
+  refresh) — a later ticket.
+- Documents: seven pages, headed as mirrors, content synced by the mirror ticket's first run.
 
 ---
 

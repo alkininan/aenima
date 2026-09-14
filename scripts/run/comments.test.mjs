@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { CLARIFYING_CAP, compose, readThread } from "./comments.mjs";
+import {
+  awaitingMigration,
+  CLARIFYING_CAP,
+  compose,
+  KINDS,
+  mentions,
+  permitted,
+  readThread,
+  shapeOf,
+} from "./comments.mjs";
 
 const P = "⟡ ";
 const c = (text, created_time) => ({ text, created_time });
@@ -141,7 +150,21 @@ describe("compose", () => {
       gap: "The body asks for a friendlier release message but doesn't say what friendlier means, and nothing else does either.",
       choice: '"Three reds in a row. Take a breath, reread the ticket, then come back."',
     },
+    change: {},
+    newWork: { name: "Print JSON from the gate", url: "https://www.notion.so/abc" },
+    merged: { commit: "a1b2c3d" },
+    applied: { file: "drizzle/0015_x.sql" },
+    noted: {},
+    setup: {
+      step: "a Notion internal integration",
+      where: "Its token goes in .env.local as NOTION_TOKEN.",
+    },
+    resolved: {},
   };
+
+  it("has a fixture for every kind, so a kind added without a voice is caught here", () => {
+    expect(Object.keys(all).sort()).toEqual([...KINDS].sort());
+  });
 
   it("writes every kind prefixed, in two to four sentences, with no labels", () => {
     for (const [kind, fields] of Object.entries(all)) {
@@ -189,7 +212,152 @@ describe("compose", () => {
     );
   });
 
+  // TC1 → AC1 (change), TC2 → AC2 (newWork), TC3 → AC3 (merged), TC4 → AC4 (applied): the
+  // shapes a reply on any task can take, each with a voice of its own.
+  it("says a change was folded in and where the task went", () => {
+    expect(compose("change", {}, P)).toBe(
+      `${P}I've read that as a change to this ticket and folded it into the body as an addendum. The task is back at Ready; the next run builds it on the same branch and pull request and brings it back to Review.`,
+    );
+  });
+
+  it("names the new task it drafted and where it sits", () => {
+    expect(compose("newWork", all.newWork, P)).toBe(
+      `${P}I've read that as new work rather than a change to this ticket, so I've drafted it as its own task at Backlog: Print JSON from the gate (https://www.notion.so/abc). Set it Ready when you want it built.`,
+    );
+  });
+
+  it("says what merged, how, and what applied", () => {
+    expect(compose("merged", all.merged, P)).toBe(
+      `${P}Merged into main at a1b2c3d with a merge commit, and the task is Done. The release row follows.`,
+    );
+    expect(compose("applied", all.applied, P)).toBe(
+      `${P}Applied drizzle/0015_x.sql to the shared database. The ticket picks up from where it stopped.`,
+    );
+  });
+
+  // Review pass 3, Must 3: a Decision answer that sets Ready needs its own ⟡ comment too, or
+  // every later run reads the same answer as unanswered.
+  it("says an answer was read as the answer, so the reply is not assessed twice", () => {
+    expect(compose("resolved", {}, P)).toBe(
+      `${P}Read that as the answer, thanks. The task is back at Ready and the next run picks it up from there.`,
+    );
+  });
+
+  it("acknowledges a reply that asks for nothing, and says exactly what a human step is", () => {
+    expect(compose("noted", {}, P)).toBe(
+      `${P}Read that, thanks. Nothing for me to do here, so I've left the ticket as it is.`,
+    );
+    expect(compose("setup", all.setup, P)).toBe(
+      `${P}I've stopped on a step only you can do: a Notion internal integration. Its token goes in .env.local as NOTION_TOKEN. Say "done" on this thread once it's in place and the next run carries on.`,
+    );
+  });
+
   it("refuses a kind it does not know rather than posting something unshaped", () => {
     expect(() => compose("apology", {}, P)).toThrow("unknown comment kind");
+  });
+});
+
+// TC3 → AC3 and TC4 → AC4, the pure half: what "the word on the thread" means. The guard
+// and the preflight read the same test, so a reply the preflight calls a merge is one the
+// guard will allow, and no other.
+describe("mentions", () => {
+  it("is true when the reply begins with the word, case and punctuation aside", () => {
+    for (const text of ["merge", "Merge.", "  merge it", "MERGE, please", '"merge"']) {
+      expect(mentions(text, "merge"), text).toBe(true);
+    }
+  });
+
+  it("is false for a mention in passing, a negation, or a longer word", () => {
+    for (const text of ["don't merge yet", "after you merge", "merged already?", "mergers", ""]) {
+      expect(mentions(text, "merge"), text).toBe(false);
+    }
+  });
+});
+
+describe("permitted", () => {
+  it("finds the human's word newer than the pipeline's last comment", () => {
+    const result = permitted(
+      "apply",
+      [
+        c(`${P}This change adds a migration, drizzle/0015_x.sql …`, "2026-09-13T10:00:00Z"),
+        c("Apply it", "2026-09-13T11:00:00Z"),
+      ],
+      P,
+    );
+    expect(result.ok).toBe(true);
+    expect(result.comment.text).toBe("Apply it");
+    expect(result.why).toBeNull();
+  });
+
+  it("never counts the pipeline's own comment, whatever it says", () => {
+    const result = permitted("merge", [c(`${P}merge`, "2026-09-13T11:00:00Z")], P);
+    expect(result.ok).toBe(false);
+    expect(result.why).toContain('no reply beginning with "merge"');
+  });
+
+  it("reads only the newest reply, so a word taken back grants nothing", () => {
+    const result = permitted(
+      "merge",
+      [c("merge", "2026-09-13T10:00:00Z"), c("wait, don't merge yet", "2026-09-13T11:00:00Z")],
+      P,
+    );
+    expect(result.ok).toBe(false);
+    expect(result.why).toContain("as the newest reply");
+    expect(
+      permitted(
+        "merge",
+        [c("not yet", "2026-09-13T10:00:00Z"), c("merge", "2026-09-13T11:00:00Z")],
+        P,
+      ).ok,
+    ).toBe(true);
+  });
+
+  it("treats a word older than the pipeline's last comment as consumed", () => {
+    const result = permitted(
+      "merge",
+      [c("merge", "2026-09-13T10:00:00Z"), c(`${P}Merged into main at x.`, "2026-09-13T11:00:00Z")],
+      P,
+    );
+    expect(result.ok).toBe(false);
+  });
+});
+
+describe("shapeOf and awaitingMigration", () => {
+  const thread = (comments) => readThread(comments, P);
+  const migration = c(
+    `${P}This change adds a migration, drizzle/0015_x.sql …`,
+    "2026-09-13T10:00:00Z",
+  );
+
+  it("is merge only at Review, and only on the word", () => {
+    const merge = thread([c("merge", "2026-09-13T11:00:00Z")]);
+    expect(shapeOf("Review", merge)).toBe("merge");
+    expect(shapeOf("Decision", merge)).toBe("assess");
+    expect(shapeOf("Review", thread([c("print JSON instead", "2026-09-13T11:00:00Z")]))).toBe(
+      "assess",
+    );
+  });
+
+  it("is apply only at Decision on a migration question, and only on the word", () => {
+    const apply = thread([migration, c("apply", "2026-09-13T11:00:00Z")]);
+    expect(awaitingMigration(apply)).toBe(true);
+    expect(shapeOf("Decision", apply)).toBe("apply");
+    expect(shapeOf("Review", apply)).toBe("assess");
+    const wording = thread([
+      c(`${P}I've stopped on the wording.`, "2026-09-13T10:00:00Z"),
+      c("apply", "2026-09-13T11:00:00Z"),
+    ]);
+    expect(awaitingMigration(wording)).toBe(false);
+    expect(shapeOf("Decision", wording)).toBe("assess");
+  });
+
+  it("is assess with nothing unanswered, and assess when the newest reply takes the word back", () => {
+    expect(shapeOf("Review", thread([]))).toBe("assess");
+    expect(
+      shapeOf(
+        "Review",
+        thread([c("merge", "2026-09-13T10:00:00Z"), c("hold on", "2026-09-13T11:00:00Z")]),
+      ),
+    ).toBe("assess");
   });
 });

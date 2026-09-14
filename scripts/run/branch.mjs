@@ -44,7 +44,15 @@ export function isPrimaryCheckout(run) {
   return common.stdout.trim() === own.stdout.trim();
 }
 
-/** Fetch, then create and check out the ticket branch. Returns what step 9 needs to know. */
+/**
+ * Fetch, then check out the ticket branch. Returns what step 9 needs to know.
+ *
+ * A branch already on origin is reused, not recreated: a task sent back to Ready by a reply
+ * at Review, or picked up again after a migration was applied, carries its branch and its
+ * pull request with it — one ticket, one PR, however many rounds (T0.11). The local branch
+ * is set to origin's copy, which every exit pushes, so nothing a previous round did is
+ * lost. With no copy on origin the branch is new, off the base.
+ */
 export function createBranch(id, { cwd = process.cwd(), env = process.env, run } = {}) {
   const g = run ?? ((args) => git(args, cwd));
   const base = baseRef(env);
@@ -52,16 +60,61 @@ export function createBranch(id, { cwd = process.cwd(), env = process.env, run }
 
   const fetched = g(["fetch", "--quiet", "origin"]);
   const primary = isPrimaryCheckout(g);
-  const created = g(["checkout", "-b", branch, base]);
+  const remote = `origin/${branch}`;
+  const reused = g(["rev-parse", "--verify", "--quiet", `refs/remotes/${remote}`]).status === 0;
+
+  // The run that took the task to Review left its worktree on the branch, and `prune.mjs`
+  // keeps an unmerged worktree for three days; git refuses to check a branch out twice. That
+  // worktree is clean by construction — every exit pushes — so it is removed first. A dirty
+  // one holds work nobody pushed and stops the run here rather than losing it.
+  let freed = null;
+  if (reused) {
+    const held = heldBy(branch, g);
+    if (held !== null) {
+      const removed = g(["worktree", "remove", held]);
+      if (removed.status !== 0) {
+        return {
+          branch,
+          base: remote,
+          reused,
+          freed,
+          primary,
+          fetched: fetched.status === 0,
+          ok: false,
+          detail: `${branch} is checked out in ${held} and it could not be removed: ${`${removed.stdout ?? ""}${removed.stderr ?? ""}`.trim()}`,
+        };
+      }
+      freed = held;
+    }
+  }
+
+  const created = reused
+    ? g(["checkout", "-B", branch, remote])
+    : g(["checkout", "-b", branch, base]);
 
   return {
     branch,
-    base,
+    base: reused ? remote : base,
+    reused,
+    freed,
     primary,
     fetched: fetched.status === 0,
     ok: created.status === 0,
     detail: created.status === 0 ? null : `${created.stdout ?? ""}${created.stderr ?? ""}`.trim(),
   };
+}
+
+/** The path of another worktree that has `branch` checked out, or null when none has. */
+export function heldBy(branch, run) {
+  const list = run(["worktree", "list", "--porcelain"]);
+  if (list.status !== 0) return null;
+  const own = String(run(["rev-parse", "--show-toplevel"]).stdout ?? "").trim();
+  let path = null;
+  for (const line of String(list.stdout ?? "").split("\n")) {
+    if (line.startsWith("worktree ")) path = line.slice("worktree ".length).trim();
+    else if (line === `branch refs/heads/${branch}` && path !== null && path !== own) return path;
+  }
+  return null;
 }
 
 /** CLI: `node branch.mjs <ticket-id>`. */

@@ -19,11 +19,11 @@
 import { spawnSync } from "node:child_process";
 
 import { branchName } from "./branch.mjs";
-import { readMarker } from "./claim.mjs";
+import { readMarker, STALE_AFTER_MS } from "./claim.mjs";
 import { emit, isMain, readStdin } from "./cli.mjs";
 
-/** A marker older than this belongs to a run that is not coming back. */
-export const STALE_AFTER_MS = 3 * 60 * 60 * 1000;
+/** A marker older than this belongs to a run that is not coming back — `claim.mjs` holds it. */
+export { STALE_AFTER_MS };
 
 /** `T0.97 Smoke C` → `T0.97`. */
 export const idOf = (name) => String(name ?? "").match(/^T\d+\.\d+/)?.[0] ?? null;
