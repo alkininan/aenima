@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { claim, markerPath } from "./claim.mjs";
 
-// T0.9 open question 5 → T0.12. The SessionEnd path of `release.mjs`: the hook JSON on stdin
+// TC3 → AC3 · T0.9 open question 5 → T0.12. The SessionEnd path of `release.mjs`: the hook JSON on stdin
 // names the session and the cwd, and only the marker that session wrote goes. `release()`
 // itself is covered beside `claim`; this drives the command the hook runs.
 

@@ -239,8 +239,8 @@ async function main() {
   }
 
   const dir = resolveDir(input);
-  const state_path = statePath(dir);
-  const file = readState(state_path);
+  const stateFile = statePath(dir);
+  const file = readState(stateFile);
   const state = projectState(file, input.session_id ?? null);
 
   const { exit, stderr, nextState } = decide({
@@ -262,7 +262,7 @@ async function main() {
   // Re-read at write time. `file` was read before a ~76s suite; merging into that snapshot
   // would roll back whatever a sibling session recorded meanwhile — the fourth review's
   // finding 3. The window shrinks from a suite run to a few milliseconds.
-  if (nextState !== state) writeState(state_path, mergeState(readState(state_path), nextState));
+  if (nextState !== state) writeState(stateFile, mergeState(readState(stateFile), nextState));
   if (stderr) process.stderr.write(`${stderr}\n`);
   // On exit 0 a Stop hook's stderr goes to the debug log and nobody reads it, so the release
   // — the one exit-0 message this gate has — is also surfaced as a `systemMessage`, the JSON

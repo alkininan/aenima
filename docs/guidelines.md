@@ -140,8 +140,9 @@ token. No model call. This is the data for park rate, findings per ticket, and t
 weight tuning. Since T0.12 the script is `scripts/run/runs.mjs`, run by the SessionEnd hook over
 the transcript Claude Code wrote: the task from the claim command the skill ran, Started and
 Duration from the first and last timestamps, Model from the assistant messages (`Fable→Opus`
-when both appear), Tokens as input plus output counted once per API message — a message written
-as several content-block lines repeats its usage on each, and T0.10's table counted lines —
+when both appear), Tokens as input plus output, cache reads and cache writes both excluded, counted once per API
+message — a message written as several content-block lines repeats its usage on each, and
+T0.10's table counted lines —
 Outcome from the last Status the run wrote on its task (Review is Done, Decision is Decision,
 anything else is Stopped, an idle run included), Findings from the reviewer's replies. A run
 that claimed nothing is `R-nnnn` alone with no Task. A session that was not a `/ticket` writes

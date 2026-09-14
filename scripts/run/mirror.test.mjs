@@ -143,9 +143,10 @@ describe("chunk", () => {
     expect(parts.join("\n\n")).toContain("after");
   });
 
-  it("gives a paragraph longer than the limit its own chunk rather than cutting it", () => {
-    const text = [para(10), "", para(200), "", para(10)].join("\n");
-    expect(chunk(text, 50)).toEqual([para(10), para(200), para(10)]);
+  it("gives a blank-free block longer than the limit its own chunk rather than cutting it at a line", () => {
+    const block = `${para(120)}\n${para(120)}`; // two lines, no blank between: a table, a list
+    const text = [para(10), "", block, "", para(10)].join("\n");
+    expect(chunk(text, 50)).toEqual([para(10), block, para(10)]);
   });
 
   it("reassembles to the document, blank-line boundaries aside", () => {

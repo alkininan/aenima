@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -304,37 +304,42 @@ describe("post", () => {
 // TC1 → AC1. The three T0.10 sessions, read from their transcripts where this machine holds
 // them. Skipped elsewhere: the transcripts live under ~/.claude, not in the repo.
 const PROJECTS = join(homedir(), ".claude", "projects");
-const session = (worktree) => {
-  const dir = join(PROJECTS, `-Users-alkininan-dev-aenima--claude-worktrees-${worktree}`);
-  if (!existsSync(dir)) return null;
-  const file = readdirSync(dir).find((name) => name.endsWith(".jsonl"));
-  return file ? readFileSync(join(dir, file), "utf8").split("\n") : null;
+const session = (worktree, id) => {
+  const file = join(
+    PROJECTS,
+    `-Users-alkininan-dev-aenima--claude-worktrees-${worktree}`,
+    `${id}.jsonl`,
+  );
+  return existsSync(file) ? readFileSync(file, "utf8").split("\n") : null;
 };
 const T010 = [
   {
     worktree: "frosty-jemison-8d64a1",
+    id: "269400de-eff8-4586-9f7d-bcbf54e53f47",
     started: "2026-09-13T11:22:33.303Z",
     input: 358,
     output: 7076,
   },
   {
     worktree: "infallible-cannon-d4c2cb",
+    id: "f36c88f7-d73b-4bbd-8511-d9793558d14f",
     started: "2026-09-13T12:33:05.265Z",
     input: 322,
     output: 6862,
   },
   {
     worktree: "relaxed-panini-b637f4",
+    id: "487e6066-f3db-484d-b036-80f228fa99df",
     started: "2026-09-13T14:08:42.827Z",
     input: 326,
     output: 9819,
   },
 ];
-describe.skipIf(T010.some(({ worktree }) => session(worktree) === null))(
+describe.skipIf(T010.some(({ worktree, id }) => session(worktree, id) === null))(
   "the three T0.10 sessions",
   () => {
     it.each(T010)("$worktree reads as an idle Fable run with its tokens counted once", (row) => {
-      const summary = parseTranscript(session(row.worktree));
+      const summary = parseTranscript(session(row.worktree, row.id));
       expect(summary).toMatchObject({
         run: true,
         started: row.started,

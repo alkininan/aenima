@@ -95,9 +95,10 @@ export function parseHeader(text) {
 }
 
 /**
- * Split a document into chunks of at most `max` characters, at blank lines outside fenced
- * code, so no table, list or code block is cut in two. A single paragraph longer than `max`
- * is its own chunk.
+ * Split a document into chunks at blank lines outside fenced code, so no table, list or code
+ * block is cut in two, each chunk at most `max` characters — except a blank-free block longer
+ * than `max`, which waits for its next blank line and goes whole as its own chunk, since
+ * cutting it at a line would be cutting the table or list it is.
  */
 export function chunk(text, max = CHUNK_CHARS) {
   const lines = String(text ?? "").split("\n");
@@ -125,12 +126,9 @@ export function chunk(text, max = CHUNK_CHARS) {
   };
 
   for (const line of lines) {
-    if (size + line.length + 1 > max && current.length > 0) {
-      if (boundary > 0) flush(boundary);
-      // No blank to cut at: what is held is one oversized paragraph, and it goes whole — unless
-      // it is a fence still open, which must not be cut and waits for its close.
-      else if (!fenced && !isFence(line)) flush(current.length);
-    }
+    // Over the limit with a blank line to cut at: cut there. With none — one blank-free block,
+    // or a fence still open — keep going; the block goes whole at its next blank line.
+    if (size + line.length + 1 > max && boundary > 0) flush(boundary);
     if (isFence(line)) fenced = !fenced;
     else if (!fenced && line.trim() === "" && current.length > 0) boundary = current.length;
     current.push(line);

@@ -150,7 +150,7 @@ describe("recover", () => {
     });
   });
 
-  // T0.9 open question 8 → T0.12. The flag reads the commit's status, not the intention.
+  // TC3 → AC3 · T0.9 open question 8 → T0.12. The flag reads the commit's status, not the intention.
   it("says wip is false, and why, when the commit itself was refused", () => {
     git("checkout", "-q", "-b", "t0-97");
     commit("work");
@@ -179,7 +179,7 @@ describe("recover", () => {
   });
 });
 
-// T0.9 open question 7 → T0.12. The remote half of `recover`, over a bare origin: the pushed
+// TC3 → AC3 · T0.9 open question 7 → T0.12. The remote half of `recover`, over a bare origin: the pushed
 // copy of the dead run's branch is renamed on origin the same way, atomically.
 describe("recover, with a pushed branch", () => {
   let root;

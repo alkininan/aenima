@@ -232,7 +232,12 @@ export function runName(number, task) {
   return task ? `${id} ${task}` : id;
 }
 
-/** The number after the highest `R-nnnn` among `titles`; 1 when there is none. */
+/**
+ * The number after the highest `R-nnnn` among `titles`; 1 when there is none. `post` reads the
+ * whole Runs data source for this, one page of 100 per request, and two sessions ending in the
+ * same second could both read the same highest and take the same number — a duplicate `R-nnnn`
+ * in the four-week data is that, not two runs of one session.
+ */
 export function nextNumber(titles) {
   let max = 0;
   for (const title of titles) {

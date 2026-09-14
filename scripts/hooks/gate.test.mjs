@@ -300,7 +300,7 @@ describe("tail", () => {
   });
 });
 
-// T0.10 open question 10 → T0.12. The state file's home is the repository's shared `.git`,
+// TC3 → AC3 · T0.10 open question 10 → T0.12. The state file's home is the repository's shared `.git`,
 // the same path from the primary and from a linked worktree, and none outside a repository.
 describe("statePath", () => {
   let primary;

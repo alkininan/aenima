@@ -80,7 +80,7 @@ describe("assess", () => {
     ]);
   });
 
-  // T0.10 open question 8 → T0.12. A stamped worktree younger than the marker's three hours
+  // TC3 → AC3 · T0.10 open question 8 → T0.12. A stamped worktree younger than the marker's three hours
   // stays even when merged: a live run's own worktree is exactly that between its steps 0 and 2.
   it("keeps a merged worktree stamped less than three hours ago", () => {
     const young = run([wt("/a")], { stampedAt: () => NOW.getTime() - YOUNG_MS + 1 });
@@ -151,7 +151,7 @@ describe("stamp and prune, over a real repository", () => {
     expect(stamp(primary)).toEqual({ stamped: false, path: null });
   });
 
-  // T0.10 open question 9 → T0.12. Linked is git's notion, not a path comparison, so a
+  // TC3 → AC3 · T0.10 open question 9 → T0.12. Linked is git's notion, not a path comparison, so a
   // subdirectory of either checkout is read the same as its root.
   it("stamps from a subdirectory of a linked worktree, and not from one of the primary", () => {
     const wt = worktree("deep");
