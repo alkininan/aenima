@@ -646,13 +646,17 @@ describe("revertOfTipAt over a temporary repository", () => {
   });
   afterAll(() => rmSync(root, { recursive: true, force: true }));
 
-  it("is true for the revert of the merge at the tip, and false for the tip itself or any other commit", () => {
+  it("is true for the revert of the merge at the tip, and false for the tip itself, a plain commit on it, or anything past it", () => {
     const work = join(root, "work");
+    expect(revertOfTipAt(work)).toBe(false);
+    // One commit past the tip that is not the revert: the parent matches, the tree does not.
+    sh(work, "checkout", "-q", "--detach", "origin/main");
+    commit(work, "c.txt", "not a revert");
     expect(revertOfTipAt(work)).toBe(false);
     sh(work, "checkout", "-q", "--detach", "origin/main");
     sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "revert", "--no-edit", "-m", "1", "HEAD");
     expect(revertOfTipAt(work)).toBe(true);
-    commit(work, "c.txt", "one more");
+    commit(work, "d.txt", "one more");
     expect(revertOfTipAt(work)).toBe(false);
   });
 });

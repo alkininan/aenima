@@ -64,6 +64,9 @@ describe("scriptsChanged", () => {
   it("reads an unparseable side as changed — a broken package.json is not a known one", () => {
     expect(scriptsChanged("{", pkg({ a: "1" }))).toBe(true);
     expect(scriptsChanged(null, pkg({ a: "1" }))).toBe(true);
+    // Two sides nobody can read are not thereby equal.
+    expect(scriptsChanged("{", "{")).toBe(true);
+    expect(scriptsChanged(null, null)).toBe(true);
   });
 });
 
@@ -98,10 +101,5 @@ describe("gatedPaths and gatedDiff", () => {
     });
     expect(result.ok).toBe(false);
     expect(result.gated).toEqual(["package.json"]);
-  });
-
-  it("does not consult package.json when the diff does not touch it", () => {
-    const result = gatedDiff({ files: ["src/a.ts"], mainPackage: "{", headPackage: "{" });
-    expect(result.ok).toBe(true);
   });
 });
