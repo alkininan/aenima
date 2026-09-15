@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { client } from "./notion.mjs";
 import { readBoardThreads, scan } from "./threads.mjs";
 
 const P = "⟡ ";
@@ -116,5 +117,50 @@ describe("readBoardThreads", () => {
     expect(result.token).toBe(true);
     expect(result.scanned).toBe(2);
     expect(result.threads.map((t) => [t.id, t.shape])).toEqual([["a", "merge"]]);
+  });
+
+  // T0.16 TC1 → AC1 (carries T0.15). The rows above are handed in already read; this one comes through the
+  // real client from the API's own shape, where the Tasks data source holds Status as a
+  // select. Under the status-shaped read every row was at no status and a human "merge" at
+  // Review shaped `assess`, which is what the preflight of 14 September found on three tasks.
+  it("shapes a merge at Review from the select Status the API returns", async () => {
+    const fetch = async (url) => {
+      const path = url.replace("https://api.notion.com/v1", "");
+      const body = path.startsWith("/data_sources/")
+        ? {
+            results: [
+              {
+                id: "3da79dafd42e818aae99df28ed02d92f",
+                url: "https://n/t0-14",
+                properties: {
+                  Name: { title: [{ plain_text: "T0.14 Ignore worktrees in lint" }] },
+                  Status: { type: "select", select: { name: "Review", color: "blue" } },
+                },
+              },
+            ],
+            has_more: false,
+          }
+        : {
+            results: [
+              {
+                id: "c1",
+                rich_text: [{ plain_text: "merge" }],
+                created_time: "2026-09-14T12:41:00.000Z",
+              },
+            ],
+            has_more: false,
+          };
+      return { ok: true, status: 200, json: async () => body };
+    };
+    const result = await readBoardThreads({
+      deps: {
+        token: () => "t",
+        board: () => ({ tasks_ds: "ds-1", prefix: P }),
+        client: client("t", { fetch }),
+      },
+    });
+    expect(result.threads).toHaveLength(1);
+    expect(result.threads[0].Status).toBe("Review");
+    expect(result.threads[0].shape).toBe("merge");
   });
 });
