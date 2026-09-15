@@ -94,8 +94,8 @@ describe("comment and task", () => {
     expect(task({ id: "t2", properties: {} }).Status).toBeNull();
   });
 
-  // T0.17 — the picker's fields: Priority as a select, Epic and Blockers as the page ids of
-  // their relations, and when the row was created.
+  // T0.17 Build 1 and 3, read by TC1, TC2, TC4 and TC6 — the picker's fields: Priority as a
+  // select, Epic and Blockers as the page ids of their relations, and when the row was created.
   it("reads Priority, Epic, Blockers and the created time as the picker orders by them", () => {
     const raw = {
       id: "t6",

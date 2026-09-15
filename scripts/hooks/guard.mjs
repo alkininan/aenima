@@ -743,8 +743,20 @@ const CONNECTOR = /^mcp__.+__notion-(update-page|create-pages|create-comment)$/;
 const connectorTool = (input) => String(input?.tool_name ?? "").match(CONNECTOR)?.[1] ?? null;
 
 /** True when an update-page call sets Status to Ready. */
-const setsReady = (input) =>
-  connectorTool(input) === "update-page" && input?.tool_input?.properties?.Status === "Ready";
+/**
+ * True when an update-page call writes Status to anything but Backlog — every such write is
+ * read against the task first, since the one move out of Backlog is to Ready, on the word.
+ */
+const movesStatus = (input) => {
+  const properties = input?.tool_input?.properties;
+  return (
+    connectorTool(input) === "update-page" &&
+    properties !== null &&
+    typeof properties === "object" &&
+    Object.hasOwn(properties, "Status") &&
+    properties.Status !== "Backlog"
+  );
+};
 
 /** The text a create-comment call would post, from markdown or from rich text. */
 const commentText = (toolInput) =>
@@ -769,7 +781,7 @@ export function wantedBy(input) {
     const command = input?.tool_input?.command;
     return typeof command === "string" ? wanted(command) : [];
   }
-  return setsReady(input) ? ["ready"] : [];
+  return movesStatus(input) ? ["ready"] : [];
 }
 
 /** The words a command line would need the board's permission for, in the order met. */
@@ -827,23 +839,37 @@ export function decide(input, deps = {}) {
   }
 
   // (h) the board's connector (T0.17). Backlog → Ready is the human's word, read from the
-  // board: a Ready write on a page the guard reads at Backlog needs "ready" as the newest
-  // reply there. From Decision, Review or In progress the move is the run's on its reading of
-  // a reply (§3), and the guard lets it through once it has read the page is not at Backlog —
-  // when nothing read the board, nothing is granted.
+  // board, and it is the one move out of Backlog (§3): a status write on a page the guard
+  // reads at Backlog is refused unless it sets Ready and "ready" is the newest reply there —
+  // otherwise Backlog → Decision, then Decision → Ready, would reach Ready with no word
+  // (review pass 1, Must 1). From Decision, Review or In progress a move to Ready is the run's
+  // on its reading of a reply, and the guard lets it through once it has read the page is not
+  // at Backlog. A move to Backlog grants nothing and is not read; a write the guard could not
+  // read the task for is refused — when nothing read the board, nothing is granted.
   const connector = connectorTool(input);
-  if (connector === "update-page" && setsReady(input)) {
+  if (connector === "update-page" && movesStatus(input)) {
+    const target = input.tool_input.properties.Status;
     const granted = permission("ready");
     const status = granted.task?.status ?? null;
-    if (!granted.ok && (status === null || status === "Backlog")) {
-      return `Setting ${granted.task?.name || "this task"} Ready is refused — Backlog → Ready is your word, a reply beginning with "ready" on the task's thread, and the guard could not find it: ${granted.why}. docs/guidelines.md §3, §4.`;
+    const name = granted.task?.name || "this task";
+    if (target === "Ready" && !granted.ok && (status === null || status === "Backlog")) {
+      return `Setting ${name} Ready is refused — Backlog → Ready is your word, a reply beginning with "ready" on the task's thread, and the guard could not find it: ${granted.why}. docs/guidelines.md §3, §4.`;
+    }
+    if (status === null && target !== "Ready") {
+      return `Setting ${name} to ${target ?? "no status"} is refused — the guard reads a task before any status write but Backlog, and it could not: ${granted.why}. docs/guidelines.md §3.`;
+    }
+    if (status === "Backlog" && target !== "Ready") {
+      return `Moving ${name} from Backlog to ${target ?? "no status"} is refused — the one move out of Backlog is to Ready, on your word on the thread. docs/guidelines.md §3.`;
     }
     return null;
   }
   if (connector === "create-pages") {
     const pages = Array.isArray(input?.tool_input?.pages) ? input.tool_input.pages : [];
-    if (pages.some((page) => page?.properties?.Status === "Ready")) {
-      return "Creating a task at Ready is refused — every task starts at Backlog, and Backlog → Ready is your word on the thread. Create it at Backlog. docs/guidelines.md §3.";
+    const born = pages
+      .map((page) => page?.properties ?? {})
+      .find((properties) => Object.hasOwn(properties, "Status") && properties.Status !== "Backlog");
+    if (born !== undefined) {
+      return `Creating a task at ${born.Status ?? "no status"} is refused — every task starts at Backlog, and the one move out of it is to Ready, on your word on the thread. Create it at Backlog. docs/guidelines.md §3.`;
     }
     return null;
   }

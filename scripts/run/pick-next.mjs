@@ -222,16 +222,29 @@ export function pickNext(rows = [], { epics = [], prefix = "⟡ " } = {}) {
 }
 
 /**
+ * The words of a comment as the thread compares them. The run posts markdown, so a task name
+ * carrying `*`, `_`, a backtick or `~` comes back from the API without the markers (review
+ * pass 1, Should 6); the Urgent count moves as the work is done, and a notice on the same task
+ * with another count is the same notice (Should 4). Spacing aside.
+ */
+const words = (text) =>
+  String(text ?? "")
+    .replace(/[*_`~]/g, "")
+    .replace(/^(\S+\s+)\d+ tasks are Urgent;/, "$1N tasks are Urgent;")
+    .replace(/\s+/g, " ")
+    .trim();
+
+/**
  * The notices the threads have not seen. A notice is dropped when the pipeline has already
- * posted those exact words on that task's thread — the "once" of T0.17 — and when the thread
- * holds a human reply still waiting for an answer: a prefixed comment there would read as the
- * reply having been answered.
+ * posted those words on that task's thread — the "once" of T0.17 — and when the thread holds a
+ * human reply still waiting for an answer: a prefixed comment there would read as the reply
+ * having been answered.
  */
 export async function unposted(notices, commentsOf, prefix = "⟡ ") {
   const kept = [];
   for (const notice of notices) {
     const thread = readThread(await commentsOf(notice.id), prefix);
-    const said = thread.pipeline.some((comment) => comment.text.trim() === notice.text.trim());
+    const said = thread.pipeline.some((comment) => words(comment.text) === words(notice.text));
     if (!said && thread.unanswered.length === 0) kept.push(notice);
   }
   return kept;

@@ -59,7 +59,7 @@ carrying the highest priority of any task not Done it blocks however far down th
 go to the roadmap — the Epic's name, then the ID as numbers phase first, then the oldest — and
 a task with no Epic or no ID sorts after. It also prints the comments the run owes the tasks it
 passes by — a Ready task waiting on a blocker at Backlog, one member of a loop of tasks
-blocking each other, the newest of three or more Ready tasks at Urgent — composed by
+blocking each other that holds a Ready task, the newest of three or more Ready tasks at Urgent — composed by
 `comments.mjs`, having read those tasks' threads and dropped any the pipeline has already
 posted there, so a second run says nothing twice. The run sets the pick In progress and `claim.mjs` writes `aenima-run-active`
 — task, page, branch, start time, session — into the repository's shared `.git` directory,

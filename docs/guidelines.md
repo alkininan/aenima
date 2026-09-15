@@ -267,10 +267,13 @@ anything the run wrote — merged with a merge commit, said outright as `--merge
 rewrites the hash the board carries and the task would never be seen to land. The model cannot
 fabricate a permission; the check reads the board, not the transcript. Nor can it write one: the
 connector posts as you, so the guard refuses a comment from a run that does not begin with the
-prefix — an unprefixed comment would read on the thread as your voice — and refuses a task
-created at Ready, which would skip your go altogether. A move to Ready from Decision, Review or
-In progress is the run's on its reading of your reply (§3), and the guard lets it through once it
-has read that the task is not at Backlog. Once the run has answered
+prefix — an unprefixed comment would read on the thread as your voice. The one move out of
+Backlog is to Ready, so the guard refuses a task created at any status but Backlog, and any status
+write on a task it reads at Backlog but Ready on your word — otherwise Backlog → Decision, then
+Decision → Ready, would reach Ready in two moves with no word. A move to Ready from Decision,
+Review or In progress is the run's on its reading of your reply (§3), and the guard lets it
+through once it has read that the task is not at Backlog; a status write it could not read the
+task for is refused, and a move to Backlog is not read at all. Once the run has answered
 with its ⟡ note the word is consumed: the same reply grants nothing twice.
 
 **`merge` is still your word in three cases, and only three.** A migration — its word is `apply`,
@@ -312,25 +315,27 @@ below is a script under `scripts/run/` with a test; the skill holds the judgment
                 fetch, mark merged Review tasks Done (merge-base --is-ancestor) and write
                 Release rows · an In progress task with no marker, or one older than three
                 hours, is stale: keep its branch as t<id>-stale-<HHMM>, post one comment,
-                re-claim it from origin/main and continue — no human needed · main moved since the last deploy check → ask
-                the live site from outside (health.mjs): /sign-in 200, /app 307; a wrong
-                answer reverts the merge at the tip (revert.mjs, then the one push to main
-                the guard lets through, HEAD:main), files one Fix task at Backlog, puts the
-                reverted ticket back at Backlog, one comment
+                re-claim it from origin/main and continue — no human needed · main moved
+                since the last deploy check → ask the live site from outside (health.mjs):
+                /sign-in 200, /app 307; a wrong answer reverts the merge at the tip
+                (revert.mjs, then the one push to main the guard lets through, HEAD:main),
+                files one Fix task at Backlog, puts the reverted ticket back at Backlog, one
+                comment
 1  Claim        the board read over the API (pick-next.mjs) · a Ready task whose Blockers are
                 all Done, by Priority — Urgent · High · Medium · Low · None, empty as Medium —
                 a Ready blocker at the highest priority of any task not Done it blocks,
                 transitively · then Epic name, then ID as numbers phase first, then oldest; no
                 Epic or no ID sorts after · a blocked task is never claimed · one comment each,
                 once — words already on the thread are not said again: a Ready task waiting on
-                a blocker at Backlog, which is never moved; one member of a blocked-by loop;
-                the newest of three or more Ready tasks at Urgent · set In progress · write the
-                marker aenima-run-active in the repository's shared .git directory (task, page,
-                branch, started, session) · assign ID and Epic if missing, Priority Medium ·
-                compare Spec versions against repo headers, note drift · with nothing to claim,
-                an idle run posts those comments, and one that met a red in step 0 files one
-                Fix task at Backlog (draft.mjs) and exits; one that met nothing writes nothing
-                else
+                a blocker at Backlog, which is never moved; one member of a blocked-by loop
+                that holds a Ready task (a loop of Backlog tasks waits for your go and is not
+                named); the newest of three or more Ready tasks at Urgent, the count aside ·
+                set In progress · write the marker aenima-run-active in the repository's
+                shared .git directory (task, page, branch, started, session) · assign ID and
+                Epic if missing, Priority Medium · compare Spec versions against repo headers,
+                note drift · with nothing to claim, an idle run posts those comments, and one
+                that met a red in step 0 files one Fix task at Backlog (draft.mjs) and exits;
+                one that met nothing writes nothing else
 2  Inline       read every cited section · write docs/tickets/<id>.md — the pack the reviewer
                 reads · an addendum round adds the reply as its own section
 3  Branch       branch t<id> off origin/main, or check out origin's copy when the branch is
@@ -497,8 +502,8 @@ production deploy, no force-push, no push to main in any refspec shape but one �
 the merge at the tip, `HEAD:main`, HEAD one commit past `origin/main` with the tree the merge's
 first parent had — no merge with main checked out, no migration apply until the guard has itself
 read your `apply` on the claimed task's thread over the API (§4), no Backlog task set Ready until
-it has read your `ready` on that task's thread, no task created at Ready, no comment from a run
-without the prefix, and no `gh pr merge` until it
+it has read your `ready` on that task's thread, no Backlog task moved anywhere but Ready, no task
+created at any status but Backlog, no comment from a run without the prefix, and no `gh pr merge` until it
 has read your `merge` there or, on a diff touching no gated path, the reviewer's `PASS` on file
 and the gate's green for the very commit the pull request carries; a merge must be that task's own pull request and
 a merge commit. The guard reads commands, never text: prose inside a heredoc or a quoted string

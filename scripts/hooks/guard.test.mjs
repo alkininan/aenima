@@ -227,12 +227,33 @@ describe("T0.17 — rule (h) the board's connector", () => {
     expect(decide(toReady(), { permission: unread })).toContain("NOTION_TOKEN");
   });
 
-  it("asks the board nothing for a write that does not set Ready", () => {
+  // Review pass 1, Must 1: Backlog → Decision, then Decision → Ready, reached Ready with no
+  // word. The one move out of Backlog is to Ready, so every other status write on a Backlog
+  // task is refused, and a write the guard could not read the task for is refused too.
+  it("refuses any move out of Backlog but Ready, so a task cannot reach Ready in two steps", () => {
+    for (const target of ["Decision", "In progress", "Review", "Done", null]) {
+      expect(
+        decide(toReady("p1", target), { permission: read("Backlog") }),
+        String(target),
+      ).toContain("the one move out of Backlog is to Ready");
+    }
+    for (const status of ["Ready", "In progress", "Decision", "Review", "Done"]) {
+      expect(decide(toReady("p1", "Done"), { permission: read(status) }), status).toBeNull();
+    }
+    expect(decide(toReady("p1", "Decision"))).toContain("the board was not read");
+  });
+
+  it("asks the board nothing for a write that sets Backlog or no Status at all", () => {
     const permission = () => {
       throw new Error("read the board for a write that needed nothing");
     };
-    expect(decide(toReady("p1", "In progress"), { permission })).toBeNull();
-    expect(decide(toReady("p1", "Done"), { permission })).toBeNull();
+    expect(decide(toReady("p1", "Backlog"), { permission })).toBeNull();
+    const name = call("notion-update-page", {
+      page_id: "p1",
+      command: "update_properties",
+      properties: { Commit: "abc1234" },
+    });
+    expect(decide(name, { permission })).toBeNull();
     const content = call("notion-update-page", {
       page_id: "p1",
       command: "update_content",
@@ -241,7 +262,7 @@ describe("T0.17 — rule (h) the board's connector", () => {
     expect(decide(content, { permission })).toBeNull();
   });
 
-  it("refuses a task created at Ready, and allows one at Backlog", () => {
+  it("refuses a task created at any Status but Backlog, and allows one at Backlog or with none", () => {
     const create = (Status) =>
       call("notion-create-pages", {
         parent: { type: "data_source_id", data_source_id: "ds" },
@@ -251,7 +272,13 @@ describe("T0.17 — rule (h) the board's connector", () => {
         ],
       });
     expect(decide(create("Ready"))).toContain("Creating a task at Ready is refused");
+    expect(decide(create("Decision"))).toContain("Creating a task at Decision is refused");
     expect(decide(create("Backlog"))).toBeNull();
+    const release = call("notion-create-pages", {
+      parent: { type: "data_source_id", data_source_id: "releases" },
+      pages: [{ properties: { Name: "2026-09-15 ec531f3", Commit: "ec531f3" } }],
+    });
+    expect(decide(release)).toBeNull();
   });
 
   it("refuses a comment without the prefix, in markdown or rich text, and allows the run's own", () => {
@@ -823,10 +850,9 @@ describe("TC4 — rule (b) applies only on the human's word", () => {
   });
 });
 
-// TC3 → AC3 and TC4 → AC4, the hook's entry: which words a command line needs before the
-// board is read.
+// T0.17 TC3 → AC3, the hook's entry: which reads a hook call needs before the rules run.
 describe("wantedBy — the words a hook call would need", () => {
-  it("is the command's words for Bash, ready for a Ready write, and nothing else", () => {
+  it("is the command's words for Bash, and a read of the task for any status write but Backlog", () => {
     const bashCall = { tool_name: "Bash", tool_input: { command: "gh pr merge t0-1 --merge" } };
     expect(wantedBy(bashCall)).toEqual(["merge"]);
     const write = (Status) => ({
@@ -834,10 +860,14 @@ describe("wantedBy — the words a hook call would need", () => {
       tool_input: { page_id: "p", properties: { Status } },
     });
     expect(wantedBy(write("Ready"))).toEqual(["ready"]);
-    expect(wantedBy(write("Done"))).toEqual([]);
+    expect(wantedBy(write("Done"))).toEqual(["ready"]);
+    expect(wantedBy(write("Backlog"))).toEqual([]);
     expect(wantedBy({ tool_name: "Write", tool_input: { file_path: "a" } })).toEqual([]);
   });
 });
+
+// TC3 → AC3 and TC4 → AC4, the hook's entry: which words a command line needs before the
+// board is read.
 
 describe("wanted — the words a command line would need", () => {
   it("lists apply for a migrate, merge for a pr merge, nothing otherwise", () => {

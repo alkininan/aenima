@@ -27,6 +27,7 @@ const EPICS = [
 const names = (result) => result.queue.map((task) => task.Name);
 
 describe("pickNext — the order", () => {
+  // Build 1 and 2, which carry no AC of their own: the scale AC1, AC4 and AC6 are read on.
   it("orders by Priority, Urgent first and None last, an empty priority read as Medium", () => {
     const rows = [
       row("T0.1 none", { Priority: "None" }),
@@ -86,6 +87,7 @@ describe("pickNext — the order", () => {
     ]);
   });
 
+  // Build 2 — only Ready tasks are claimable, and an empty queue is how a run says nothing to do.
   it("claims nothing that is not Ready, and picks null on an empty queue", () => {
     const rows = [
       row("T0.1 backlog", { Status: "Backlog", Priority: "Urgent" }),
@@ -97,6 +99,7 @@ describe("pickNext — the order", () => {
     expect(pickNext([row("T0.4 review", { Status: "Review" })], { epics: EPICS }).pick).toBeNull();
   });
 
+  // Build 2 — the order is computed, never written back into the rows.
   it("leaves the caller's rows alone", () => {
     const rows = [row("T0.2 b"), row("T0.1 a")];
     pickNext(rows, { epics: EPICS });
@@ -119,6 +122,7 @@ describe("pickNext — Blockers", () => {
     expect(result.blocked).toEqual([{ Name: "T0.1 A", by: ["T0.2"] }]);
   });
 
+  // TC1 → AC1, Build 4's "transitively".
   it("carries the priority through a chain, and matches relation ids with or without dashes", () => {
     const rows = [
       row("T0.1 A", { id: "aaaa-0001", Priority: "Urgent", Blockers: ["aaaa0002"] }),
@@ -136,6 +140,7 @@ describe("pickNext — Blockers", () => {
     expect(result.pick.as).toBe("Urgent");
   });
 
+  // TC1 → AC1, Build 4's "incomplete".
   it("lifts a blocker only for a task that is not Done", () => {
     const rows = [
       row("T0.1 done", { Status: "Done", Priority: "Urgent", Blockers: ["T0.2 B"] }),
@@ -147,6 +152,7 @@ describe("pickNext — Blockers", () => {
     expect(result.queue.find((task) => task.Name === "T0.2 B").as).toBe("Low");
   });
 
+  // Build 3, which carries no AC of its own: what blocked means.
   it("is blocked while any blocker is not Done; a Done blocker, or one the board no longer lists, does not block", () => {
     const rows = [
       row("T0.1 two blockers", { Priority: "Urgent", Blockers: ["T0.2 done", "T0.3 review"] }),
@@ -181,6 +187,7 @@ describe("pickNext — Blockers", () => {
     expect(result.notices[0].text).toContain("T3.1, which isn't Ready");
   });
 
+  // TC2 → AC2, the notice's reach: only a Backlog blocker, only on a Ready task.
   it("posts no waiting notice when the blocker is Ready, In progress, or the blocked task is not Ready", () => {
     const rows = [
       row("T0.1 A", { Blockers: ["T0.2 B"] }),
@@ -214,6 +221,7 @@ describe("pickNext — Blockers", () => {
     ]);
   });
 
+  // TC5 → AC5, a loop's other shapes.
   it("names a cycle through a Backlog member once, with no waiting notice besides, and a task that lists itself", () => {
     const rows = [
       row("T0.1 A", { Blockers: ["T0.2 B"] }),
@@ -257,6 +265,7 @@ describe("pickNext — the Urgent notice", () => {
     ]);
   });
 
+  // TC4 → AC4, the threshold.
   it("posts nothing at two Urgent tasks, and counts a task lifted to Urgent as not the human's Urgent", () => {
     const rows = [
       urgent("T0.1 a", "2026-09-01T00:00:00.000Z", { Blockers: ["T0.3 c"] }),
@@ -298,8 +307,35 @@ describe("unposted", () => {
     ];
     expect(await unposted([notice], waiting, P)).toEqual([]);
   });
+
+  // Review pass 1, Should 4: the count moves as Urgent work is done, and the notice on the same
+  // task is the same notice.
+  it("reads an Urgent notice with another count as already said on that thread", async () => {
+    const urgent = { ...notice, kind: "urgent", text: compose("urgent", { count: 3 }, P) };
+    const four = async () => [at(compose("urgent", { count: 4 }, P), "2026-09-01T00:00:00Z")];
+    expect(await unposted([urgent], four, P)).toEqual([]);
+    const waitingOnly = async () => [at(notice.text, "2026-09-01T00:00:00Z")];
+    expect(await unposted([urgent], waitingOnly, P)).toEqual([urgent]);
+  });
+
+  // Review pass 1, Should 6: the comment is posted as markdown, so a name carrying * _ ` or ~
+  // comes back from the API without the markers.
+  it("matches the words the API returns when a name's markdown markers were read as formatting", async () => {
+    const marked = {
+      ...notice,
+      text: compose("waiting", { blockers: ["Draft the `probes` for *check 19*"] }, P),
+    };
+    const returned = async () => [
+      at(
+        compose("waiting", { blockers: ["Draft the probes for check 19"] }, P),
+        "2026-09-01T00:00:00Z",
+      ),
+    ];
+    expect(await unposted([marked], returned, P)).toEqual([]);
+  });
 });
 
+// TC1 → AC1 and TC2 → AC2, the board as the picker reads it.
 describe("readPick", () => {
   const board = () => ({ prefix: P, tasks_ds: "tasks", epics_ds: "epics" });
 
