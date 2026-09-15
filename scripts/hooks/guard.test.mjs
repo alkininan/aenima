@@ -5,8 +5,19 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { claim } from "../run/claim.mjs";
+import { compose } from "../run/comments.mjs";
 import { release } from "../run/release.mjs";
-import { decide, judge, parse, program, target, wanted, writeTargets } from "./guard.mjs";
+import {
+  decide,
+  judge,
+  parse,
+  program,
+  revertOfTipAt,
+  target,
+  wanted,
+  wantedBy,
+  writeTargets,
+} from "./guard.mjs";
 
 /** A PreToolUse payload for a Bash call, with the branch the rule (d) check would see. */
 const bash = (command, branch = "t0-7") => [
@@ -156,6 +167,187 @@ describe("rule (d) — force-push and merging on main", () => {
       "main is checked out",
     );
     expect(decide(...bash("git -C /tmp/wt merge t0-7", "t0-7"))).toBeNull();
+  });
+});
+
+// T0.16 TC2 → AC2, the verdict's half: the file the second door reads is the reviewer's to
+// write, through its own Bash, and the run's Edit and Write are refused under docs/reviews/.
+describe("rule (g) — Edit and Write under docs/reviews/", () => {
+  it("refuses a Write and an Edit of a verdict file, relative or absolute", () => {
+    expect(decide(...file("Write", "docs/reviews/T0.16.md"))).toContain("docs/reviews/");
+    expect(decide(...file("Edit", "/repo/docs/reviews/T0.16.md"))).toContain("reviewer's to write");
+  });
+
+  it("allows the report and the log beside it", () => {
+    expect(decide(...file("Write", "docs/reports/T0.16.md"))).toBeNull();
+    expect(decide(...file("Write", "docs/log/T0.16.md"))).toBeNull();
+    expect(decide(...file("Write", "docs/reviews-notes.md"))).toBeNull();
+  });
+});
+
+// T0.17 TC3 → AC3. Backlog → Ready is the human's word, and the guard reads it from the board
+// at the connector the run writes the board through: a status write on a Backlog page, a task
+// created at Ready, and a comment the run would post in the human's own voice.
+describe("T0.17 — rule (h) the board's connector", () => {
+  const SERVER = "mcp__a6bc5cd2-b1e4-484a-b22d-e3708b2a94f4__";
+  const call = (tool, tool_input) => ({ tool_name: `${SERVER}${tool}`, tool_input, cwd: "/repo" });
+  const toReady = (page_id = "p1", Status = "Ready") =>
+    call("notion-update-page", { page_id, command: "update_properties", properties: { Status } });
+  const read =
+    (status, ok = false) =>
+    () => ({
+      ok,
+      why: ok
+        ? null
+        : `the guard read the thread of T3.1 Slice at ${status} and did not find "ready" as your newest reply since the run's last comment`,
+      task: { name: "T3.1 Slice", status, branch: "t3-1" },
+    });
+
+  it("refuses Backlog → Ready without the word, and says what it read", () => {
+    const reason = decide(toReady(), { permission: read("Backlog") });
+    expect(reason).toContain("Setting T3.1 Slice Ready is refused");
+    expect(reason).toContain('did not find "ready"');
+  });
+
+  it("allows Backlog → Ready on the word", () => {
+    expect(decide(toReady(), { permission: read("Backlog", true) })).toBeNull();
+  });
+
+  it("leaves Ready from Decision, Review or In progress to the run's reading, as §3 does", () => {
+    for (const status of ["Decision", "Review", "In progress", "Ready"]) {
+      expect(decide(toReady(), { permission: read(status) }), status).toBeNull();
+    }
+  });
+
+  it("refuses when nothing read the board — a word nobody read grants nothing", () => {
+    expect(decide(toReady())).toContain("the board was not read");
+    const unread = () => ({
+      ok: false,
+      why: "NOTION_TOKEN is not in .env.local, so the board cannot be read",
+    });
+    expect(decide(toReady(), { permission: unread })).toContain("NOTION_TOKEN");
+  });
+
+  // Review pass 1, Must 1: Backlog → Decision, then Decision → Ready, reached Ready with no
+  // word. The one move out of Backlog is to Ready, so every other status write on a Backlog
+  // task is refused, and a write the guard could not read the task for is refused too.
+  it("refuses any move out of Backlog but Ready, so a task cannot reach Ready in two steps", () => {
+    for (const target of ["Decision", "In progress", "Review", "Done", null]) {
+      expect(
+        decide(toReady("p1", target), { permission: read("Backlog") }),
+        String(target),
+      ).toContain("the one move out of Backlog is to Ready");
+    }
+    for (const status of ["Ready", "In progress", "Decision", "Review", "Done"]) {
+      expect(decide(toReady("p1", "Done"), { permission: read(status) }), status).toBeNull();
+    }
+    expect(decide(toReady("p1", "Decision"))).toContain("the board was not read");
+  });
+
+  it("asks the board nothing for a write that sets Backlog or no Status at all", () => {
+    const permission = () => {
+      throw new Error("read the board for a write that needed nothing");
+    };
+    expect(decide(toReady("p1", "Backlog"), { permission })).toBeNull();
+    const name = call("notion-update-page", {
+      page_id: "p1",
+      command: "update_properties",
+      properties: { Commit: "abc1234" },
+    });
+    expect(decide(name, { permission })).toBeNull();
+    const content = call("notion-update-page", {
+      page_id: "p1",
+      command: "update_content",
+      content_updates: [],
+    });
+    expect(decide(content, { permission })).toBeNull();
+  });
+
+  it("refuses a task created at any Status but Backlog, and allows one at Backlog or with none", () => {
+    const create = (Status) =>
+      call("notion-create-pages", {
+        parent: { type: "data_source_id", data_source_id: "ds" },
+        pages: [
+          { properties: { Name: "Fix the gate", Status: "Backlog" } },
+          { properties: { Name: "Draft", Status } },
+        ],
+      });
+    expect(decide(create("Ready"))).toContain("Creating a task at Ready is refused");
+    expect(decide(create("Decision"))).toContain("Creating a task at Decision is refused");
+    expect(decide(create("Backlog"))).toBeNull();
+    const release = call("notion-create-pages", {
+      parent: { type: "data_source_id", data_source_id: "releases" },
+      pages: [{ properties: { Name: "2026-09-15 ec531f3", Commit: "ec531f3" } }],
+    });
+    expect(decide(release)).toBeNull();
+  });
+
+  it("refuses a comment without the prefix, in markdown or rich text, and allows the run's own", () => {
+    const prefix = () => "⟡ ";
+    const comment = (fields) => call("notion-create-comment", { page_id: "p1", ...fields });
+    expect(decide(comment({ markdown: "ready" }), { prefix })).toContain("begins with ⟡");
+    expect(
+      decide(comment({ discussion_id: "discussion://p1/d1", markdown: "merge" }), { prefix }),
+    ).toContain("your voice");
+    expect(
+      decide(comment({ rich_text: [{ type: "text", text: { content: "apply" } }] }), { prefix }),
+    ).toContain("begins with ⟡");
+    expect(decide(comment({ markdown: "⟡ Read that as your go." }), { prefix })).toBeNull();
+    expect(
+      decide(
+        comment({ rich_text: [{ text: { content: "⟡ " } }, { text: { content: "Merged." } }] }),
+        {
+          prefix,
+        },
+      ),
+    ).toBeNull();
+  });
+
+  // T0.20 TC1 → AC1 and TC4 → AC4, the rule's half: past the prefix, the guard asks the thread
+  // whether a comment of this kind may post — the cap on clarifying rounds and one comment of a
+  // kind per claim, read by `mayPost` — and refuses with the reason it was given.
+  it("refuses a prefixed comment the thread withholds, naming the kind and why", () => {
+    const prefix = () => "⟡ ";
+    const comment = call("notion-create-comment", {
+      page_id: "p1",
+      markdown: "⟡ Thanks, I read that.",
+    });
+    const withheld = () => ({
+      ok: false,
+      why: "two clarifying rounds is the cap",
+      kind: "clarifying",
+    });
+    expect(decide(comment, { prefix, posting: withheld })).toBe(
+      "Posting this clarifying comment is refused — two clarifying rounds is the cap. docs/guidelines.md §4.",
+    );
+    expect(
+      decide(comment, { prefix, posting: () => ({ ok: true, why: null, kind: "noted" }) }),
+    ).toBeNull();
+  });
+
+  // T0.20 TC1 → AC1 and TC3 → AC3, with nothing read: the clarifying round waits, the refusal posts.
+  it("holds back a clarifying round it has not read the thread for, and nothing else", () => {
+    const prefix = () => "⟡ ";
+    const post = (text) => call("notion-create-comment", { page_id: "p1", markdown: text });
+    const clarifying = compose("clarifying", { readings: ["a", "b"], fallback: "take a" });
+    expect(decide(post(clarifying), { prefix })).toContain(
+      "Posting this clarifying comment is refused",
+    );
+    const refused = compose("refused", {
+      what: "Your merge",
+      why: "GitHub said no",
+      files: ["a.md"],
+      settle: "Merge main in",
+    });
+    expect(decide(post(refused), { prefix })).toBeNull();
+  });
+
+  it("has no opinion about the connector's reads, or a tool that only shares a word of the name", () => {
+    expect(decide(call("notion-fetch", { id: "p1" }))).toBeNull();
+    expect(decide(call("notion-get-comments", { page_id: "p1" }))).toBeNull();
+    expect(
+      decide({ tool_name: "notion-create-comment", tool_input: { markdown: "ready" } }),
+    ).toBeNull();
   });
 });
 
@@ -493,6 +685,166 @@ describe("TC3 — rule (f) merges only on the human's word", () => {
   });
 });
 
+// T0.16 TC2 → AC2 and TC3 → AC3. The second door: the reviewer's PASS on file over a diff
+// with nothing gated merges without the word — and only from the commit the guard can see.
+describe("T0.16 — rule (f)'s second door, the reviewer's PASS", () => {
+  const unread = { ok: false, why: "the board was not read" };
+  const passed = {
+    ok: true,
+    why: null,
+    marker: { task: "T0.16", branch: "t0-16" },
+    task: { name: "T0.16", branch: "t0-16" },
+    gated: [],
+  };
+  const shut = (why) => ({ ok: false, why });
+  const merge = (command, verdict, extra = {}) => [
+    { tool_name: "Bash", tool_input: { command }, cwd: "/repo" },
+    {
+      currentBranch: () => "t0-16",
+      permission: () => unread,
+      verdict: () => verdict,
+      prBranch: () => "t0-16",
+      prHead: () => "abc123def",
+      localHead: () => "abc123def",
+      ...extra,
+    },
+  ];
+
+  it("allows a merge commit on the PASS when the word is not there", () => {
+    expect(decide(...merge("gh pr merge t0-16 --merge --delete-branch", passed))).toBeNull();
+  });
+
+  it("refuses when both doors are shut, and says why each is", () => {
+    const reason = decide(
+      ...merge("gh pr merge t0-16 --merge", shut("no reviewer verdict at docs/reviews/T0.16.md")),
+    );
+    expect(reason).toContain("the board was not read");
+    expect(reason).toContain("no reviewer verdict at docs/reviews/T0.16.md");
+  });
+
+  it("refuses on the PASS when the diff touches a gated path — the verdict says so", () => {
+    const why = "the diff touches scripts/hooks/guard.mjs, which only your word merges";
+    expect(decide(...merge("gh pr merge t0-16 --merge", shut(why)))).toContain(why);
+  });
+
+  it("still wants a merge commit and the task's own branch on the second door", () => {
+    expect(decide(...merge("gh pr merge t0-16 --squash", passed))).toContain("squash");
+    expect(
+      decide(...merge("gh pr merge 9 --merge", passed, { prBranch: () => "t0-12" })),
+    ).toContain("the pull request is for t0-12");
+  });
+
+  it("refuses on the PASS when the pull request's head is not this checkout's HEAD", () => {
+    const stale = decide(
+      ...merge("gh pr merge t0-16 --merge", passed, { localHead: () => "fff000abc" }),
+    );
+    expect(stale).toContain("not the diff that would merge");
+    expect(stale).toContain("abc123d");
+    expect(stale).toContain("fff000a");
+    expect(decide(...merge("gh pr merge t0-16 --merge", passed, { prHead: () => null }))).toContain(
+      "unknown",
+    );
+  });
+
+  it("does not ask for the head binding when the human's word granted the merge", () => {
+    const granted = { ...passed, task: { name: "T0.16 Self-merge", branch: "t0-16" } };
+    const reason = decide(
+      ...merge("gh pr merge t0-16 --merge", shut("x"), {
+        permission: () => granted,
+        localHead: () => "different",
+      }),
+    );
+    expect(reason).toBeNull();
+  });
+});
+
+// T0.16 TC5 → AC5, the push half. A revert of the merge at the tip is the one push to main.
+describe("T0.16 — rule (d) lets the revert's push through, and nothing else that names main", () => {
+  const push = (command, revertOfTip, branch = "HEAD") => [
+    { tool_name: "Bash", tool_input: { command }, cwd: "/repo" },
+    { currentBranch: () => branch, revertOfTip: () => revertOfTip },
+  ];
+
+  it("allows git push origin HEAD:main when HEAD is exactly the revert of the tip", () => {
+    expect(decide(...push("git push origin HEAD:main", true))).toBeNull();
+    expect(decide(...push("git push origin HEAD:refs/heads/main", true))).toBeNull();
+  });
+
+  it("refuses the same push when HEAD is not that revert", () => {
+    expect(decide(...push("git push origin HEAD:main", false))).toContain(
+      "Pushing main is refused",
+    );
+  });
+
+  it("refuses every other shape that names main even when HEAD is the revert", () => {
+    expect(decide(...push("git push origin main", true, "main"))).toContain(
+      "Pushing main is refused",
+    );
+    expect(decide(...push("git push origin t0-16:main", true))).toContain(
+      "Pushing main is refused",
+    );
+    expect(decide(...push("git push origin HEAD:main t0-16", true))).toContain(
+      "Pushing main is refused",
+    );
+    expect(decide(...push("git push -f origin HEAD:main", true))).toContain("Force-pushing");
+  });
+});
+
+// T0.16 TC5 → AC5, the guard's own reading of the revert, over a real repository.
+describe("revertOfTipAt over a temporary repository", () => {
+  let root;
+  const sh = (cwd, ...args) => {
+    const result = spawnSync("git", args, { cwd, encoding: "utf8" });
+    if (result.status !== 0) throw new Error(`git ${args.join(" ")}: ${result.stderr}`);
+    return result.stdout.trim();
+  };
+  const commit = (cwd, name, message) => {
+    writeFileSync(join(cwd, name), `${message}\n`);
+    sh(cwd, "add", name);
+    sh(cwd, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", message);
+  };
+
+  beforeAll(() => {
+    root = mkdtempSync(join(tmpdir(), "aenima-revert-guard-"));
+    const src = join(root, "src");
+    sh(root, "init", "-q", "-b", "main", src);
+    commit(src, "a.txt", "base");
+    sh(src, "checkout", "-q", "-b", "t9-1");
+    commit(src, "b.txt", "broken");
+    sh(src, "checkout", "-q", "main");
+    sh(
+      src,
+      "-c",
+      "user.name=t",
+      "-c",
+      "user.email=t@t",
+      "merge",
+      "--no-ff",
+      "-q",
+      "-m",
+      "Merge pull request #1 from x/t9-1",
+      "t9-1",
+    );
+    sh(root, "clone", "-q", "--bare", src, join(root, "origin.git"));
+    sh(root, "clone", "-q", join(root, "origin.git"), join(root, "work"));
+  });
+  afterAll(() => rmSync(root, { recursive: true, force: true }));
+
+  it("is true for the revert of the merge at the tip, and false for the tip itself, a plain commit on it, or anything past it", () => {
+    const work = join(root, "work");
+    expect(revertOfTipAt(work)).toBe(false);
+    // One commit past the tip that is not the revert: the parent matches, the tree does not.
+    sh(work, "checkout", "-q", "--detach", "origin/main");
+    commit(work, "c.txt", "not a revert");
+    expect(revertOfTipAt(work)).toBe(false);
+    sh(work, "checkout", "-q", "--detach", "origin/main");
+    sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "revert", "--no-edit", "-m", "1", "HEAD");
+    expect(revertOfTipAt(work)).toBe(true);
+    commit(work, "d.txt", "one more");
+    expect(revertOfTipAt(work)).toBe(false);
+  });
+});
+
 // TC4 → AC4. A migration applies on the word "apply", read from the board the same way.
 describe("TC4 — rule (b) applies only on the human's word", () => {
   const apply = (command, permission) => [
@@ -535,6 +887,22 @@ describe("TC4 — rule (b) applies only on the human's word", () => {
     expect(decide(input("gh pr merge --merge"), deps("apply"))).toContain("merge");
     expect(decide(input("pnpm db:migrate"), deps("apply"))).toBeNull();
     expect(decide(input("gh pr merge --merge"), deps("merge"))).toBeNull();
+  });
+});
+
+// T0.17 TC3 → AC3, the hook's entry: which reads a hook call needs before the rules run.
+describe("wantedBy — the words a hook call would need", () => {
+  it("is the command's words for Bash, and a read of the task for any status write but Backlog", () => {
+    const bashCall = { tool_name: "Bash", tool_input: { command: "gh pr merge t0-1 --merge" } };
+    expect(wantedBy(bashCall)).toEqual(["merge"]);
+    const write = (Status) => ({
+      tool_name: "mcp__notion__notion-update-page",
+      tool_input: { page_id: "p", properties: { Status } },
+    });
+    expect(wantedBy(write("Ready"))).toEqual(["ready"]);
+    expect(wantedBy(write("Done"))).toEqual(["ready"]);
+    expect(wantedBy(write("Backlog"))).toEqual([]);
+    expect(wantedBy({ tool_name: "Write", tool_input: { file_path: "a" } })).toEqual([]);
   });
 });
 
@@ -598,6 +966,33 @@ describe("judge — reads the marker and the token file, then the thread", () =>
     expect(await judge(merge(worktree), { deps })).toBeNull();
   });
 
+  // T0.16 TC2 → AC2: from the hook's entry, the word not there, the reviewer's door read
+  // through the same `deps` — the verdict and the diff injected, the pull request's head
+  // equal to the checkout's.
+  it("opens the reviewer's door from judge when the word is not there", async () => {
+    const deps = {
+      board: () => ({ prefix: "⟡ " }),
+      comments: async () => [],
+      page: async () => ({ Name: "T0.96 Smoke D", Status: "Review" }),
+      verdict: () => "# T0.96 — review\n\nPASS\n",
+      diff: () => ({ files: ["src/a.ts"], gated: [], ok: true }),
+      gate: () => ({ green: "h", tree: "h" }),
+      prBranch: () => "t0-96",
+      prHead: () => "abc",
+      localHead: () => "abc",
+    };
+    expect(await judge(merge(worktree), { deps })).toBeNull();
+    const gated = {
+      ...deps,
+      diff: () => ({ files: ["scripts/run/x.mjs"], gated: ["scripts/run/x.mjs"], ok: false }),
+    };
+    expect(await judge(merge(worktree), { deps: gated })).toContain("scripts/run/x.mjs");
+    const moved = { ...deps, localHead: () => "def" };
+    expect(await judge(merge(worktree), { deps: moved })).toContain(
+      "not the diff that would merge",
+    );
+  });
+
   it("refuses again once the word is consumed by the pipeline's own reply", async () => {
     const thread = async () => [
       { text: "merge", created_time: "2026-09-13T11:00:00Z" },
@@ -611,5 +1006,115 @@ describe("judge — reads the marker and the token file, then the thread", () =>
     };
     expect(await judge(merge(worktree), { deps })).toContain('did not find "merge"');
     expect(release({ session: "s" }, { cwd: worktree }).released).toBe(true);
+  });
+
+  // T0.17 TC3 → AC3, from the hook's entry: the page the write names, no marker, the token from
+  // the checkout's .env.local, and the thread over the (stubbed) API.
+  it("reads the thread of the page a Ready write names, with no marker, and grants only the human's ready", async () => {
+    const write = (cwd) => ({
+      tool_name: "mcp__notion__notion-update-page",
+      tool_input: {
+        page_id: "page-7",
+        command: "update_properties",
+        properties: { Status: "Ready" },
+      },
+      cwd,
+    });
+    const pages = [];
+    const page = async (id) => {
+      pages.push(id);
+      return { Name: "T3.1 Slice", Status: "Backlog" };
+    };
+    const board = () => ({ prefix: "⟡ " });
+    const human = {
+      board,
+      page,
+      comments: async () => [{ text: "ready", created_time: "2026-09-15T11:00:00Z" }],
+    };
+    expect(await judge(write(worktree), { deps: human })).toBeNull();
+    expect(pages).toEqual(["page-7"]);
+    const own = {
+      ...human,
+      comments: async () => [{ text: "⟡ ready", created_time: "2026-09-15T11:00:00Z" }],
+    };
+    expect(await judge(write(worktree), { deps: own })).toContain(
+      "Setting T3.1 Slice Ready is refused",
+    );
+    expect(await judge(write(primary), { deps: human })).toContain(
+      "NOTION_TOKEN is not in .env.local",
+    );
+  });
+
+  const post = (cwd, page_id, text) => ({
+    tool_name: "mcp__notion__notion-create-comment",
+    tool_input: { page_id, markdown: text },
+    cwd,
+  });
+  const clarifying = compose("clarifying", { readings: ["a", "b"], fallback: "take a" });
+  const capped = [
+    compose("decision", {
+      stopped: "the wording",
+      gap: "Nothing says.",
+      fallback: "take the first",
+    }),
+    "which?",
+    clarifying,
+    "this?",
+    clarifying,
+    "merge",
+  ].map((text, i) => ({ text, created_time: `2026-09-15T10:0${i}:00.000Z` }));
+
+  // T0.20 TC3 → AC3, from the hook's entry: a merge the guard let through and GitHub refused
+  // posts its one comment on a thread the cap has silenced, and a third clarifying round
+  // on the same thread does not.
+  it("lets a refusal through on a capped thread, and holds a third clarifying round back", async () => {
+    const pages = [];
+    const deps = {
+      board: () => ({ prefix: "⟡ " }),
+      comments: async (id) => {
+        pages.push(id);
+        return capped;
+      },
+    };
+    const refused = compose("refused", {
+      what: "Your merge of T0.13",
+      why: "GitHub says the pull request no longer merges cleanly into main",
+      files: ["docs/guidelines.md", "scripts/run/README.md"],
+      settle: "Merging main into the branch and settling those would do it",
+    });
+    expect(await judge(post(worktree, "page-13", refused), { deps })).toBeNull();
+    expect(pages).toEqual(["page-13"]);
+    expect(await judge(post(worktree, "page-13", clarifying), { deps })).toContain(
+      "Posting this clarifying comment is refused",
+    );
+  });
+
+  // T0.20 TC4 → AC4, from the hook's entry: the marker names the claimed page and when the
+  // claim began; a second comment of a kind on that page in that claim is refused, and the
+  // same words on another task's page are not the claim's.
+  it("holds one claim to one comment of a kind on its task's thread", async () => {
+    claim(
+      { task: "T0.20", page: "3dc79daf-d42e-8137-be2e-c18de771596d", branch: "t0-20" },
+      { cwd: primary, env: { CLAUDE_CODE_SESSION_ID: "s20" } },
+    );
+    const chose = compose("default", { gap: "The body is silent.", choice: "the first" });
+    const now = new Date().toISOString();
+    const deps = {
+      board: () => ({ prefix: "⟡ " }),
+      comments: async () => [{ text: chose, created_time: now }],
+    };
+    expect(
+      await judge(post(worktree, "3dc79dafd42e8137be2ec18de771596d", chose), { deps }),
+    ).toContain("Posting this default comment is refused");
+    expect(
+      await judge(
+        post(worktree, "3dc79daf-d42e-8137-be2e-c18de771596d", compose("gated", { paths: "x" })),
+        {
+          deps,
+        },
+      ),
+    ).toBeNull();
+    expect(await judge(post(worktree, "another-page", chose), { deps })).toBeNull();
+    expect(release({ session: "s20" }, { cwd: worktree }).released).toBe(true);
   });
 });

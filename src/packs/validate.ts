@@ -64,6 +64,13 @@ export function validatePack(pack: SkillPack): string[] {
         `check "${check.id}" has points ${check.points}; points must be a positive integer`,
       );
     }
+
+    // A probe is rendered under its check as a question the scorer answers. An
+    // empty one is a blank line the model is told to answer — a rule nobody
+    // wrote, and a prompt that differs from the pack a human reviews.
+    if (check.probes?.some((probe) => probe.trim().length === 0)) {
+      problems.push(`check "${check.id}" carries an empty probe`);
+    }
   }
 
   // §6: "every objection must bind to a rubric check ID; unbound objections are

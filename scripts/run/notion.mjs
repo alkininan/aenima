@@ -5,10 +5,12 @@
  * Two readers need the board without a model in the loop: the guard, which allows a merge or
  * a migration only when it has itself seen the human's word on the thread (`permission.mjs`),
  * and the preflight, which reads every task's comments in one command instead of one
- * connector call per task (`threads.mjs`). Both go through here. The token is an internal
- * integration's, shared with the `dev` teamspace, and lives in `.env.local` as `NOTION_TOKEN`
- * — a file the guard refuses to write and `.worktreeinclude` carries into every worktree
- * (docs/guidelines.md §5, the capability boundary).
+ * connector call per task (`threads.mjs`). Since T0.12 two more do: the session-end script
+ * that posts a Runs row (`runs.mjs`), and the mirror, which reads each page's header block
+ * here before the skill rewrites the page (`mirror.mjs`). All go through here. The token is
+ * an internal integration's, shared with the `dev` teamspace, and lives in `.env.local` as
+ * `NOTION_TOKEN` — a file the guard refuses to write and `.worktreeinclude` carries into every
+ * worktree (docs/guidelines.md §5, the capability boundary).
  *
  * The token is read and never printed: an error carries the endpoint and the status, not
  * the header that was sent with it. `fetch` is injected so a test drives the client against
@@ -69,14 +71,32 @@ export function comment(raw) {
   };
 }
 
-/** One Tasks row as the run reads it: `{ id, url, Name, Status }`. */
+/** The page ids a relation property holds, in the order the API lists them. */
+const related = (property) =>
+  (Array.isArray(property?.relation) ? property.relation : []).map((page) => page?.id);
+
+/**
+ * One Tasks row as the run reads it: `{ id, url, Name, Status, Priority, Epic, Blockers,
+ * created }`.
+ *
+ * The Tasks data source holds Status as a select property, not a status property, and the
+ * API returns it under `select` (T0.15, T0.16). That shape alone is read: a status-typed
+ * property is not the board's and reads null, which the guard then refuses at "no status".
+ * Priority is a select too; Epic and Blockers are relations, read as the page ids they hold,
+ * which is what the picker orders and sequences by (T0.17). A relation lists its first 25
+ * pages inline — far more Blockers than any task carries.
+ */
 export function task(raw) {
   const props = raw?.properties ?? {};
   return {
     id: raw?.id ?? null,
     url: raw?.url ?? null,
     Name: plain(props.Name?.title),
-    Status: props.Status?.status?.name ?? null,
+    Status: props.Status?.select?.name ?? null,
+    Priority: props.Priority?.select?.name ?? null,
+    Epic: related(props.Epic),
+    Blockers: related(props.Blockers),
+    created: raw?.created_time ?? null,
   };
 }
 
@@ -153,6 +173,33 @@ export function client(
     /** One Tasks row by page id — its Name and Status as the board holds them. */
     async page(pageId) {
       return task(await call("GET", `/pages/${String(pageId).replaceAll("-", "")}`));
+    },
+
+    /**
+     * The children of a block or page — the first `pageSize` of them, or every page when
+     * `pageSize` is null. The mirror reads a page's first block for its header and the
+     * Documents page's child pages for their ids (`mirror.mjs`).
+     */
+    async children(blockId, pageSize = null) {
+      const id = String(blockId).replaceAll("-", "");
+      if (pageSize !== null) {
+        const page = await call("GET", `/blocks/${id}/children?page_size=${pageSize}`);
+        return page.results ?? [];
+      }
+      return all((cursor) =>
+        call(
+          "GET",
+          `/blocks/${id}/children?page_size=100${cursor ? `&start_cursor=${cursor}` : ""}`,
+        ),
+      );
+    },
+
+    /** Create one row in a data source with `properties` in the API's own shapes (`runs.mjs`). */
+    async createPage(dataSourceId, properties) {
+      return call("POST", "/pages", {
+        parent: { type: "data_source_id", data_source_id: dataSourceId },
+        properties,
+      });
     },
 
     /** Every row of a data source, every status. */

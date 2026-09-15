@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { compose } from "./comments.mjs";
+import { client } from "./notion.mjs";
 import { readBoardThreads, scan } from "./threads.mjs";
 
 const P = "⟡ ";
@@ -10,6 +12,7 @@ const row = (id, Name, Status) => ({ id, url: `https://n/${id}`, Name, Status })
 // command. Only tasks with a reply the pipeline has not answered come back, each with the
 // shape the words settle.
 describe("scan", () => {
+  const clarifying = compose("clarifying", { readings: ["x", "y"], fallback: "take x" }, P);
   const threads = {
     review: [c("print JSON instead", "2026-09-13T11:00:00Z")],
     merge: [c("Merge.", "2026-09-13T11:00:00Z")],
@@ -28,10 +31,14 @@ describe("scan", () => {
     ],
     capped: [
       c(`${P}I've stopped on x.`, "2026-09-13T08:00:00Z"),
-      c(`${P}clarify 1`, "2026-09-13T09:00:00Z"),
-      c(`${P}clarify 2`, "2026-09-13T10:00:00Z"),
+      c("a", "2026-09-13T08:30:00Z"),
+      c(clarifying, "2026-09-13T09:00:00Z"),
+      c("b", "2026-09-13T09:30:00Z"),
+      c(clarifying, "2026-09-13T10:00:00Z"),
       c("still unclear to me too", "2026-09-13T11:00:00Z"),
     ],
+    // T0.17 TC3 → AC3: the human's go on a Backlog task.
+    ready: [c("ready", "2026-09-13T11:00:00Z")],
   };
   const commentsOf = async (id) => threads[id];
   const tasks = [
@@ -42,21 +49,24 @@ describe("scan", () => {
     row("migration", "T5 migration", "Decision"),
     row("decision", "T6 decision", "Decision"),
     row("capped", "T7 capped", "Decision"),
+    row("ready", "T8 ready", "Backlog"),
   ];
 
   it("returns only the tasks with an unanswered reply, and counts every task scanned", async () => {
     const result = await scan(tasks, commentsOf, P);
-    expect(result.scanned).toBe(7);
+    expect(result.scanned).toBe(8);
     expect(result.threads.map((t) => t.id)).toEqual([
       "review",
       "merge",
       "migration",
       "decision",
       "capped",
+      "ready",
     ]);
   });
 
-  it("names the shape the words settle: merge at Review, apply on a migration, else assess", async () => {
+  // T0.11's TC1–TC4, and T0.17 TC3 → AC3 for ready at Backlog.
+  it("names the shape the words settle: merge at Review, apply on a migration, ready at Backlog, else assess", async () => {
     const { threads: found } = await scan(tasks, commentsOf, P);
     const shape = Object.fromEntries(found.map((t) => [t.id, t.shape]));
     expect(shape).toEqual({
@@ -65,6 +75,7 @@ describe("scan", () => {
       migration: "apply",
       decision: "assess",
       capped: "assess",
+      ready: "ready",
     });
   });
 
@@ -74,9 +85,66 @@ describe("scan", () => {
     expect(migration.unanswered.map((x) => x.text)).toEqual(["apply"]);
     expect(migration.lastPipeline).toContain("adds a migration");
     expect(migration.migration).toBe(true);
-    expect(migration.mayPost).toBe(true);
-    expect(found.find((t) => t.id === "capped").mayPost).toBe(false);
+    expect(migration).toMatchObject({ clarifyingRounds: 0, mayClarify: true });
+    expect(found.find((t) => t.id === "capped")).toMatchObject({
+      clarifyingRounds: 2,
+      mayClarify: false,
+    });
     expect(found.find((t) => t.id === "review").Status).toBe("Review");
+  });
+
+  // T0.20 TC2 → AC2, as the preflight reads it: routine notices are not clarifying rounds.
+  it("leaves a thread of routine notices free for a clarifying round", async () => {
+    const notices = [
+      compose("waiting", { blockers: ["T3.1"] }, P),
+      compose("urgent", { count: 3 }, P),
+      compose("default", { gap: "The body is silent.", choice: "the first" }, P),
+      compose("gated", { paths: "scripts/run/x.mjs" }, P),
+      compose("stale", { date: "9 September", branch: null }, P),
+    ].map((text, i) => c(text, `2026-09-15T10:0${i}:00.000Z`));
+    const { threads: found } = await scan(
+      [row("busy", "T0.99 Busy", "Ready")],
+      async () => [...notices, c("which part is gated?", "2026-09-15T11:00:00.000Z")],
+      P,
+    );
+    expect(found[0]).toMatchObject({ clarifyingRounds: 0, mayClarify: true });
+  });
+
+  // T0.20 TC6 → AC6. T0.13's thread as the API returned it on 2026-09-15: a stop, the answer
+  // read as resolving, a default taken, then the human's merge and default with nothing after
+  // them — three pipeline comments, which the count by author read as two clarifying rounds.
+  it("reads T0.13's thread uncapped", async () => {
+    const t013 = [
+      c(
+        `${P}I've stopped on the Vercel step. Production's DATABASE_URL on Vercel still names the admin role, and only you can change it — this machine has no Vercel CLI and no login. Set the Production value to the aenima_pipeline string .env.local holds, redeploy, and reply here that it is done and that /app loads signed in; the next run then checks aeni.ma from the outside and writes the §5 line. If you say "default" I'll take that as done and go on to the check and the §5 line.`,
+        "2026-09-13T16:53:00.000Z",
+      ),
+      c("done — /app loads signed in", "2026-09-13T17:20:00.000Z"),
+      c(
+        `${P}Read that as the answer, thanks. The task is back at Ready and the next run picks it up from there.`,
+        "2026-09-14T12:45:00.000Z",
+      ),
+      c(
+        `${P}AC3 says the header goes to v1.6 with the change named, and v1.6 was taken by T0.11 while this task waited on the Vercel step, so the number the ticket names is already the one in the repo. A wrong guess here costs nothing to change, so I went with v1.7, the next number, with the change named in the header and kept going. Say the word if you'd rather something else.`,
+        "2026-09-14T15:30:00.000Z",
+      ),
+      c("merge", "2026-09-15T14:47:00.000Z"),
+      c("default", "2026-09-15T16:40:00.000Z"),
+    ];
+    const { threads: found } = await scan(
+      [
+        row(
+          "3da79daf-d42e-8114-8a24-d52f19d4ed8c",
+          "T0.13 Restrict Vercel's database role",
+          "Ready",
+        ),
+      ],
+      async () => t013,
+      P,
+    );
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({ clarifyingRounds: 0, mayClarify: true });
+    expect(found[0].unanswered.map((x) => x.text)).toEqual(["merge", "default"]);
   });
 
   it("does not read the word merge as a shape off a Review task", async () => {
@@ -116,5 +184,50 @@ describe("readBoardThreads", () => {
     expect(result.token).toBe(true);
     expect(result.scanned).toBe(2);
     expect(result.threads.map((t) => [t.id, t.shape])).toEqual([["a", "merge"]]);
+  });
+
+  // T0.16 TC1 → AC1 (carries T0.15). The rows above are handed in already read; this one comes through the
+  // real client from the API's own shape, where the Tasks data source holds Status as a
+  // select. Under the status-shaped read every row was at no status and a human "merge" at
+  // Review shaped `assess`, which is what the preflight of 14 September found on three tasks.
+  it("shapes a merge at Review from the select Status the API returns", async () => {
+    const fetch = async (url) => {
+      const path = url.replace("https://api.notion.com/v1", "");
+      const body = path.startsWith("/data_sources/")
+        ? {
+            results: [
+              {
+                id: "3da79dafd42e818aae99df28ed02d92f",
+                url: "https://n/t0-14",
+                properties: {
+                  Name: { title: [{ plain_text: "T0.14 Ignore worktrees in lint" }] },
+                  Status: { type: "select", select: { name: "Review", color: "blue" } },
+                },
+              },
+            ],
+            has_more: false,
+          }
+        : {
+            results: [
+              {
+                id: "c1",
+                rich_text: [{ plain_text: "merge" }],
+                created_time: "2026-09-14T12:41:00.000Z",
+              },
+            ],
+            has_more: false,
+          };
+      return { ok: true, status: 200, json: async () => body };
+    };
+    const result = await readBoardThreads({
+      deps: {
+        token: () => "t",
+        board: () => ({ tasks_ds: "ds-1", prefix: P }),
+        client: client("t", { fetch }),
+      },
+    });
+    expect(result.threads).toHaveLength(1);
+    expect(result.threads[0].Status).toBe("Review");
+    expect(result.threads[0].shape).toBe("merge");
   });
 });

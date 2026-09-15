@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -150,6 +150,25 @@ describe("recover", () => {
     });
   });
 
+  // TC3 → AC3 · T0.9 open question 8 → T0.12. The flag reads the commit's status, not the intention.
+  it("says wip is false, and why, when the commit itself was refused", () => {
+    git("checkout", "-q", "-b", "t0-97");
+    commit("work");
+    writeFileSync(join(dir, "c.txt"), "half-written\n");
+    const hooks = join(dir, "hooks");
+    mkdirSync(hooks);
+    writeFileSync(join(hooks, "pre-commit"), "#!/bin/sh\necho refused by hook >&2\nexit 1\n", {
+      mode: 0o755,
+    });
+    git("config", "core.hooksPath", hooks);
+
+    const result = recover("T0.97", { run, now });
+
+    expect(result.wip).toBe(false);
+    expect(result.detail).toContain("refused by hook");
+    expect(result.renamed).toBe("t0-97-stale-1607");
+  });
+
   it("leaves a clean checked-out branch without a WIP commit", () => {
     git("checkout", "-q", "-b", "t0-97");
     commit("work");
@@ -157,5 +176,65 @@ describe("recover", () => {
     const result = recover("T0.97", { run, now });
     expect(result.wip).toBe(false);
     expect(git("rev-parse", "t0-97-stale-1607").stdout.trim()).toBe(head);
+  });
+});
+
+// TC3 → AC3 · T0.9 open question 7 → T0.12. The remote half of `recover`, over a bare origin: the pushed
+// copy of the dead run's branch is renamed on origin the same way, atomically.
+describe("recover, with a pushed branch", () => {
+  let root;
+  let dir;
+  const git = (cwd, ...args) => spawnSync("git", args, { cwd, encoding: "utf8" });
+  const now = () => new Date("2026-09-09T16:07:00Z");
+  const commit = (cwd, message) => {
+    git(cwd, "add", "-A");
+    git(
+      cwd,
+      "-c",
+      "user.name=t",
+      "-c",
+      "user.email=t@t",
+      "commit",
+      "-q",
+      "--allow-empty",
+      "-m",
+      message,
+    );
+  };
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), "aenima-stale-remote-"));
+    const origin = join(root, "origin.git");
+    dir = join(root, "clone");
+    git(root, "init", "-q", "--bare", "-b", "main", origin);
+    git(root, "clone", "-q", origin, dir);
+    writeFileSync(join(dir, "a.txt"), "a\n");
+    commit(dir, "base");
+    git(dir, "push", "-q", "origin", "main");
+  });
+  afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+  it("renames origin's copy too, and reports the remote name", () => {
+    git(dir, "checkout", "-q", "-b", "t0-97");
+    writeFileSync(join(dir, "b.txt"), "b\n");
+    commit(dir, "work");
+    const head = git(dir, "rev-parse", "HEAD").stdout.trim();
+    git(dir, "push", "-q", "-u", "origin", "t0-97");
+    git(dir, "checkout", "-q", "main");
+
+    const result = recover("T0.97", { run: (args) => git(dir, ...args), now });
+
+    expect(result).toMatchObject({ renamed: "t0-97-stale-1607", remote: "t0-97-stale-1607", head });
+    expect(git(dir, "ls-remote", "--heads", "origin", "t0-97-stale-1607").stdout).toContain(head);
+    expect(git(dir, "ls-remote", "--heads", "origin", "t0-97").stdout.trim()).toBe("");
+  });
+
+  it("reports no remote when the branch was never pushed", () => {
+    git(dir, "checkout", "-q", "-b", "t0-97");
+    commit(dir, "work");
+    git(dir, "checkout", "-q", "main");
+    const result = recover("T0.97", { run: (args) => git(dir, ...args), now });
+    expect(result.remote).toBeNull();
+    expect(result.renamed).toBe("t0-97-stale-1607");
   });
 });

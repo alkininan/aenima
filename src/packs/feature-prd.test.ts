@@ -96,6 +96,28 @@ describe("the Feature PRD pack", () => {
     expect(safetyLayer?.appliesWhen.id).toBe("user-to-user-or-location");
   });
 
+  // T2.7 measured which verdicts move on identical bytes: exactly the checks
+  // that ask whether what is present is *enough*. Probes give those five a
+  // settled reading (§5: "behind each check sits an open-ended probe library").
+  // Any other check gaining a probe changes what the scorer reads for a check
+  // that was already stable, and would need its own measurement.
+  it("carries probes on the five sufficiency checks and on no other, at 1.1.0", () => {
+    const probed = allChecks(featurePrdPack).filter((check) => (check.probes ?? []).length > 0);
+    expect(probed.map((check) => check.id)).toEqual([
+      "prd-12",
+      "prd-14",
+      "prd-16",
+      "prd-18",
+      "prd-19",
+    ]);
+    for (const check of probed) {
+      for (const probe of check.probes ?? []) expect(probe.trim().length).toBeGreaterThan(0);
+    }
+    // §5 versions rubrics like documents: the probes are a rubric edit, and
+    // the version is what makes the re-baseline findable.
+    expect(featurePrdPack.version).toBe("1.1.0");
+  });
+
   it("binds all twenty interview questions to real checks", () => {
     expect(featurePrdPack.interview).toHaveLength(20);
     expect(featurePrdPack.interview.map((question) => question.checkId)).toEqual(
