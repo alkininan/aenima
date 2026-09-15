@@ -152,13 +152,14 @@ Written by a script at session end from the local transcript, posted with a Noti
 token. No model call. This is the data for park rate, findings per ticket, and the four-week weight
 tuning. Since T0.12 the script is `scripts/run/runs.mjs`, run by the SessionEnd hook over the
 transcript Claude Code wrote: the task from the claim command the skill ran — the last claim that
-wrote a Status on its task before its `release.mjs`, since step 0 claims and releases a task it
-merges or applies before step 1 claims the run's own — Started and Duration from the first and last
+did not merge before writing a Status of its own, since step 0 claims a task only to merge it on
+your word before step 1 claims the run's — Started and Duration from the first and last
 timestamps, Model from the assistant messages (`Fable→Opus` when both appear), Tokens as input plus
 output, cache reads and cache writes both excluded, counted once per API message — a message
 written as several content-block lines repeats its usage on each, and T0.10's table counted lines
-— Outcome from the last Status the run wrote on its task while that claim stood (Review and Done
-are Done, Decision is Decision, anything else is Stopped, an idle run included), Findings from the
+— Outcome from the last Status the run wrote on its task before any later claim, a write after the
+release included, since a stop releases the marker and then sets Decision (Review and Done are
+Done, Decision is Decision, anything else is Stopped, an idle run included), Findings from the
 reviewer's replies. A subagent's transcript — the reviewer's passes, written beside the session's
 under `<session>/subagents/` — counts towards Tokens and Model and nothing else, since the reviewer
 is about half of what a real run spends. A run that claimed nothing of its own is `R-nnnn` alone
@@ -346,6 +347,19 @@ below is a script under `scripts/run/` with a test; the skill holds the judgment
                 (mirror.mjs plans; the skill writes through the connector): a stopped refresh
                 first, each page header-last under a refresh-in-progress sentinel,
                 allow_async false on every write
+1  Claim        the board read over the API (pick-next.mjs) · a Ready task whose Blockers are
+                all Done, by Priority — Urgent · High · Medium · Low · None, empty as Medium —
+                a Ready blocker at the highest priority of any task not Done it blocks,
+                transitively · then Epic name, then ID as numbers phase first, then oldest; no
+                Epic or no ID sorts after · a blocked task is never claimed · one comment each,
+                once — words already on the thread are not said again: a Ready task waiting on
+                a blocker at Backlog, which is never moved; one member of a blocked-by loop
+                that holds a Ready task (a loop of Backlog tasks waits for your go and is not
+                named); the newest of three or more Ready tasks at Urgent, the count aside ·
+                set In progress · write the marker aenima-run-active in the repository's
+                shared .git directory (task, page, branch, started, session) · assign ID and
+                Epic if missing, Priority Medium · compare Spec versions against repo headers,
+                note drift · with nothing to claim, an idle run posts those comments, and one
                 that met a red in step 0 files one Fix task at Backlog (draft.mjs) and exits;
                 one that met nothing writes nothing else
 2  Inline       read every cited section · write docs/tickets/<id>.md — the pack the reviewer

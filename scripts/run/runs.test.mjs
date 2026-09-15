@@ -226,11 +226,14 @@ describe("parseTranscript", () => {
     expect(parseTranscript(lines).run).toBe(false);
   });
 
-  // One run, one task: a later command that happens to carry `claim.mjs --task` — a `claude -p`
-  // prompt in a live observation, say — writes no Status on its page, so it is not the run's.
-  it("keeps the claim that wrote a Status over a later command that mentions one", () => {
+  // One run, one task: a command that happens to carry `claim.mjs --task` — a `claude -p` prompt
+  // in a live observation, say — did not run the script, so it is no claim and does not end the
+  // run's own claim before its Status writes.
+  it("does not read a claim.mjs quoted in a later command's prompt as a claim", () => {
     const lines = transcript();
-    lines.push(
+    lines.splice(
+      lines.findIndex((l) => l.includes("tu_status_0")),
+      0,
       ...assistant(
         "msg_later",
         "claude-fable-5-1",
@@ -308,20 +311,51 @@ describe("parseTranscript", () => {
 
   it("reads a run that merged its own work at close as Done", () => {
     expect(parseTranscript(transcript({ statuses: ["In progress", "Done"] })).outcome).toBe("Done");
-    expect(
-      parseTranscript(transcript({ statuses: ["In progress", "Review", "Done"] })).outcome,
-    ).toBe("Done");
-  });
-
-  it("ends a claim at release.mjs run as a command, not at a command that names the file", () => {
-    const lines = transcript();
-    const firstStatus = lines.findIndex((l) => l.includes("tu_status_0"));
+    // Step 9: Review, the run's own gh pr merge, Done, release — the claim is still the run's.
+    const lines = transcript({ statuses: ["In progress", "Review"] });
     lines.splice(
-      firstStatus,
+      lines.findIndex((l) => l.includes("msg_last")),
       0,
-      ...bash("grep", "grep -n release.mjs scripts/run/README.md", at(22, 50)),
+      ...bash("close_merge", "gh pr merge t0-96 --merge --delete-branch", at(39, 0)),
+      ...status("close_done", "3d679daf-d42e-813f-af58-f5f053219a57", "Done", at(39, 10)),
+      ...bash("close_release", "node scripts/run/release.mjs", at(39, 20)),
     );
     expect(parseTranscript(lines)).toMatchObject({ task: "T0.96", outcome: "Done" });
+  });
+
+  // Steps 4 and 6 release the marker and then set Decision, so a write after the release is still
+  // the claim's — in either order the skill allows for In progress and the claim.
+  it("reads a stop that released the marker before setting Decision as Decision, with its task", () => {
+    const afterClaim = transcript({ statuses: ["In progress"] });
+    const beforeClaim = transcript({ statuses: [] });
+    beforeClaim.splice(
+      beforeClaim.findIndex((l) => l.includes("msg_1")),
+      0,
+      ...status("pre_progress", "3d679daf-d42e-813f-af58-f5f053219a57", "In progress", at(22, 38)),
+    );
+    for (const lines of [afterClaim, beforeClaim]) {
+      lines.splice(
+        lines.findIndex((l) => l.includes("msg_last")),
+        0,
+        ...bash("stop_release", "node scripts/run/release.mjs", at(39, 0)),
+        ...status("stop_decision", "3d679daf-d42e-813f-af58-f5f053219a57", "Decision", at(39, 10)),
+      );
+      expect(parseTranscript(lines)).toMatchObject({ task: "T0.96", outcome: "Decision" });
+    }
+  });
+
+  it("keeps a killed run's claim over a later command that only quotes one", () => {
+    const lines = transcript({ statuses: [] });
+    lines.splice(
+      lines.findIndex((l) => l.includes("msg_last")),
+      0,
+      ...bash(
+        "quoted",
+        'claude -p "Run: node scripts/run/claim.mjs --task T9.9 --page 3db79daf-d42e-8130-85d2-e2b73bd2bcc3" --model haiku',
+        at(39, 30),
+      ),
+    );
+    expect(parseTranscript(lines)).toMatchObject({ task: "T0.96", outcome: STOPPED });
   });
 
   // A subagent's transcript is beside the session's, every line a sidechain: its usage and model

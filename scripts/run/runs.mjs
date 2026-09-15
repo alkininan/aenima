@@ -17,11 +17,13 @@
  *     of one API message, every line repeating that message's usage — so usage is counted
  *     once per `message.id`, never per line (T0.10's table counted lines, which is why its
  *     tokens and turns are high by the blocks-per-message ratio);
- *   - the claimed task is the `claim.mjs --task … --page …` the skill ran, read from the Bash
- *     tool call — the last one that wrote a Status on its page before its `release.mjs`, since
- *     step 0 claims and releases a task it merges or applies before step 1 claims the run's;
- *     the outcome is the last Status the skill wrote on that page through the connector while
- *     the claim stood — Review and Done are Done, Decision is Decision, anything else Stopped;
+ *   - the claimed task is the `claim.mjs --task … --page …` the skill ran as a command, read
+ *     from the Bash tool call — the last one that did not merge before writing a Status of its
+ *     own, since step 0 claims a task only to merge it on the human's word before step 1 claims
+ *     the run's; the outcome is the last Status the skill wrote on that page through the
+ *     connector before the next claim, a write after `release.mjs` included (steps 4 and 6
+ *     release, then set Decision) — Review and Done are Done, Decision is Decision, anything
+ *     else Stopped;
  *   - findings are counted from the reviewer subagent's replies, `Must` and `Should` tags;
  *   - a subagent's transcript is written beside the session's, under
  *     `<transcript dir>/<session id>/subagents/agent-*.jsonl`, every line a sidechain; its
@@ -62,8 +64,14 @@ export const OUTCOMES = { Review: "Done", Done: "Done", Decision: "Decision" };
 /** The outcome of a run that wrote no Review, Done or Decision — an idle run, a killed one. */
 export const STOPPED = "Stopped";
 
-/** `node scripts/run/release.mjs` run as a command — the end of the claim that stood. */
-export const RELEASE_PATTERN = /(?:^|[\n;&|(]\s*)node\s+\S*release\.mjs(?:\s|$)/;
+/**
+ * `node scripts/run/claim.mjs …` run as a command — at the start of the command or after a
+ * separator — its arguments captured. Not the same words inside a quoted `claude -p` prompt.
+ */
+export const CLAIM_PATTERN = /(?:^|[\n;&|(]\s*)node\s+\S*claim\.mjs\b([^\n;&|]*)/;
+
+/** `gh pr merge` run as a command — what makes a claim step 0's merge rather than a run's own. */
+export const MERGE_PATTERN = /(?:^|[\n;&|(]\s*)gh\s+pr\s+merge\b/;
 
 /** Parse one JSONL line, or null for a line that is not JSON. */
 const parseLine = (line) => {
@@ -207,41 +215,39 @@ export function parseTranscript(lines, sidechains = []) {
     }
   }
 
-  // One run, one task (docs/guidelines.md §5) — but not one claim. Step 0 claims a task to merge
-  // or to apply on the human's word and releases it again, and only then does step 1 claim the
-  // run's own. So each claim stands until the next `release.mjs`, the Status writes on its page
-  // while it stands are its own, and the run's task is the last claim that wrote one. A claim
-  // still standing at the end with none — a run killed before its first write — is the run's
-  // when no claim wrote. A command that merely carries `claim.mjs --task` — a `claude -p`
-  // prompt, an echo — writes no Status on its page and so is never the run's.
+  // One run, one task (docs/guidelines.md §5) — but not one claim. Step 0 claims a task only to
+  // merge it on the human's word, and only then does step 1 claim the run's own. A claim's Status
+  // writes are those on its page up to the next claim — a write after `release.mjs` included,
+  // since steps 4 and 6 release the marker and then set Decision. A claim that ran `gh pr merge`
+  // before writing a Status of its own is step 0's merge and never the run's; step 9's merge
+  // comes after the run's Review. The run's task is the last other claim that wrote a Status, or,
+  // when none did — a run killed before its first write — the last other claim.
   const claims = [];
   for (const use of toolUses) {
+    const current = claims.at(-1);
     if (use.name === "Bash") {
       const command = String(use.input?.command ?? "");
-      if (RELEASE_PATTERN.test(command)) {
-        for (const claim of claims) claim.open = false;
+      const claimed = command.match(CLAIM_PATTERN);
+      const task = claimed?.[1].match(/--task\s+(T\d+\.\d+)/)?.[1];
+      if (task) {
+        const page = claimed[1].match(/--page\s+([0-9a-f-]{32,36})/)?.[1] ?? null;
+        claims.push({ task, page, statuses: [], merged: false });
       }
-      const claimed = command.match(/claim\.mjs\b[^\n;&|]*?--task\s+(T\d+\.\d+)/);
-      if (claimed) {
-        const page = command.match(/claim\.mjs\b[^\n;&|]*?--page\s+([0-9a-f-]{32,36})/)?.[1];
-        claims.push({ task: claimed[1], page: page ?? null, open: true, statuses: [] });
-      }
+      const claim = claims.at(-1);
+      const rest = task ? command.slice(claimed.index + claimed[0].length) : command;
+      if (claim && claim.statuses.length === 0 && MERGE_PATTERN.test(rest)) claim.merged = true;
       continue;
     }
     if (!/notion-update-page$/.test(use.name)) continue;
     const status = use.input?.properties?.Status;
     if (typeof status !== "string") continue;
     const target = String(use.input?.page_id ?? "").replaceAll("-", "");
-    for (const claim of claims) {
-      if (claim.open && claim.page !== null && claim.page.replaceAll("-", "") === target) {
-        claim.statuses.push(status);
-      }
+    if (current?.page != null && current.page.replaceAll("-", "") === target) {
+      current.statuses.push(status);
     }
   }
-  const own =
-    claims.filter((claim) => claim.statuses.length > 0).at(-1) ??
-    claims.filter((claim) => claim.open).at(-1) ??
-    null;
+  const others = claims.filter((claim) => !claim.merged);
+  const own = others.filter((claim) => claim.statuses.length > 0).at(-1) ?? others.at(-1) ?? null;
   const task = own?.task ?? null;
   const page = own?.page ?? null;
   const statuses = own?.statuses ?? [];

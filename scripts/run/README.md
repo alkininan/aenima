@@ -175,10 +175,11 @@ returns to `main`; `release.mjs` also runs from the SessionEnd hook, so a run th
 no marker behind for the next preflight to trust. Beside it at SessionEnd runs `runs.mjs`,
 which reads the session's transcript — the JSONL Claude Code wrote, handed over as the hook's
 `transcript_path` — and posts the Runs row with the token and no model: `R-nnnn T<id>`, the
-task from the last claim that wrote a Status on its page before its `release.mjs` (step 0
-claims and releases what it merges or applies), started and duration from the first and last
-timestamps, the model family (or `Fable→Opus` when the session fell back), input plus output
-tokens counted once per API message with cache reads and writes excluded, the outcome from the
-last Status the run wrote on its task while the claim stood (Review and Done are Done, Decision
-is Decision, anything else is Stopped), and the reviewer's findings counted from its replies. A
+task from the last claim that did not merge before writing a Status of its own (step 0 claims a
+task only to merge it), started and duration from the first and last timestamps, the model family
+(or `Fable→Opus` when the session fell back), input plus output tokens counted once per API
+message with cache reads and writes excluded, the outcome from the last Status the run wrote on
+its task before any later claim — a Decision set after the release included (Review and Done are
+Done, Decision is Decision, anything else is Stopped) — and the reviewer's findings counted from
+its replies. A
 session that was not a `/ticket` writes no row.
