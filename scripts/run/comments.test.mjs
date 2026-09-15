@@ -5,6 +5,8 @@ import {
   CLARIFYING_CAP,
   compose,
   KINDS,
+  kindOf,
+  mayPost,
   mentions,
   permitted,
   readThread,
@@ -13,6 +15,60 @@ import {
 
 const P = "⟡ ";
 const c = (text, created_time) => ({ text, created_time });
+
+/** Fields for every kind, so each composes as a run would post it. */
+const all = {
+  decision: {
+    stopped: "the release wording",
+    gap: 'The body asks for "the agreed wording" and that isn\'t written down anywhere, not in the ticket and not in the specs.',
+    fallback: "use build-guide §6's own sentence",
+  },
+  clarifying: {
+    readings: ["the sentence as it stands", "the sentence with the rule's location added"],
+    fallback: "keep it as it stands",
+  },
+  migration: { file: "drizzle/0013_activity_trigger.sql" },
+  stale: { date: "9 September", branch: "t0-97-stale-1607" },
+  default: {
+    gap: "The body asks for a friendlier release message but doesn't say what friendlier means, and nothing else does either.",
+    choice: '"Three reds in a row. Take a breath, reread the ticket, then come back."',
+  },
+  change: {},
+  newWork: { name: "Print JSON from the gate", url: "https://www.notion.so/abc" },
+  merged: { commit: "a1b2c3d" },
+  applied: { file: "drizzle/0015_x.sql" },
+  noted: {},
+  setup: {
+    step: "a Notion internal integration",
+    where: "Its token goes in .env.local as NOTION_TOKEN.",
+  },
+  resolved: {},
+  gated: { paths: "scripts/hooks/guard.mjs and .claude/settings.json" },
+  reverted: {
+    failed: "/sign-in answered 500 and /app answered 200",
+    merge: "9c1d2e3",
+    commit: "a1b2c3d",
+    name: "Fix the sign-in page after T0.16",
+    url: "https://www.notion.so/xyz",
+  },
+  readied: {},
+  waiting: { blockers: ["T3.1"] },
+  cycle: { members: ["T3.1", "T3.2"] },
+  urgent: { count: 3 },
+  refused: {
+    what: "Your merge of T0.13",
+    why: "GitHub says the pull request no longer merges cleanly into main",
+    files: ["docs/guidelines.md", "scripts/run/README.md"],
+    settle:
+      'Merging main into the branch and settling those two would do it; say "default" and the next run does that and brings it back to Review',
+  },
+};
+
+/** A thread as the API hands it back: one comment a minute, in the order given. */
+const timeline = (...texts) =>
+  texts.map((text, i) => c(text, `2026-09-15T10:${String(i).padStart(2, "0")}:00.000Z`));
+
+const said = (kind, fields = all[kind]) => compose(kind, fields, P);
 
 // TC4 → AC4. Prefixed comments are the pipeline's; a human comment newer than the last
 // prefixed one is the answer this run must assess.
@@ -86,44 +142,178 @@ describe("readThread", () => {
   });
 
   it("counts clarifying rounds without counting the Question itself", () => {
-    const question = c(`${P}Question   q`, "2026-09-01T10:00:00Z");
-    expect(readThread([question], P).clarifyingRounds).toBe(0);
-    expect(
-      readThread([question, c(`${P}still unclear`, "2026-09-01T12:00:00Z")], P).clarifyingRounds,
-    ).toBe(1);
+    const question = said("decision");
+    expect(readThread(timeline(question), P).clarifyingRounds).toBe(0);
+    expect(readThread(timeline(question, "hm", said("clarifying")), P).clarifyingRounds).toBe(1);
   });
 
-  it("stops posting after two clarifying rounds, and keeps reading", () => {
-    const thread = readThread(
-      [
-        c(`${P}Question   q`, "2026-09-01T10:00:00Z"),
-        c(`${P}clarify 1`, "2026-09-01T12:00:00Z"),
-        c(`${P}clarify 2`, "2026-09-01T14:00:00Z"),
-        c("a new answer", "2026-09-01T15:00:00Z"),
-      ],
-      P,
-    );
-    expect(thread.clarifyingRounds).toBe(CLARIFYING_CAP);
-    expect(thread.mayPost).toBe(false);
-    expect(thread.unanswered).toHaveLength(1);
-  });
-
-  it("may still post at one round below the cap", () => {
-    const thread = readThread(
-      [c(`${P}Question   q`, "2026-09-01T10:00:00Z"), c(`${P}clarify 1`, "2026-09-01T12:00:00Z")],
-      P,
-    );
-    expect(thread.mayPost).toBe(true);
+  it("reads each pipeline comment's kind from its own words", () => {
+    const thread = readThread(timeline(said("decision"), "which?", said("clarifying")), P);
+    expect(thread.pipeline.map((x) => x.kind)).toEqual(["decision", "clarifying"]);
   });
 
   it("reads an empty thread without inventing anything", () => {
-    expect(readThread([], P)).toMatchObject({ unanswered: [], clarifyingRounds: 0, mayPost: true });
+    expect(readThread([], P)).toMatchObject({ unanswered: [], clarifyingRounds: 0 });
   });
 
   it("does not mistake a comment that merely mentions the glyph for a pipeline one", () => {
     const thread = readThread([c(`the ${P}glyph is fine`, "2026-09-01T10:00:00Z")], P);
     expect(thread.pipeline).toEqual([]);
     expect(thread.human).toHaveLength(1);
+  });
+});
+
+// T0.20. A comment carries its kind in its own words: the fixed part of the sentence the
+// composer wrote. `kindOf` reads it back from the text the API returns, so the cap can count
+// clarifying rounds and nothing else, and a claim can be held to one comment of a kind.
+describe("kindOf", () => {
+  it("reads back the kind of every composed comment, every variant", () => {
+    const variants = [
+      ...Object.entries(all),
+      ["stale", { date: "9 September", branch: null }],
+      ["waiting", { blockers: ["T3.1", "T3.2"] }],
+      ["cycle", { members: ["T3.1", "T3.2", "T3.3"] }],
+      ["cycle", { members: ["T3.1"] }],
+      ["refused", { ...all.refused, files: ["docs/guidelines.md"] }],
+      ["refused", { ...all.refused, files: [] }],
+    ];
+    for (const [kind, fields] of variants) {
+      expect(kindOf(compose(kind, fields, P), P), `${kind} ${JSON.stringify(fields)}`).toBe(kind);
+    }
+  });
+
+  it("reads the comments already on the board, written before kinds were read", () => {
+    // The stops on T0.13's and T0.12's threads, shortened from what the API returned on
+    // 2026-09-15 (T0.13's whole thread is threads.test.mjs's AC6 fixture).
+    expect(
+      kindOf(
+        `${P}I've stopped on the Vercel step. Production's DATABASE_URL on Vercel still names the admin role, and only you can change it. If you say "default" I'll take that as done and go on to the check and the §5 line.`,
+        P,
+      ),
+    ).toBe("decision");
+    expect(
+      kindOf(
+        `${P}I've stopped on your merge, because the pull request no longer merges cleanly into main. If you say "default" I'll merge main into the branch.`,
+        P,
+      ),
+    ).toBe("decision");
+  });
+
+  it("is null for a human comment and for a prefixed comment no composer wrote", () => {
+    expect(kindOf("Thanks, I read that, but it still fits two readings: a, or b.", P)).toBeNull();
+    expect(kindOf(`${P}clarify 1`, P)).toBeNull();
+    expect(kindOf("", P)).toBeNull();
+  });
+});
+
+// T0.20. The one place that says whether the run may post a comment of a kind on a thread;
+// the preflight reads it for a clarifying round and the guard reads it for every comment.
+describe("mayPost", () => {
+  // TC1 → AC1
+  it("silences a third clarifying round on one question, and nothing else", () => {
+    const thread = readThread(
+      timeline(said("decision"), "which?", said("clarifying"), "this?", said("clarifying"), "or?"),
+      P,
+    );
+    expect(thread.clarifyingRounds).toBe(CLARIFYING_CAP);
+    expect(mayPost(thread, "clarifying").ok).toBe(false);
+    expect(mayPost(thread, "clarifying").why).toContain("two clarifying rounds");
+    expect(thread.unanswered).toHaveLength(1);
+    for (const kind of KINDS.filter((k) => k !== "clarifying")) {
+      expect(mayPost(thread, kind).ok, kind).toBe(true);
+    }
+    const below = readThread(timeline(said("decision"), "which?", said("clarifying"), "?"), P);
+    expect(mayPost(below, "clarifying").ok).toBe(true);
+  });
+
+  // TC2 → AC2
+  it("still lets a task with five routine notices hear a clarifying round", () => {
+    const thread = readThread(
+      timeline(
+        said("waiting"),
+        said("urgent"),
+        said("default"),
+        said("gated"),
+        said("stale"),
+        "I don't follow the gated part",
+      ),
+      P,
+    );
+    expect(thread.clarifyingRounds).toBe(0);
+    expect(mayPost(thread, "clarifying")).toEqual({ ok: true, why: null });
+  });
+
+  // TC3 → AC3, the cap's half: a refusal reports on a capped thread.
+  it("posts a refusal on a thread the cap has silenced", () => {
+    const capped = readThread(
+      timeline(said("decision"), "a", said("clarifying"), "b", said("clarifying"), "merge"),
+      P,
+    );
+    expect(mayPost(capped, "clarifying").ok).toBe(false);
+    expect(mayPost(capped, "refused")).toEqual({ ok: true, why: null });
+  });
+
+  // TC4 → AC4
+  it("holds one claim to one comment of a kind, and only from the claim's start", () => {
+    const thread = readThread(
+      [
+        c(said("default"), "2026-09-15T09:00:00.000Z"),
+        c("ok", "2026-09-15T09:30:00.000Z"),
+        c(said("default"), "2026-09-15T10:03:00.000Z"),
+      ],
+      P,
+    );
+    const since = "2026-09-15T10:00:12.345Z";
+    const again = mayPost(thread, "default", { since });
+    expect(again.ok).toBe(false);
+    expect(again.why).toContain("default");
+    expect(mayPost(thread, "gated", { since }).ok).toBe(true);
+    // Before this claim began the earlier default was another claim's.
+    expect(mayPost(thread, "default", { since: "2026-09-15T10:04:00.000Z" }).ok).toBe(true);
+    // With no claim on this thread there is no claim to hold it to.
+    expect(mayPost(thread, "default").ok).toBe(true);
+  });
+
+  // The API gives a comment's time to the minute: one posted a few seconds after the claim
+  // began reads as older than the claim, and is still the claim's.
+  it("reads a comment in the claim's first minute as the claim's", () => {
+    const thread = readThread([c(said("default"), "2026-09-15T10:00:00.000Z")], P);
+    expect(mayPost(thread, "default", { since: "2026-09-15T10:00:41.000Z" }).ok).toBe(false);
+  });
+
+  // TC5 → AC5
+  it("starts the count again once a reply has been answered as anything but unclear", () => {
+    const answered = readThread(
+      timeline(
+        said("decision"),
+        "a",
+        said("clarifying"),
+        "b",
+        said("clarifying"),
+        "use the first one",
+        said("resolved"),
+      ),
+      P,
+    );
+    expect(answered.clarifyingRounds).toBe(0);
+    expect(mayPost(answered, "clarifying").ok).toBe(true);
+    const next = readThread(
+      timeline(
+        said("decision"),
+        "a",
+        said("clarifying"),
+        "b",
+        said("clarifying"),
+        "c",
+        said("decision"),
+        "d",
+        said("clarifying"),
+        "e",
+      ),
+      P,
+    );
+    expect(next.clarifyingRounds).toBe(1);
+    expect(mayPost(next, "clarifying").ok).toBe(true);
   });
 });
 
@@ -134,45 +324,6 @@ describe("compose", () => {
       .replace(P, "")
       .split(/(?<=[.!?])\s+/)
       .filter(Boolean);
-  const all = {
-    decision: {
-      stopped: "the release wording",
-      gap: 'The body asks for "the agreed wording" and that isn\'t written down anywhere, not in the ticket and not in the specs.',
-      fallback: "use build-guide §6's own sentence",
-    },
-    clarifying: {
-      readings: ["the sentence as it stands", "the sentence with the rule's location added"],
-      fallback: "keep it as it stands",
-    },
-    migration: { file: "drizzle/0013_activity_trigger.sql" },
-    stale: { date: "9 September", branch: "t0-97-stale-1607" },
-    default: {
-      gap: "The body asks for a friendlier release message but doesn't say what friendlier means, and nothing else does either.",
-      choice: '"Three reds in a row. Take a breath, reread the ticket, then come back."',
-    },
-    change: {},
-    newWork: { name: "Print JSON from the gate", url: "https://www.notion.so/abc" },
-    merged: { commit: "a1b2c3d" },
-    applied: { file: "drizzle/0015_x.sql" },
-    noted: {},
-    setup: {
-      step: "a Notion internal integration",
-      where: "Its token goes in .env.local as NOTION_TOKEN.",
-    },
-    resolved: {},
-    gated: { paths: "scripts/hooks/guard.mjs and .claude/settings.json" },
-    reverted: {
-      failed: "/sign-in answered 500 and /app answered 200",
-      merge: "9c1d2e3",
-      commit: "a1b2c3d",
-      name: "Fix the sign-in page after T0.16",
-      url: "https://www.notion.so/xyz",
-    },
-    readied: {},
-    waiting: { blockers: ["T3.1"] },
-    cycle: { members: ["T3.1", "T3.2"] },
-    urgent: { count: 3 },
-  };
 
   /** The Urgent notice is the ticket's own sentence, one of it (T0.17 item 7). */
   const ONE_SENTENCE = new Set(["urgent"]);
@@ -307,6 +458,30 @@ describe("compose", () => {
     );
     expect(compose("cycle", { members: ["T3.1"] }, P)).toBe(
       `${P}This task lists itself in its own Blockers, so no run can pick it. Take it out and it is picked up in its turn.`,
+    );
+  });
+
+  // T0.20 TC3 → AC3, the voice's half: a step the guard let through and something else refused
+  // says what was refused, which files stand in the way, and what would settle it.
+  it("says what was refused, the files in conflict, and what would settle it", () => {
+    expect(compose("refused", all.refused, P)).toBe(
+      `${P}Your merge of T0.13 was refused: GitHub says the pull request no longer merges cleanly into main. The files in conflict are docs/guidelines.md and scripts/run/README.md. Merging main into the branch and settling those two would do it; say "default" and the next run does that and brings it back to Review.`,
+    );
+    expect(compose("refused", { ...all.refused, files: ["docs/guidelines.md"] }, P)).toContain(
+      "The file in conflict is docs/guidelines.md.",
+    );
+    expect(
+      compose(
+        "refused",
+        {
+          what: "Applying drizzle/0015_x.sql",
+          why: "Postgres answered: relation workspace already exists",
+          settle: "The migration needs a guard on that table; the ticket stays at Decision",
+        },
+        P,
+      ),
+    ).toBe(
+      `${P}Applying drizzle/0015_x.sql was refused: Postgres answered: relation workspace already exists. The migration needs a guard on that table; the ticket stays at Decision.`,
     );
   });
 

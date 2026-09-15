@@ -1,4 +1,7 @@
-<!-- guidelines.md · v1.10 · in the repo · every run leaves a Runs row and the mirrors keep up: §2
+<!-- guidelines.md · v1.11 · in the repo · the cap counts clarifying rounds: §4 the cap per
+     question, the kinds it never counts, a refusal that always reports, one comment of a kind
+     per claim, and the guard reading all of it before a comment posts.
+     v1.10 · in the repo · every run leaves a Runs row and the mirrors keep up: §2
      the Runs row's fields as the session-end script reads them from the transcript, the
      Documents mirrors refreshed header-last under a sentinel; §5 the mirror step in preflight
      after the deploy check, the Runs row from the SessionEnd hook, the integration token as a
@@ -275,6 +278,19 @@ the reply was read. What the assessment can be depends on where the task sits:
   gets a ⟡ note and nothing else. Anything the run cannot place gets one clarifying comment.
 - After two clarifying rounds on the same question the pipeline stops asking and waits. It never
   stops assessing: your next comment is read like any other. Two-round cap, §6, applied to itself.
+  The cap counts **clarifying rounds and nothing else**: the clarifying comments since the pipeline
+  last said anything else on the thread. The replies between them do not reset it — each round
+  answers one — but a reply the run reads as anything other than unclear does, once the run has
+  answered it: an answer, a change, new work, a note, or a question opened afresh closes the one
+  the rounds were about. Every other kind — a stop, a default taken, a migration waiting, a stale
+  run, a merge, a gated diff, a revert, a waiting, loop or Urgent notice, a refusal — is never a
+  clarifying round, never counts toward the cap, and posts whatever the thread holds: the cap is
+  there to stop a misunderstanding looping, never to keep a run from telling you something.
+- **A refusal always reports**, cap or no cap. A merge the guard let through that GitHub refused
+  posts one comment naming the files in conflict and what would settle them; so does an apply
+  that failed, and a claim that could not go on.
+- Uncapped is not unlimited: **one comment of a kind per claim**. A run that takes two defaults
+  says both in its one default comment.
 
 **The three words are verified in code.** `merge` and `apply` are the two replies with
 consequences outside the board, and `ready` is the one move on the board that is yours; none is
@@ -290,7 +306,12 @@ anything the run wrote — merged with a merge commit, said outright as `--merge
 rewrites the hash the board carries and the task would never be seen to land. The model cannot
 fabricate a permission; the check reads the board, not the transcript. Nor can it write one: the
 connector posts as you, so the guard refuses a comment from a run that does not begin with the
-prefix — an unprefixed comment would read on the thread as your voice. The one move out of
+prefix — an unprefixed comment would read on the thread as your voice. Past the prefix, every
+comment the pipeline posts carries its kind in its own words, and before it posts the guard reads
+the page's thread for the two limits above — a third clarifying round on one question, a second
+comment of a kind in the claim on that task — with the same `mayPost` in
+`scripts/run/comments.mjs` the preflight reads; a thread it could not read holds back a clarifying
+round and lets every other comment through. The one move out of
 Backlog is to Ready, so the guard refuses a task created at any status but Backlog, and any status
 write on a task it reads at Backlog but Ready on your word — otherwise Backlog → Decision, then
 Decision → Ready, would reach Ready in two moves with no word. A move to Ready from Decision,

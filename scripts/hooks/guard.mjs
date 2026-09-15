@@ -36,7 +36,9 @@
  * Backlog task Ready needs the human's `ready` on that page's thread, read over the API the
  * same way; no task is created at Ready; and no comment is posted without the pipeline's
  * prefix, because an unprefixed comment reads on the thread as the human's voice, and the
- * human's voice is what grants `merge`, `apply` and `ready`.
+ * human's voice is what grants `merge`, `apply` and `ready`. Since T0.20 a prefixed comment is
+ * read against its page's thread as well (`postable`): a clarifying round past the cap, or a
+ * second comment of a kind in one claim, waits; every other comment posts.
  *
  * `decide()` is pure and exported so scripts/hooks/guard.test.mjs can cover every rule and,
  * more importantly, every neighbouring call that must stay allowed.
@@ -46,8 +48,9 @@ import { execFileSync } from "node:child_process";
 import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { kindOf } from "../run/comments.mjs";
 import { readBoard } from "../run/notion.mjs";
-import { reviewed, verify } from "../run/permission.mjs";
+import { postable, reviewed, unreadPost, verify } from "../run/permission.mjs";
 import { resolveDir } from "./gate.mjs";
 
 /** Words that run their remaining argv as the command. */
@@ -806,12 +809,13 @@ const UNREVIEWED = { ok: false, why: "no reviewer verdict was read" };
 /**
  * The whole decision. Returns the refusal reason, or null to let the call through.
  *
- * `deps.currentBranch`, `deps.permission`, `deps.verdict`, `deps.prBranch`, `deps.prHead`,
- * `deps.localHead`, `deps.revertOfTip` and `deps.prefix` are injected so the rules that depend on where
- * HEAD points, on what the board's thread says, on what the reviewer wrote, and on which
- * branch and commit a pull request carries can be tested without a repository or a board
- * standing in a particular state. Without `deps.permission` nothing is granted and without
- * `deps.verdict` the second door is shut: the hook's `judge()` is what reads both.
+ * `deps.currentBranch`, `deps.permission`, `deps.verdict`, `deps.posting`, `deps.prBranch`,
+ * `deps.prHead`, `deps.localHead`, `deps.revertOfTip` and `deps.prefix` are injected so the rules
+ * that depend on where HEAD points, on what the board's thread says, on what the reviewer wrote,
+ * and on which branch and commit a pull request carries can be tested without a repository or a
+ * board standing in a particular state. Without `deps.permission` nothing is granted, without
+ * `deps.verdict` the second door is shut, and without `deps.posting` the thread was not read, so
+ * a clarifying round waits and every other comment posts: the hook's `judge()` reads all three.
  */
 export function decide(input, deps = {}) {
   const dir = resolveDir(input);
@@ -823,6 +827,8 @@ export function decide(input, deps = {}) {
   const localHead = deps.localHead ?? (() => revAt("HEAD", dir));
   const revertOfTip = deps.revertOfTip ?? (() => revertOfTipAt(dir));
   const prefix = deps.prefix ?? (() => boardPrefix(dir));
+  const posting =
+    deps.posting ?? ((text) => unreadPost(kindOf(text, prefix()), "the thread was not read"));
   const tool = input?.tool_name;
 
   if (tool === "Edit" || tool === "Write") {
@@ -874,8 +880,15 @@ export function decide(input, deps = {}) {
   }
   if (connector === "create-comment") {
     const mark = prefix();
-    if (!commentText(input?.tool_input).startsWith(mark)) {
+    const text = commentText(input?.tool_input);
+    if (!text.startsWith(mark)) {
       return `Posting a comment is refused unless it begins with ${mark.trim()} — without it the thread reads it as your voice, and your voice is what grants merge, apply and ready. Compose it with scripts/run/comments.mjs. docs/guidelines.md §4.`;
+    }
+    // (h, T0.20) the thread says whether a comment of this kind may post: a clarifying round
+    // past the cap waits, and so does a second comment of a kind in one claim.
+    const allowed = posting(text);
+    if (!allowed.ok) {
+      return `Posting this ${allowed.kind ?? "unshaped"} comment is refused — ${allowed.why}. docs/guidelines.md §4.`;
     }
     return null;
   }
@@ -1006,9 +1019,19 @@ export async function judge(input, { dir = resolveDir(input), deps = {} } = {}) 
     // granted needs no verdict, and a verdict is never read for an apply.
     if (word === "merge" && !answers[word].ok) passed = reviewed({ dir, deps });
   }
+  // A comment is read against the thread of the page it names (T0.20).
+  const posted =
+    connectorTool(input) === "create-comment"
+      ? await postable(commentText(input?.tool_input), {
+          dir,
+          page: input?.tool_input?.page_id ?? null,
+          deps,
+        })
+      : null;
   return decide(input, {
     permission: (word) => answers[word] ?? UNREAD,
     verdict: () => passed ?? UNREVIEWED,
+    ...(posted ? { posting: () => posted } : {}),
     ...(deps.prBranch ? { prBranch: deps.prBranch } : {}),
     ...(deps.prHead ? { prHead: deps.prHead } : {}),
     ...(deps.localHead ? { localHead: deps.localHead } : {}),

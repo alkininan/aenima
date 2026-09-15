@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { compose } from "./comments.mjs";
 import { client } from "./notion.mjs";
 import { readBoardThreads, scan } from "./threads.mjs";
 
@@ -11,6 +12,7 @@ const row = (id, Name, Status) => ({ id, url: `https://n/${id}`, Name, Status })
 // command. Only tasks with a reply the pipeline has not answered come back, each with the
 // shape the words settle.
 describe("scan", () => {
+  const clarifying = compose("clarifying", { readings: ["x", "y"], fallback: "take x" }, P);
   const threads = {
     review: [c("print JSON instead", "2026-09-13T11:00:00Z")],
     merge: [c("Merge.", "2026-09-13T11:00:00Z")],
@@ -29,8 +31,10 @@ describe("scan", () => {
     ],
     capped: [
       c(`${P}I've stopped on x.`, "2026-09-13T08:00:00Z"),
-      c(`${P}clarify 1`, "2026-09-13T09:00:00Z"),
-      c(`${P}clarify 2`, "2026-09-13T10:00:00Z"),
+      c("a", "2026-09-13T08:30:00Z"),
+      c(clarifying, "2026-09-13T09:00:00Z"),
+      c("b", "2026-09-13T09:30:00Z"),
+      c(clarifying, "2026-09-13T10:00:00Z"),
       c("still unclear to me too", "2026-09-13T11:00:00Z"),
     ],
     // T0.17 TC3 → AC3: the human's go on a Backlog task.
@@ -81,9 +85,66 @@ describe("scan", () => {
     expect(migration.unanswered.map((x) => x.text)).toEqual(["apply"]);
     expect(migration.lastPipeline).toContain("adds a migration");
     expect(migration.migration).toBe(true);
-    expect(migration.mayPost).toBe(true);
-    expect(found.find((t) => t.id === "capped").mayPost).toBe(false);
+    expect(migration).toMatchObject({ clarifyingRounds: 0, mayClarify: true });
+    expect(found.find((t) => t.id === "capped")).toMatchObject({
+      clarifyingRounds: 2,
+      mayClarify: false,
+    });
     expect(found.find((t) => t.id === "review").Status).toBe("Review");
+  });
+
+  // T0.20 TC2 → AC2, as the preflight reads it: routine notices are not clarifying rounds.
+  it("leaves a thread of routine notices free for a clarifying round", async () => {
+    const notices = [
+      compose("waiting", { blockers: ["T3.1"] }, P),
+      compose("urgent", { count: 3 }, P),
+      compose("default", { gap: "The body is silent.", choice: "the first" }, P),
+      compose("gated", { paths: "scripts/run/x.mjs" }, P),
+      compose("stale", { date: "9 September", branch: null }, P),
+    ].map((text, i) => c(text, `2026-09-15T10:0${i}:00.000Z`));
+    const { threads: found } = await scan(
+      [row("busy", "T0.99 Busy", "Ready")],
+      async () => [...notices, c("which part is gated?", "2026-09-15T11:00:00.000Z")],
+      P,
+    );
+    expect(found[0]).toMatchObject({ clarifyingRounds: 0, mayClarify: true });
+  });
+
+  // T0.20 TC6 → AC6. T0.13's thread as the API returned it on 2026-09-15: a stop, the answer
+  // read as resolving, a default taken, then the human's merge and default with nothing after
+  // them — three pipeline comments, which the count by author read as two clarifying rounds.
+  it("reads T0.13's thread uncapped", async () => {
+    const t013 = [
+      c(
+        `${P}I've stopped on the Vercel step. Production's DATABASE_URL on Vercel still names the admin role, and only you can change it — this machine has no Vercel CLI and no login. Set the Production value to the aenima_pipeline string .env.local holds, redeploy, and reply here that it is done and that /app loads signed in; the next run then checks aeni.ma from the outside and writes the §5 line. If you say "default" I'll take that as done and go on to the check and the §5 line.`,
+        "2026-09-13T16:53:00.000Z",
+      ),
+      c("done — /app loads signed in", "2026-09-13T17:20:00.000Z"),
+      c(
+        `${P}Read that as the answer, thanks. The task is back at Ready and the next run picks it up from there.`,
+        "2026-09-14T12:45:00.000Z",
+      ),
+      c(
+        `${P}AC3 says the header goes to v1.6 with the change named, and v1.6 was taken by T0.11 while this task waited on the Vercel step, so the number the ticket names is already the one in the repo. A wrong guess here costs nothing to change, so I went with v1.7, the next number, with the change named in the header and kept going. Say the word if you'd rather something else.`,
+        "2026-09-14T15:30:00.000Z",
+      ),
+      c("merge", "2026-09-15T14:47:00.000Z"),
+      c("default", "2026-09-15T16:40:00.000Z"),
+    ];
+    const { threads: found } = await scan(
+      [
+        row(
+          "3da79daf-d42e-8114-8a24-d52f19d4ed8c",
+          "T0.13 Restrict Vercel's database role",
+          "Ready",
+        ),
+      ],
+      async () => t013,
+      P,
+    );
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({ clarifyingRounds: 0, mayClarify: true });
+    expect(found[0].unanswered.map((x) => x.text)).toEqual(["merge", "default"]);
   });
 
   it("does not read the word merge as a shape off a Review task", async () => {

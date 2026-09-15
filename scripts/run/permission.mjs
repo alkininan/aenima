@@ -15,6 +15,11 @@
  * on its thread. The run sets Ready in the preflight, before anything is claimed, so that word
  * is read on the page the status write names rather than through the marker.
  *
+ * Since T0.20 the guard asks one more thing of a page's thread before a comment posts
+ * (`postable`): whether a comment of that kind may post there now — the cap on clarifying
+ * rounds, and one comment of a kind per claim — which `mayPost` in `comments.mjs` says for
+ * the preflight as well.
+ *
  * Every `why` is a plain sentence the guard puts in its refusal, so a session that is
  * refused knows which of the things it needs was missing.
  */
@@ -26,7 +31,7 @@ import { join } from "node:path";
 
 import { STATE_FILE, treeFingerprint } from "../hooks/gate.mjs";
 import { emit, isMain } from "./cli.mjs";
-import { readThread, shapeOf } from "./comments.mjs";
+import { kindOf, mayPost, readThread, shapeOf } from "./comments.mjs";
 import { gatedDiffOf } from "./gated.mjs";
 import { commonDir } from "./repo.mjs";
 import { client, readBoard, readToken, TOKEN_VAR } from "./notion.mjs";
@@ -116,6 +121,59 @@ export async function verify(word, { dir = process.cwd(), page = null, deps = {}
     comment: ok ? thread.unanswered.at(-1) : null,
     task,
   };
+}
+
+/** A page id as the API and the marker may each write it: dashes and case aside. */
+const pageKey = (id) =>
+  String(id ?? "")
+    .replaceAll("-", "")
+    .toLowerCase();
+
+/**
+ * When the thread could not be read, a clarifying round waits — it is never urgent, and the cap
+ * is what it would pass — and every other comment posts: a report the guard cannot check is
+ * still a report the human should have (T0.20).
+ */
+export function unreadPost(kind, why) {
+  return kind === "clarifying"
+    ? { ok: false, why: `${why}, so the cap on clarifying rounds could not be read`, kind }
+    : { ok: true, why: null, kind };
+}
+
+/**
+ * `{ ok, why, kind }` for a comment of `text` on `page` (T0.20): the kind its words carry, read
+ * against the page's thread by `mayPost` — the cap on clarifying rounds, and one comment of a
+ * kind per claim, the claim being the marker's when it names this page. Never throws: a board
+ * it cannot read is `unreadPost`. Effects injected: `marker`, `token`, `board`, `comments`.
+ */
+export async function postable(text, { dir = process.cwd(), page = null, deps = {} } = {}) {
+  let board;
+  try {
+    board = deps.board ? deps.board() : readBoard(dir);
+  } catch (error) {
+    return unreadPost(null, `the board file could not be read (${error.message})`);
+  }
+  const prefix = board.prefix ?? "⟡ ";
+  const kind = kindOf(text, prefix);
+  if (!String(text ?? "").startsWith(prefix)) return { ok: true, why: null, kind };
+  if (!page) return unreadPost(kind, "no page was named");
+
+  const token = deps.token ? deps.token() : readToken(dir);
+  if (token === null) return unreadPost(kind, `${TOKEN_VAR} is not in .env.local`);
+
+  let comments;
+  try {
+    comments = deps.comments
+      ? await deps.comments(page)
+      : await client(token, { fetch: deps.fetch }).comments(page);
+  } catch (error) {
+    return unreadPost(kind, `the thread could not be read: ${error.message}`);
+  }
+
+  const marker = deps.marker ? deps.marker() : readMarker(dir);
+  const since =
+    marker !== null && pageKey(marker.page) === pageKey(page) ? (marker.started ?? null) : null;
+  return { ...mayPost(readThread(comments, prefix), kind, { since }), kind };
 }
 
 /** Where the reviewer writes its verdict, one file per ticket (T0.16). */

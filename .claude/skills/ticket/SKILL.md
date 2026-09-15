@@ -27,7 +27,13 @@ Kinds: `decision` (stopped, gap, fallback) · `clarifying` (readings, fallback) 
 (file) · `stale` (date, branch or null) · `default` (gap, choice) · `change` · `newWork` (name,
 url) · `merged` (commit) · `applied` (file) · `noted` · `setup` (step, where) · `resolved` ·
 `gated` (paths) · `reverted` (failed, merge, commit, name, url) · `readied` · `waiting` (blockers) ·
-`cycle` (members) · `urgent` (count).
+`cycle` (members) · `urgent` (count) · `refused` (what, why, files, settle).
+A comment carries its kind in its own words, and the guard reads it against the thread before
+the comment posts: a third clarifying round on one question waits, and so does a second comment
+of one kind in one claim — say every default a claim takes in its one `default` comment. Every
+other comment posts, cap or no cap. A step the guard let through that fails anyway always
+reports, as one `refused` comment: what was refused, why, the files in the way, what would
+settle it.
 Never set a task to Ready without a human comment that asks for it — an answer that resolves a
 question, a change request at Review, or `ready` on a Backlog task. The guard reads that last one
 from the board before the connector's write goes through, and it refuses any comment you post
@@ -64,9 +70,10 @@ marker besides, so a claim made in error here stops rather than clobbers.)
 `token: false` means `NOTION_TOKEN` is not in `.env.local`: say so in your report line and go
 on to c — nothing else reads comments. Otherwise each `threads` entry is a task with a human
 reply newer than the pipeline's last ⟡ comment, with its `Status`, the `unanswered` replies,
-`mayPost`, and `shape`. Give each task **exactly one** assessment, and end it with one ⟡
-comment on that task — except where `mayPost` is false: two clarifying rounds is the cap;
-keep reading, post nothing.
+`clarifyingRounds`, `mayClarify`, and `shape`. Give each task **exactly one** assessment, and
+end it with one ⟡ comment on that task. The cap withholds one comment only: where `mayClarify`
+is false and your assessment is a clarifying round, two clarifying rounds on that question is
+the cap — keep reading, post nothing. Every other assessment posts its comment, cap or no cap.
 
 - `shape: merge` (Review, the newest reply begins with *merge*). Claim it so the guard knows
   the task — `node scripts/run/claim.mjs --task <id> --page <page id> --branch t<id>` — then
@@ -74,8 +81,11 @@ keep reading, post nothing.
       gh pr merge t<id> --merge
 
   The guard reads the thread itself before it lets that through; if it refuses, the reason
-  says which of the four things was missing — quote it in your report and post nothing. On
-  success post one `merged` comment with the merge commit's short hash. Either way, then:
+  says which of the four things was missing — quote it in your report and post nothing. If
+  the guard lets it through and GitHub refuses — the pull request no longer merges cleanly —
+  run `node scripts/run/conflicts.mjs t<id>` and post one `refused` comment: `files` its
+  `files`, and `settle` what would settle them; the task stays at Review. On success post one
+  `merged` comment with the merge commit's short hash. Any of the three, then:
   `node scripts/run/release.mjs`. Step c fetches, sets Done and writes the Release row; the
   remote branch is left for GitHub's own deletion and the worktree for `prune.mjs`.
 - `shape: apply` (Decision waiting on a migration, the newest reply begins with *apply*). Only
@@ -84,7 +94,9 @@ keep reading, post nothing.
   check the ticket's branch out — `node scripts/run/branch.mjs <id>` reuses origin's copy,
   which is where the migration file is; the primary sits on `main` until then — and only then
   `pnpm db:migrate`; the guard reads the thread first. If it refuses, release the marker and
-  post nothing. On success post one `applied` comment naming the file, set the task
+  post nothing. If the guard lets it through and the migration itself fails, post one
+  `refused` comment with the error's first line and what would settle it, release the marker,
+  and leave the task at Decision. On success post one `applied` comment naming the file, set the task
   `In progress`, and continue from step 1's marker with this task: skip the pick, step 3 is
   already done, and the ticket carries on from where it stopped.
 - `shape: ready` (Backlog, the newest reply begins with *ready*). Set the task `Ready` through
@@ -244,6 +256,8 @@ worktree Desktop made for it; it stays on its branch and the next run's step 0 r
 worktree once the branch is merged. `reused` true means the branch was already on origin —
 an addendum round, or a ticket continuing after its migration was applied — and the pull
 request is already open: build on it, and step 9 pushes to it rather than opening another.
+`ok: false` means the claim cannot go on: post one `refused` comment with its `detail` and what
+would settle it, release the marker, set `Decision`, and exit.
 
 ## 4 Build
 

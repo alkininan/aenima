@@ -21,9 +21,13 @@ command: `threads.mjs` queries every task and every task's comments over the Not
 through `notion.mjs` — the integration token in `.env.local`, never the connector, so forty
 tasks cost forty requests rather than forty model turns — and returns the tasks with a human
 reply newer than the pipeline's last prefixed comment, each with its status, the replies,
-whether the two-round cap still allows a post, and the shape the words settle. `comments.mjs`
-holds that reading: the prefixed comments are the pipeline's and everything else is the
-human's; `mentions` says whether a reply *begins* with a word, `permitted` whether the human's
+how many clarifying rounds the open question has had and whether another may post, and the
+shape the words settle. `comments.mjs` holds that reading: the prefixed comments are the
+pipeline's and everything else is the human's; since T0.20 each of the pipeline's comments
+carries its kind in its own words, read back by `kindOf`, so the two-round cap counts the
+clarifying rounds on one question and nothing else, and `mayPost` — the one place that says
+whether a comment of a kind may post, the preflight asking it for a clarifying round and the
+guard, over the API, for every comment — lets every other kind through, once per claim; `mentions` says whether a reply *begins* with a word, `permitted` whether the human's
 `merge`, `apply` or `ready` is on the thread newer than the pipeline's last comment, and
 `shapeOf` names the three countable shapes — `merge` on a task at Review, `apply` on a Decision
 waiting on a migration, `ready` on a task at Backlog, which the run sets Ready through the
@@ -31,8 +35,10 @@ connector only once the guard has read the word there too (T0.17) — leaving `a
 skill: a change to the ticket, new work, an answer that resolves a question, a note, or a
 clarifying round. The same script composes every comment the run posts — decision, clarifying,
 migration, stale, default, change, newWork, merged, applied, noted, setup, resolved, gated,
-reverted, readied, waiting, cycle, urgent — in plain sentences with the prefix, from the
-sentences the skill supplies. `merge-detect.mjs` takes the Review tasks with their commits and asks `git
+reverted, readied, waiting, cycle, urgent, refused — in plain sentences with the prefix, from the
+sentences the skill supplies; a merge the guard let through and GitHub refused posts its
+`refused` comment with the files `conflicts.mjs` names, from `git merge-tree` against
+`origin/main`. `merge-detect.mjs` takes the Review tasks with their commits and asks `git
 merge-base --is-ancestor` against `origin/main` after a fetch, which is the only honest test of
 "merged" — whether the human merged by hand or a run merged on the human's word a moment
 earlier; every task it returns
