@@ -394,7 +394,8 @@ below is a script under `scripts/run/` with a test; the skill holds the judgment
                 it is for the next run's step 0
 4  Build        smallest complete implementation · stop only when a wrong guess is expensive
                 (§4), otherwise take the default and say so — every default of the claim in its
-                one comment, posted when the claim stops or closes · new logic has tests observed
+                one comment, posted when the claim stops or closes, before the marker is
+                released · new logic has tests observed
                 failing first, the mutation and the count recorded per test
 5  Review       reviewer subagent, fresh context, reads the ticket file and the diff, not the
                 author's summary · runs only the tests the ticket names plus the test files the

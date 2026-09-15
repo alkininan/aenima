@@ -44,6 +44,29 @@ export function conflictsOf(head, run, base = "origin/main") {
   };
 }
 
+/**
+ * `branch` as origin has it against `origin/main`, fetched first: a merge refused a moment ago
+ * met the main GitHub holds, and a stale copy could name nothing (review pass 2, Should 6).
+ */
+export function conflictsFor(branch, run) {
+  const fetched = run(["fetch", "--quiet", "origin"]);
+  if (fetched.status !== 0) {
+    const said =
+      String(fetched.stderr ?? "")
+        .trim()
+        .split("\n")[0] || `exit ${fetched.status}`;
+    return {
+      ok: false,
+      head: `origin/${branch}`,
+      base: "origin/main",
+      clean: false,
+      files: [],
+      why: `git fetch origin failed, so origin/main may not be the main GitHub refused against: ${said}`,
+    };
+  }
+  return conflictsOf(`origin/${branch}`, run);
+}
+
 /** CLI: `node conflicts.mjs <branch>` — the branch as origin has it, against origin/main. */
 async function main() {
   const branch = process.argv[2];
@@ -51,9 +74,7 @@ async function main() {
     process.stderr.write("usage: conflicts.mjs <branch>\n");
     process.exit(1);
   }
-  const run = defaultRunner(process.cwd());
-  run(["fetch", "--quiet", "origin"]);
-  emit(conflictsOf(`origin/${branch}`, run));
+  emit(conflictsFor(branch, defaultRunner(process.cwd())));
 }
 
 if (isMain(import.meta.url)) await main();

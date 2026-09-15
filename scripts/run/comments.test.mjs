@@ -209,6 +209,17 @@ describe("kindOf", () => {
     expect(kindOf("", P)).toBeNull();
   });
 
+  // T0.20 Build 2 (review pass 2, Should 4): a claim's one default comment may list its choices
+  // on lines of their own.
+  it("reads a default whose choice runs over several lines", () => {
+    const listed = compose(
+      "default",
+      { gap: "The ticket is silent on three things.", choice: "these:\n- one\n- two\n- three" },
+      P,
+    );
+    expect(kindOf(listed, P)).toBe("default");
+  });
+
   // T0.20 Build 2 (review pass 1, Should 8): a refusal quoting another kind's words is still a
   // refusal — the signatures a caller's words could reach are anchored at both ends.
   it("reads a refusal as a refusal when its reason quotes a loop or a default", () => {
@@ -647,6 +658,27 @@ describe("shapeOf and awaitingMigration", () => {
         ]),
       ),
     ).toBe("assess");
+  });
+
+  // T0.20 TC3 → AC3 (review pass 2, Must 2): an apply that failed says so, and the question it
+  // answered is still the migration's — the human's next apply is still the word.
+  it("is apply again after a refusal reported the failed apply", () => {
+    const again = thread(
+      timeline(
+        said("migration"),
+        "apply",
+        said("refused", {
+          what: "Applying drizzle/0013_activity_trigger.sql",
+          why: "Postgres answered: relation activity already exists",
+          settle: "Say apply once the table is settled",
+        }),
+        "apply",
+      ),
+    );
+    expect(awaitingMigration(again)).toBe(true);
+    expect(shapeOf("Decision", again)).toBe("apply");
+    const refusedAlone = thread(timeline(said("refused"), "apply"));
+    expect(shapeOf("Decision", refusedAlone)).toBe("assess");
   });
 
   it("is assess with nothing unanswered, and assess when the newest reply takes the word back", () => {

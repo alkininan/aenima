@@ -162,9 +162,13 @@ export function permitted(word, comments = [], prefix = "⟡ ") {
 /** The sentence every migration comment carries, which is how a thread says it waits on one. */
 export const MIGRATION_PHRASE = "This change adds a migration";
 
-/** True when the pipeline's last comment on the thread is the migration question. */
+/**
+ * True when the pipeline's last comment on the thread is the migration question — reading past
+ * a refusal, which reports an apply that failed and leaves the question standing (T0.20).
+ */
 export function awaitingMigration(thread) {
-  return String(thread?.pipeline?.at(-1)?.text ?? "").includes(MIGRATION_PHRASE);
+  const asked = (thread?.pipeline ?? []).findLast((comment) => comment.kind !== "refused");
+  return String(asked?.text ?? "").includes(MIGRATION_PHRASE);
 }
 
 /**
@@ -221,7 +225,7 @@ const SIGNATURES = [
   ["stale", /^This run stopped partway on /],
   [
     "default",
-    / A wrong guess here costs nothing to change, so I went with .+ and kept going\. Say the word if you'd rather something else\.$/,
+    / A wrong guess here costs nothing to change, so I went with [\s\S]+ and kept going\. Say the word if you'd rather something else\.$/,
   ],
   ["change", /^I've read that as a change to this ticket and folded it into the body /],
   ["newWork", /^I've read that as new work rather than a change to this ticket, /],

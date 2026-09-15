@@ -211,9 +211,6 @@ describe("verify", () => {
   });
 });
 
-// T0.16 TC2 → AC2 and TC3 → AC3. The guard's second door: `gh pr merge` is also allowed when
-// the claimed task's reviewer verdict is on file and ends in PASS, and the diff against
-// origin/main touches no gated path. Both are read in code; neither is the model's claim.
 // T0.20 TC1 → AC1, where the board is not read: a clarifying round waits, and every other
 // comment posts, whichever of the board file, the token, the page or the API was missing.
 describe("postable", () => {
@@ -250,6 +247,9 @@ describe("postable", () => {
   });
 });
 
+// T0.16 TC2 → AC2 and TC3 → AC3. The guard's second door: `gh pr merge` is also allowed when
+// the claimed task's reviewer verdict is on file and ends in PASS, and the diff against
+// origin/main touches no gated path. Both are read in code; neither is the model's claim.
 describe("reviewed", () => {
   const passing = () => "# T0.16 — review\n\nFindings: none.\n\nPASS\n";
   const clean = () => ({ files: ["src/a.ts"], gated: [], ok: true });

@@ -266,14 +266,15 @@ Plan first. Then the smallest complete implementation that satisfies the Criteri
 **Where the ticket is silent, stop only when a wrong guess is expensive to undo** (§4). A choice
 is expensive if it touches the database schema or stored data, a public surface — a route, copy
 a product user sees, an API shape — or would need a spec to record it. Then commit what you
-have and push the branch (`git push -u origin <branch>`) so the next run finds it, release the
-marker (`node scripts/run/release.mjs`), post one `decision` comment, set `Decision`, and
+have and push the branch (`git push -u origin <branch>`) so the next run finds it, post one
+`decision` comment, release the marker (`node scripts/run/release.mjs`), set `Decision`, and
 exit. Everything else: take the stated default and keep building, and say it in the claim's
 one `default` comment — every default the claim takes, what you chose and why you could pick
 alone. Hold that comment until the claim's defaults are all in: post it before the `decision`
-or `migration` comment when the claim stops, or at close before `release.mjs`. The guard lets
-one comment of a kind through per claim, so a second `default` is refused and never reaches the
-thread. A step only a human can do — a
+or `migration` comment when the claim stops, or at close before `release.mjs`. Every comment of
+a claim goes up while the marker still names it: the guard lets one comment of a kind through
+per claim, reading the claim from the marker, so a second `default` is refused and never reaches
+the thread. A step only a human can do — a
 credential to create, a page to share — is not a guess: finish everything that does not need
 it, and say exactly where it goes in one `setup` comment at close.
 
@@ -301,9 +302,9 @@ Type `Fix`, the same Epic, body headed `Drafted by pipeline`.
 
     node scripts/run/migration-check.mjs
 
-`waiting: true` → write the Report so far, commit and push the branch, release the marker
-(`node scripts/run/release.mjs`), set `Decision`, post one `migration` comment naming the
-file, and exit. The credential this run holds cannot apply a migration, and the guard refuses
+`waiting: true` → write the Report so far, commit and push the branch, post the claim's
+`default` comment if it holds one and one `migration` comment naming the file, release the
+marker (`node scripts/run/release.mjs`), set `Decision`, and exit. The credential this run holds cannot apply a migration, and the guard refuses
 the command until it has itself read the word *apply* from you on this task's thread. The
 human answers with that one word; the next run in the primary checkout applies it (step 0a)
 and carries the ticket on from here.
@@ -366,7 +367,11 @@ The guard opens its second door on its own reading — the verdict file, the gat
 this tree, the diff, and the pull request's head being this checkout's HEAD — and refuses with
 the reason otherwise; a refusal
 here means the task stays at `Review` with that reason in the report and no comment, and
-`git checkout -B <branch> origin/<branch>` puts the local branch back. Detach and drop the
+`git checkout -B <branch> origin/<branch>` puts the local branch back. If the guard lets it
+through and GitHub refuses — main moved and the pull request no longer merges cleanly — run
+`node scripts/run/conflicts.mjs <branch>` and post one `refused` comment before `release.mjs`:
+`files` its `files`, `settle` what would settle them. The task stays at `Review`, and the same
+`git checkout -B` puts the local branch back. Detach and drop the
 local branch first: gh's `--delete-branch` asks which branch is checked out only while a local
 copy of the pull request's branch exists, and on a detached HEAD that question fails after the
 merge has already landed; with no local copy gh goes straight on to delete the remote one. The

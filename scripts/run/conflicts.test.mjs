@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { conflictsOf } from "./conflicts.mjs";
+import { conflictsFor, conflictsOf } from "./conflicts.mjs";
 import { defaultRunner } from "./merge-detect.mjs";
 
 // T0.20 TC3 → AC3, the files' half: a merge GitHub refused says which files stand in the way.
@@ -67,6 +67,15 @@ describe("conflictsOf over a temporary repository", () => {
 
   it("says a branch that merges cleanly has no files in the way", () => {
     expect(conflictsOf("t9-2", run, "main")).toMatchObject({ ok: true, clean: true, files: [] });
+  });
+
+  // T0.20 TC3 → AC3 (review pass 2, Should 6): against an origin/main that could not be
+  // fetched, "no conflicts" would be a guess.
+  it("says so, rather than naming nothing, when origin could not be fetched", () => {
+    const result = conflictsFor("t9-1", run);
+    expect(result.ok).toBe(false);
+    expect(result.files).toEqual([]);
+    expect(result.why).toContain("fetch");
   });
 
   it("says so, rather than naming nothing, when a ref is not there", () => {
