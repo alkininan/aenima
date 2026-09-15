@@ -1,4 +1,8 @@
-<!-- guidelines.md · v1.11 · in the repo · the cap counts clarifying rounds: §4 the cap per
+<!-- guidelines.md · v1.12 · in the repo · the boundary reaches production: §5 Vercel's Production
+     DATABASE_URL is aenima_pipeline too, so the admin credential is on no path at all — not a
+     run's, not the deployed app's — and .env.migrate in the primary checkout is its only home.
+     This change held v1.7 on its branch while it waited; that number never reached main.
+     v1.11 · in the repo · the cap counts clarifying rounds: §4 the cap per
      question, the kinds it never counts, a refusal that always reports, one comment of a kind
      per claim, and the guard reading all of it before a comment posts.
      v1.10 · in the repo · every run leaves a Runs row and the mirrors keep up: §2
@@ -526,13 +530,16 @@ connection as it: it reads and writes every row, bypasses RLS as the app's direc
 always has, cannot create, alter or own anything, and cannot reach the `drizzle` schema. Every
 script, test, dev server and run — human or scheduled — uses it. `.env.migrate` holds the admin
 URL; only `pnpm db:migrate` and `pnpm db:baseline` read it, it is gitignored, and
-`.worktreeinclude` does not carry it. So the credential a run is handed cannot change schema, and
-the admin credential is on no path a run follows. That is a real boundary and not a wall: a
-session in a worktree can read any file on the disk, the primary checkout's `.env.migrate`
-included, if it goes looking. The guard's rule (b) stays as the second layer for exactly that
-reason. Deploys: there is no Vercel CLI on the machine and no login to it; production deploys
-come from `main` through the Vercel Git integration, and the guard's rule (c) stays as the
-second layer there too. The role is created once per project, in the Supabase SQL editor:
+`.worktreeinclude` does not carry it. So the credential a run is handed cannot change schema.
+Production is the same role: Vercel's Production `DATABASE_URL` names `aenima_pipeline`, set by
+hand and redeployed on 2026-09-13 (T0.13), so the admin credential is on no path at all — not a
+run's and not the deployed app's — and `.env.migrate` in the primary checkout is its only home.
+That is a real boundary and not a wall: a session in a worktree can read any file on the
+disk, the primary checkout's `.env.migrate` included, if it goes looking. The guard's rule (b)
+stays as the second layer for exactly that reason. Deploys: there is no Vercel CLI on the machine
+and no login to it, which is also why the production variable is the human's to set; production
+deploys come from `main` through the Vercel Git integration, and the guard's rule (c) stays as
+the second layer there too. The role is created once per project, in the Supabase SQL editor:
 
 ```sql
 create role aenima_pipeline login password '…';   -- the password lives only in .env.local
