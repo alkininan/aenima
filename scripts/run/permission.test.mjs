@@ -1,11 +1,11 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { claim } from "./claim.mjs";
-import { verify } from "./permission.mjs";
+import { reviewed, verdictOf, verify } from "./permission.mjs";
 
 const P = "⟡ ";
 const c = (text, created_time) => ({ text, created_time });
@@ -138,7 +138,47 @@ describe("verify", () => {
     expect(result.why).toContain("answered 403");
   });
 
-  it("grants only the two words the board can say", async () => {
+  // T0.17 TC3 → AC3. "ready" is read on the page the status write names — the preflight sets
+  // Ready before anything is claimed, so there is no marker to find it through — and only at
+  // Backlog, the one move it is for.
+  it("grants ready on the page the write names, at Backlog, with no marker", async () => {
+    const backlog = async (id) => ({ Name: `T3.1 page ${id}`, Status: "Backlog" });
+    const seen = [];
+    const deps = stub([c("ready", "2026-09-13T11:00:00Z")], {
+      marker: () => null,
+      page: async (id) => {
+        seen.push(id);
+        return backlog(id);
+      },
+    });
+    const result = await verify("ready", { page: "page-9", deps });
+    expect(result.ok).toBe(true);
+    expect(seen).toEqual(["page-9"]);
+    expect(result.task).toEqual({ name: "T3.1 page page-9", status: "Backlog", branch: "t3-1" });
+  });
+
+  it("refuses ready from the pipeline's own comment, at a state it is not for, or with no page named", async () => {
+    const backlog = async () => ({ Name: "T3.1 Slice", Status: "Backlog" });
+    const own = await verify("ready", {
+      page: "p",
+      deps: stub([c(`${P}ready`, "2026-09-13T11:00:00Z")], { page: backlog }),
+    });
+    expect(own.ok).toBe(false);
+    expect(own.why).toContain('"ready" is the word for a task at Backlog');
+    const decision = await verify("ready", {
+      page: "p",
+      deps: stub([c("ready", "2026-09-13T11:00:00Z")], {
+        page: async () => ({ Name: "T3.1 Slice", Status: "Decision" }),
+      }),
+    });
+    expect(decision.ok).toBe(false);
+    expect(decision.task.status).toBe("Decision");
+    const nowhere = await verify("ready", { deps: stub([c("ready", "2026-09-13T11:00:00Z")]) });
+    expect(nowhere.ok).toBe(false);
+    expect(nowhere.why).toContain("no page");
+  });
+
+  it("grants only the three words the board can say", async () => {
     const result = await verify("deploy", { deps: stub([]) });
     expect(result.ok).toBe(false);
     expect(result.why).toContain("not a word the board grants");
@@ -167,5 +207,85 @@ describe("verify", () => {
       expect(result.ok).toBe(true);
       expect(result.task.branch).toBe("t0-11");
     });
+  });
+});
+
+// T0.16 TC2 → AC2 and TC3 → AC3. The guard's second door: `gh pr merge` is also allowed when
+// the claimed task's reviewer verdict is on file and ends in PASS, and the diff against
+// origin/main touches no gated path. Both are read in code; neither is the model's claim.
+describe("reviewed", () => {
+  const passing = () => "# T0.16 — review\n\nFindings: none.\n\nPASS\n";
+  const clean = () => ({ files: ["src/a.ts"], gated: [], ok: true });
+  const green = () => ({ green: "h1", tree: "h1" });
+  const deps = (extra = {}) => ({ marker, verdict: passing, diff: clean, gate: green, ...extra });
+
+  it("opens on a PASS verdict for the marker's task over a diff with nothing gated", () => {
+    const result = reviewed({ deps: deps() });
+    expect(result.ok).toBe(true);
+    expect(result.task).toEqual({ name: "T0.11", branch: "t0-11" });
+    expect(result.gated).toEqual([]);
+  });
+
+  it("refuses without a marker — no claimed task, no verdict to look for", () => {
+    const result = reviewed({ deps: deps({ marker: () => null }) });
+    expect(result.ok).toBe(false);
+    expect(result.why).toContain("no run marker");
+  });
+
+  it("refuses when the verdict file is not there, naming where it looked", () => {
+    const result = reviewed({ deps: deps({ verdict: () => null }) });
+    expect(result.ok).toBe(false);
+    expect(result.why).toContain("docs/reviews/T0.11.md");
+  });
+
+  it("refuses a verdict that does not end in PASS — findings, or a PASS buried mid-file", () => {
+    const findings = reviewed({ deps: deps({ verdict: () => "FINDINGS\n1. Must — x\n" }) });
+    expect(findings.ok).toBe(false);
+    expect(findings.why).toContain("rather than PASS");
+    const buried = reviewed({ deps: deps({ verdict: () => "PASS\n\nbut also this\n" }) });
+    expect(buried.ok).toBe(false);
+    const empty = reviewed({ deps: deps({ verdict: () => "" }) });
+    expect(empty.ok).toBe(false);
+  });
+
+  it("refuses a diff on a gated path even with the PASS, and names the path", () => {
+    const gated = () => ({
+      files: ["scripts/hooks/guard.mjs"],
+      gated: ["scripts/hooks/guard.mjs"],
+      ok: false,
+    });
+    const result = reviewed({ deps: deps({ diff: gated }) });
+    expect(result.ok).toBe(false);
+    expect(result.why).toContain("scripts/hooks/guard.mjs");
+    expect(result.why).toContain("your word");
+  });
+
+  it("refuses while the Stop gate's last green is not this tree, naming both", () => {
+    const stale = reviewed({
+      deps: deps({ gate: () => ({ green: "aaaaaaa1", tree: "bbbbbbb2" }) }),
+    });
+    expect(stale.ok).toBe(false);
+    expect(stale.why).toContain("aaaaaaa");
+    expect(stale.why).toContain("bbbbbbb");
+    const never = reviewed({ deps: deps({ gate: () => ({ green: null, tree: "bbbbbbb2" }) }) });
+    expect(never.ok).toBe(false);
+    expect(never.why).toContain("none");
+  });
+
+  it("reads the verdict from docs/reviews/<id>.md in the checkout, and the last non-blank line is the verdict", () => {
+    expect(verdictOf("a\nPASS\n\n  \n")).toBe("PASS");
+    expect(verdictOf("PASS\nFINDINGS")).toBe("FINDINGS");
+    expect(verdictOf("")).toBeNull();
+    const dir = mkdtempSync(join(tmpdir(), "aenima-verdict-"));
+    try {
+      mkdirSync(join(dir, "docs", "reviews"), { recursive: true });
+      writeFileSync(join(dir, "docs", "reviews", "T0.11.md"), "reviewed\nPASS\n");
+      const result = reviewed({ dir, deps: { marker, diff: clean, gate: green } });
+      expect(result.ok).toBe(true);
+      // Outside a repository there is no gate record: shut.
+      expect(reviewed({ dir, deps: { marker, diff: clean } }).why).toContain("Stop gate");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

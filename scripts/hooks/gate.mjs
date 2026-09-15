@@ -153,7 +153,7 @@ function git(args, cwd) {
  * what is in them, so two different edits to one file would fingerprint identically and
  * the second would inherit the first one's green.
  */
-function treeFingerprint(dir) {
+export function treeFingerprint(dir) {
   const hash = createHash("sha256");
   hash.update(git(["rev-parse", "HEAD"], dir).trim());
 

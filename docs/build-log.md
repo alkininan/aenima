@@ -77,8 +77,12 @@ One file per ticket under `docs/log/`, oldest first. This list is written by `no
 - [T0.97 — Smoke C: plain sentences, a default taken, the first stale-run recovery](log/T0.97.md) · 2026-09-09 · `df9b0a6`
 - [T0.96 — Smoke D: a package script and its test, on the schedule](log/T0.96.md) · 2026-09-13
 - [T0.10 — Schedule: nobody types /ticket](log/T0.10.md) · 2026-09-13
+- [T0.14 — Ignore worktrees in lint](log/T0.14.md) · 2026-09-13
 - [T0.11 — Comments: a comment on the board is enough](log/T0.11.md) · 2026-09-13
+- [T2.8 — Sufficiency probes](log/T2.8.md) · 2026-09-14
 - [T0.12 — Telemetry and mirror: every run leaves a row, the mirrors keep up](log/T0.12.md) · 2026-09-14
+- [T0.16 — Self-merge: a finished ticket merges itself](log/T0.16.md) · 2026-09-14
+- [T0.17 — Linear ordering](log/T0.17.md) · 2026-09-15
 
 ## Decisions made during the build
 
@@ -1018,9 +1022,12 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
     re-baseline.** Telling the scorer to quote whole sentences, or to quote without markdown
     syntax, costs a `PROTOCOL_VERSION` move and invalidates §5's cache for every stored run — the
     same arithmetic as open question 23, and the same conclusion: pay it once, inside the ticket
-    that was re-scoring anyway. **T2.8 is that ticket.** Until then the rate is 1 run in 12 on a
-    document with 21 bold spans, and it scales with emphasis density, so a denser document is
-    worse.
+    that was re-scoring anyway. **T2.8 was that ticket and did not carry it**: its body named
+    probes only, and the question was read after its eleven runs had been paid for, so a second
+    fingerprint move would have orphaned the measurement (docs/reports/T2.8.md open question 5).
+    It rides with the next ticket that moves `PROTOCOL_VERSION`. Until then the rate is 1 run in
+    12 on a document with 21 bold spans, and it scales with emphasis density, so a denser
+    document is worse.
 
     One thing this investigation did fix, because it was a false accept rather than a false
     reject: reading the rejection showed the italic rule pairing the *leftovers* of a bold run that

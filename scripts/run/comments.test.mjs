@@ -160,7 +160,22 @@ describe("compose", () => {
       where: "Its token goes in .env.local as NOTION_TOKEN.",
     },
     resolved: {},
+    gated: { paths: "scripts/hooks/guard.mjs and .claude/settings.json" },
+    reverted: {
+      failed: "/sign-in answered 500 and /app answered 200",
+      merge: "9c1d2e3",
+      commit: "a1b2c3d",
+      name: "Fix the sign-in page after T0.16",
+      url: "https://www.notion.so/xyz",
+    },
+    readied: {},
+    waiting: { blockers: ["T3.1"] },
+    cycle: { members: ["T3.1", "T3.2"] },
+    urgent: { count: 3 },
   };
+
+  /** The Urgent notice is the ticket's own sentence, one of it (T0.17 item 7). */
+  const ONE_SENTENCE = new Set(["urgent"]);
 
   it("has a fixture for every kind, so a kind added without a voice is caught here", () => {
     expect(Object.keys(all).sort()).toEqual([...KINDS].sort());
@@ -173,7 +188,7 @@ describe("compose", () => {
       expect(text, kind).not.toMatch(/\n/);
       expect(text, kind).not.toMatch(/\b(Question|Where|Default)\s{2,}/);
       const count = sentences(text).length;
-      expect(count, `${kind}: ${text}`).toBeGreaterThanOrEqual(2);
+      expect(count, `${kind}: ${text}`).toBeGreaterThanOrEqual(ONE_SENTENCE.has(kind) ? 1 : 2);
       expect(count, `${kind}: ${text}`).toBeLessThanOrEqual(4);
       expect(readThread([c(text, "2026-09-01T10:00:00Z")], P).pipeline).toHaveLength(1);
     }
@@ -235,6 +250,18 @@ describe("compose", () => {
     );
   });
 
+  // T0.16 TC3 → AC3 and TC5 → AC5. A gated diff stays at Review and says which path waits for
+  // the word; a merge whose deploy failed says what failed, what was reverted, and where the
+  // fix was filed.
+  it("names the gated path that waits for the word, and the merge that was reverted", () => {
+    expect(compose("gated", all.gated, P)).toBe(
+      `${P}This ticket is built, reviewed and green, but the diff touches scripts/hooks/guard.mjs and .claude/settings.json, which is a path only your word merges — the pipeline's own boundary, a migration or the product spec. It stays at Review; say "merge" here and the next run lands it with a merge commit.`,
+    );
+    expect(compose("reverted", all.reverted, P)).toBe(
+      `${P}The deploy check after this merge failed: /sign-in answered 500 and /app answered 200. I've reverted the merge commit 9c1d2e3 on main as a1b2c3d and put this task back at Backlog. The fix is filed as its own task: Fix the sign-in page after T0.16 (https://www.notion.so/xyz).`,
+    );
+  });
+
   // Review pass 3, Must 3: a Decision answer that sets Ready needs its own ⟡ comment too, or
   // every later run reads the same answer as unanswered.
   it("says an answer was read as the answer, so the reply is not assessed twice", () => {
@@ -249,6 +276,44 @@ describe("compose", () => {
     );
     expect(compose("setup", all.setup, P)).toBe(
       `${P}I've stopped on a step only you can do: a Notion internal integration. Its token goes in .env.local as NOTION_TOKEN. Say "done" on this thread once it's in place and the next run carries on.`,
+    );
+  });
+
+  // T0.17 TC3 → AC3. A human's "ready" on a Backlog task, done, with the one comment that
+  // consumes the word.
+  it("says the task is Ready on the human's word", () => {
+    expect(compose("readied", {}, P)).toBe(
+      `${P}Read that as your go, so the task is Ready. A run picks it up in its turn.`,
+    );
+  });
+
+  // T0.17 TC2 → AC2 and TC5 → AC5. A skipped task says why, in words: the blocker that isn't
+  // Ready, or the loop no run can pick through.
+  it("says which blockers a skipped task waits on, one or several", () => {
+    expect(compose("waiting", all.waiting, P)).toBe(
+      `${P}This task is waiting on T3.1, which isn't Ready, so runs pass it by for now. Set it Ready or take it out of Blockers, and this task is picked up in its turn.`,
+    );
+    expect(compose("waiting", { blockers: ["T3.1", "T3.2", "Draft the probes"] }, P)).toBe(
+      `${P}This task is waiting on T3.1, T3.2 and Draft the probes, which aren't Ready, so runs pass it by for now. Set them Ready or take them out of Blockers, and this task is picked up in its turn.`,
+    );
+  });
+
+  it("names the members of a cycle, two, several, or a task that lists itself", () => {
+    expect(compose("cycle", all.cycle, P)).toBe(
+      `${P}T3.1 and T3.2 are each waiting on the other in Blockers, so no run can pick either. Take one out of the other's Blockers and both are picked up in their turn.`,
+    );
+    expect(compose("cycle", { members: ["T3.1", "T3.2", "T3.3"] }, P)).toBe(
+      `${P}T3.1, T3.2 and T3.3 wait on each other in a loop through Blockers, so no run can pick any of them. Take one link out of the loop and they are picked up in their turn.`,
+    );
+    expect(compose("cycle", { members: ["T3.1"] }, P)).toBe(
+      `${P}This task lists itself in its own Blockers, so no run can pick it. Take it out and it is picked up in its turn.`,
+    );
+  });
+
+  // T0.17 TC4 → AC4: the ticket's sentence, verbatim.
+  it("says how many tasks are Urgent and that they run in roadmap order", () => {
+    expect(compose("urgent", { count: 4 }, P)).toBe(
+      `${P}4 tasks are Urgent; running them in roadmap order.`,
     );
   });
 
@@ -349,6 +414,24 @@ describe("shapeOf and awaitingMigration", () => {
     ]);
     expect(awaitingMigration(wording)).toBe(false);
     expect(shapeOf("Decision", wording)).toBe("assess");
+  });
+
+  // T0.17 TC3 → AC3: ready is a word only at Backlog.
+  it("is ready only at Backlog, and only on the word", () => {
+    const ready = thread([c("Ready, go", "2026-09-13T11:00:00Z")]);
+    expect(shapeOf("Backlog", ready)).toBe("ready");
+    expect(shapeOf("Decision", ready)).toBe("assess");
+    expect(shapeOf("Review", ready)).toBe("assess");
+    expect(shapeOf("Backlog", thread([c("not ready yet", "2026-09-13T11:00:00Z")]))).toBe("assess");
+    expect(
+      shapeOf(
+        "Backlog",
+        thread([
+          c(`${P}This task is waiting on T3.1.`, "2026-09-13T10:00:00Z"),
+          c("ready", "2026-09-13T09:00:00Z"),
+        ]),
+      ),
+    ).toBe("assess");
   });
 
   it("is assess with nothing unanswered, and assess when the newest reply takes the word back", () => {

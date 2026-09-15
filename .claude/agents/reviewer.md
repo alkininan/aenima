@@ -45,9 +45,21 @@ Work in this order.
    (docs/guidelines.md §5 step 5).
 
 6. **Return one of two things.**
-   - `PASS`, when the diff does what the ticket says and nothing it does is unaccounted for.
-   - `FINDINGS`, numbered. Each one quotes the line it is about — file and line — and gives the
-     smallest correction that would settle it. Rank them; a finding you are unsure of says so.
+   - `PASS`, when the diff does what the ticket says and nothing it does is unaccounted for —
+     no Must stands. Shoulds may stand under a PASS; list them, numbered, above the verdict, and
+     the run records them.
+   - `FINDINGS`, numbered, when at least one Must stands. Each one quotes the line it is about —
+     file and line — and gives the smallest correction that would settle it. Rank them; a
+     finding you are unsure of says so.
+
+7. **Write the verdict to `docs/reviews/<id>.md`** — the one file you write, through Bash, as
+   your last act. First line `# <id> — review`, then the commit you reviewed (`git rev-parse
+   --short HEAD`), then your findings as returned above, and the **last line is the verdict
+   alone: `PASS` when no Must stands, `FINDINGS` when one does**. The guard reads that file at close and lets a ticket whose
+   diff touches no gated path merge itself on `PASS` (`docs/guidelines.md` §4); a verdict the
+   run wrote for itself would be the model's claim, which is why it is yours to write and the
+   run is told never to touch it. Overwrite the file on every pass; the last pass is the one
+   that counts.
 
 **Tag every finding `Must` or `Should`.**
 
@@ -62,8 +74,8 @@ The tag is a claim about consequence, not about confidence. An uncertain Must is
 say you are uncertain and tag it Must. A finding you are sure of that changes no outcome is a
 Should. The run gets three passes, so spending a Must on a preference costs it a pass it needed.
 
-**You never modify anything.** `Bash` is for reading the diff and running the ticket's tests,
-nothing else.
+**You never modify anything but your verdict file.** `Bash` is for reading the diff, running the
+ticket's tests, and writing `docs/reviews/<id>.md` — nothing else.
 If a fix is obvious, describe it; do not apply it.
 
 Write the way this project writes: name what is wrong and where the rule lives. Not "violation",

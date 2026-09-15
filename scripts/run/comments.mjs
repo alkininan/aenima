@@ -16,8 +16,9 @@
  *
  * Since T0.11 every task's thread is read, not only a Decision's, and a reply's shape is
  * partly countable: `mentions` and `permitted` say whether the human's word — `merge`,
- * `apply` — is on the thread, and the guard asks the same question of the API before it
- * lets the command through. `shapeOf` names the countable shapes; the rest is `assess`.
+ * `apply`, and since T0.17 `ready` — is on the thread, and the guard asks the same question
+ * of the API before it lets the command or the status write through. `shapeOf` names the
+ * countable shapes; the rest is `assess`.
  *
  * Pure. Deciding whether an answer resolves a question, or whether a reply is a change to
  * the ticket or new work, is the skill's, and is the one thing here that is not countable.
@@ -97,14 +98,17 @@ export function awaitingMigration(thread) {
 /**
  * The part of a reply's shape that is countable. `merge` is a Review task whose unanswered
  * reply begins with the word; `apply` is a Decision task waiting on a migration whose reply
- * begins with the word. Everything else is `assess`: change, new work, an answer that
- * resolves a question, a note, or a reply that needs a clarifying round — the skill's call.
+ * begins with the word; `ready` is a Backlog task whose reply begins with the word — the
+ * human's go, said on the thread rather than clicked (T0.17). Everything else is `assess`:
+ * change, new work, an answer that resolves a question, a note, or a reply that needs a
+ * clarifying round — the skill's call.
  */
 export function shapeOf(status, thread) {
   const newest = thread?.unanswered?.at(-1) ?? null;
   const said = (word) => newest !== null && mentions(newest.text, word);
   if (status === "Review" && said("merge")) return "merge";
   if (status === "Decision" && awaitingMigration(thread) && said("apply")) return "apply";
+  if (status === "Backlog" && said("ready")) return "ready";
   return "assess";
 }
 
@@ -122,6 +126,12 @@ export const KINDS = [
   "noted",
   "setup",
   "resolved",
+  "gated",
+  "reverted",
+  "readied",
+  "waiting",
+  "cycle",
+  "urgent",
 ];
 
 /** A sentence ends in one full stop, whatever the caller handed in. */
@@ -135,6 +145,14 @@ const clause = (text) =>
   String(text ?? "")
     .trim()
     .replace(/\.$/, "");
+
+/** Names in a sentence: `a`, `a and b`, `a, b and c`. */
+const listed = (items) => {
+  const names = (items ?? []).map(clause);
+  return names.length <= 1
+    ? (names[0] ?? "")
+    : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+};
 
 /**
  * One comment, prefixed, two to four plain sentences.
@@ -152,6 +170,13 @@ const clause = (text) =>
  *   noted       {}                          — a reply that asks for nothing
  *   setup       { step, where }             — a step only a human can do, said exactly
  *   resolved    {}                          — a Decision answer read as resolving: Ready
+ *   gated       { paths }                   — a diff on a gated path, waiting for the word
+ *   reverted    { failed, merge, commit, name, url } — a merge whose deploy check failed
+ *   readied     {}                          — the human's "ready" on a Backlog task, done
+ *   waiting     { blockers }                — a Ready task skipped for a blocker not Ready
+ *   cycle       { members }                 — tasks that block each other, none pickable
+ *   urgent      { count }                   — three or more Ready tasks at Urgent (T0.17's
+ *               own sentence, and the one kind that is a single sentence)
  */
 export function compose(kind, fields = {}, prefix = "⟡ ") {
   switch (kind) {
@@ -181,6 +206,27 @@ export function compose(kind, fields = {}, prefix = "⟡ ") {
       return `${prefix}Read that, thanks. Nothing for me to do here, so I've left the ticket as it is.`;
     case "resolved":
       return `${prefix}Read that as the answer, thanks. The task is back at Ready and the next run picks it up from there.`;
+    case "gated":
+      return `${prefix}This ticket is built, reviewed and green, but the diff touches ${clause(fields.paths)}, which is a path only your word merges — the pipeline's own boundary, a migration or the product spec. It stays at Review; say "merge" here and the next run lands it with a merge commit.`;
+    case "reverted":
+      return `${prefix}The deploy check after this merge failed: ${sentence(fields.failed)} I've reverted the merge commit ${clause(fields.merge)} on main as ${clause(fields.commit)} and put this task back at Backlog. The fix is filed as its own task: ${clause(fields.name)} (${clause(fields.url)}).`;
+    case "readied":
+      return `${prefix}Read that as your go, so the task is Ready. A run picks it up in its turn.`;
+    case "waiting": {
+      const several = (fields.blockers ?? []).length > 1;
+      return `${prefix}This task is waiting on ${listed(fields.blockers)}, which ${several ? "aren't" : "isn't"} Ready, so runs pass it by for now. Set ${several ? "them" : "it"} Ready or take ${several ? "them" : "it"} out of Blockers, and this task is picked up in its turn.`;
+    }
+    case "cycle": {
+      const members = fields.members ?? [];
+      if (members.length <= 1) {
+        return `${prefix}This task lists itself in its own Blockers, so no run can pick it. Take it out and it is picked up in its turn.`;
+      }
+      return members.length === 2
+        ? `${prefix}${listed(members)} are each waiting on the other in Blockers, so no run can pick either. Take one out of the other's Blockers and both are picked up in their turn.`
+        : `${prefix}${listed(members)} wait on each other in a loop through Blockers, so no run can pick any of them. Take one link out of the loop and they are picked up in their turn.`;
+    }
+    case "urgent":
+      return `${prefix}${fields.count} tasks are Urgent; running them in roadmap order.`;
     case "setup":
       return `${prefix}I've stopped on a step only you can do: ${clause(fields.step)}. ${sentence(fields.where)} Say "done" on this thread once it's in place and the next run carries on.`;
     default:

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { featurePrdPack } from "@/packs";
 import { allChecks, packConditions } from "@/packs";
+import type { SkillPack } from "@/packs";
 
 import {
   PROTOCOL,
@@ -52,7 +53,9 @@ describe("PROTOCOL_VERSION", () => {
     // Changed deliberately? Bump `PROTOCOL_RELEASE`, paste the new digest here,
     // and say in the commit what the model will now read differently. Every
     // stored run misses the cache and re-scores, which is the point.
-    expect(PROTOCOL_VERSION).toBe("1.1.0+602d20db225ee669");
+    // 1.2.0 (T2.8): the protocol says what a probe is, and `renderCheck`
+    // prints a check's probes beneath it. Every run stamped 1.1.0 re-scores.
+    expect(PROTOCOL_VERSION).toBe("1.2.0+6476334ca2123595");
   });
 
   it("carries the release, so a stamp groups by generation", () => {
@@ -100,6 +103,41 @@ describe("renderPack", () => {
     expect(renderPack(featurePrdPack)).toContain(
       `RUBRIC ${featurePrdPack.id} version ${featurePrdPack.version}`,
     );
+  });
+
+  it("renders a check's probes beneath it, and nothing beneath a check without", () => {
+    // §5: "behind each check sits an open-ended probe library of follow-up
+    // questions." The scorer reads them where the check is, so a probe is
+    // answered in the check's own light rather than found in a list elsewhere.
+    const pack: SkillPack = {
+      id: "probed",
+      version: "0.0.0",
+      artifactKind: "prd",
+      checks: [
+        {
+          id: "p-1",
+          prose: "A check with two probes",
+          tag: "must",
+          points: 50,
+          probes: ["Is the first thing there?", "Is the second thing there?"],
+        },
+        { id: "p-2", prose: "A check with none", tag: "should", points: 50 },
+      ],
+      layers: [],
+      interview: [],
+    };
+
+    const rendered = renderPack(pack);
+    const lines = rendered.split("\n");
+    const first = lines.indexOf("p-1 (must, 50 points): A check with two probes");
+    const second = lines.indexOf("p-2 (should, 50 points): A check with none");
+
+    expect(first).toBeGreaterThan(-1);
+    expect(lines.slice(first + 1, second)).toEqual([
+      "  probe: Is the first thing there?",
+      "  probe: Is the second thing there?",
+    ]);
+    expect(lines[second + 1]).toBeUndefined();
   });
 
   it("puts a layer's checks under the layer", () => {

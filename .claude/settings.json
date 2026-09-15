@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PROJECT_DIR}/scripts/hooks/guard.mjs\"",
+            "command": "d=$(mktemp -d) && d=$(cd \"$d\" && pwd -P) && if git -C \"${CLAUDE_PROJECT_DIR:-.}\" archive -o \"$d/scripts.tar\" origin/main scripts && tar -xf \"$d/scripts.tar\" -C \"$d\"; then node \"$d/scripts/hooks/guard.mjs\"; s=$?; else echo \"The guard could not read scripts/ from origin/main, so nothing was judged and nothing is allowed — hooks run the main copy, never this checkout's. docs/guidelines.md §5.\" >&2; s=2; fi; rm -rf \"$d\"; exit $s",
             "timeout": 60
           }
         ]
@@ -17,8 +17,18 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PROJECT_DIR}/scripts/hooks/guard.mjs\"",
+            "command": "d=$(mktemp -d) && d=$(cd \"$d\" && pwd -P) && if git -C \"${CLAUDE_PROJECT_DIR:-.}\" archive -o \"$d/scripts.tar\" origin/main scripts && tar -xf \"$d/scripts.tar\" -C \"$d\"; then node \"$d/scripts/hooks/guard.mjs\"; s=$?; else echo \"The guard could not read scripts/ from origin/main, so nothing was judged and nothing is allowed — hooks run the main copy, never this checkout's. docs/guidelines.md §5.\" >&2; s=2; fi; rm -rf \"$d\"; exit $s",
             "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__.*__notion-(update-page|create-pages|create-comment)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "d=$(mktemp -d) && d=$(cd \"$d\" && pwd -P) && if git -C \"${CLAUDE_PROJECT_DIR:-.}\" archive -o \"$d/scripts.tar\" origin/main scripts && tar -xf \"$d/scripts.tar\" -C \"$d\"; then node \"$d/scripts/hooks/guard.mjs\"; s=$?; else echo \"The guard could not read scripts/ from origin/main, so nothing was judged and nothing is allowed — hooks run the main copy, never this checkout's. docs/guidelines.md §5.\" >&2; s=2; fi; rm -rf \"$d\"; exit $s",
+            "timeout": 30
           }
         ]
       }
@@ -28,7 +38,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PROJECT_DIR}/scripts/hooks/gate.mjs\"",
+            "command": "d=$(mktemp -d) && d=$(cd \"$d\" && pwd -P) && if git -C \"${CLAUDE_PROJECT_DIR:-.}\" archive -o \"$d/scripts.tar\" origin/main scripts && tar -xf \"$d/scripts.tar\" -C \"$d\"; then node \"$d/scripts/hooks/gate.mjs\"; s=$?; else echo \"The gate could not read scripts/ from origin/main, so the suite was not run and this cannot close — hooks run the main copy, never this checkout's. docs/guidelines.md §5.\" >&2; s=2; fi; rm -rf \"$d\"; exit $s",
             "timeout": 600
           }
         ]
