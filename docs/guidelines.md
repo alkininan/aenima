@@ -152,7 +152,7 @@ Written by a script at session end from the local transcript, posted with a Noti
 token. No model call. This is the data for park rate, findings per ticket, and the four-week weight
 tuning. Since T0.12 the script is `scripts/run/runs.mjs`, run by the SessionEnd hook over the
 transcript Claude Code wrote: the task from the claim command the skill ran — the last claim that
-did not merge before writing a Status of its own, since step 0 claims a task only to merge it on
+did not merge before writing a Status of its own, since step 0 may claim a task to merge it on
 your word before step 1 claims the run's — Started and Duration from the first and last
 timestamps, Model from the assistant messages (`Fable→Opus` when both appear), Tokens as input plus
 output, cache reads and cache writes both excluded, counted once per API message — a message

@@ -258,8 +258,8 @@ describe("parseTranscript", () => {
     expect(summary.outcome).toBe("Done");
   });
 
-  // Addendum (T0.16, T0.17 merged in): step 0 claims a task to merge on the human's word and
-  // releases it, step 0c then sets it Done, and only step 1 claims the run's own task.
+  // TA3 → AA3 (addendum; T0.16 and T0.17 merged in): step 0 may claim a task to merge on the
+  // human's word and release it, step 0c then sets it Done, and only step 1 claims the run's own.
   const MERGED_PAGE = "3db79daf-d42e-8130-85d2-e2b73bd2bcc3";
   const tool = (id, name, input, stamp) =>
     assistant(
@@ -342,6 +342,28 @@ describe("parseTranscript", () => {
       );
       expect(parseTranscript(lines)).toMatchObject({ task: "T0.96", outcome: "Decision" });
     }
+  });
+
+  // Most runs write In progress before claim.mjs, so the claim holds no Status until Review; a
+  // heredoc the build writes — the skill's own step 9, say — carries `gh pr merge` as text.
+  it("does not read gh pr merge inside a heredoc body as the claim's merge", () => {
+    const lines = transcript({ statuses: [] });
+    lines.splice(
+      lines.findIndex((l) => l.includes("msg_1")),
+      0,
+      ...status("pre_progress", "3d679daf-d42e-813f-af58-f5f053219a57", "In progress", at(22, 38)),
+    );
+    lines.splice(
+      lines.findIndex((l) => l.includes("msg_last")),
+      0,
+      ...bash(
+        "heredoc",
+        "cat >> .claude/skills/ticket/SKILL.md <<'EOF'\n    git checkout --detach\n    gh pr merge <branch> --merge --delete-branch\nEOF\ngit add .claude/skills/ticket/SKILL.md",
+        at(38, 0),
+      ),
+      ...status("build_review", "3d679daf-d42e-813f-af58-f5f053219a57", "Review", at(39, 0)),
+    );
+    expect(parseTranscript(lines)).toMatchObject({ task: "T0.96", outcome: "Done" });
   });
 
   it("keeps a killed run's claim over a later command that only quotes one", () => {
