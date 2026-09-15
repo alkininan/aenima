@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { claim } from "../run/claim.mjs";
+import { compose } from "../run/comments.mjs";
 import { release } from "../run/release.mjs";
 import {
   decide,
@@ -300,6 +301,45 @@ describe("T0.17 — rule (h) the board's connector", () => {
         },
       ),
     ).toBeNull();
+  });
+
+  // T0.20 TC1 → AC1 and TC4 → AC4, the rule's half: past the prefix, the guard asks the thread
+  // whether a comment of this kind may post — the cap on clarifying rounds and one comment of a
+  // kind per claim, read by `mayPost` — and refuses with the reason it was given.
+  it("refuses a prefixed comment the thread withholds, naming the kind and why", () => {
+    const prefix = () => "⟡ ";
+    const comment = call("notion-create-comment", {
+      page_id: "p1",
+      markdown: "⟡ Thanks, I read that.",
+    });
+    const withheld = () => ({
+      ok: false,
+      why: "two clarifying rounds is the cap",
+      kind: "clarifying",
+    });
+    expect(decide(comment, { prefix, posting: withheld })).toBe(
+      "Posting this clarifying comment is refused — two clarifying rounds is the cap. docs/guidelines.md §4.",
+    );
+    expect(
+      decide(comment, { prefix, posting: () => ({ ok: true, why: null, kind: "noted" }) }),
+    ).toBeNull();
+  });
+
+  // T0.20 TC1 → AC1 and TC3 → AC3, with nothing read: the clarifying round waits, the refusal posts.
+  it("holds back a clarifying round it has not read the thread for, and nothing else", () => {
+    const prefix = () => "⟡ ";
+    const post = (text) => call("notion-create-comment", { page_id: "p1", markdown: text });
+    const clarifying = compose("clarifying", { readings: ["a", "b"], fallback: "take a" });
+    expect(decide(post(clarifying), { prefix })).toContain(
+      "Posting this clarifying comment is refused",
+    );
+    const refused = compose("refused", {
+      what: "Your merge",
+      why: "GitHub said no",
+      files: ["a.md"],
+      settle: "Merge main in",
+    });
+    expect(decide(post(refused), { prefix })).toBeNull();
   });
 
   it("has no opinion about the connector's reads, or a tool that only shares a word of the name", () => {
@@ -1003,5 +1043,78 @@ describe("judge — reads the marker and the token file, then the thread", () =>
     expect(await judge(write(primary), { deps: human })).toContain(
       "NOTION_TOKEN is not in .env.local",
     );
+  });
+
+  const post = (cwd, page_id, text) => ({
+    tool_name: "mcp__notion__notion-create-comment",
+    tool_input: { page_id, markdown: text },
+    cwd,
+  });
+  const clarifying = compose("clarifying", { readings: ["a", "b"], fallback: "take a" });
+  const capped = [
+    compose("decision", {
+      stopped: "the wording",
+      gap: "Nothing says.",
+      fallback: "take the first",
+    }),
+    "which?",
+    clarifying,
+    "this?",
+    clarifying,
+    "merge",
+  ].map((text, i) => ({ text, created_time: `2026-09-15T10:0${i}:00.000Z` }));
+
+  // T0.20 TC3 → AC3, from the hook's entry: a merge the guard let through and GitHub refused
+  // posts its one comment on a thread the cap has silenced, and a third clarifying round
+  // on the same thread does not.
+  it("lets a refusal through on a capped thread, and holds a third clarifying round back", async () => {
+    const pages = [];
+    const deps = {
+      board: () => ({ prefix: "⟡ " }),
+      comments: async (id) => {
+        pages.push(id);
+        return capped;
+      },
+    };
+    const refused = compose("refused", {
+      what: "Your merge of T0.13",
+      why: "GitHub says the pull request no longer merges cleanly into main",
+      files: ["docs/guidelines.md", "scripts/run/README.md"],
+      settle: "Merging main into the branch and settling those would do it",
+    });
+    expect(await judge(post(worktree, "page-13", refused), { deps })).toBeNull();
+    expect(pages).toEqual(["page-13"]);
+    expect(await judge(post(worktree, "page-13", clarifying), { deps })).toContain(
+      "Posting this clarifying comment is refused",
+    );
+  });
+
+  // T0.20 TC4 → AC4, from the hook's entry: the marker names the claimed page and when the
+  // claim began; a second comment of a kind on that page in that claim is refused, and the
+  // same words on another task's page are not the claim's.
+  it("holds one claim to one comment of a kind on its task's thread", async () => {
+    claim(
+      { task: "T0.20", page: "3dc79daf-d42e-8137-be2e-c18de771596d", branch: "t0-20" },
+      { cwd: primary, env: { CLAUDE_CODE_SESSION_ID: "s20" } },
+    );
+    const chose = compose("default", { gap: "The body is silent.", choice: "the first" });
+    const now = new Date().toISOString();
+    const deps = {
+      board: () => ({ prefix: "⟡ " }),
+      comments: async () => [{ text: chose, created_time: now }],
+    };
+    expect(
+      await judge(post(worktree, "3dc79dafd42e8137be2ec18de771596d", chose), { deps }),
+    ).toContain("Posting this default comment is refused");
+    expect(
+      await judge(
+        post(worktree, "3dc79daf-d42e-8137-be2e-c18de771596d", compose("gated", { paths: "x" })),
+        {
+          deps,
+        },
+      ),
+    ).toBeNull();
+    expect(await judge(post(worktree, "another-page", chose), { deps })).toBeNull();
+    expect(release({ session: "s20" }, { cwd: worktree }).released).toBe(true);
   });
 });

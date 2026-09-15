@@ -27,7 +27,13 @@ Kinds: `decision` (stopped, gap, fallback) · `clarifying` (readings, fallback) 
 (file) · `stale` (date, branch or null) · `default` (gap, choice) · `change` · `newWork` (name,
 url) · `merged` (commit) · `applied` (file) · `noted` · `setup` (step, where) · `resolved` ·
 `gated` (paths) · `reverted` (failed, merge, commit, name, url) · `readied` · `waiting` (blockers) ·
-`cycle` (members) · `urgent` (count).
+`cycle` (members) · `urgent` (count) · `refused` (what, why, files, settle).
+A comment carries its kind in its own words, and the guard reads it against the thread before
+the comment posts: a third clarifying round on one question waits, and so does a second comment
+of one kind in one claim — say every default a claim takes in its one `default` comment. Every
+other comment posts, cap or no cap. A step the guard let through that fails anyway always
+reports, as one `refused` comment: what was refused, why, the files in the way, what would
+settle it.
 Never set a task to Ready without a human comment that asks for it — an answer that resolves a
 question, a change request at Review, or `ready` on a Backlog task. The guard reads that last one
 from the board before the connector's write goes through, and it refuses any comment you post
@@ -64,9 +70,10 @@ marker besides, so a claim made in error here stops rather than clobbers.)
 `token: false` means `NOTION_TOKEN` is not in `.env.local`: say so in your report line and go
 on to c — nothing else reads comments. Otherwise each `threads` entry is a task with a human
 reply newer than the pipeline's last ⟡ comment, with its `Status`, the `unanswered` replies,
-`mayPost`, and `shape`. Give each task **exactly one** assessment, and end it with one ⟡
-comment on that task — except where `mayPost` is false: two clarifying rounds is the cap;
-keep reading, post nothing.
+`clarifyingRounds`, `mayClarify`, and `shape`. Give each task **exactly one** assessment, and
+end it with one ⟡ comment on that task. The cap withholds one comment only: where `mayClarify`
+is false and your assessment is a clarifying round, two clarifying rounds on that question is
+the cap — keep reading, post nothing. Every other assessment posts its comment, cap or no cap.
 
 - `shape: merge` (Review, the newest reply begins with *merge*). Claim it so the guard knows
   the task — `node scripts/run/claim.mjs --task <id> --page <page id> --branch t<id>` — then
@@ -74,8 +81,11 @@ keep reading, post nothing.
       gh pr merge t<id> --merge
 
   The guard reads the thread itself before it lets that through; if it refuses, the reason
-  says which of the four things was missing — quote it in your report and post nothing. On
-  success post one `merged` comment with the merge commit's short hash. Either way, then:
+  says which of the four things was missing — quote it in your report and post nothing. If
+  the guard lets it through and GitHub refuses — the pull request no longer merges cleanly —
+  run `node scripts/run/conflicts.mjs t<id>` and post one `refused` comment: `files` its
+  `files`, and `settle` what would settle them; the task stays at Review. On success post one
+  `merged` comment with the merge commit's short hash. Any of the three, then:
   `node scripts/run/release.mjs`. Step c fetches, sets Done and writes the Release row; the
   remote branch is left for GitHub's own deletion and the worktree for `prune.mjs`.
 - `shape: apply` (Decision waiting on a migration, the newest reply begins with *apply*). Only
@@ -84,7 +94,9 @@ keep reading, post nothing.
   check the ticket's branch out — `node scripts/run/branch.mjs <id>` reuses origin's copy,
   which is where the migration file is; the primary sits on `main` until then — and only then
   `pnpm db:migrate`; the guard reads the thread first. If it refuses, release the marker and
-  post nothing. On success post one `applied` comment naming the file, set the task
+  post nothing. If the guard lets it through and the migration itself fails, post one
+  `refused` comment with the error's first line and what would settle it, release the marker,
+  and leave the task at Decision. On success post one `applied` comment naming the file, set the task
   `In progress`, and continue from step 1's marker with this task: skip the pick, step 3 is
   already done, and the ticket carries on from where it stopped.
 - `shape: ready` (Backlog, the newest reply begins with *ready*). Set the task `Ready` through
@@ -244,6 +256,8 @@ worktree Desktop made for it; it stays on its branch and the next run's step 0 r
 worktree once the branch is merged. `reused` true means the branch was already on origin —
 an addendum round, or a ticket continuing after its migration was applied — and the pull
 request is already open: build on it, and step 9 pushes to it rather than opening another.
+`ok: false` means the claim cannot go on: post one `refused` comment with its `detail` and what
+would settle it, release the marker, set `Decision`, and exit.
 
 ## 4 Build
 
@@ -252,10 +266,15 @@ Plan first. Then the smallest complete implementation that satisfies the Criteri
 **Where the ticket is silent, stop only when a wrong guess is expensive to undo** (§4). A choice
 is expensive if it touches the database schema or stored data, a public surface — a route, copy
 a product user sees, an API shape — or would need a spec to record it. Then commit what you
-have and push the branch (`git push -u origin <branch>`) so the next run finds it, release the
-marker (`node scripts/run/release.mjs`), post one `decision` comment, set `Decision`, and
-exit. Everything else: take the stated default, post one `default` comment saying what you
-chose and why you could pick alone, and keep building. A step only a human can do — a
+have and push the branch (`git push -u origin <branch>`) so the next run finds it, post one
+`decision` comment, release the marker (`node scripts/run/release.mjs`), set `Decision`, and
+exit. Everything else: take the stated default and keep building, and say it in the claim's
+one `default` comment — every default the claim takes, what you chose and why you could pick
+alone. Hold that comment until the claim's defaults are all in: post it before the `decision`
+or `migration` comment when the claim stops, or at close before `release.mjs`. Every comment of
+a claim goes up while the marker still names it: the guard lets one comment of a kind through
+per claim, reading the claim from the marker, so a second `default` is refused and never reaches
+the thread. A step only a human can do — a
 credential to create, a page to share — is not a guess: finish everything that does not need
 it, and say exactly where it goes in one `setup` comment at close.
 
@@ -283,9 +302,9 @@ Type `Fix`, the same Epic, body headed `Drafted by pipeline`.
 
     node scripts/run/migration-check.mjs
 
-`waiting: true` → write the Report so far, commit and push the branch, release the marker
-(`node scripts/run/release.mjs`), set `Decision`, post one `migration` comment naming the
-file, and exit. The credential this run holds cannot apply a migration, and the guard refuses
+`waiting: true` → write the Report so far, commit and push the branch, post the claim's
+`default` comment if it holds one and one `migration` comment naming the file, release the
+marker (`node scripts/run/release.mjs`), set `Decision`, and exit. The credential this run holds cannot apply a migration, and the guard refuses
 the command until it has itself read the word *apply* from you on this task's thread. The
 human answers with that one word; the next run in the primary checkout applies it (step 0a)
 and carries the ticket on from here.
@@ -348,7 +367,11 @@ The guard opens its second door on its own reading — the verdict file, the gat
 this tree, the diff, and the pull request's head being this checkout's HEAD — and refuses with
 the reason otherwise; a refusal
 here means the task stays at `Review` with that reason in the report and no comment, and
-`git checkout -B <branch> origin/<branch>` puts the local branch back. Detach and drop the
+`git checkout -B <branch> origin/<branch>` puts the local branch back. If the guard lets it
+through and GitHub refuses — main moved and the pull request no longer merges cleanly — run
+`node scripts/run/conflicts.mjs <branch>` and post one `refused` comment before `release.mjs`:
+`files` its `files`, `settle` what would settle them. The task stays at `Review`, and the same
+`git checkout -B` puts the local branch back. Detach and drop the
 local branch first: gh's `--delete-branch` asks which branch is checked out only while a local
 copy of the pull request's branch exists, and on a detached HEAD that question fails after the
 merge has already landed; with no local copy gh goes straight on to delete the remote one. The

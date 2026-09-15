@@ -9,13 +9,15 @@
  * task: forty tasks is forty requests here and forty model turns there.
  *
  * What comes back is the countable part: the tasks with a human reply newer than the
- * pipeline's last comment, each with its status, the replies, whether the two-round cap
- * still allows a post, and the shape the words settle — `merge`, `apply`, or `assess` for
- * the skill to read. Deciding change from new work from an answer is the skill's.
+ * pipeline's last comment, each with its status, the replies, how many clarifying rounds the
+ * open question has had and whether another may post (`mayPost`, counted by kind since T0.20
+ * — every other kind posts whatever the thread holds), and the shape the words settle —
+ * `merge`, `apply`, or `assess` for the skill to read. Deciding change from new work from an
+ * answer is the skill's.
  */
 
 import { emit, isMain } from "./cli.mjs";
-import { awaitingMigration, readThread, shapeOf } from "./comments.mjs";
+import { awaitingMigration, mayPost, readThread, shapeOf } from "./comments.mjs";
 import { client, readBoard, readToken, TOKEN_VAR } from "./notion.mjs";
 
 /**
@@ -35,7 +37,8 @@ export async function scan(tasks, commentsOf, prefix = "⟡ ") {
       unanswered: thread.unanswered,
       lastPipeline: thread.pipeline.at(-1)?.text ?? null,
       migration: awaitingMigration(thread),
-      mayPost: thread.mayPost,
+      clarifyingRounds: thread.clarifyingRounds,
+      mayClarify: mayPost(thread, "clarifying").ok,
       shape: shapeOf(task.Status, thread),
     });
   }

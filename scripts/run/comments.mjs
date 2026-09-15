@@ -6,7 +6,7 @@
  * The pipeline's own comments all begin with the prefix glyph; everything else on the thread
  * is the human's. A human comment newer than the last prefixed one is the answer this run
  * must assess, and it gets *exactly one* assessment. After two clarifying rounds on the same
- * question the pipeline stops posting and only reads — the two-round cap of §6, applied to
+ * question the pipeline stops asking and only reads — the two-round cap of §6, applied to
  * the board.
  *
  * `compose` writes every comment a run can post, in plain sentences: what it hit, why it
@@ -20,40 +20,112 @@
  * of the API before it lets the command or the status write through. `shapeOf` names the
  * countable shapes; the rest is `assess`.
  *
+ * Since T0.20 a comment's kind is read back from its own words — the fixed part of the sentence
+ * `compose` wrote (`kindOf`) — so the cap counts clarifying rounds and nothing else, and
+ * `mayPost` is the one place that says whether a comment of a kind may post: the preflight
+ * reads it for a clarifying round, the guard for every comment the run sends.
+ *
  * Pure. Deciding whether an answer resolves a question, or whether a reply is a change to
  * the ticket or new work, is the skill's, and is the one thing here that is not countable.
  */
 
 import { emit, isMain, readStdin } from "./cli.mjs";
 
-/** The first prefixed comment is the Question; every later one is a clarifying round. */
+/**
+ * Clarifying rounds on one question before the run stops asking and waits (§4) — the
+ * consecutive clarifying comments since the pipeline last said anything else on the thread.
+ */
 export const CLARIFYING_CAP = 2;
 
 const at = (comment) => String(comment?.created_time ?? "");
 
 /**
+ * Comments that neither ask nor answer anything on the thread's question: a notice about the
+ * board's order — a task waiting on a blocker, a loop, the Urgent count — posted by step 1
+ * without reading a reply, and a prefixed comment no composer wrote, whose words the count
+ * cannot place. A run of clarifying rounds reads through them (review pass 1, Must 1).
+ */
+const NOTICES = new Set(["waiting", "cycle", "urgent", null]);
+
+/**
  * Split a thread and say what the run may do with it.
  *
- * Returns `{ pipeline, human, unanswered, clarifyingRounds, mayPost }`:
+ * Returns `{ pipeline, human, unanswered, clarifyingRounds }`:
+ *   pipeline          prefixed comments, oldest first, each with the `kind` its words carry
  *   unanswered        human comments newer than the last prefixed one, oldest first
- *   clarifyingRounds  prefixed comments after the first — the Question does not count
- *   mayPost           false once the cap is reached; the run reads and stays silent
+ *   clarifyingRounds  clarifying comments since the pipeline last asked or answered anything
+ *                     else on the thread. Human replies between them do not end the run of
+ *                     rounds — every round answers one — and nor does a notice about the
+ *                     board's order (`NOTICES`), which asks and answers nothing; any other
+ *                     comment does: a question opened, a reply read as the answer, a note.
+ *                     That is the reply resetting the count, once the run has answered it as
+ *                     something other than unclear.
  */
 export function readThread(comments = [], prefix = "⟡ ") {
   const ordered = comments.slice().sort((a, b) => at(a).localeCompare(at(b)));
   const isPipeline = (comment) => String(comment?.text ?? "").startsWith(prefix);
 
-  const pipeline = ordered.filter(isPipeline);
+  const pipeline = ordered
+    .filter(isPipeline)
+    .map((comment) => ({ ...comment, kind: kindOf(comment.text, prefix) }));
   const human = ordered.filter((comment) => !isPipeline(comment));
   const lastPipelineAt = pipeline.length === 0 ? "" : at(pipeline.at(-1));
+
+  let clarifyingRounds = 0;
+  for (const comment of [...pipeline].reverse()) {
+    if (NOTICES.has(comment.kind)) continue;
+    if (comment.kind !== "clarifying") break;
+    clarifyingRounds += 1;
+  }
 
   return {
     pipeline,
     human,
     unanswered: human.filter((comment) => at(comment) > lastPipelineAt),
-    clarifyingRounds: Math.max(0, pipeline.length - 1),
-    mayPost: Math.max(0, pipeline.length - 1) < CLARIFYING_CAP,
+    clarifyingRounds,
   };
+}
+
+/** A time the API gives to the minute, as milliseconds: `since` floored the same way. */
+const minuteOf = (time) => {
+  const ms = Date.parse(String(time ?? ""));
+  return Number.isNaN(ms) ? null : ms - (ms % 60_000);
+};
+
+/**
+ * Whether the run may post a comment of `kind` on `thread` now — `{ ok, why }`, the one place
+ * that says so (§4). The preflight asks it for a clarifying round; the guard asks it for every
+ * comment, with the kind read from the words and `since` the claim's start when the marker's
+ * claim is this thread's task.
+ *
+ *   - A clarifying round past the cap waits: two on one question, and the run stops asking.
+ *   - The same kind twice in one claim waits: uncapped is not unlimited. A comment's time
+ *     comes from the API to the minute, so the claim's first minute counts as the claim's.
+ *
+ * Every other comment posts, whatever the thread holds. A stop, a default taken, a merge, a
+ * gated diff, a notice, a refusal: each tells the human something new, and the cap is never the
+ * reason a human is not told.
+ */
+export function mayPost(thread, kind, { since = null } = {}) {
+  if (kind === "clarifying" && (thread?.clarifyingRounds ?? 0) >= CLARIFYING_CAP) {
+    return {
+      ok: false,
+      why: "the open question on this thread has had two clarifying rounds, which is the cap — the run waits for an answer it can place",
+    };
+  }
+  const from = since === null ? null : minuteOf(since);
+  if (from !== null) {
+    const earlier = (thread?.pipeline ?? []).find(
+      (comment) => comment.kind === kind && (Date.parse(at(comment)) || 0) >= from,
+    );
+    if (earlier !== undefined) {
+      return {
+        ok: false,
+        why: `this claim already posted ${kind === null ? "a comment no composer wrote" : `a ${kind} comment`} on this thread, at ${at(earlier)} — one comment of a kind per claim, so say everything of that kind in the one`,
+      };
+    }
+  }
+  return { ok: true, why: null };
 }
 
 /**
@@ -90,9 +162,13 @@ export function permitted(word, comments = [], prefix = "⟡ ") {
 /** The sentence every migration comment carries, which is how a thread says it waits on one. */
 export const MIGRATION_PHRASE = "This change adds a migration";
 
-/** True when the pipeline's last comment on the thread is the migration question. */
+/**
+ * True when the pipeline's last comment on the thread is the migration question — reading past
+ * a refusal, which reports an apply that failed and leaves the question standing (T0.20).
+ */
 export function awaitingMigration(thread) {
-  return String(thread?.pipeline?.at(-1)?.text ?? "").includes(MIGRATION_PHRASE);
+  const asked = (thread?.pipeline ?? []).findLast((comment) => comment.kind !== "refused");
+  return String(asked?.text ?? "").includes(MIGRATION_PHRASE);
 }
 
 /**
@@ -132,7 +208,54 @@ export const KINDS = [
   "waiting",
   "cycle",
   "urgent",
+  "refused",
 ];
+
+/**
+ * Each kind's signature: the fixed words of its sentence, which the composer always writes and
+ * a field it is handed is unlikely to. Tried in this order, first match wins — `setup` before
+ * `decision`, which shares its opening, and `refused`, whose opening is the caller's, last. The
+ * words carry no markdown, so the text the API hands back (markers stripped) matches too.
+ */
+const SIGNATURES = [
+  ["setup", /^I've stopped on a step only you can do: /],
+  ["decision", /^I've stopped on /],
+  ["clarifying", /^Thanks, I read that, but it still fits two readings: /],
+  ["migration", /^This change adds a migration, /],
+  ["stale", /^This run stopped partway on /],
+  [
+    "default",
+    / A wrong guess here costs nothing to change, so I went with [\s\S]+ and kept going\. Say the word if you'd rather something else\.$/,
+  ],
+  ["change", /^I've read that as a change to this ticket and folded it into the body /],
+  ["newWork", /^I've read that as new work rather than a change to this ticket, /],
+  ["merged", /^Merged into main at .+ with a merge commit, and the task is Done\./],
+  ["applied", /^Applied .+ to the shared database\. The ticket picks up /],
+  ["noted", /^Read that, thanks\. Nothing for me to do here, /],
+  ["resolved", /^Read that as the answer, thanks\. /],
+  ["gated", /^This ticket is built, reviewed and green, but the diff touches /],
+  ["reverted", /^The deploy check after this merge failed: /],
+  ["readied", /^Read that as your go, so the task is Ready\. /],
+  ["waiting", /^This task is waiting on .+, so runs pass it by for now\. /],
+  [
+    "cycle",
+    /^(This task lists itself|.+ are each waiting on the other|.+ wait on each other in a loop)[^.]* Blockers, so no run can pick (it|either|any of them)\. Take .+ picked up in (its|their) turn\.$/,
+  ],
+  ["urgent", /^\d+ tasks are Urgent; running them in roadmap order\.$/],
+  ["refused", /^.+? was refused: /],
+];
+
+/**
+ * The kind a comment's words carry, or null — for a human's comment, and for a prefixed one no
+ * composer wrote. Every comment `compose` writes reads back as the kind it was composed as; the
+ * comments already on the board, written before kinds were read, read the same way.
+ */
+export function kindOf(text, prefix = "⟡ ") {
+  const whole = String(text ?? "");
+  if (!whole.startsWith(prefix)) return null;
+  const body = whole.slice(prefix.length);
+  return SIGNATURES.find(([, signature]) => signature.test(body))?.[0] ?? null;
+}
 
 /** A sentence ends in one full stop, whatever the caller handed in. */
 const sentence = (text) => {
@@ -177,6 +300,9 @@ const listed = (items) => {
  *   cycle       { members }                 — tasks that block each other, none pickable
  *   urgent      { count }                   — three or more Ready tasks at Urgent (T0.17's
  *               own sentence, and the one kind that is a single sentence)
+ *   refused     { what, why, files, settle } — a step the guard let through that failed
+ *               anyway: GitHub refusing a merge, a migration erroring, a claim that could
+ *               not go on. `files` those in conflict, empty or absent when none (T0.20)
  */
 export function compose(kind, fields = {}, prefix = "⟡ ") {
   switch (kind) {
@@ -227,6 +353,16 @@ export function compose(kind, fields = {}, prefix = "⟡ ") {
     }
     case "urgent":
       return `${prefix}${fields.count} tasks are Urgent; running them in roadmap order.`;
+    case "refused": {
+      const files = fields.files ?? [];
+      const inTheWay =
+        files.length === 0
+          ? ""
+          : files.length === 1
+            ? ` The file in conflict is ${listed(files)}.`
+            : ` The files in conflict are ${listed(files)}.`;
+      return `${prefix}${clause(fields.what)} was refused: ${sentence(fields.why)}${inTheWay} ${sentence(fields.settle)}`;
+    }
     case "setup":
       return `${prefix}I've stopped on a step only you can do: ${clause(fields.step)}. ${sentence(fields.where)} Say "done" on this thread once it's in place and the next run carries on.`;
     default:
