@@ -40,14 +40,22 @@ as merged becomes Done and, when main has moved past the newest release, a Relea
 written. `stale.mjs` reads the In progress tasks against the repository's run marker: a fresh
 marker names a live run and the run exits; a task with no marker, or a marker older than three
 hours, is a run that died, and `stale.mjs --recover <id>` keeps its branch as
-`t<id>-stale-<HHMM>` — committing anything uncommitted onto it first — so the task can be
-claimed again from `origin/main` with one comment and no human. Last, once per commit of
-main, `health.mjs` asks the live site from outside — `/sign-in` 200, `/app` 307 — recording the
-commit it asked about beside the marker so one outage reverts one merge; a wrong answer has
-`revert.mjs` prepare the revert of the merge at `origin/main`'s tip on a detached HEAD, one
-commit restoring the tree before the merge, which the skill pushes as `HEAD:main` — the one push
-to main the guard lets through — before filing one Fix task, returning the reverted ticket to
-Backlog and posting one comment (T0.16).
+`t<id>-stale-<HHMM>` — committing anything uncommitted onto it first, and saying `wip: false`
+with the reason when that commit was refused — so the task can be claimed again from
+`origin/main` with one comment and no human. Then, once per commit of main, `health.mjs` asks
+the live site from outside — `/sign-in` 200, `/app` 307 — recording the commit it asked about
+beside the marker so one outage reverts one merge; a wrong answer has `revert.mjs` prepare the
+revert of the merge at `origin/main`'s tip on a detached HEAD, one commit restoring the tree
+before the merge, which the skill pushes as `HEAD:main` — the one push to main the guard lets
+through — before filing one Fix task, returning the reverted ticket to Backlog and posting one
+comment (T0.16). Last, since T0.12, the mirrors: `mirror.mjs` reads each Documents sub-page's
+and the Guidelines page's first block over the API for the commit it claims, compares it with
+the file's last commit on `origin/main` — after the deploy check, so a revert it pushed is what
+is mirrored — and plans the refresh: which pages, in what order (a *refresh in progress*
+sentinel left by a write that died comes first), the sentinel and heading texts, and the file
+split into chunks at blank lines outside fenced code, for the skill to write through the
+connector, header-last, so a page is whole and headed with its commit or visibly in progress
+and never in between.
 
 ## 1 Claim
 
@@ -164,4 +172,14 @@ gated diff stays at Review with one comment naming the path, and merging is the 
 made with the word `merge` there, which the guard refuses `gh pr merge` until `permission.mjs`
 has read from the board. Either way `release.mjs` removes the marker and a primary checkout
 returns to `main`; `release.mjs` also runs from the SessionEnd hook, so a run that dies leaves
-no marker behind for the next preflight to trust. The Runs row is a later ticket's.
+no marker behind for the next preflight to trust. Beside it at SessionEnd runs `runs.mjs`,
+which reads the session's transcript — the JSONL Claude Code wrote, handed over as the hook's
+`transcript_path` — and posts the Runs row with the token and no model: `R-nnnn T<id>`, the
+task from the claims that did not merge before writing a Status of their own (step 0 may claim a
+task to merge it) — the last of them that wrote a Status, or the last of them when none did —
+started and duration from the first and last timestamps, the model family (or `Fable→Opus` when
+the session fell back), input plus output tokens counted once per API message with cache reads and
+writes excluded, the outcome from the last Status the run wrote on its task before any later claim
+— a Decision set after the release included (Review and Done are Done, Decision is Decision,
+anything else is Stopped) — and the reviewer's findings counted from its replies. A session that
+was not a `/ticket` writes no row.

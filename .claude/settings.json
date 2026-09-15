@@ -51,6 +51,11 @@
             "type": "command",
             "command": "node \"${CLAUDE_PROJECT_DIR}/scripts/run/release.mjs\" --hook",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/scripts/run/runs.mjs\" --hook",
+            "timeout": 30
           }
         ]
       }

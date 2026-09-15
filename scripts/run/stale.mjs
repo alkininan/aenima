@@ -84,10 +84,14 @@ export function recover(id, { cwd = process.cwd(), run, now = () => new Date() }
   const head = g(["rev-parse", branch]).stdout.trim();
   const current = g(["rev-parse", "--abbrev-ref", "HEAD"]).stdout.trim();
   let wip = false;
+  let detail;
   if (current === branch && g(["status", "--porcelain"]).stdout.trim() !== "") {
     g(["add", "-A"]);
-    g(["commit", "--quiet", "-m", `wip: ${id} — stale run, kept for salvage`]);
-    wip = true;
+    // `wip` says what the commit did, not what was asked: a commit a hook refused leaves the
+    // work in the tree, and the rename below then carries it nowhere (T0.9 open question 8).
+    const committed = g(["commit", "--quiet", "-m", `wip: ${id} — stale run, kept for salvage`]);
+    wip = committed.status === 0;
+    if (!wip) detail = `${committed.stdout ?? ""}${committed.stderr ?? ""}`.trim();
   }
 
   const renamed = g(["branch", "-m", branch, stale]);
@@ -118,7 +122,7 @@ export function recover(id, { cwd = process.cwd(), run, now = () => new Date() }
     remote = moved.status === 0 ? stale : null;
   }
 
-  return { branch, renamed: stale, head, wip, remote };
+  return { branch, renamed: stale, head, wip, remote, ...(detail ? { detail } : {}) };
 }
 
 /**

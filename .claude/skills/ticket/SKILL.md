@@ -164,7 +164,21 @@ Name begins with `id`, set it `Backlog`; draft one Fix task with `draft.mjs` (`f
 Priority `Medium`; then post one `reverted` comment on the reverted task — `failed` the
 `failedText`, `merge` and `commit` the two short hashes, `name` and `url` the Fix task's.
 
-Do not refresh the Documents or Guidelines mirrors. That is a later ticket's.
+**f. The mirrors.** Notion holds mirrors of the repo documents, each headed with the commit it
+mirrors (§1, §2), and this is where they catch up with `main` — after the deploy check, so a
+revert it pushed is what they mirror:
+
+    node scripts/run/mirror.mjs
+
+`token: false` → say so in your report line and go on. Otherwise every `pages` entry with
+`refresh: true` is behind `origin/main` — or a refresh that stopped partway, which comes first
+in the list — and you rewrite it, in the order given, through the connector with
+`allow_async: false` on **every** write: `replace_content` with the page's `sentinel` alone;
+then `insert_content` at the end with each chunk file's text, in order (`cat` the file, pass the
+text verbatim); then `update_content` replacing the sentinel with the page's `heading`. The
+heading goes last so a page is either whole and headed with its commit, or visibly *refresh in
+progress* — never in between. A page marked `missing` is one the Documents page does not list;
+say so in the report and write nothing for it.
 
 ## 1 Claim
 
@@ -349,4 +363,7 @@ Either way, release the marker: `node scripts/run/release.mjs`. If step 3 said `
 
 **Never merge on your own word.** The two doors are the guard's, read in code: the human's
 *merge* on the task at Review, or the reviewer's `PASS` on file over a diff with nothing
-gated. Nothing you say in this transcript opens either. The Runs row is a later ticket's.
+gated. Nothing you say in this transcript opens either. The Runs row is not yours to write
+either: the SessionEnd hook runs `scripts/run/runs.mjs` over this session's transcript once you
+have exited, and posts it with the token — task, outcome, model, tokens, findings, all read from
+what happened, none of it from what you say.

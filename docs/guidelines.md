@@ -1,4 +1,9 @@
-<!-- guidelines.md · v1.9 · in the repo · the board is ordered the way Linear orders a backlog: §2
+<!-- guidelines.md · v1.10 · in the repo · every run leaves a Runs row and the mirrors keep up: §2
+     the Runs row's fields as the session-end script reads them from the transcript, the
+     Documents mirrors refreshed header-last under a sentinel; §5 the mirror step in preflight
+     after the deploy check, the Runs row from the SessionEnd hook, the integration token as a
+     writer too, prune's three-hour floor; §8 names T0.12 as it now is.
+     v1.9 · in the repo · the board is ordered the way Linear orders a backlog: §2
      Priority as Urgent · High · Medium · Low · None and the Blockers relation; §3 ready as a
      comment word, Backlog → Ready on it; §4 three words verified in code, and the guard at the
      board's connector; §5 the picker's order, propagation through Blockers, the waiting, loop
@@ -144,8 +149,21 @@ your word, and a merge you make by hand is detected by the next run. You never f
 | Findings | number | reviewer findings raised | M |
 
 Written by a script at session end from the local transcript, posted with a Notion integration
-token. No model call. This is the data for park rate, findings per ticket, and the four-week
-weight tuning.
+token. No model call. This is the data for park rate, findings per ticket, and the four-week weight
+tuning. Since T0.12 the script is `scripts/run/runs.mjs`, run by the SessionEnd hook over the
+transcript Claude Code wrote: the task from the claim commands the skill ran — of the claims that
+did not merge before writing a Status of their own, since step 0 may claim a task to merge it on
+your word before step 1 claims the run's, the last that wrote a Status, or the last when none did — Started and Duration from the first and last
+timestamps, Model from the assistant messages (`Fable→Opus` when both appear), Tokens as input plus
+output, cache reads and cache writes both excluded, counted once per API message — a message
+written as several content-block lines repeats its usage on each, and T0.10's table counted lines
+— Outcome from the last Status the run wrote on its task before any later claim, a write after the
+release included, since a stop releases the marker and then sets Decision (Review and Done are
+Done, Decision is Decision, anything else is Stopped, an idle run included), Findings from the
+reviewer's replies. A subagent's transcript — the reviewer's passes, written beside the session's
+under `<session>/subagents/` — counts towards Tokens and Model and nothing else, since the reviewer
+is about half of what a real run spends. A run that claimed nothing of its own is `R-nnnn` alone
+with no Task. A session that was not a `/ticket` writes no row.
 
 ### Documents
 
@@ -153,8 +171,13 @@ Seven sub-pages: `product-spec` · `design-spec` · `CLAUDE` · `AGENTS` · `bui
 `build-log` · `schema`. The page is headed, verbatim: **Machine-written mirrors of the repo
 documents.** *Each page is refreshed from `main` at the start of every pipeline run and headed
 with the commit it mirrors. The repo is the only editing surface; nothing typed here survives the
-next run.* Nobody types here. The refresh itself is a later ticket's; no run before it touches a
-mirror.
+next run.* Nobody types here. Since T0.12 the refresh is §5's step 0: `scripts/run/mirror.mjs`
+reads each page's first block over the API for the commit it claims and plans the pages behind
+`main`; the run rewrites each through the connector **header-last** — a *refresh in progress*
+callout first, the document in chunks, the *Mirrored from* heading last — so a page is either
+whole and headed with its commit or visibly in progress, never in between. A sentinel still
+standing at the next preflight is a write that died, and that page is refreshed first. The
+Guidelines page is refreshed the same way.
 
 ---
 
@@ -320,7 +343,10 @@ below is a script under `scripts/run/` with a test; the skill holds the judgment
                 /sign-in 200, /app 307; a wrong answer reverts the merge at the tip
                 (revert.mjs, then the one push to main the guard lets through, HEAD:main),
                 files one Fix task at Backlog, puts the reverted ticket back at Backlog, one
-                comment
+                comment · then refresh the Documents and Guidelines mirrors behind main
+                (mirror.mjs plans; the skill writes through the connector): a stopped refresh
+                first, each page header-last under a refresh-in-progress sentinel,
+                allow_async false on every write
 1  Claim        the board read over the API (pick-next.mjs) · a Ready task whose Blockers are
                 all Done, by Priority — Urgent · High · Medium · Low · None, empty as Medium —
                 a Ready blocker at the highest priority of any task not Done it blocks,
@@ -372,8 +398,8 @@ below is a script under `scripts/run/` with a test; the skill holds the judgment
                 record — gh pr merge --merge --delete-branch from the pushed commit — then
                 Done and the Release row in the same run · a gated diff stays at Review with
                 one comment naming the path and waits for `merge` from you, made by the next
-                run's step 0 · remove the marker · Runs row written by the session-end script
-                (a later ticket)
+                run's step 0 · remove the marker · the Runs row is written after the session
+                by the SessionEnd hook, from the transcript (runs.mjs)
 ```
 
 One run, one task. The run exits; the next scheduled run takes the next task. Chaining inside a
@@ -439,9 +465,12 @@ fresh worktree of a commit the suite already passed inherits the green.
 `origin/main`, with `.env.local` carried in by `.worktreeinclude` and nothing else. Desktop does
 not remove the worktree when the run ends; it goes with the session's archive, and an idle run
 opens no pull request for auto-archive to notice. So step 0 stamps the worktree it is in as a
-run's, and removes every stamped worktree that is clean, unlocked, not its own, and either merged
-into `origin/main` or older than three days. A worktree without the stamp is a person's and is
-never touched; a dirty one holds work nobody committed and is left for a person to look at.
+run's, and removes every stamped worktree that is clean, unlocked, not its own, stamped more than
+three hours ago, and either merged into `origin/main` or older than three days. A worktree
+without the stamp is a person's and is never touched; a dirty one holds work nobody committed
+and is left for a person to look at; one stamped inside the last three hours is a run that may
+still be between its step 0 and its step 2, clean at `origin/main`, and stays whatever its merge
+state.
 
 **The board's token.** A third credential, and every run is handed it: `NOTION_TOKEN` in
 `.env.local`, an internal integration's token, the integration shared with the `dev` teamspace,
@@ -452,15 +481,18 @@ API's ~3 a second, so an idle run reads the whole board in one command rather th
 call per task; `pick-next.mjs` reads every task's Priority, Epic and Blockers, the epics' names,
 and the threads of the tasks it would comment on (step 1); and the guard reads the claimed task's
 thread before it lets a merge or a migration apply through, and a Backlog task's thread before it
-lets the connector set it Ready (§4). The token is read from the file and never printed; an API error
-names the endpoint and the status and nothing else. Without it a run says so in its report line,
-reads no comments and claims nothing — the picker reads Blockers over the API too — and a gated
-merge, an apply or a Ready write is refused on that ground, which is the honest answer: nothing
-read the board; a merge on the reviewer's door reads the verdict, the diff
-and the gate's record, none of which is the board. The API lists open threads only, so resolve nothing on a task
-until the run has answered it: a resolved `merge` is a merge nobody will see. The comments the
-pipeline posts still go through the connector, which posts as you; the prefix is what tells the
-two voices apart on a thread, as §4 says.
+lets the connector set it Ready (§4). Since T0.12 two more use it, still without a model:
+`mirror.mjs` reads each mirror page's first block before a refresh, and `runs.mjs` posts the Runs
+row at session end — so the integration needs insert-content capability besides read and
+comment. The token is read from the file and never printed; an API error names the endpoint and
+the status and nothing else. Without it a run says so in its report line, reads no comments and
+claims nothing — the picker reads Blockers over the API too — refreshes no mirror and writes no
+Runs row, and a gated merge, an apply or a Ready write is refused on that ground, which is the
+honest answer: nothing read the board; a merge on the reviewer's door reads the verdict, the diff
+and the gate's record, none of which is the board. The API lists open threads only, so resolve
+nothing on a task until the run has answered it: a resolved `merge` is a merge nobody will see.
+The comments the pipeline posts still go through the connector, which posts as you; the prefix
+is what tells the two voices apart on a thread, as §4 says.
 
 **The capability boundary.** Two database credentials in two files, and a run is handed only one.
 `.env.local`'s `DATABASE_URL` is `aenima_pipeline`, a member of `service_role` that starts every
@@ -547,14 +579,17 @@ Criteria means the same thing on a task and on a phase: what must be true to be 
   version. `T0.10 Schedule` (the scheduled task, the shared marker, worktrees and their
   pruning, the capability boundary, per-ticket logs) — v1.5. `T0.11 Comments` (every task's
   thread read each run, the four shapes a reply takes, merge and apply as words the guard
-  verifies over the API, the integration token, an idle run's one filing) — this version.
+  verifies over the API, the integration token, an idle run's one filing) — v1.6.
   `T0.16 Self-merge` (Status read as the select the board holds, the reviewer's verdict on
   file, the guard's second door and the gated paths, hooks run from main, the deploy check and
   the revert) — v1.8. `T0.17 Linear ordering` (Priority as Urgent · High · Medium · Low · None,
   Blockers as the sequence and propagation through them, the waiting, loop and Urgent notices,
-  `ready` as a word the guard reads at the board's connector) — this version. Telemetry and the mirror (Runs rows from the transcript, the
-  Documents and Guidelines mirror refresh) — a later ticket.
-- Documents: seven pages, headed as mirrors, content synced by the mirror ticket's first run.
+  `ready` as a word the guard reads at the board's connector) — v1.9. `T0.12 Telemetry and
+  mirror` (the Runs row from the transcript by the SessionEnd hook, the Documents and Guidelines
+  mirrors refreshed in preflight header-last under a sentinel, the debts of the last three
+  reports) — this version.
+- Documents: seven pages, headed as mirrors, content refreshed from `main` at every preflight
+  since T0.12.
 
 ---
 

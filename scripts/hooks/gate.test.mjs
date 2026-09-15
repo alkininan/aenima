@@ -1,10 +1,22 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { spawnSync } from "node:child_process";
 
-import { decide, MAX_RED, mergeState, projectState, resolveDir, STEPS, tail } from "./gate.mjs";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+
+import {
+  decide,
+  MAX_RED,
+  mergeState,
+  projectState,
+  resolveDir,
+  STATE_FILE,
+  statePath,
+  STEPS,
+  tail,
+} from "./gate.mjs";
 
 const SESSION = "session-a";
 const HASH = "fingerprint-1";
@@ -285,5 +297,42 @@ describe("tail", () => {
 
   it("leaves shorter output alone", () => {
     expect(tail("one\ntwo")).toBe("one\ntwo");
+  });
+});
+
+// TC3 → AC3 · T0.10 open question 10 → T0.12. The state file's home is the repository's shared `.git`,
+// the same path from the primary and from a linked worktree, and none outside a repository.
+describe("statePath", () => {
+  let primary;
+  let other;
+  const git = (cwd, ...args) => spawnSync("git", args, { cwd, encoding: "utf8" });
+
+  beforeEach(() => {
+    primary = mkdtempSync(join(tmpdir(), "aenima-gate-repo-"));
+    git(primary, "init", "-q", "-b", "main");
+    writeFileSync(join(primary, "a.txt"), "a\n");
+    git(primary, "add", "-A");
+    git(primary, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "base");
+    other = mkdtempSync(join(tmpdir(), "aenima-gate-wt-"));
+    rmSync(other, { recursive: true });
+    expect(git(primary, "worktree", "add", "-q", other, "-b", "wt").status).toBe(0);
+  });
+  afterEach(() => {
+    rmSync(other, { recursive: true, force: true });
+    rmSync(primary, { recursive: true, force: true });
+  });
+
+  it("resolves to the same file from the primary and from a linked worktree", () => {
+    expect(statePath(other)).toBe(statePath(primary));
+    expect(statePath(primary)).toBe(join(realpathSync(primary), ".git", STATE_FILE));
+  });
+
+  it("is null outside a repository, rather than a guessed path", () => {
+    const nowhere = mkdtempSync(join(tmpdir(), "aenima-gate-norepo-"));
+    try {
+      expect(statePath(nowhere)).toBeNull();
+    } finally {
+      rmSync(nowhere, { recursive: true, force: true });
+    }
   });
 });
