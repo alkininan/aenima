@@ -77,6 +77,7 @@ One file per ticket under `docs/log/`, oldest first. This list is written by `no
 - [T0.97 — Smoke C: plain sentences, a default taken, the first stale-run recovery](log/T0.97.md) · 2026-09-09 · `df9b0a6`
 - [T0.96 — Smoke D: a package script and its test, on the schedule](log/T0.96.md) · 2026-09-13
 - [T0.10 — Schedule: nobody types /ticket](log/T0.10.md) · 2026-09-13
+- [T0.14 — Ignore worktrees in lint](log/T0.14.md) · 2026-09-13
 - [T0.11 — Comments: a comment on the board is enough](log/T0.11.md) · 2026-09-13
 - [T0.16 — Self-merge: a finished ticket merges itself](log/T0.16.md) · 2026-09-14
 
