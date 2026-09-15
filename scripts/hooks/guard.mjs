@@ -31,6 +31,13 @@
  * revert of the merge at origin/main's tip, `HEAD:main`, one commit that restores the tree
  * before the merge. The guard verifies; the model never asserts (docs/guidelines.md §4).
  *
+ * Since T0.17 the guard also stands at the board's connector — the Notion tools the run writes
+ * the board through, whatever the server is called. Rule (h): a status write that sets a
+ * Backlog task Ready needs the human's `ready` on that page's thread, read over the API the
+ * same way; no task is created at Ready; and no comment is posted without the pipeline's
+ * prefix, because an unprefixed comment reads on the thread as the human's voice, and the
+ * human's voice is what grants `merge`, `apply` and `ready`.
+ *
  * `decide()` is pure and exported so scripts/hooks/guard.test.mjs can cover every rule and,
  * more importantly, every neighbouring call that must stay allowed.
  */
@@ -39,6 +46,7 @@ import { execFileSync } from "node:child_process";
 import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { readBoard } from "../run/notion.mjs";
 import { reviewed, verify } from "../run/permission.mjs";
 import { resolveDir } from "./gate.mjs";
 
@@ -728,6 +736,42 @@ const mergeCommit = (rest) =>
   rest.some((token) => token === "--merge" || token === "-m") &&
   !rest.some((token) => ["--squash", "-s", "--rebase", "-r"].includes(token));
 
+/** The board's connector tools rule (h) reads, by the tool's own name after the server's. */
+const CONNECTOR = /^mcp__.+__notion-(update-page|create-pages|create-comment)$/;
+
+/** Which of the connector's writes a hook call is — `update-page` and so on — or null. */
+const connectorTool = (input) => String(input?.tool_name ?? "").match(CONNECTOR)?.[1] ?? null;
+
+/** True when an update-page call sets Status to Ready. */
+const setsReady = (input) =>
+  connectorTool(input) === "update-page" && input?.tool_input?.properties?.Status === "Ready";
+
+/** The text a create-comment call would post, from markdown or from rich text. */
+const commentText = (toolInput) =>
+  typeof toolInput?.markdown === "string"
+    ? toolInput.markdown
+    : (Array.isArray(toolInput?.rich_text) ? toolInput.rich_text : [])
+        .map((part) => part?.text?.content ?? part?.plain_text ?? "")
+        .join("");
+
+/** The pipeline's prefix from the board file at `dir`, the board's default when there is none. */
+function boardPrefix(dir) {
+  try {
+    return readBoard(dir).prefix ?? "⟡ ";
+  } catch {
+    return "⟡ ";
+  }
+}
+
+/** The words a hook call would need the board's permission for: a command's, or a Ready write's. */
+export function wantedBy(input) {
+  if (input?.tool_name === "Bash") {
+    const command = input?.tool_input?.command;
+    return typeof command === "string" ? wanted(command) : [];
+  }
+  return setsReady(input) ? ["ready"] : [];
+}
+
 /** The words a command line would need the board's permission for, in the order met. */
 export function wanted(command) {
   const words = [];
@@ -752,7 +796,7 @@ const UNREVIEWED = { ok: false, why: "no reviewer verdict was read" };
  * The whole decision. Returns the refusal reason, or null to let the call through.
  *
  * `deps.currentBranch`, `deps.permission`, `deps.verdict`, `deps.prBranch`, `deps.prHead`,
- * `deps.localHead` and `deps.revertOfTip` are injected so the rules that depend on where
+ * `deps.localHead`, `deps.revertOfTip` and `deps.prefix` are injected so the rules that depend on where
  * HEAD points, on what the board's thread says, on what the reviewer wrote, and on which
  * branch and commit a pull request carries can be tested without a repository or a board
  * standing in a particular state. Without `deps.permission` nothing is granted and without
@@ -767,6 +811,7 @@ export function decide(input, deps = {}) {
   const prHead = deps.prHead ?? ((selector) => prHeadAt(selector, dir));
   const localHead = deps.localHead ?? (() => revAt("HEAD", dir));
   const revertOfTip = deps.revertOfTip ?? (() => revertOfTipAt(dir));
+  const prefix = deps.prefix ?? (() => boardPrefix(dir));
   const tool = input?.tool_name;
 
   if (tool === "Edit" || tool === "Write") {
@@ -777,6 +822,35 @@ export function decide(input, deps = {}) {
     // (g) the reviewer's verdict is the reviewer's to write; the guard's second door reads it.
     if (typeof path === "string" && isVerdictPath(path)) {
       return `Writing ${path} is refused — a file under docs/reviews/ is the reviewer's to write, and the guard opens a merge on what it finds there. docs/guidelines.md §4.`;
+    }
+    return null;
+  }
+
+  // (h) the board's connector (T0.17). Backlog → Ready is the human's word, read from the
+  // board: a Ready write on a page the guard reads at Backlog needs "ready" as the newest
+  // reply there. From Decision, Review or In progress the move is the run's on its reading of
+  // a reply (§3), and the guard lets it through once it has read the page is not at Backlog —
+  // when nothing read the board, nothing is granted.
+  const connector = connectorTool(input);
+  if (connector === "update-page" && setsReady(input)) {
+    const granted = permission("ready");
+    const status = granted.task?.status ?? null;
+    if (!granted.ok && (status === null || status === "Backlog")) {
+      return `Setting ${granted.task?.name || "this task"} Ready is refused — Backlog → Ready is your word, a reply beginning with "ready" on the task's thread, and the guard could not find it: ${granted.why}. docs/guidelines.md §3, §4.`;
+    }
+    return null;
+  }
+  if (connector === "create-pages") {
+    const pages = Array.isArray(input?.tool_input?.pages) ? input.tool_input.pages : [];
+    if (pages.some((page) => page?.properties?.Status === "Ready")) {
+      return "Creating a task at Ready is refused — every task starts at Backlog, and Backlog → Ready is your word on the thread. Create it at Backlog. docs/guidelines.md §3.";
+    }
+    return null;
+  }
+  if (connector === "create-comment") {
+    const mark = prefix();
+    if (!commentText(input?.tool_input).startsWith(mark)) {
+      return `Posting a comment is refused unless it begins with ${mark.trim()} — without it the thread reads it as your voice, and your voice is what grants merge, apply and ready. Compose it with scripts/run/comments.mjs. docs/guidelines.md §4.`;
     }
     return null;
   }
@@ -897,11 +971,12 @@ async function readStdin() {
  * needs no word reads nothing.
  */
 export async function judge(input, { dir = resolveDir(input), deps = {} } = {}) {
-  const command = input?.tool_name === "Bash" ? input?.tool_input?.command : null;
   const answers = {};
   let passed = null;
-  for (const word of typeof command === "string" ? wanted(command) : []) {
-    answers[word] = await verify(word, { dir, deps });
+  for (const word of wantedBy(input)) {
+    // "ready" is read on the page the write names; the preflight sets Ready before any claim.
+    const page = word === "ready" ? (input?.tool_input?.page_id ?? null) : null;
+    answers[word] = await verify(word, { dir, page, deps });
     // The reviewer's door is read only when the word is not there: a merge the human
     // granted needs no verdict, and a verdict is never read for an apply.
     if (word === "merge" && !answers[word].ok) passed = reviewed({ dir, deps });
@@ -912,6 +987,7 @@ export async function judge(input, { dir = resolveDir(input), deps = {} } = {}) 
     ...(deps.prBranch ? { prBranch: deps.prBranch } : {}),
     ...(deps.prHead ? { prHead: deps.prHead } : {}),
     ...(deps.localHead ? { localHead: deps.localHead } : {}),
+    ...(deps.prefix ? { prefix: deps.prefix } : {}),
   });
 }
 
@@ -929,10 +1005,10 @@ async function main() {
   try {
     reason = await judge(input);
   } catch (error) {
-    // A guard that cannot finish judging a merge or an apply refuses it: the board was not
-    // read, and an exit other than 2 would let the call through. Anything else proceeds.
-    const command = input?.tool_input?.command;
-    const needed = typeof command === "string" ? wanted(command) : [];
+    // A guard that cannot finish judging a merge, an apply or a Ready write refuses it: the
+    // board was not read, and an exit other than 2 would let the call through. Anything else
+    // proceeds.
+    const needed = wantedBy(input);
     reason =
       needed.length === 0
         ? null

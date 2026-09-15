@@ -24,12 +24,14 @@ reply newer than the pipeline's last prefixed comment, each with its status, the
 whether the two-round cap still allows a post, and the shape the words settle. `comments.mjs`
 holds that reading: the prefixed comments are the pipeline's and everything else is the
 human's; `mentions` says whether a reply *begins* with a word, `permitted` whether the human's
-`merge` or `apply` is on the thread newer than the pipeline's last comment, and `shapeOf`
-names the two countable shapes — `merge` on a task at Review, `apply` on a Decision waiting on
-a migration — leaving `assess` for the skill: a change to the ticket, new work, an answer
-that resolves a question, a note, or a clarifying round. The same script composes every
-comment the run posts — decision, clarifying, migration, stale, default, change, newWork,
-merged, applied, noted, setup, resolved — in plain sentences with the prefix, from the
+`merge`, `apply` or `ready` is on the thread newer than the pipeline's last comment, and
+`shapeOf` names the three countable shapes — `merge` on a task at Review, `apply` on a Decision
+waiting on a migration, `ready` on a task at Backlog, which the run sets Ready through the
+connector only once the guard has read the word there too (T0.17) — leaving `assess` for the
+skill: a change to the ticket, new work, an answer that resolves a question, a note, or a
+clarifying round. The same script composes every comment the run posts — decision, clarifying,
+migration, stale, default, change, newWork, merged, applied, noted, setup, resolved, gated,
+reverted, readied, waiting, cycle, urgent — in plain sentences with the prefix, from the
 sentences the skill supplies. `merge-detect.mjs` takes the Review tasks with their commits and asks `git
 merge-base --is-ancestor` against `origin/main` after a fetch, which is the only honest test of
 "merged" — whether the human merged by hand or a run merged on the human's word a moment
@@ -49,8 +51,17 @@ Backlog and posting one comment (T0.16).
 
 ## 1 Claim
 
-`pick-next.mjs` chooses the task: top Ready by Priority (Must, Should, Could — never Won't),
-then oldest created. The run sets it In progress and `claim.mjs` writes `aenima-run-active`
+`pick-next.mjs` chooses the task, reading the board itself over the API through `notion.mjs` —
+every task's Priority, Epic and Blockers, the epics' names — the way Linear orders a backlog
+(T0.17): a Ready task is claimable once every row in its Blockers is Done; claimable tasks go by
+Priority, Urgent · High · Medium · Low · None with an empty one read as Medium, a Ready blocker
+carrying the highest priority of any task not Done it blocks however far down the chain; ties
+go to the roadmap — the Epic's name, then the ID as numbers phase first, then the oldest — and
+a task with no Epic or no ID sorts after. It also prints the comments the run owes the tasks it
+passes by — a Ready task waiting on a blocker at Backlog, one member of a loop of tasks
+blocking each other, the newest of three or more Ready tasks at Urgent — composed by
+`comments.mjs`, having read those tasks' threads and dropped any the pipeline has already
+posted there, so a second run says nothing twice. The run sets the pick In progress and `claim.mjs` writes `aenima-run-active`
 — task, page, branch, start time, session — into the repository's shared `.git` directory,
 which `repo.mjs` locates and which is the same file from every worktree: the footprint the
 guard reads to find the claimed task's thread before it lets a merge or a migrate through,

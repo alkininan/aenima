@@ -86,8 +86,40 @@ describe("comment and task", () => {
       url: "https://www.notion.so/t1",
       Name: "T0.11 Comments",
       Status: "Review",
+      Priority: null,
+      Epic: [],
+      Blockers: [],
+      created: null,
     });
     expect(task({ id: "t2", properties: {} }).Status).toBeNull();
+  });
+
+  // T0.17 — the picker's fields: Priority as a select, Epic and Blockers as the page ids of
+  // their relations, and when the row was created.
+  it("reads Priority, Epic, Blockers and the created time as the picker orders by them", () => {
+    const raw = {
+      id: "t6",
+      url: "https://www.notion.so/t6",
+      created_time: "2026-09-14T17:11:24.354Z",
+      properties: {
+        Name: { title: [{ plain_text: "T0.17 Linear ordering" }] },
+        Status: { type: "select", select: { name: "Ready" } },
+        Priority: { type: "select", select: { name: "High" } },
+        Epic: { type: "relation", relation: [{ id: "3cf79daf-d42e-81cf-8a80-ca880f54fdec" }] },
+        Blockers: {
+          type: "relation",
+          relation: [{ id: "3db79daf-d42e-8153-8a9b-dcffdfc70538" }, { id: "b2" }],
+          has_more: false,
+        },
+      },
+    };
+    expect(task(raw)).toMatchObject({
+      Priority: "High",
+      Epic: ["3cf79daf-d42e-81cf-8a80-ca880f54fdec"],
+      Blockers: ["3db79daf-d42e-8153-8a9b-dcffdfc70538", "b2"],
+      created: "2026-09-14T17:11:24.354Z",
+    });
+    expect(task({ id: "t7", properties: { Priority: { select: null } } }).Priority).toBeNull();
   });
 
   // T0.16 TC1 → AC1 (carries T0.15). The Tasks data source holds Status as a select property, not a status
@@ -230,6 +262,10 @@ describe("client", () => {
       url: "https://www.notion.so/abc",
       Name: "T0.11 Comments",
       Status: "Review",
+      Priority: null,
+      Epic: [],
+      Blockers: [],
+      created: null,
     });
     expect(calls[0].method).toBe("GET");
   });

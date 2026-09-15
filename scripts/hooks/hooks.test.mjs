@@ -72,6 +72,25 @@ describe("the hook commands in .claude/settings.json", () => {
     expect(result.stderr).toContain(".env");
   });
 
+  // T0.17 TC3 → AC3: the board's connector is guarded by the same command, so a comment the
+  // run would post in the human's voice is refused by main's copy of the guard.
+  it("guards the board's connector with the same command, whatever the server is called", () => {
+    const entry = settings.hooks.PreToolUse.find((e) => e.matcher.includes("notion"));
+    expect(entry.hooks[0].command).toBe(commandOf("PreToolUse", "Bash"));
+    const matcher = new RegExp(`^(?:${entry.matcher})$`);
+    for (const tool of ["notion-update-page", "notion-create-pages", "notion-create-comment"]) {
+      expect(matcher.test(`mcp__a6bc5cd2-b1e4-484a-b22d-e3708b2a94f4__${tool}`), tool).toBe(true);
+    }
+    expect(matcher.test("mcp__a6bc5cd2-b1e4-484a-b22d-e3708b2a94f4__notion-fetch")).toBe(false);
+    const result = hook(entry.hooks[0].command, {
+      tool_name: "mcp__notion__notion-create-comment",
+      tool_input: { page_id: "p1", markdown: "ready" },
+      cwd: work,
+    });
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("your voice");
+  });
+
   it("refuses everything rather than run nothing when origin/main cannot be read", () => {
     sh(work, "update-ref", "-d", "refs/remotes/origin/main");
     const result = hook(commandOf("PreToolUse", "Bash"), bash("git status"));
