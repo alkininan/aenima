@@ -1,6 +1,7 @@
 <!-- guidelines.md · v1.12 · in the repo · the boundary reaches production: §5 Vercel's Production
      DATABASE_URL is aenima_pipeline too, so the admin credential is on no path at all — not a
      run's, not the deployed app's — and .env.migrate in the primary checkout is its only home.
+     This change held v1.7 on its branch while it waited; that number never reached main.
      v1.11 · in the repo · the cap counts clarifying rounds: §4 the cap per
      question, the kinds it never counts, a refusal that always reports, one comment of a kind
      per claim, and the guard reading all of it before a comment posts.
