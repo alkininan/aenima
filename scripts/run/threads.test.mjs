@@ -33,6 +33,8 @@ describe("scan", () => {
       c(`${P}clarify 2`, "2026-09-13T10:00:00Z"),
       c("still unclear to me too", "2026-09-13T11:00:00Z"),
     ],
+    // T0.17 TC3 → AC3: the human's go on a Backlog task.
+    ready: [c("ready", "2026-09-13T11:00:00Z")],
   };
   const commentsOf = async (id) => threads[id];
   const tasks = [
@@ -43,21 +45,24 @@ describe("scan", () => {
     row("migration", "T5 migration", "Decision"),
     row("decision", "T6 decision", "Decision"),
     row("capped", "T7 capped", "Decision"),
+    row("ready", "T8 ready", "Backlog"),
   ];
 
   it("returns only the tasks with an unanswered reply, and counts every task scanned", async () => {
     const result = await scan(tasks, commentsOf, P);
-    expect(result.scanned).toBe(7);
+    expect(result.scanned).toBe(8);
     expect(result.threads.map((t) => t.id)).toEqual([
       "review",
       "merge",
       "migration",
       "decision",
       "capped",
+      "ready",
     ]);
   });
 
-  it("names the shape the words settle: merge at Review, apply on a migration, else assess", async () => {
+  // T0.11's TC1–TC4, and T0.17 TC3 → AC3 for ready at Backlog.
+  it("names the shape the words settle: merge at Review, apply on a migration, ready at Backlog, else assess", async () => {
     const { threads: found } = await scan(tasks, commentsOf, P);
     const shape = Object.fromEntries(found.map((t) => [t.id, t.shape]));
     expect(shape).toEqual({
@@ -66,6 +71,7 @@ describe("scan", () => {
       migration: "apply",
       decision: "assess",
       capped: "assess",
+      ready: "ready",
     });
   });
 

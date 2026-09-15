@@ -14,6 +14,7 @@ import {
   revertOfTipAt,
   target,
   wanted,
+  wantedBy,
   writeTargets,
 } from "./guard.mjs";
 
@@ -180,6 +181,133 @@ describe("rule (g) — Edit and Write under docs/reviews/", () => {
     expect(decide(...file("Write", "docs/reports/T0.16.md"))).toBeNull();
     expect(decide(...file("Write", "docs/log/T0.16.md"))).toBeNull();
     expect(decide(...file("Write", "docs/reviews-notes.md"))).toBeNull();
+  });
+});
+
+// T0.17 TC3 → AC3. Backlog → Ready is the human's word, and the guard reads it from the board
+// at the connector the run writes the board through: a status write on a Backlog page, a task
+// created at Ready, and a comment the run would post in the human's own voice.
+describe("T0.17 — rule (h) the board's connector", () => {
+  const SERVER = "mcp__a6bc5cd2-b1e4-484a-b22d-e3708b2a94f4__";
+  const call = (tool, tool_input) => ({ tool_name: `${SERVER}${tool}`, tool_input, cwd: "/repo" });
+  const toReady = (page_id = "p1", Status = "Ready") =>
+    call("notion-update-page", { page_id, command: "update_properties", properties: { Status } });
+  const read =
+    (status, ok = false) =>
+    () => ({
+      ok,
+      why: ok
+        ? null
+        : `the guard read the thread of T3.1 Slice at ${status} and did not find "ready" as your newest reply since the run's last comment`,
+      task: { name: "T3.1 Slice", status, branch: "t3-1" },
+    });
+
+  it("refuses Backlog → Ready without the word, and says what it read", () => {
+    const reason = decide(toReady(), { permission: read("Backlog") });
+    expect(reason).toContain("Setting T3.1 Slice Ready is refused");
+    expect(reason).toContain('did not find "ready"');
+  });
+
+  it("allows Backlog → Ready on the word", () => {
+    expect(decide(toReady(), { permission: read("Backlog", true) })).toBeNull();
+  });
+
+  it("leaves Ready from Decision, Review or In progress to the run's reading, as §3 does", () => {
+    for (const status of ["Decision", "Review", "In progress", "Ready"]) {
+      expect(decide(toReady(), { permission: read(status) }), status).toBeNull();
+    }
+  });
+
+  it("refuses when nothing read the board — a word nobody read grants nothing", () => {
+    expect(decide(toReady())).toContain("the board was not read");
+    const unread = () => ({
+      ok: false,
+      why: "NOTION_TOKEN is not in .env.local, so the board cannot be read",
+    });
+    expect(decide(toReady(), { permission: unread })).toContain("NOTION_TOKEN");
+  });
+
+  // Review pass 1, Must 1: Backlog → Decision, then Decision → Ready, reached Ready with no
+  // word. The one move out of Backlog is to Ready, so every other status write on a Backlog
+  // task is refused, and a write the guard could not read the task for is refused too.
+  it("refuses any move out of Backlog but Ready, so a task cannot reach Ready in two steps", () => {
+    for (const target of ["Decision", "In progress", "Review", "Done", null]) {
+      expect(
+        decide(toReady("p1", target), { permission: read("Backlog") }),
+        String(target),
+      ).toContain("the one move out of Backlog is to Ready");
+    }
+    for (const status of ["Ready", "In progress", "Decision", "Review", "Done"]) {
+      expect(decide(toReady("p1", "Done"), { permission: read(status) }), status).toBeNull();
+    }
+    expect(decide(toReady("p1", "Decision"))).toContain("the board was not read");
+  });
+
+  it("asks the board nothing for a write that sets Backlog or no Status at all", () => {
+    const permission = () => {
+      throw new Error("read the board for a write that needed nothing");
+    };
+    expect(decide(toReady("p1", "Backlog"), { permission })).toBeNull();
+    const name = call("notion-update-page", {
+      page_id: "p1",
+      command: "update_properties",
+      properties: { Commit: "abc1234" },
+    });
+    expect(decide(name, { permission })).toBeNull();
+    const content = call("notion-update-page", {
+      page_id: "p1",
+      command: "update_content",
+      content_updates: [],
+    });
+    expect(decide(content, { permission })).toBeNull();
+  });
+
+  it("refuses a task created at any Status but Backlog, and allows one at Backlog or with none", () => {
+    const create = (Status) =>
+      call("notion-create-pages", {
+        parent: { type: "data_source_id", data_source_id: "ds" },
+        pages: [
+          { properties: { Name: "Fix the gate", Status: "Backlog" } },
+          { properties: { Name: "Draft", Status } },
+        ],
+      });
+    expect(decide(create("Ready"))).toContain("Creating a task at Ready is refused");
+    expect(decide(create("Decision"))).toContain("Creating a task at Decision is refused");
+    expect(decide(create("Backlog"))).toBeNull();
+    const release = call("notion-create-pages", {
+      parent: { type: "data_source_id", data_source_id: "releases" },
+      pages: [{ properties: { Name: "2026-09-15 ec531f3", Commit: "ec531f3" } }],
+    });
+    expect(decide(release)).toBeNull();
+  });
+
+  it("refuses a comment without the prefix, in markdown or rich text, and allows the run's own", () => {
+    const prefix = () => "⟡ ";
+    const comment = (fields) => call("notion-create-comment", { page_id: "p1", ...fields });
+    expect(decide(comment({ markdown: "ready" }), { prefix })).toContain("begins with ⟡");
+    expect(
+      decide(comment({ discussion_id: "discussion://p1/d1", markdown: "merge" }), { prefix }),
+    ).toContain("your voice");
+    expect(
+      decide(comment({ rich_text: [{ type: "text", text: { content: "apply" } }] }), { prefix }),
+    ).toContain("begins with ⟡");
+    expect(decide(comment({ markdown: "⟡ Read that as your go." }), { prefix })).toBeNull();
+    expect(
+      decide(
+        comment({ rich_text: [{ text: { content: "⟡ " } }, { text: { content: "Merged." } }] }),
+        {
+          prefix,
+        },
+      ),
+    ).toBeNull();
+  });
+
+  it("has no opinion about the connector's reads, or a tool that only shares a word of the name", () => {
+    expect(decide(call("notion-fetch", { id: "p1" }))).toBeNull();
+    expect(decide(call("notion-get-comments", { page_id: "p1" }))).toBeNull();
+    expect(
+      decide({ tool_name: "notion-create-comment", tool_input: { markdown: "ready" } }),
+    ).toBeNull();
   });
 });
 
@@ -722,6 +850,22 @@ describe("TC4 — rule (b) applies only on the human's word", () => {
   });
 });
 
+// T0.17 TC3 → AC3, the hook's entry: which reads a hook call needs before the rules run.
+describe("wantedBy — the words a hook call would need", () => {
+  it("is the command's words for Bash, and a read of the task for any status write but Backlog", () => {
+    const bashCall = { tool_name: "Bash", tool_input: { command: "gh pr merge t0-1 --merge" } };
+    expect(wantedBy(bashCall)).toEqual(["merge"]);
+    const write = (Status) => ({
+      tool_name: "mcp__notion__notion-update-page",
+      tool_input: { page_id: "p", properties: { Status } },
+    });
+    expect(wantedBy(write("Ready"))).toEqual(["ready"]);
+    expect(wantedBy(write("Done"))).toEqual(["ready"]);
+    expect(wantedBy(write("Backlog"))).toEqual([]);
+    expect(wantedBy({ tool_name: "Write", tool_input: { file_path: "a" } })).toEqual([]);
+  });
+});
+
 // TC3 → AC3 and TC4 → AC4, the hook's entry: which words a command line needs before the
 // board is read.
 describe("wanted — the words a command line would need", () => {
@@ -822,5 +966,42 @@ describe("judge — reads the marker and the token file, then the thread", () =>
     };
     expect(await judge(merge(worktree), { deps })).toContain('did not find "merge"');
     expect(release({ session: "s" }, { cwd: worktree }).released).toBe(true);
+  });
+
+  // T0.17 TC3 → AC3, from the hook's entry: the page the write names, no marker, the token from
+  // the checkout's .env.local, and the thread over the (stubbed) API.
+  it("reads the thread of the page a Ready write names, with no marker, and grants only the human's ready", async () => {
+    const write = (cwd) => ({
+      tool_name: "mcp__notion__notion-update-page",
+      tool_input: {
+        page_id: "page-7",
+        command: "update_properties",
+        properties: { Status: "Ready" },
+      },
+      cwd,
+    });
+    const pages = [];
+    const page = async (id) => {
+      pages.push(id);
+      return { Name: "T3.1 Slice", Status: "Backlog" };
+    };
+    const board = () => ({ prefix: "⟡ " });
+    const human = {
+      board,
+      page,
+      comments: async () => [{ text: "ready", created_time: "2026-09-15T11:00:00Z" }],
+    };
+    expect(await judge(write(worktree), { deps: human })).toBeNull();
+    expect(pages).toEqual(["page-7"]);
+    const own = {
+      ...human,
+      comments: async () => [{ text: "⟡ ready", created_time: "2026-09-15T11:00:00Z" }],
+    };
+    expect(await judge(write(worktree), { deps: own })).toContain(
+      "Setting T3.1 Slice Ready is refused",
+    );
+    expect(await judge(write(primary), { deps: human })).toContain(
+      "NOTION_TOKEN is not in .env.local",
+    );
   });
 });

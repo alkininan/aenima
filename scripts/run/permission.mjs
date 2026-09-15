@@ -11,6 +11,10 @@
  * here reads the transcript — and the branch a merge must match is derived from the task's
  * name on the board, not from the branch the run wrote into the marker (review pass 2).
  *
+ * Since T0.17 the board grants a third word, `ready`: the human's go on a Backlog task, said
+ * on its thread. The run sets Ready in the preflight, before anything is claimed, so that word
+ * is read on the page the status write names rather than through the marker.
+ *
  * Every `why` is a plain sentence the guard puts in its refusal, so a session that is
  * refused knows which of the things it needs was missing.
  */
@@ -28,21 +32,40 @@ import { commonDir } from "./repo.mjs";
 import { client, readBoard, readToken, TOKEN_VAR } from "./notion.mjs";
 import { idOf } from "./stale.mjs";
 
-export const WORDS = ["merge", "apply"];
+export const WORDS = ["merge", "apply", "ready"];
+
+/** The state each word is for, as a refusal says it. */
+const STATE = {
+  merge: "a task at Review",
+  apply: "a task at Decision waiting on a migration question",
+  ready: "a task at Backlog",
+};
 
 /**
- * `{ ok, why, marker, comment, task }` for `word` on the claimed task. `task` is what the
- * board says the claimed page is — `{ name, status, branch }`, the branch derived from the ID
- * in the name, null when the name carries none. Effects injected: `marker`, `token`, `board`,
- * `comments` and `page` default to the real ones for `dir`.
+ * `{ ok, why, marker, comment, task }` for `word` on the claimed task — or, for `ready`, on
+ * `page`, the page the status write names. `task` is what the board says the page is —
+ * `{ name, status, branch }`, the branch derived from the ID in the name, null when the name
+ * carries none. Effects injected: `marker`, `token`, `board`, `comments` and `page` default
+ * to the real ones for `dir`.
  */
-export async function verify(word, { dir = process.cwd(), deps = {} } = {}) {
+export async function verify(word, { dir = process.cwd(), page = null, deps = {} } = {}) {
   if (!WORDS.includes(word)) return { ok: false, why: `"${word}" is not a word the board grants` };
 
-  const marker = deps.marker ? deps.marker() : readMarker(dir);
-  if (marker === null || !marker.page) {
-    return { ok: false, why: "no run marker names a claimed task, so there is no thread to read" };
+  let marker = null;
+  if (word === "ready") {
+    if (!page) {
+      return { ok: false, why: "no page was named, so there is no thread to read" };
+    }
+  } else {
+    marker = deps.marker ? deps.marker() : readMarker(dir);
+    if (marker === null || !marker.page) {
+      return {
+        ok: false,
+        why: "no run marker names a claimed task, so there is no thread to read",
+      };
+    }
   }
+  const target = word === "ready" ? page : marker.page;
 
   const token = deps.token ? deps.token() : readToken(dir);
   if (token === null) {
@@ -64,8 +87,8 @@ export async function verify(word, { dir = process.cwd(), deps = {} } = {}) {
   let comments;
   let row;
   try {
-    comments = deps.comments ? await deps.comments(marker.page) : await api.comments(marker.page);
-    row = deps.page ? await deps.page(marker.page) : await api.page(marker.page);
+    comments = deps.comments ? await deps.comments(target) : await api.comments(target);
+    row = deps.page ? await deps.page(target) : await api.page(target);
   } catch (error) {
     return { ok: false, why: `the thread could not be read: ${error.message}`, marker };
   }
@@ -78,19 +101,17 @@ export async function verify(word, { dir = process.cwd(), deps = {} } = {}) {
   };
 
   // The same test the preflight reads: the word, as the newest reply, at the state the word
-  // is for — `merge` on a task at Review, `apply` on a Decision waiting on a migration. A
-  // "merge the two helpers" on a task In progress is a change request, not a merge (review
-  // pass 3).
+  // is for — `merge` on a task at Review, `apply` on a Decision waiting on a migration,
+  // `ready` on a task at Backlog. A "merge the two helpers" on a task In progress is a change
+  // request, not a merge (review pass 3).
   const thread = readThread(comments, board.prefix ?? "⟡ ");
   const shape = shapeOf(task.status, thread);
   const ok = shape === word;
-  const state =
-    word === "merge" ? "a task at Review" : "a task at Decision waiting on a migration question";
   return {
     ok,
     why: ok
       ? null
-      : `the guard read the thread of ${task.name || "the claimed task"} at ${task.status ?? "no status"} and did not find "${word}" as your newest reply since the run's last comment — "${word}" is the word for ${state}`,
+      : `the guard read the thread of ${task.name || "the claimed task"} at ${task.status ?? "no status"} and did not find "${word}" as your newest reply since the run's last comment — "${word}" is the word for ${STATE[word]}`,
     marker,
     comment: ok ? thread.unanswered.at(-1) : null,
     task,
@@ -187,14 +208,17 @@ export function reviewed({ dir = process.cwd(), deps = {} } = {}) {
   return { ok: true, why: null, marker, task: { name: id, branch: branchName(id) }, gated: [] };
 }
 
-/** CLI: `node permission.mjs merge` — what the guard would find, for a person to check. */
+/**
+ * CLI: `node permission.mjs merge`, or `node permission.mjs ready <page id>` — what the guard
+ * would find, for a person to check.
+ */
 async function main() {
-  const word = process.argv[2];
+  const [word, page = null] = process.argv.slice(2);
   if (!word) {
-    process.stderr.write(`usage: permission.mjs <${WORDS.join("|")}>\n`);
+    process.stderr.write(`usage: permission.mjs <${WORDS.join("|")}> [page id]\n`);
     process.exit(1);
   }
-  const result = await verify(word);
+  const result = await verify(word, { page });
   emit({ ok: result.ok, why: result.why, task: result.task ?? null });
   process.exit(result.ok ? 0 : 1);
 }

@@ -1,4 +1,9 @@
-<!-- guidelines.md · v1.8 · in the repo · a finished ticket merges itself: §2 Status is the select
+<!-- guidelines.md · v1.9 · in the repo · the board is ordered the way Linear orders a backlog: §2
+     Priority as Urgent · High · Medium · Low · None and the Blockers relation; §3 ready as a
+     comment word, Backlog → Ready on it; §4 three words verified in code, and the guard at the
+     board's connector; §5 the picker's order, propagation through Blockers, the waiting, loop
+     and Urgent notices, the token's third reader; §8 names T0.17.
+     v1.8 · in the repo · a finished ticket merges itself: §2 Status is the select
      the board holds; §3 Review → Done is the run's own move except on a gated path, and Done →
      Backlog when the deploy check reverts it; §4 the three cases where merge is still your word;
      §5 the reviewer's verdict on file, the guard's second door, hooks run from main, the outside
@@ -60,10 +65,12 @@ Writer column: **H** human · **M** machine (pipeline) · **F** formula, nobody 
 | Property | Type | Values | Writer | Notes |
 |---|---|---|---|---|
 | Name | title | `T3.1 Slice PRD into items` | H, M | ID + imperative, six words max. ID assigned by M at claim if missing. |
-| Status | select | Backlog · Ready · In progress · Decision · Review · Done | H for Backlog→Ready; M for all else | See §3. The board holds it as a select, not a status property; `scripts/run/notion.mjs` reads the select alone, and a status-typed property reads null — the guard then refuses at no status. |
-| Priority | select | Must · Should · Could · Won't | H | MoSCoW. Default Should. Never used in bodies with this meaning — in bodies Must/Should mean check severity. |
+| Status | select | Backlog · Ready · In progress · Decision · Review · Done | H for Backlog→Ready — a click, or your word `ready` on the thread, which M acts on; M for all else | See §3. The board holds it as a select, not a status property; `scripts/run/notion.mjs` reads the select alone, and a status-typed property reads null — the guard then refuses at no status. |
+| Priority | select | Urgent · High · Medium · Low · None | H, M | Linear's scale. Empty reads as Medium, and M writes Medium on a task it creates. Urgent is how you put work in front; it is never how you sequence it. |
 | Type | select | Feature · Enhancement · Technical · Content · Experiment · Fix · Spike | H, M | product-spec §4, exactly. |
-| Epic | relation → Epics | | H, M | Proposed by M at claim if empty. |
+| Epic | relation → Epics | | H, M | Proposed by M at claim if empty. Its name carries the phase, which is how the roadmap breaks a priority tie (§5 step 1). |
+| Blockers | relation → Tasks | | H | Tasks that must be Done before this one is picked. Sequencing lives here, never in a priority tier. |
+| Blocks | relation ← Tasks | | (dual of Blockers) | Fills itself. |
 | Spec | text | `product-spec v1.3 §8, §11 · design-spec v2.15 §4` | H, M | Sections cited + versions cited against. Hidden. |
 | Commit | text | short hash | M | Last commit on the task branch. Hidden. |
 | Release | relation → Releases | | M | Set when merged. |
@@ -156,7 +163,8 @@ mirror.
 | From | To | Who | Trigger |
 |---|---|---|---|
 | — | Backlog | H or M | Created. Everything starts here, including tasks the pipeline creates from findings, from a reply on any task that asks for new work, and from an idle run's own red. |
-| Backlog | Ready | **H only** | Your go. The one human move on the board. |
+| Backlog | Ready | **H** | Your go. The one human move on the board. |
+| Backlog | Ready | M | The same go, said on the thread: your newest reply begins with `ready`. The run sets Ready, the guard having read the word from the board — see §4. |
 | Ready | In progress | M | Run claims it. A branch already on origin is reused, with its pull request. |
 | In progress | Review | M | Branch pushed, Report written. |
 | In progress | Decision | M | Run stopped on a question, or a migration awaits your apply. |
@@ -170,7 +178,8 @@ mirror.
 | Review | Done | M | Next run finds the branch merged into main by hand. Release row written. |
 
 Nothing is ever set backwards by a human. "Status is derived, never declared" (§1) applied to the
-board. A comment is enough: you never open Claude Code or GitHub to change, merge, apply or file.
+board. A comment is enough: you never open Claude Code or GitHub to change, merge, apply, file or
+say go.
 
 ---
 
@@ -234,6 +243,9 @@ the reply was read. What the assessment can be depends on where the task sits:
   ticket carries on from where it stopped. A reply that does not resolve the question → one
   clarifying comment, in the same voice, naming the two readings it cannot pick between; status
   stays Decision.
+- **At Backlog**, a reply that begins with the word **`ready`** is your go: the run sets the task
+  Ready and says so in one comment, and the next pick takes it in its turn. Backlog → Ready stays
+  yours; it no longer needs a click.
 - **Anywhere**, a reply that asks for something beyond the task it is on becomes **new work**: one
   task drafted from your words at Backlog, headed `⟡ Drafted by pipeline`, with a ⟡ note on the
   original linking it. Never Ready — Backlog → Ready stays yours. A reply that asks for nothing
@@ -241,17 +253,27 @@ the reply was read. What the assessment can be depends on where the task sits:
 - After two clarifying rounds on the same question the pipeline stops asking and waits. It never
   stops assessing: your next comment is read like any other. Two-round cap, §6, applied to itself.
 
-**The two words are verified in code.** `merge` and `apply` are the two replies with consequences
-outside the board, and neither is taken on the model's reading of the thread: before the guard
-lets `gh pr merge` or `pnpm db:migrate` through it reads the claimed task's thread itself, over
-the Notion API with the integration token, and requires that your *newest* reply since the
-pipeline's last comment on that thread *begins* with the word — `merge`, `Merge it`, `apply,
-then carry on`; not `don't merge yet`, not `after you merge`. Only the newest: a `merge` followed
+**The three words are verified in code.** `merge` and `apply` are the two replies with
+consequences outside the board, and `ready` is the one move on the board that is yours; none is
+taken on the model's reading of the thread: before the guard lets `gh pr merge` or `pnpm
+db:migrate` through it reads the claimed task's thread itself, over the Notion API with the
+integration token — and before it lets the connector set a Backlog task Ready it reads that
+task's thread the same way — and requires that your *newest* reply since the pipeline's last
+comment on that thread *begins* with the word — `merge`, `Merge it`, `apply, then carry on`,
+`Ready`; not `don't merge yet`, not `after you merge`, not `not ready`. Only the newest: a `merge` followed
 by `wait, not yet` grants nothing, because the last word is the word. A merge must also be the
 task's own pull request — the branch is derived from the task's name on the board, not from
 anything the run wrote — merged with a merge commit, said outright as `--merge`: a squash
 rewrites the hash the board carries and the task would never be seen to land. The model cannot
-fabricate a permission; the check reads the board, not the transcript. Once the run has answered
+fabricate a permission; the check reads the board, not the transcript. Nor can it write one: the
+connector posts as you, so the guard refuses a comment from a run that does not begin with the
+prefix — an unprefixed comment would read on the thread as your voice. The one move out of
+Backlog is to Ready, so the guard refuses a task created at any status but Backlog, and any status
+write on a task it reads at Backlog but Ready on your word — otherwise Backlog → Decision, then
+Decision → Ready, would reach Ready in two moves with no word. A move to Ready from Decision,
+Review or In progress is the run's on its reading of your reply (§3), and the guard lets it
+through once it has read that the task is not at Backlog; a status write it could not read the
+task for is refused, and a move to Backlog is not read at all. Once the run has answered
 with its ⟡ note the word is consumed: the same reply grants nothing twice.
 
 **`merge` is still your word in three cases, and only three.** A migration — its word is `apply`,
@@ -288,22 +310,32 @@ below is a script under `scripts/run/` with a test; the skill holds the judgment
                 and give each reply newer than the pipeline's last comment one assessment
                 (§4): a change at Review → addendum, Ready · merge at Review → claim, gh pr
                 merge --merge, one comment, release · apply on a migration question → claim,
-                db:migrate, carry on · new work → one Backlog task, one note · an answer →
-                Ready · else one clarifying comment · fetch, mark merged Review tasks Done
-                (merge-base --is-ancestor) and write Release rows · an In progress task with
-                no marker, or one older than three hours, is stale: keep its branch as
-                t<id>-stale-<HHMM>, post one comment, re-claim it from origin/main and
-                continue — no human needed · main moved since the last deploy check → ask
-                the live site from outside (health.mjs): /sign-in 200, /app 307; a wrong
-                answer reverts the merge at the tip (revert.mjs, then the one push to main
-                the guard lets through, HEAD:main), files one Fix task at Backlog, puts the
-                reverted ticket back at Backlog, one comment
-1  Claim        top Ready by Priority (Must first), then oldest · set In progress · write the
-                marker aenima-run-active in the repository's shared .git directory (task, page,
-                branch, started, session) · assign ID and Epic if missing · compare Spec
-                versions against repo headers, note drift · with nothing to claim, an idle run
+                db:migrate, carry on · ready at Backlog → Ready, one comment · new work → one
+                Backlog task, one note · an answer → Ready · else one clarifying comment ·
+                fetch, mark merged Review tasks Done (merge-base --is-ancestor) and write
+                Release rows · an In progress task with no marker, or one older than three
+                hours, is stale: keep its branch as t<id>-stale-<HHMM>, post one comment,
+                re-claim it from origin/main and continue — no human needed · main moved
+                since the last deploy check → ask the live site from outside (health.mjs):
+                /sign-in 200, /app 307; a wrong answer reverts the merge at the tip
+                (revert.mjs, then the one push to main the guard lets through, HEAD:main),
+                files one Fix task at Backlog, puts the reverted ticket back at Backlog, one
+                comment
+1  Claim        the board read over the API (pick-next.mjs) · a Ready task whose Blockers are
+                all Done, by Priority — Urgent · High · Medium · Low · None, empty as Medium —
+                a Ready blocker at the highest priority of any task not Done it blocks,
+                transitively · then Epic name, then ID as numbers phase first, then oldest; no
+                Epic or no ID sorts after · a blocked task is never claimed · one comment each,
+                once — words already on the thread are not said again: a Ready task waiting on
+                a blocker at Backlog, which is never moved; one member of a blocked-by loop
+                that holds a Ready task (a loop of Backlog tasks waits for your go and is not
+                named); the newest of three or more Ready tasks at Urgent, the count aside ·
+                set In progress · write the marker aenima-run-active in the repository's
+                shared .git directory (task, page, branch, started, session) · assign ID and
+                Epic if missing, Priority Medium · compare Spec versions against repo headers,
+                note drift · with nothing to claim, an idle run posts those comments, and one
                 that met a red in step 0 files one Fix task at Backlog (draft.mjs) and exits;
-                one that met nothing writes nothing
+                one that met nothing writes nothing else
 2  Inline       read every cited section · write docs/tickets/<id>.md — the pack the reviewer
                 reads · an addendum round adds the reply as its own section
 3  Branch       branch t<id> off origin/main, or check out origin's copy when the branch is
@@ -367,8 +399,10 @@ tokens in and out plus 341k written to cache, and one gate run; the second, at t
 in T0.10's report. `AENIMA_RUN_BASE` in `.claude/settings.local.json` must be unset for the
 schedule: it is a fixture's override, and a scheduled run reads that file too.
 
-**Hooks run the main copy.** The guard and gate commands in `.claude/settings.json` do not run
-the checkout's `scripts/hooks/*.mjs`: each extracts `scripts/` from `origin/main` into a
+**Hooks run the main copy.** The guard stands at Bash, at Edit and Write, and since T0.17 at the
+board connector's three writes — a page update, a page created, a comment — matched by tool name
+whatever the connector's server is called. The guard and gate commands in `.claude/settings.json`
+do not run the checkout's `scripts/hooks/*.mjs`: each extracts `scripts/` from `origin/main` into a
 temporary directory (`git archive`) and runs the hook from there, so a run that edits its own
 guard, gate or run scripts changes nothing until a human merges it — which is what makes
 `.claude/**`, `scripts/hooks/**` and `scripts/run/**` gated paths rather than a hope. When
@@ -412,14 +446,17 @@ never touched; a dirty one holds work nobody committed and is left for a person 
 **The board's token.** A third credential, and every run is handed it: `NOTION_TOKEN` in
 `.env.local`, an internal integration's token, the integration shared with the `dev` teamspace,
 created once by hand (Notion › Settings › Integrations › Develop or manage integrations › New
-internal integration; `.env.example` says where). Two readers use it and neither is the model:
+internal integration; `.env.example` says where). Three readers use it and none is the model:
 `threads.mjs` reads every task's comments at the start of a run, one request per task at the
 API's ~3 a second, so an idle run reads the whole board in one command rather than one connector
-call per task; and the guard reads the claimed task's thread before it lets a merge or a
-migration apply through (§4). The token is read from the file and never printed; an API error
-names the endpoint and the status and nothing else. Without it a run says so in its report line
-and reads no comments — a gated merge or an apply is then refused on that ground, which is the
-honest answer: nothing read the board; a merge on the reviewer's door reads the verdict, the diff
+call per task; `pick-next.mjs` reads every task's Priority, Epic and Blockers, the epics' names,
+and the threads of the tasks it would comment on (step 1); and the guard reads the claimed task's
+thread before it lets a merge or a migration apply through, and a Backlog task's thread before it
+lets the connector set it Ready (§4). The token is read from the file and never printed; an API error
+names the endpoint and the status and nothing else. Without it a run says so in its report line,
+reads no comments and claims nothing — the picker reads Blockers over the API too — and a gated
+merge, an apply or a Ready write is refused on that ground, which is the honest answer: nothing
+read the board; a merge on the reviewer's door reads the verdict, the diff
 and the gate's record, none of which is the board. The API lists open threads only, so resolve nothing on a task
 until the run has answered it: a resolved `merge` is a merge nobody will see. The comments the
 pipeline posts still go through the connector, which posts as you; the prefix is what tells the
@@ -464,7 +501,11 @@ schema push, no writes to `.env` or `.env.*` (`.env.example` is tracked and exce
 production deploy, no force-push, no push to main in any refspec shape but one — the revert of
 the merge at the tip, `HEAD:main`, HEAD one commit past `origin/main` with the tree the merge's
 first parent had — no merge with main checked out, no migration apply until the guard has itself
-read your `apply` on the claimed task's thread over the API (§4), and no `gh pr merge` until it
+read your `apply` on the claimed task's thread over the API (§4), and at the board's connector no
+Backlog task set Ready until it has read your `ready` on that task's thread, no Backlog task
+moved anywhere but Ready, no task created at any status but Backlog and no comment from a run
+without the prefix — the connector's writes, not the token's, which a script could send over
+the API without passing the guard (a Backlog Fix, *Guard the token and duplicate routes*), and no `gh pr merge` until it
 has read your `merge` there or, on a diff touching no gated path, the reviewer's `PASS` on file
 and the gate's green for the very commit the pull request carries; a merge must be that task's own pull request and
 a merge commit. The guard reads commands, never text: prose inside a heredoc or a quoted string
@@ -509,7 +550,9 @@ Criteria means the same thing on a task and on a phase: what must be true to be 
   verifies over the API, the integration token, an idle run's one filing) — this version.
   `T0.16 Self-merge` (Status read as the select the board holds, the reviewer's verdict on
   file, the guard's second door and the gated paths, hooks run from main, the deploy check and
-  the revert) — this version. Telemetry and the mirror (Runs rows from the transcript, the
+  the revert) — v1.8. `T0.17 Linear ordering` (Priority as Urgent · High · Medium · Low · None,
+  Blockers as the sequence and propagation through them, the waiting, loop and Urgent notices,
+  `ready` as a word the guard reads at the board's connector) — this version. Telemetry and the mirror (Runs rows from the transcript, the
   Documents and Guidelines mirror refresh) — a later ticket.
 - Documents: seven pages, headed as mirrors, content synced by the mirror ticket's first run.
 

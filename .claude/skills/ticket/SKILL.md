@@ -1,5 +1,5 @@
 ---
-description: Run one dev-board ticket end to end, per docs/guidelines.md §5 — recover a stale run, assess every task's comments (change, new work, merge, apply, an answer), claim the top Ready task, build it on a branch, review it, report, set Review, exit. One run, one ticket.
+description: Run one dev-board ticket end to end, per docs/guidelines.md §5 — recover a stale run, assess every task's comments (change, new work, merge, apply, ready, an answer), claim the first Ready task in the board's order, build it on a branch, review it, report, set Review, exit. One run, one ticket.
 disable-model-invocation: true
 ---
 
@@ -26,9 +26,13 @@ the gap lives, in words — and the script supplies the shape:
 Kinds: `decision` (stopped, gap, fallback) · `clarifying` (readings, fallback) · `migration`
 (file) · `stale` (date, branch or null) · `default` (gap, choice) · `change` · `newWork` (name,
 url) · `merged` (commit) · `applied` (file) · `noted` · `setup` (step, where) · `resolved` ·
-`gated` (paths) · `reverted` (failed, merge, commit, name, url).
+`gated` (paths) · `reverted` (failed, merge, commit, name, url) · `readied` · `waiting` (blockers) ·
+`cycle` (members) · `urgent` (count).
 Never set a task to Ready without a human comment that asks for it — an answer that resolves a
-question, or a change request at Review. Every reply you assess ends with one ⟡ comment: that
+question, a change request at Review, or `ready` on a Backlog task. The guard reads that last one
+from the board before the connector's write goes through, and it refuses any comment you post
+without the prefix: an unprefixed comment is the human's voice, and that voice is what grants the
+words. Every reply you assess ends with one ⟡ comment: that
 comment is how the next run knows the reply was read.
 
 ## 0 Preflight
@@ -83,6 +87,10 @@ keep reading, post nothing.
   post nothing. On success post one `applied` comment naming the file, set the task
   `In progress`, and continue from step 1's marker with this task: skip the pick, step 3 is
   already done, and the ticket carries on from where it stopped.
+- `shape: ready` (Backlog, the newest reply begins with *ready*). Set the task `Ready` through
+  the connector first — the guard reads the thread itself before it lets that write through, and
+  your own comment would consume the word — then post one `readied` comment. If the guard
+  refuses, quote its reason in your report and post nothing.
 - `shape: assess`, task at **Review** — read the reply:
   - It asks for a change to what was built → append to the body an `# Addendum` section:
     the date, then the reply verbatim as a quote. Set `Ready`. Post one `change` comment. The
@@ -104,7 +112,7 @@ keep reading, post nothing.
 **New work.** Draft the body — `echo '{"request":"<the reply>","from":{"name":"<task
 name>","url":"<task url>"},"date":"<YYYY-MM-DD>","prefix":"⟡ "}' | node scripts/run/draft.mjs`
 — and create one Tasks row at `Backlog`: Name an imperative of six words at most and no ID
-(claim assigns it), the original's Epic, Priority `Should`, the Type from product-spec §4 the
+(claim assigns it), the original's Epic, Priority `Medium`, the Type from product-spec §4 the
 reply describes. Never Ready. Then post one `newWork` comment on the original with the new
 task's name and URL.
 
@@ -126,8 +134,10 @@ itself — one file for every worktree:
 
   Post one `stale` comment on the task with the date and `renamed` (null when there was no
   branch). The stale task is the one you re-claim: skip step 1's pick, leave it `In progress`,
-  and continue from step 1's marker with it. With several stale tasks, order them with
-  `pick-next.mjs` over those rows alone: the first is yours, the rest go back to `Ready`.
+  and continue from step 1's marker with it. With several stale tasks, ask the board's order
+  of those alone — `node scripts/run/pick-next.mjs --among <id>,<id>` reads them as if they were
+  Ready — and `pick` is yours; the rest go back to `Ready`. A `pick` of null means every one of them is
+  now blocked: all go back to `Ready`, and step 1 picks as usual.
 
 **e. The deploy.** Main deploys with nobody watching, so once per commit of main the run asks the
 live site from outside:
@@ -151,23 +161,33 @@ own command so the guard reads it: it lets exactly that shape through, HEAD one 
 to revert: quote its `why` in the report and go on. On success: query Tasks for the task whose
 Name begins with `id`, set it `Backlog`; draft one Fix task with `draft.mjs` (`from` that task,
 `reason` the `failedText` health printed), create it at `Backlog`, Type `Fix`, the same Epic,
-Priority `Should`; then post one `reverted` comment on the reverted task — `failed` the
+Priority `Medium`; then post one `reverted` comment on the reverted task — `failed` the
 `failedText`, `merge` and `commit` the two short hashes, `name` and `url` the Fix task's.
 
 Do not refresh the Documents or Guidelines mirrors. That is a later ticket's.
 
 ## 1 Claim
 
-Query Tasks and pick:
+The picker reads the board itself over the API — every task's Priority, Epic and Blockers, the
+epics' names, and the threads it would comment on:
 
-    node scripts/run/pick-next.mjs --file <rows.json>
+    node scripts/run/pick-next.mjs
 
-Nothing back → report `nothing to do` and exit. An idle run writes one thing at most: if
-step 0 itself went red — a script that failed, a gate that refused, a worktree that could not
-be removed — draft one task with `draft.mjs` (`from` null, `reason` the one sentence on what
-went red) and create it at `Backlog`, Type `Fix`, Epic E0.2 Pipeline, Priority `Should`. A
-preflight that met nothing wrong writes nothing. Otherwise set the picked task `In progress`
-and write the marker — the run's footprint, in the repository's shared `.git` directory so every
+`token: false` → say so in the report line and exit: without the token nothing reads Blockers.
+Otherwise `pick` is the task to claim and `as` the priority it is claimed at — a Ready blocker
+carries the highest priority of the tasks waiting on it. `blocked` and `cycles` are for the
+report line. Post each of `notices` as one page-level comment on its task, its `text` exactly
+as printed: a Ready task waiting on a blocker at Backlog (never move the blocker), a loop of
+tasks blocking each other, three or more Ready tasks at Urgent. The script has already dropped
+any notice the thread holds, so what it prints is what is new.
+
+`pick` null → report `nothing to do` and exit. An idle run writes the notices and one thing more
+at most: if step 0 itself went red — a script that failed, a gate that refused, a worktree that
+could not be removed — draft one task with `draft.mjs` (`from` null, `reason` the one sentence
+on what went red) and create it at `Backlog`, Type `Fix`, Epic E0.2 Pipeline, Priority
+`Medium`. A preflight that met nothing wrong writes nothing else.
+
+Otherwise set the picked task `In progress` and write the marker — the run's footprint, in the repository's shared `.git` directory so every
 worktree sees the same file, which the guard and the next preflight read and you never reason
 about:
 
@@ -179,7 +199,7 @@ Then fill what is missing:
   rename. An `error` back means the Epic carries no phase; that is a question, not a number to
   invent — set `Decision` and ask.
 - **No Epic** → read the body and the Epics list, propose the one that fits, set it.
-- **No Priority** → `Should`. **No Type** → the one from product-spec §4 the body describes.
+- **No Priority** → `Medium`. **No Type** → the one from product-spec §4 the body describes.
 - **Spec** → `node scripts/run/version-drift.mjs "<Spec>"`. Anything `drifted` goes in the report
   under *changed since this ticket was cut*. Build against the repo, which is the record.
 

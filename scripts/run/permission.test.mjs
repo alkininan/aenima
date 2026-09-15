@@ -138,7 +138,47 @@ describe("verify", () => {
     expect(result.why).toContain("answered 403");
   });
 
-  it("grants only the two words the board can say", async () => {
+  // T0.17 TC3 → AC3. "ready" is read on the page the status write names — the preflight sets
+  // Ready before anything is claimed, so there is no marker to find it through — and only at
+  // Backlog, the one move it is for.
+  it("grants ready on the page the write names, at Backlog, with no marker", async () => {
+    const backlog = async (id) => ({ Name: `T3.1 page ${id}`, Status: "Backlog" });
+    const seen = [];
+    const deps = stub([c("ready", "2026-09-13T11:00:00Z")], {
+      marker: () => null,
+      page: async (id) => {
+        seen.push(id);
+        return backlog(id);
+      },
+    });
+    const result = await verify("ready", { page: "page-9", deps });
+    expect(result.ok).toBe(true);
+    expect(seen).toEqual(["page-9"]);
+    expect(result.task).toEqual({ name: "T3.1 page page-9", status: "Backlog", branch: "t3-1" });
+  });
+
+  it("refuses ready from the pipeline's own comment, at a state it is not for, or with no page named", async () => {
+    const backlog = async () => ({ Name: "T3.1 Slice", Status: "Backlog" });
+    const own = await verify("ready", {
+      page: "p",
+      deps: stub([c(`${P}ready`, "2026-09-13T11:00:00Z")], { page: backlog }),
+    });
+    expect(own.ok).toBe(false);
+    expect(own.why).toContain('"ready" is the word for a task at Backlog');
+    const decision = await verify("ready", {
+      page: "p",
+      deps: stub([c("ready", "2026-09-13T11:00:00Z")], {
+        page: async () => ({ Name: "T3.1 Slice", Status: "Decision" }),
+      }),
+    });
+    expect(decision.ok).toBe(false);
+    expect(decision.task.status).toBe("Decision");
+    const nowhere = await verify("ready", { deps: stub([c("ready", "2026-09-13T11:00:00Z")]) });
+    expect(nowhere.ok).toBe(false);
+    expect(nowhere.why).toContain("no page");
+  });
+
+  it("grants only the three words the board can say", async () => {
     const result = await verify("deploy", { deps: stub([]) });
     expect(result.ok).toBe(false);
     expect(result.why).toContain("not a word the board grants");
