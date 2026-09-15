@@ -268,8 +268,12 @@ is expensive if it touches the database schema or stored data, a public surface 
 a product user sees, an API shape — or would need a spec to record it. Then commit what you
 have and push the branch (`git push -u origin <branch>`) so the next run finds it, release the
 marker (`node scripts/run/release.mjs`), post one `decision` comment, set `Decision`, and
-exit. Everything else: take the stated default, post one `default` comment saying what you
-chose and why you could pick alone, and keep building. A step only a human can do — a
+exit. Everything else: take the stated default and keep building, and say it in the claim's
+one `default` comment — every default the claim takes, what you chose and why you could pick
+alone. Hold that comment until the claim's defaults are all in: post it before the `decision`
+or `migration` comment when the claim stops, or at close before `release.mjs`. The guard lets
+one comment of a kind through per claim, so a second `default` is refused and never reaches the
+thread. A step only a human can do — a
 credential to create, a page to share — is not a guess: finish everything that does not need
 it, and say exactly where it goes in one `setup` comment at close.
 

@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { claim } from "./claim.mjs";
-import { reviewed, verdictOf, verify } from "./permission.mjs";
+import { compose } from "./comments.mjs";
+import { postable, reviewed, verdictOf, verify } from "./permission.mjs";
 
 const P = "⟡ ";
 const c = (text, created_time) => ({ text, created_time });
@@ -213,6 +214,42 @@ describe("verify", () => {
 // T0.16 TC2 → AC2 and TC3 → AC3. The guard's second door: `gh pr merge` is also allowed when
 // the claimed task's reviewer verdict is on file and ends in PASS, and the diff against
 // origin/main touches no gated path. Both are read in code; neither is the model's claim.
+// T0.20 TC1 → AC1, where the board is not read: a clarifying round waits, and every other
+// comment posts, whichever of the board file, the token, the page or the API was missing.
+describe("postable", () => {
+  const clarifying = compose("clarifying", { readings: ["a", "b"], fallback: "take a" }, P);
+  const noted = compose("noted", {}, P);
+
+  it("holds back a clarifying round and lets a note through when nothing could be read", async () => {
+    const unreadable = {
+      board: () => {
+        throw new Error("no board.json");
+      },
+    };
+    expect(await postable(clarifying, { page: "p", deps: unreadable })).toMatchObject({
+      ok: false,
+      kind: "clarifying",
+    });
+    expect(await postable(noted, { page: "p", deps: unreadable })).toMatchObject({ ok: true });
+    const tokenless = { board, token: () => null };
+    expect((await postable(clarifying, { page: "p", deps: tokenless })).why).toContain(
+      "NOTION_TOKEN",
+    );
+    expect(await postable(clarifying, { page: null, deps: { board } })).toMatchObject({
+      ok: false,
+    });
+    const down = {
+      board,
+      token: () => "t",
+      comments: async () => {
+        throw new Error("GET /comments answered 502");
+      },
+    };
+    expect((await postable(clarifying, { page: "p", deps: down })).why).toContain("502");
+    expect(await postable(noted, { page: "p", deps: down })).toMatchObject({ ok: true });
+  });
+});
+
 describe("reviewed", () => {
   const passing = () => "# T0.16 — review\n\nFindings: none.\n\nPASS\n";
   const clean = () => ({ files: ["src/a.ts"], gated: [], ok: true });

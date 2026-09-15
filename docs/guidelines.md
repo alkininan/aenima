@@ -279,10 +279,11 @@ the reply was read. What the assessment can be depends on where the task sits:
 - After two clarifying rounds on the same question the pipeline stops asking and waits. It never
   stops assessing: your next comment is read like any other. Two-round cap, §6, applied to itself.
   The cap counts **clarifying rounds and nothing else**: the clarifying comments since the pipeline
-  last said anything else on the thread. The replies between them do not reset it — each round
-  answers one — but a reply the run reads as anything other than unclear does, once the run has
-  answered it: an answer, a change, new work, a note, or a question opened afresh closes the one
-  the rounds were about. Every other kind — a stop, a default taken, a migration waiting, a stale
+  last asked or answered anything else on the thread. The replies between them do not reset it —
+  each round answers one — and nor does a notice about the board's order, a task waiting, a loop
+  or the Urgent count, which asks and answers nothing; but a reply the run reads as anything other
+  than unclear does, once the run has answered it: an answer, a change, new work, a note, or a
+  question opened afresh closes the one the rounds were about. Every other kind — a stop, a default taken, a migration waiting, a stale
   run, a merge, a gated diff, a revert, a waiting, loop or Urgent notice, a refusal — is never a
   clarifying round, never counts toward the cap, and posts whatever the thread holds: the cap is
   there to stop a misunderstanding looping, never to keep a run from telling you something.
@@ -290,7 +291,8 @@ the reply was read. What the assessment can be depends on where the task sits:
   posts one comment naming the files in conflict and what would settle them; so does an apply
   that failed, and a claim that could not go on.
 - Uncapped is not unlimited: **one comment of a kind per claim**. A run that takes two defaults
-  says both in its one default comment.
+  says both in its one default comment, posted once the claim's defaults are all in — when it
+  stops or closes.
 
 **The three words are verified in code.** `merge` and `apply` are the two replies with
 consequences outside the board, and `ready` is the one move on the board that is yours; none is
@@ -391,7 +393,8 @@ below is a script under `scripts/run/` with a test; the skill holds the judgment
                 checkout is returned to main on exit, success or not; a worktree is left where
                 it is for the next run's step 0
 4  Build        smallest complete implementation · stop only when a wrong guess is expensive
-                (§4), otherwise take the default and say so · new logic has tests observed
+                (§4), otherwise take the default and say so — every default of the claim in its
+                one comment, posted when the claim stops or closes · new logic has tests observed
                 failing first, the mutation and the count recorded per test
 5  Review       reviewer subagent, fresh context, reads the ticket file and the diff, not the
                 author's summary · runs only the tests the ticket names plus the test files the
@@ -508,7 +511,8 @@ row at session end — so the integration needs insert-content capability beside
 comment. The token is read from the file and never printed; an API error names the endpoint and
 the status and nothing else. Without it a run says so in its report line, reads no comments and
 claims nothing — the picker reads Blockers over the API too — refreshes no mirror and writes no
-Runs row, and a gated merge, an apply or a Ready write is refused on that ground, which is the
+Runs row, and a gated merge, an apply, a Ready write or a clarifying round is refused on that
+ground — every other comment still posts — which is the
 honest answer: nothing read the board; a merge on the reviewer's door reads the verdict, the diff
 and the gate's record, none of which is the board. The API lists open threads only, so resolve
 nothing on a task until the run has answered it: a resolved `merge` is a merge nobody will see.
@@ -556,8 +560,9 @@ the merge at the tip, `HEAD:main`, HEAD one commit past `origin/main` with the t
 first parent had — no merge with main checked out, no migration apply until the guard has itself
 read your `apply` on the claimed task's thread over the API (§4), and at the board's connector no
 Backlog task set Ready until it has read your `ready` on that task's thread, no Backlog task
-moved anywhere but Ready, no task created at any status but Backlog and no comment from a run
-without the prefix — the connector's writes, not the token's, which a script could send over
+moved anywhere but Ready, no task created at any status but Backlog, no comment from a run
+without the prefix, and no third clarifying round on one question or second comment of a kind
+in one claim — the connector's writes, not the token's, which a script could send over
 the API without passing the guard (a Backlog Fix, *Guard the token and duplicate routes*), and no `gh pr merge` until it
 has read your `merge` there or, on a diff touching no gated path, the reviewer's `PASS` on file
 and the gate's green for the very commit the pull request carries; a merge must be that task's own pull request and

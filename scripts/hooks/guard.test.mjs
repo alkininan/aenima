@@ -303,8 +303,9 @@ describe("T0.17 — rule (h) the board's connector", () => {
     ).toBeNull();
   });
 
-  // T0.20: past the prefix, the guard asks the thread whether a comment of this kind may post —
-  // the cap on clarifying rounds and one comment of a kind per claim, read by `mayPost`.
+  // T0.20 TC1 → AC1 and TC4 → AC4, the rule's half: past the prefix, the guard asks the thread
+  // whether a comment of this kind may post — the cap on clarifying rounds and one comment of a
+  // kind per claim, read by `mayPost` — and refuses with the reason it was given.
   it("refuses a prefixed comment the thread withholds, naming the kind and why", () => {
     const prefix = () => "⟡ ";
     const comment = call("notion-create-comment", {
@@ -324,6 +325,7 @@ describe("T0.17 — rule (h) the board's connector", () => {
     ).toBeNull();
   });
 
+  // T0.20 TC1 → AC1 and TC3 → AC3, with nothing read: the clarifying round waits, the refusal posts.
   it("holds back a clarifying round it has not read the thread for, and nothing else", () => {
     const prefix = () => "⟡ ";
     const post = (text) => call("notion-create-comment", { page_id: "p1", markdown: text });

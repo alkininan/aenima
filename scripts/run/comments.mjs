@@ -40,16 +40,26 @@ export const CLARIFYING_CAP = 2;
 const at = (comment) => String(comment?.created_time ?? "");
 
 /**
+ * Comments that neither ask nor answer anything on the thread's question: a notice about the
+ * board's order — a task waiting on a blocker, a loop, the Urgent count — posted by step 1
+ * without reading a reply, and a prefixed comment no composer wrote, whose words the count
+ * cannot place. A run of clarifying rounds reads through them (review pass 1, Must 1).
+ */
+const NOTICES = new Set(["waiting", "cycle", "urgent", null]);
+
+/**
  * Split a thread and say what the run may do with it.
  *
  * Returns `{ pipeline, human, unanswered, clarifyingRounds }`:
  *   pipeline          prefixed comments, oldest first, each with the `kind` its words carry
  *   unanswered        human comments newer than the last prefixed one, oldest first
- *   clarifyingRounds  clarifying comments since the pipeline's last comment of any other kind.
- *                     Human replies between them do not end the run of rounds — every round
- *                     answers one — but any other comment does: a question opened, a reply
- *                     read as the answer, a note. That is the reply resetting the count, once
- *                     the run has answered it as something other than unclear.
+ *   clarifyingRounds  clarifying comments since the pipeline last asked or answered anything
+ *                     else on the thread. Human replies between them do not end the run of
+ *                     rounds — every round answers one — and nor does a notice about the
+ *                     board's order (`NOTICES`), which asks and answers nothing; any other
+ *                     comment does: a question opened, a reply read as the answer, a note.
+ *                     That is the reply resetting the count, once the run has answered it as
+ *                     something other than unclear.
  */
 export function readThread(comments = [], prefix = "⟡ ") {
   const ordered = comments.slice().sort((a, b) => at(a).localeCompare(at(b)));
@@ -62,7 +72,11 @@ export function readThread(comments = [], prefix = "⟡ ") {
   const lastPipelineAt = pipeline.length === 0 ? "" : at(pipeline.at(-1));
 
   let clarifyingRounds = 0;
-  while (pipeline.at(-1 - clarifyingRounds)?.kind === "clarifying") clarifyingRounds += 1;
+  for (const comment of [...pipeline].reverse()) {
+    if (NOTICES.has(comment.kind)) continue;
+    if (comment.kind !== "clarifying") break;
+    clarifyingRounds += 1;
+  }
 
   return {
     pipeline,
@@ -205,7 +219,10 @@ const SIGNATURES = [
   ["clarifying", /^Thanks, I read that, but it still fits two readings: /],
   ["migration", /^This change adds a migration, /],
   ["stale", /^This run stopped partway on /],
-  ["default", / A wrong guess here costs nothing to change, so I went with /],
+  [
+    "default",
+    / A wrong guess here costs nothing to change, so I went with .+ and kept going\. Say the word if you'd rather something else\.$/,
+  ],
   ["change", /^I've read that as a change to this ticket and folded it into the body /],
   ["newWork", /^I've read that as new work rather than a change to this ticket, /],
   ["merged", /^Merged into main at .+ with a merge commit, and the task is Done\./],
@@ -216,7 +233,10 @@ const SIGNATURES = [
   ["reverted", /^The deploy check after this merge failed: /],
   ["readied", /^Read that as your go, so the task is Ready\. /],
   ["waiting", /^This task is waiting on .+, so runs pass it by for now\. /],
-  ["cycle", /, so no run can pick (it|either|any of them)\. /],
+  [
+    "cycle",
+    /^(This task lists itself|.+ are each waiting on the other|.+ wait on each other in a loop)[^.]* Blockers, so no run can pick (it|either|any of them)\. Take .+ picked up in (its|their) turn\.$/,
+  ],
   ["urgent", /^\d+ tasks are Urgent; running them in roadmap order\.$/],
   ["refused", /^.+? was refused: /],
 ];

@@ -151,7 +151,8 @@ export async function postable(text, { dir = process.cwd(), page = null, deps = 
   try {
     board = deps.board ? deps.board() : readBoard(dir);
   } catch (error) {
-    return unreadPost(null, `the board file could not be read (${error.message})`);
+    // The board's own prefix is unread too; the kind is read with the default one (pass 1, Should 5).
+    return unreadPost(kindOf(text), `the board file could not be read (${error.message})`);
   }
   const prefix = board.prefix ?? "⟡ ";
   const kind = kindOf(text, prefix);

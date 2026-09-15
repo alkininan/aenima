@@ -147,6 +147,7 @@ describe("readThread", () => {
     expect(readThread(timeline(question, "hm", said("clarifying")), P).clarifyingRounds).toBe(1);
   });
 
+  // T0.20 Build 2: each composed comment carries its kind.
   it("reads each pipeline comment's kind from its own words", () => {
     const thread = readThread(timeline(said("decision"), "which?", said("clarifying")), P);
     expect(thread.pipeline.map((x) => x.kind)).toEqual(["decision", "clarifying"]);
@@ -167,6 +168,7 @@ describe("readThread", () => {
 // composer wrote. `kindOf` reads it back from the text the API returns, so the cap can count
 // clarifying rounds and nothing else, and a claim can be held to one comment of a kind.
 describe("kindOf", () => {
+  // T0.20 Build 2
   it("reads back the kind of every composed comment, every variant", () => {
     const variants = [
       ...Object.entries(all),
@@ -182,6 +184,7 @@ describe("kindOf", () => {
     }
   });
 
+  // T0.20 Build 2, and TC6 → AC6's premise: the comments already on the board read by kind.
   it("reads the comments already on the board, written before kinds were read", () => {
     // The stops on T0.13's and T0.12's threads, shortened from what the API returned on
     // 2026-09-15 (T0.13's whole thread is threads.test.mjs's AC6 fixture).
@@ -199,17 +202,33 @@ describe("kindOf", () => {
     ).toBe("decision");
   });
 
+  // T0.20 Build 2: no kind is invented for words no composer wrote.
   it("is null for a human comment and for a prefixed comment no composer wrote", () => {
     expect(kindOf("Thanks, I read that, but it still fits two readings: a, or b.", P)).toBeNull();
     expect(kindOf(`${P}clarify 1`, P)).toBeNull();
     expect(kindOf("", P)).toBeNull();
+  });
+
+  // T0.20 Build 2 (review pass 1, Should 8): a refusal quoting another kind's words is still a
+  // refusal — the signatures a caller's words could reach are anchored at both ends.
+  it("reads a refusal as a refusal when its reason quotes a loop or a default", () => {
+    const quoting = compose(
+      "refused",
+      {
+        what: "Claiming T3.1",
+        why: "T3.1 and T3.2 are each waiting on the other in Blockers, so no run can pick either. A wrong guess here costs nothing to change, so I went with the first",
+        settle: "Take one out of the other's Blockers",
+      },
+      P,
+    );
+    expect(kindOf(quoting, P)).toBe("refused");
   });
 });
 
 // T0.20. The one place that says whether the run may post a comment of a kind on a thread;
 // the preflight reads it for a clarifying round and the guard reads it for every comment.
 describe("mayPost", () => {
-  // TC1 → AC1
+  // T0.20 TC1 → AC1
   it("silences a third clarifying round on one question, and nothing else", () => {
     const thread = readThread(
       timeline(said("decision"), "which?", said("clarifying"), "this?", said("clarifying"), "or?"),
@@ -226,7 +245,28 @@ describe("mayPost", () => {
     expect(mayPost(below, "clarifying").ok).toBe(true);
   });
 
-  // TC2 → AC2
+  // T0.20 TC1 → AC1 (review pass 1, Must 1): a notice step 1 posts between the rounds and the
+  // next reply asks and answers nothing, so the question is still the one the rounds were on.
+  it("keeps the cap through a notice about the board's order", () => {
+    for (const notice of ["waiting", "cycle", "urgent"]) {
+      const thread = readThread(
+        timeline(
+          said("decision"),
+          "which?",
+          said("clarifying"),
+          "this?",
+          said("clarifying"),
+          said(notice),
+          "or?",
+        ),
+        P,
+      );
+      expect(thread.clarifyingRounds, notice).toBe(CLARIFYING_CAP);
+      expect(mayPost(thread, "clarifying").ok, notice).toBe(false);
+    }
+  });
+
+  // T0.20 TC2 → AC2
   it("still lets a task with five routine notices hear a clarifying round", () => {
     const thread = readThread(
       timeline(
@@ -243,7 +283,7 @@ describe("mayPost", () => {
     expect(mayPost(thread, "clarifying")).toEqual({ ok: true, why: null });
   });
 
-  // TC3 → AC3, the cap's half: a refusal reports on a capped thread.
+  // T0.20 TC3 → AC3, the cap's half: a refusal reports on a capped thread.
   it("posts a refusal on a thread the cap has silenced", () => {
     const capped = readThread(
       timeline(said("decision"), "a", said("clarifying"), "b", said("clarifying"), "merge"),
@@ -253,7 +293,7 @@ describe("mayPost", () => {
     expect(mayPost(capped, "refused")).toEqual({ ok: true, why: null });
   });
 
-  // TC4 → AC4
+  // T0.20 TC4 → AC4
   it("holds one claim to one comment of a kind, and only from the claim's start", () => {
     const thread = readThread(
       [
@@ -274,14 +314,14 @@ describe("mayPost", () => {
     expect(mayPost(thread, "default").ok).toBe(true);
   });
 
-  // The API gives a comment's time to the minute: one posted a few seconds after the claim
+  // T0.20 TC4 → AC4. The API gives a comment's time to the minute: one posted a few seconds after the claim
   // began reads as older than the claim, and is still the claim's.
   it("reads a comment in the claim's first minute as the claim's", () => {
     const thread = readThread([c(said("default"), "2026-09-15T10:00:00.000Z")], P);
     expect(mayPost(thread, "default", { since: "2026-09-15T10:00:41.000Z" }).ok).toBe(false);
   });
 
-  // TC5 → AC5
+  // T0.20 TC5 → AC5
   it("starts the count again once a reply has been answered as anything but unclear", () => {
     const answered = readThread(
       timeline(
