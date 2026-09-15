@@ -122,6 +122,8 @@ export const KINDS = [
   "noted",
   "setup",
   "resolved",
+  "gated",
+  "reverted",
 ];
 
 /** A sentence ends in one full stop, whatever the caller handed in. */
@@ -152,6 +154,8 @@ const clause = (text) =>
  *   noted       {}                          — a reply that asks for nothing
  *   setup       { step, where }             — a step only a human can do, said exactly
  *   resolved    {}                          — a Decision answer read as resolving: Ready
+ *   gated       { paths }                   — a diff on a gated path, waiting for the word
+ *   reverted    { failed, merge, commit, name, url } — a merge whose deploy check failed
  */
 export function compose(kind, fields = {}, prefix = "⟡ ") {
   switch (kind) {
@@ -181,6 +185,10 @@ export function compose(kind, fields = {}, prefix = "⟡ ") {
       return `${prefix}Read that, thanks. Nothing for me to do here, so I've left the ticket as it is.`;
     case "resolved":
       return `${prefix}Read that as the answer, thanks. The task is back at Ready and the next run picks it up from there.`;
+    case "gated":
+      return `${prefix}This ticket is built, reviewed and green, but the diff touches ${clause(fields.paths)}, which is a path only your word merges — the pipeline's own boundary, a migration or the product spec. It stays at Review; say "merge" here and the next run lands it with a merge commit.`;
+    case "reverted":
+      return `${prefix}The deploy check after this merge failed: ${sentence(fields.failed)} I've reverted the merge commit ${clause(fields.merge)} on main as ${clause(fields.commit)} and put this task back at Backlog. The fix is filed as its own task: ${clause(fields.name)} (${clause(fields.url)}).`;
     case "setup":
       return `${prefix}I've stopped on a step only you can do: ${clause(fields.step)}. ${sentence(fields.where)} Say "done" on this thread once it's in place and the next run carries on.`;
     default:

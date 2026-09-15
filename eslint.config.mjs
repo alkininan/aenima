@@ -21,6 +21,9 @@ const eslintConfig = defineConfig([
     "playwright-report/**",
     "test-results/**",
     ".playwright-mcp/**",
+    // Other sessions' worktrees (.gitignore:57). Each holds its own checkout and, once it has
+    // built, its own `.next/types`; none of it is this checkout's code.
+    ".claude/worktrees/**",
   ]),
 ]);
 

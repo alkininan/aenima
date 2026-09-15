@@ -160,6 +160,14 @@ describe("compose", () => {
       where: "Its token goes in .env.local as NOTION_TOKEN.",
     },
     resolved: {},
+    gated: { paths: "scripts/hooks/guard.mjs and .claude/settings.json" },
+    reverted: {
+      failed: "/sign-in answered 500 and /app answered 200",
+      merge: "9c1d2e3",
+      commit: "a1b2c3d",
+      name: "Fix the sign-in page after T0.16",
+      url: "https://www.notion.so/xyz",
+    },
   };
 
   it("has a fixture for every kind, so a kind added without a voice is caught here", () => {
@@ -232,6 +240,18 @@ describe("compose", () => {
     );
     expect(compose("applied", all.applied, P)).toBe(
       `${P}Applied drizzle/0015_x.sql to the shared database. The ticket picks up from where it stopped.`,
+    );
+  });
+
+  // T0.16 TC3 → AC3 and TC5 → AC5. A gated diff stays at Review and says which path waits for
+  // the word; a merge whose deploy failed says what failed, what was reverted, and where the
+  // fix was filed.
+  it("names the gated path that waits for the word, and the merge that was reverted", () => {
+    expect(compose("gated", all.gated, P)).toBe(
+      `${P}This ticket is built, reviewed and green, but the diff touches scripts/hooks/guard.mjs and .claude/settings.json, which is a path only your word merges — the pipeline's own boundary, a migration or the product spec. It stays at Review; say "merge" here and the next run lands it with a merge commit.`,
+    );
+    expect(compose("reverted", all.reverted, P)).toBe(
+      `${P}The deploy check after this merge failed: /sign-in answered 500 and /app answered 200. I've reverted the merge commit 9c1d2e3 on main as a1b2c3d and put this task back at Backlog. The fix is filed as its own task: Fix the sign-in page after T0.16 (https://www.notion.so/xyz).`,
     );
   });
 
