@@ -226,9 +226,9 @@ describe("parseTranscript", () => {
     expect(parseTranscript(lines).run).toBe(false);
   });
 
-  // One run, one task: the first claim is the run's, and a later command that happens to carry
-  // `claim.mjs --task` — a `claude -p` prompt in a live observation, say — is not.
-  it("takes the first claim as the run's and ignores a later command that mentions one", () => {
+  // One run, one task: a later command that happens to carry `claim.mjs --task` — a `claude -p`
+  // prompt in a live observation, say — writes no Status on its page, so it is not the run's.
+  it("keeps the claim that wrote a Status over a later command that mentions one", () => {
     const lines = transcript();
     lines.push(
       ...assistant(
@@ -253,6 +253,75 @@ describe("parseTranscript", () => {
     expect(summary.task).toBe("T0.96");
     expect(summary.page).toBe("3d679daf-d42e-813f-af58-f5f053219a57");
     expect(summary.outcome).toBe("Done");
+  });
+
+  // Addendum (T0.16, T0.17 merged in): step 0 claims a task to merge on the human's word and
+  // releases it, step 0c then sets it Done, and only step 1 claims the run's own task.
+  const MERGED_PAGE = "3db79daf-d42e-8130-85d2-e2b73bd2bcc3";
+  const tool = (id, name, input, stamp) =>
+    assistant(
+      `msg_${id}`,
+      "claude-fable-5-1",
+      { input_tokens: 1, output_tokens: 1 },
+      [{ type: "tool_use", id: `tu_${id}`, name, input }],
+      stamp,
+    );
+  const bash = (id, command, stamp) => tool(id, "Bash", { command }, stamp);
+  const status = (id, page_id, value, stamp) =>
+    tool(
+      id,
+      "mcp__abc__notion-update-page",
+      { page_id, command: "update_properties", properties: { Status: value } },
+      stamp,
+    );
+  const mergedInStepZero = [
+    ...bash(
+      "merge_claim",
+      `node scripts/run/claim.mjs --task T0.17 --page ${MERGED_PAGE} --branch t0-17`,
+      at(22, 34),
+    ),
+    ...bash("merge", "gh pr merge t0-17 --merge", at(22, 35)),
+    ...bash("merge_release", "node scripts/run/release.mjs", at(22, 36)),
+    ...status("merge_done", MERGED_PAGE, "Done", at(22, 37)),
+  ];
+
+  it("takes step 1's claim as the run's, not a task step 0 claimed to merge and released", () => {
+    const lines = transcript();
+    lines.splice(lines.indexOf(PROMPT) + 1, 0, ...mergedInStepZero);
+    const summary = parseTranscript(lines);
+    expect(summary.task).toBe("T0.96");
+    expect(summary.page).toBe("3d679daf-d42e-813f-af58-f5f053219a57");
+    expect(summary.statuses).toEqual(["In progress", "Review"]);
+    expect(summary.outcome).toBe("Done");
+  });
+
+  it("reads a run that only merged in step 0 and claimed nothing after as Stopped, no task", () => {
+    const lines = transcript({ withTask: false, statuses: [] });
+    lines.splice(lines.indexOf(PROMPT) + 1, 0, ...mergedInStepZero);
+    expect(parseTranscript(lines)).toMatchObject({ task: null, page: null, outcome: STOPPED });
+  });
+
+  it("keeps a claim that no Status write followed as the run's while it still stands", () => {
+    const summary = parseTranscript(transcript({ statuses: [] }));
+    expect(summary).toMatchObject({ task: "T0.96", outcome: STOPPED });
+  });
+
+  it("reads a run that merged its own work at close as Done", () => {
+    expect(parseTranscript(transcript({ statuses: ["In progress", "Done"] })).outcome).toBe("Done");
+    expect(
+      parseTranscript(transcript({ statuses: ["In progress", "Review", "Done"] })).outcome,
+    ).toBe("Done");
+  });
+
+  it("ends a claim at release.mjs run as a command, not at a command that names the file", () => {
+    const lines = transcript();
+    const firstStatus = lines.findIndex((l) => l.includes("tu_status_0"));
+    lines.splice(
+      firstStatus,
+      0,
+      ...bash("grep", "grep -n release.mjs scripts/run/README.md", at(22, 50)),
+    );
+    expect(parseTranscript(lines)).toMatchObject({ task: "T0.96", outcome: "Done" });
   });
 
   // A subagent's transcript is beside the session's, every line a sidechain: its usage and model

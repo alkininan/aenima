@@ -151,17 +151,18 @@ your word, and a merge you make by hand is detected by the next run. You never f
 Written by a script at session end from the local transcript, posted with a Notion integration
 token. No model call. This is the data for park rate, findings per ticket, and the four-week weight
 tuning. Since T0.12 the script is `scripts/run/runs.mjs`, run by the SessionEnd hook over the
-transcript Claude Code wrote: the task from the claim command the skill ran, Started and Duration
-from the first and last timestamps, Model from the assistant messages (`Fable→Opus` when both
-appear), Tokens as input plus output, cache reads and cache writes both excluded, counted once per
-API message — a message written as several content-block lines repeats its usage on each, and
-T0.10's table counted lines — Outcome from the last Status the run wrote on its task (Review is
-Done, Decision is Decision, anything else is Stopped, an idle run included), Findings from the
+transcript Claude Code wrote: the task from the claim command the skill ran — the last claim that
+wrote a Status on its task before its `release.mjs`, since step 0 claims and releases a task it
+merges or applies before step 1 claims the run's own — Started and Duration from the first and last
+timestamps, Model from the assistant messages (`Fable→Opus` when both appear), Tokens as input plus
+output, cache reads and cache writes both excluded, counted once per API message — a message
+written as several content-block lines repeats its usage on each, and T0.10's table counted lines
+— Outcome from the last Status the run wrote on its task while that claim stood (Review and Done
+are Done, Decision is Decision, anything else is Stopped, an idle run included), Findings from the
 reviewer's replies. A subagent's transcript — the reviewer's passes, written beside the session's
 under `<session>/subagents/` — counts towards Tokens and Model and nothing else, since the reviewer
-is about half of what a real run spends. A run that claimed nothing is `R-nnnn` alone with no Task.
-A session that was not a `/ticket` writes no row.
-
+is about half of what a real run spends. A run that claimed nothing of its own is `R-nnnn` alone
+with no Task. A session that was not a `/ticket` writes no row.
 
 ### Documents
 

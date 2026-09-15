@@ -18,8 +18,10 @@
  *     once per `message.id`, never per line (T0.10's table counted lines, which is why its
  *     tokens and turns are high by the blocks-per-message ratio);
  *   - the claimed task is the `claim.mjs --task … --page …` the skill ran, read from the Bash
- *     tool call; the outcome is the last Status the skill wrote on that page through the
- *     connector — Review is Done, Decision is Decision, anything else is Stopped;
+ *     tool call — the last one that wrote a Status on its page before its `release.mjs`, since
+ *     step 0 claims and releases a task it merges or applies before step 1 claims the run's;
+ *     the outcome is the last Status the skill wrote on that page through the connector while
+ *     the claim stood — Review and Done are Done, Decision is Decision, anything else Stopped;
  *   - findings are counted from the reviewer subagent's replies, `Must` and `Should` tags;
  *   - a subagent's transcript is written beside the session's, under
  *     `<transcript dir>/<session id>/subagents/agent-*.jsonl`, every line a sidechain; its
@@ -51,11 +53,17 @@ export const RUN_PATTERN = /(^|>)\s*\/ticket\s*($|<)/m;
 /** The model names the board's `Model` select knows. */
 export const MODELS = ["Fable", "Opus", "Fable→Opus"];
 
-/** How the last Status a run wrote reads as an Outcome. */
-export const OUTCOMES = { Review: "Done", Decision: "Decision" };
+/**
+ * How the last Status a run wrote on its task reads as an Outcome. Done is a run that merged its
+ * own work at close (T0.16), Review one whose diff waits on the human's word.
+ */
+export const OUTCOMES = { Review: "Done", Done: "Done", Decision: "Decision" };
 
-/** The outcome of a run that wrote no Review and no Decision — an idle run, a killed one. */
+/** The outcome of a run that wrote no Review, Done or Decision — an idle run, a killed one. */
 export const STOPPED = "Stopped";
+
+/** `node scripts/run/release.mjs` run as a command — the end of the claim that stood. */
+export const RELEASE_PATTERN = /(?:^|[\n;&|(]\s*)node\s+\S*release\.mjs(?:\s|$)/;
 
 /** Parse one JSONL line, or null for a line that is not JSON. */
 const parseLine = (line) => {
@@ -199,29 +207,44 @@ export function parseTranscript(lines, sidechains = []) {
     }
   }
 
-  // The first claim is the run's: one run, one task (docs/guidelines.md §5). A later command
-  // that carries `claim.mjs --task` — a `claude -p` prompt, an echo, a test — is not a claim.
-  let task = null;
-  let page = null;
+  // One run, one task (docs/guidelines.md §5) — but not one claim. Step 0 claims a task to merge
+  // or to apply on the human's word and releases it again, and only then does step 1 claim the
+  // run's own. So each claim stands until the next `release.mjs`, the Status writes on its page
+  // while it stands are its own, and the run's task is the last claim that wrote one. A claim
+  // still standing at the end with none — a run killed before its first write — is the run's
+  // when no claim wrote. A command that merely carries `claim.mjs --task` — a `claude -p`
+  // prompt, an echo — writes no Status on its page and so is never the run's.
+  const claims = [];
   for (const use of toolUses) {
-    if (use.name !== "Bash") continue;
-    const command = String(use.input?.command ?? "");
-    const claimed = command.match(/claim\.mjs\b[^\n;&|]*?--task\s+(T\d+\.\d+)/);
-    if (!claimed) continue;
-    task = claimed[1];
-    page = command.match(/claim\.mjs\b[^\n;&|]*?--page\s+([0-9a-f-]{32,36})/)?.[1] ?? null;
-    break;
-  }
-
-  const statuses = [];
-  for (const use of toolUses) {
+    if (use.name === "Bash") {
+      const command = String(use.input?.command ?? "");
+      if (RELEASE_PATTERN.test(command)) {
+        for (const claim of claims) claim.open = false;
+      }
+      const claimed = command.match(/claim\.mjs\b[^\n;&|]*?--task\s+(T\d+\.\d+)/);
+      if (claimed) {
+        const page = command.match(/claim\.mjs\b[^\n;&|]*?--page\s+([0-9a-f-]{32,36})/)?.[1];
+        claims.push({ task: claimed[1], page: page ?? null, open: true, statuses: [] });
+      }
+      continue;
+    }
     if (!/notion-update-page$/.test(use.name)) continue;
     const status = use.input?.properties?.Status;
     if (typeof status !== "string") continue;
     const target = String(use.input?.page_id ?? "").replaceAll("-", "");
-    if (page !== null && target !== page.replaceAll("-", "")) continue;
-    statuses.push(status);
+    for (const claim of claims) {
+      if (claim.open && claim.page !== null && claim.page.replaceAll("-", "") === target) {
+        claim.statuses.push(status);
+      }
+    }
   }
+  const own =
+    claims.filter((claim) => claim.statuses.length > 0).at(-1) ??
+    claims.filter((claim) => claim.open).at(-1) ??
+    null;
+  const task = own?.task ?? null;
+  const page = own?.page ?? null;
+  const statuses = own?.statuses ?? [];
   const last = statuses.filter((status) => status in OUTCOMES).at(-1);
   const outcome = last === undefined ? STOPPED : OUTCOMES[last];
 
