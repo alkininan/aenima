@@ -19,12 +19,12 @@
  *     tokens and turns are high by the blocks-per-message ratio);
  *   - the claimed task is the `claim.mjs --task … --page …` the skill ran, read from the Bash
  *     tool call with the guard's own parser, so a quoted prompt or a heredoc body is not a
- *     command — the last claim that did not merge before writing a Status of its own, since
- *     step 0 may claim a task to merge it on the human's word before step 1 claims the run's
- *     (a claim to apply or to recover a stale run is the run's own); the outcome is the last Status the skill wrote on that page through the
- *     connector before the next claim, a write after `release.mjs` included (steps 4 and 6
- *     release, then set Decision) — Review and Done are Done, Decision is Decision, anything
- *     else Stopped;
+ *     command. Of the claims that did not merge before writing a Status of their own — step 0
+ *     may claim a task to merge it on the human's word before step 1 claims the run's — the
+ *     run's is the last that wrote a Status, or the last of them when none did; the outcome is
+ *     the last Status the skill wrote on that page through the connector before the next claim,
+ *     a write after `release.mjs` included (steps 4 and 6 release, then set Decision) — Review
+ *     and Done are Done, Decision is Decision, anything else Stopped;
  *   - findings are counted from the reviewer subagent's replies, `Must` and `Should` tags;
  *   - a subagent's transcript is written beside the session's, under
  *     `<transcript dir>/<session id>/subagents/agent-*.jsonl`, every line a sidechain; its
@@ -183,14 +183,14 @@ export function countFindings(text) {
  * run prompt — a session that was not a `/ticket`, which gets no row.
  */
 export function parseTranscript(lines, sidechains = []) {
-  const parse = (raw) =>
+  const readLines = (raw) =>
     (Array.isArray(raw) ? raw : String(raw).split("\n"))
       .map((line) => (typeof line === "string" ? parseLine(line) : line))
       .filter((event) => event !== null && typeof event === "object");
-  const events = parse(lines).filter((event) => !event.isSidechain);
+  const events = readLines(lines).filter((event) => !event.isSidechain);
   // A subagent's lines: usage and model only. Its prompt is the ticket path, its statuses none.
   const side = sidechains
-    .flatMap((raw) => parse(raw))
+    .flatMap((raw) => readLines(raw))
     .filter((event) => event.type === "assistant");
 
   const timestamps = events
@@ -249,10 +249,10 @@ export function parseTranscript(lines, sidechains = []) {
   for (const use of toolUses) {
     const current = claims.at(-1);
     if (use.name === "Bash") {
-      for (const run of runsIn(String(use.input?.command ?? ""))) {
-        if (run.claim) claims.push({ ...run.claim, statuses: [], merged: false });
+      for (const step of runsIn(String(use.input?.command ?? ""))) {
+        if (step.claim) claims.push({ ...step.claim, statuses: [], merged: false });
         const claim = claims.at(-1);
-        if (run.merge && claim && claim.statuses.length === 0) claim.merged = true;
+        if (step.merge && claim && claim.statuses.length === 0) claim.merged = true;
       }
       continue;
     }

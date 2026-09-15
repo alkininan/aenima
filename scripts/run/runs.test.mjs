@@ -226,9 +226,9 @@ describe("parseTranscript", () => {
     expect(parseTranscript(lines).run).toBe(false);
   });
 
-  // One run, one task: a command that happens to carry `claim.mjs --task` — a `claude -p` prompt
-  // in a live observation, say — did not run the script, so it is no claim and does not end the
-  // run's own claim before its Status writes.
+  // TC1 → AC1, and TA3 → AA3 since the addendum. One run, one task: a command that happens to
+  // carry `claim.mjs --task` — a `claude -p` prompt in a live observation, say — did not run the
+  // script, so it is no claim and does not end the run's own claim before its Status writes.
   it("does not read a claim.mjs quoted in a later command's prompt as a claim", () => {
     const lines = transcript();
     lines.splice(
@@ -364,6 +364,33 @@ describe("parseTranscript", () => {
       ...status("build_review", "3d679daf-d42e-813f-af58-f5f053219a57", "Review", at(39, 0)),
     );
     expect(parseTranscript(lines)).toMatchObject({ task: "T0.96", outcome: "Done" });
+  });
+
+  // Step 0 claims a task to apply and only looks — `permission.mjs apply`, refused, released —
+  // then step 1 claims the run's own in the same command, In progress written before it (the
+  // shape of session 748b808b). Neither claim merged; the run's is the later one.
+  it("takes step 1's claim over a step-0 claim that did not merge, both in one command", () => {
+    const APPLY_PAGE = "3da79daf-d42e-8114-8a24-d52f19d4ed8c";
+    const RUN_PAGE = "3d679daf-d42e-813f-af58-f5f053219a57";
+    const shaped = (after) => {
+      const lines = transcript({ withTask: false, statuses: [] });
+      lines.splice(
+        lines.findIndex((l) => l.includes("msg_last")),
+        0,
+        ...status("apply_progress", RUN_PAGE, "In progress", at(30, 0)),
+        ...bash(
+          "apply_then_claim",
+          `node scripts/run/claim.mjs --task T0.13 --page ${APPLY_PAGE} --branch t0-13 && node scripts/run/permission.mjs apply; node scripts/run/release.mjs && node scripts/run/claim.mjs --task T0.96 --page ${RUN_PAGE} --branch t0-96`,
+          at(30, 10),
+        ),
+        ...after,
+      );
+      return lines;
+    };
+    expect(parseTranscript(shaped([]))).toMatchObject({ task: "T0.96", outcome: STOPPED });
+    expect(
+      parseTranscript(shaped(status("apply_decision", RUN_PAGE, "Decision", at(39, 0)))),
+    ).toMatchObject({ task: "T0.96", outcome: "Decision" });
   });
 
   it("keeps a killed run's claim over a later command that only quotes one", () => {
