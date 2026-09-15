@@ -369,4 +369,26 @@ describe("readPick", () => {
     expect(result).toMatchObject({ token: false, pick: null, notices: [] });
     expect(result.why).toContain("NOTION_TOKEN");
   });
+
+  // Review pass 2, Should 2: a preflight that recovers several stale runs re-claims one and
+  // returns the rest to Ready (§5 step 0). They are In progress, so the order is asked of them as
+  // if they were Ready, and nothing is said on any thread.
+  it("orders only the named tasks when asked among them, as if Ready, and owes no notices", async () => {
+    const rows = [
+      row("T0.12 stale, medium", { Status: "In progress" }),
+      row("T0.13 stale, high", { Status: "In progress", Priority: "High" }),
+      row("T0.14 ready, urgent", { Priority: "Urgent" }),
+      row("T0.15 waiting", { Blockers: ["T0.16 backlog"] }),
+      row("T0.16 backlog", { Status: "Backlog" }),
+    ];
+    const api = { tasks: async (ds) => (ds === "epics" ? EPICS : rows), comments: async () => [] };
+    const deps = { token: () => "t", board, client: api };
+    const result = await readPick({ among: ["T0.12", "T0.13"], deps });
+    expect(result.pick.Name).toBe("T0.13 stale, high");
+    expect(result.queue.map((task) => task.Name)).toEqual([
+      "T0.13 stale, high",
+      "T0.12 stale, medium",
+    ]);
+    expect(result.notices).toEqual([]);
+  });
 });

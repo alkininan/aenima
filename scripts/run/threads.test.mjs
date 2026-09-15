@@ -33,6 +33,7 @@ describe("scan", () => {
       c(`${P}clarify 2`, "2026-09-13T10:00:00Z"),
       c("still unclear to me too", "2026-09-13T11:00:00Z"),
     ],
+    // T0.17 TC3 → AC3: the human's go on a Backlog task.
     ready: [c("ready", "2026-09-13T11:00:00Z")],
   };
   const commentsOf = async (id) => threads[id];
@@ -60,6 +61,7 @@ describe("scan", () => {
     ]);
   });
 
+  // T0.11's TC1–TC4, and T0.17 TC3 → AC3 for ready at Backlog.
   it("names the shape the words settle: merge at Review, apply on a migration, ready at Backlog, else assess", async () => {
     const { threads: found } = await scan(tasks, commentsOf, P);
     const shape = Object.fromEntries(found.map((t) => [t.id, t.shape]));

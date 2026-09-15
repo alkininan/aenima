@@ -250,8 +250,14 @@ export async function unposted(notices, commentsOf, prefix = "⟡ ") {
   return kept;
 }
 
-/** The whole step-1 read for `dir`: token, board, every task, the epic names, the threads. */
-export async function readPick({ dir = process.cwd(), deps = {} } = {}) {
+/**
+ * The whole step-1 read for `dir`: token, board, every task, the epic names, the threads.
+ *
+ * `among`, a list of IDs, asks the order of those tasks alone, read as if they were Ready: a
+ * preflight that recovered several stale runs re-claims the first and returns the rest to Ready
+ * (§5 step 0). Nothing is said on any thread for that question — the notices are step 1's.
+ */
+export async function readPick({ dir = process.cwd(), among = null, deps = {} } = {}) {
   const token = deps.token ? deps.token() : readToken(dir);
   if (token === null) {
     return {
@@ -270,14 +276,30 @@ export async function readPick({ dir = process.cwd(), deps = {} } = {}) {
   const rows = await api.tasks(board.tasks_ds);
   // An Epics row reads through the same shape: its id and its Name are all the order needs.
   const epics = await api.tasks(board.epics_ds);
+  if (among !== null) {
+    const named = new Set(among);
+    const asked = rows.map((row) =>
+      named.has(idOf(row.Name)) ? { ...row, Status: "Ready" } : row,
+    );
+    const result = pickNext(asked, { epics, prefix });
+    const queue = result.queue.filter((task) => named.has(idOf(task.Name)));
+    return { token: true, ...result, pick: queue[0] ?? null, queue, notices: [] };
+  }
   const result = pickNext(rows, { epics, prefix });
   const notices = await unposted(result.notices, (id) => api.comments(id), prefix);
   return { token: true, ...result, notices };
 }
 
-/** CLI: `node pick-next.mjs`, run from the checkout. */
+/** CLI: `node pick-next.mjs`, or `node pick-next.mjs --among T0.12,T0.13`, run from the checkout. */
 async function main() {
-  emit(await readPick());
+  const flag = process.argv.indexOf("--among");
+  const among =
+    flag === -1
+      ? null
+      : String(process.argv[flag + 1] ?? "")
+          .split(",")
+          .filter(Boolean);
+  emit(await readPick({ among }));
 }
 
 if (isMain(import.meta.url)) await main();

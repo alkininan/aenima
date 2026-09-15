@@ -868,7 +868,6 @@ describe("wantedBy — the words a hook call would need", () => {
 
 // TC3 → AC3 and TC4 → AC4, the hook's entry: which words a command line needs before the
 // board is read.
-
 describe("wanted — the words a command line would need", () => {
   it("lists apply for a migrate, merge for a pr merge, nothing otherwise", () => {
     expect(wanted("pnpm db:migrate")).toEqual(["apply"]);

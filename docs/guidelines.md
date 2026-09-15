@@ -501,9 +501,11 @@ schema push, no writes to `.env` or `.env.*` (`.env.example` is tracked and exce
 production deploy, no force-push, no push to main in any refspec shape but one — the revert of
 the merge at the tip, `HEAD:main`, HEAD one commit past `origin/main` with the tree the merge's
 first parent had — no merge with main checked out, no migration apply until the guard has itself
-read your `apply` on the claimed task's thread over the API (§4), no Backlog task set Ready until
-it has read your `ready` on that task's thread, no Backlog task moved anywhere but Ready, no task
-created at any status but Backlog, no comment from a run without the prefix, and no `gh pr merge` until it
+read your `apply` on the claimed task's thread over the API (§4), and at the board's connector no
+Backlog task set Ready until it has read your `ready` on that task's thread, no Backlog task
+moved anywhere but Ready, no task created at any status but Backlog and no comment from a run
+without the prefix — the connector's writes, not the token's, which a script could send over
+the API without passing the guard (a Backlog Fix, *Guard the token and duplicate routes*), and no `gh pr merge` until it
 has read your `merge` there or, on a diff touching no gated path, the reviewer's `PASS` on file
 and the gate's green for the very commit the pull request carries; a merge must be that task's own pull request and
 a merge commit. The guard reads commands, never text: prose inside a heredoc or a quoted string

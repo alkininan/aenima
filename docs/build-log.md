@@ -81,6 +81,7 @@ One file per ticket under `docs/log/`, oldest first. This list is written by `no
 - [T0.11 — Comments: a comment on the board is enough](log/T0.11.md) · 2026-09-13
 - [T2.8 — Sufficiency probes](log/T2.8.md) · 2026-09-14
 - [T0.16 — Self-merge: a finished ticket merges itself](log/T0.16.md) · 2026-09-14
+- [T0.17 — Linear ordering](log/T0.17.md) · 2026-09-15
 
 ## Decisions made during the build
 

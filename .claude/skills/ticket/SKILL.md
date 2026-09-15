@@ -134,8 +134,10 @@ itself — one file for every worktree:
 
   Post one `stale` comment on the task with the date and `renamed` (null when there was no
   branch). The stale task is the one you re-claim: skip step 1's pick, leave it `In progress`,
-  and continue from step 1's marker with it. With several stale tasks, order them with
-  `pick-next.mjs` over those rows alone: the first is yours, the rest go back to `Ready`.
+  and continue from step 1's marker with it. With several stale tasks, ask the board's order
+  of those alone — `node scripts/run/pick-next.mjs --among <id>,<id>` reads them as if they were
+  Ready — and `pick` is yours; the rest go back to `Ready`. A `pick` of null means every one of them is
+  now blocked: all go back to `Ready`, and step 1 picks as usual.
 
 **e. The deploy.** Main deploys with nobody watching, so once per commit of main the run asks the
 live site from outside:

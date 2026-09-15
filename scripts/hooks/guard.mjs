@@ -742,7 +742,6 @@ const CONNECTOR = /^mcp__.+__notion-(update-page|create-pages|create-comment)$/;
 /** Which of the connector's writes a hook call is — `update-page` and so on — or null. */
 const connectorTool = (input) => String(input?.tool_name ?? "").match(CONNECTOR)?.[1] ?? null;
 
-/** True when an update-page call sets Status to Ready. */
 /**
  * True when an update-page call writes Status to anything but Backlog — every such write is
  * read against the task first, since the one move out of Backlog is to Ready, on the word.
