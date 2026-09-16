@@ -134,8 +134,9 @@ becomes a Backlog task of Type Fix under the same Epic. The reviewer writes its 
 close, and the run never writes it (T0.16). The reviewer's model comes from one chain, the
 model its definition pins and then `.claude/settings.json`'s `fallbackModel`, and
 `review-model.mjs` reads it (T0.22): a call refused for credits or availability — an API
-error with a 429, a 5xx or an overloaded model — names the next model, and the run calls the
-reviewer again on it with the same message; any other failure, a chain with no model left, or
+error with a 429, a 5xx, an overloaded model or a lost connection — names the next model, and the
+run calls the reviewer again on it with the same message, each pass starting again at the pinned
+model; any other failure, a chain with no model left, or
 models tried out of the chain's order is a stop, because a review that did not run is not a
 pass.
 

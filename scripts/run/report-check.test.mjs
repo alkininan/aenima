@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { checkReport, reviewerSection, tableRows, testsWrittenSection } from "./report-check.mjs";
@@ -133,6 +135,16 @@ describe("report-check", () => {
         "reviewer pass 2 ran on Sonnet, which is not in the configured chain — fable, opus",
       ]);
       expect(checkReport(report).ok).toBe(true);
+    });
+
+    it("is the table the skill's step 8 tells a run to write", () => {
+      const skill = readFileSync(
+        join(import.meta.dirname, "..", "..", ".claude/skills/ticket/SKILL.md"),
+        "utf8",
+      );
+      const step8 = skill.match(/^## 8 Report\n[\s\S]*?(?=^## 9 )/m)?.[0] ?? "";
+      expect(step8).toContain("columns `pass · commit · model · verdict`");
+      expect(step8).toContain("the model it ran on");
     });
   });
 });

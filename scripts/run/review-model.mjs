@@ -37,7 +37,11 @@ export function fallbackModels(settingsText) {
   return (Array.isArray(fallback) ? fallback : [fallback]).map(String).filter(Boolean);
 }
 
-/** The configured chain: the pinned model, then each fallback, every model once. */
+/**
+ * The configured chain: the pinned model, then each fallback, every model once. A definition
+ * that pins no model leaves the chain at the fallbacks, and its first call runs on the session's
+ * model, which is not in it — an unpinned reviewer has no fallback, and a refusal is a stop.
+ */
 export function reviewChain({ agent, settings }) {
   const chain = [pinnedModel(agent), ...fallbackModels(settings)].filter(Boolean);
   return chain.filter(
@@ -57,7 +61,8 @@ export function readChain(root = process.cwd(), read = (path) => readFileSync(pa
  * Why a reviewer call failed: `credits`, `availability`, or `other`.
  *
  * Only a refusal from the model's API counts for either of the first two, which Claude Code
- * reports as "…an API error: … (error type rate_limit, HTTP 429, …)" or "API Error: 429 …". A
+ * reports as "…an API error: … (error type rate_limit, HTTP 429, …)" or "API Error: 429 …"; a
+ * connection lost mid-response is the service not answering, so it is availability. A
  * status is read where a status stands, never as any three digits in the message: "max_tokens:
  * 512" is a bad request, not a server that did not answer.
  */
@@ -76,6 +81,7 @@ export function causeOf(error) {
   if (
     status?.startsWith("5") ||
     /\berror type overloaded\b|\boverloaded_error\b/i.test(text) ||
+    /\bconnection (lost|reset|closed)\b/i.test(text) ||
     /\bnot_found_error\b[\s\S]*\bmodel\b/i.test(text)
   ) {
     return "availability";
@@ -84,9 +90,10 @@ export function causeOf(error) {
 }
 
 /**
- * The step after a refused call. `tried` is every model the review has been called on so far,
- * in order, which must be the start of the chain — a model from anywhere else is the run's own
- * pick. Returns `{ chain, cause, stop, model, why, detail }`: `model` the one to call next when
+ * The step after a refused call. `tried` is every model this pass has been called on, in order,
+ * which must be the start of the chain — a model from anywhere else is the run's own pick. Each
+ * pass starts again at the pinned model, so a second pass on a model still out of credits falls
+ * back the way the first did. Returns `{ chain, cause, stop, model, why, detail }`: `model` the one to call next when
  * `stop` is false, `why` the sentence a stop reports, `detail` the failure's first line.
  */
 export function nextReviewer({ chain = [], tried = [], error }) {

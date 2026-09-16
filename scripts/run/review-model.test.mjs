@@ -48,13 +48,20 @@ describe("reviewChain", () => {
 });
 
 describe("causeOf", () => {
+  // T0.22 Build 1 — the fallback itself, which AC1 states
   it("reads the out-of-credits refusal as credits", () => {
     expect(causeOf(CREDITS)).toBe("credits");
     expect(causeOf("API Error: 429 rate_limit_error")).toBe("credits");
   });
 
+  // T0.22 Build 1
   it("reads an overloaded or unanswering model as availability", () => {
     expect(causeOf(OVERLOADED)).toBe("availability");
+    expect(
+      causeOf(
+        "Agent terminated early due to an API error: API Error: Connection lost mid-response.",
+      ),
+    ).toBe("availability");
     expect(causeOf("API Error: 503 service unavailable")).toBe("availability");
     expect(
       causeOf(
@@ -83,6 +90,7 @@ describe("causeOf", () => {
 });
 
 describe("nextReviewer", () => {
+  // T0.22 Build 1
   it("falls back to the next configured model when the pinned one is out of credits", () => {
     expect(nextReviewer({ chain: CHAIN, tried: ["fable"], error: CREDITS })).toEqual({
       chain: CHAIN,
@@ -94,6 +102,7 @@ describe("nextReviewer", () => {
     });
   });
 
+  // T0.22 Build 1
   it("falls back on availability too, and matches the models tried whatever their case", () => {
     expect(nextReviewer({ chain: CHAIN, tried: ["Fable"], error: OVERLOADED })).toMatchObject({
       cause: "availability",
@@ -154,6 +163,7 @@ describe("guidelines §5 step 5", () => {
     expect(step5).toContain("fallbackModel");
     expect(step5).toContain("review-model.mjs");
     expect(step5).toContain("only the model changes");
+    expect(step5).toContain("each pass starts again at the pinned model");
   });
 
   it("states the reporting duty and the stop for any other failure", () => {
@@ -163,7 +173,8 @@ describe("guidelines §5 step 5", () => {
 
   it("is what the skill's step 5 tells a run to do", () => {
     const skillStep5 = skill.match(/^## 5 Review\n[\s\S]*?(?=^## 6 )/m)?.[0] ?? "";
-    expect(skillStep5).toContain("node scripts/run/review-model.mjs");
+    expect(skillStep5).toContain("node scripts/run/review-model.mjs <<'EOF'");
+    expect(skillStep5).toContain("each pass starts again at the pinned model");
     expect(skillStep5).toContain("fallbackModel");
     expect(skillStep5).toContain("`refused`");
   });

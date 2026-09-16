@@ -434,7 +434,8 @@ below is a script under `scripts/run/` with a test; the skill holds the judgment
                 runs again on the next model of the configured chain, the model the reviewer's
                 definition pins and then .claude/settings.json's fallbackModel — review-model.mjs
                 reads the chain and the refusal, and the run never picks a model — in a fresh
-                session with the same one-line message: only the model changes · the run
+                session with the same one-line message: only the model changes, and
+                each pass starts again at the pinned model · the run
                 names every pass's model in the report · any other failure, or a chain with no
                 model left, is a stop: the review did not run, so the branch is pushed, one
                 comment, Decision — a ticket never closes unreviewed
