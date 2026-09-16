@@ -109,6 +109,9 @@ export async function getOpportunityByKey(
     .select(OPPORTUNITY_PAGE_TREE)
     .eq("workspace_id", workspaceId)
     .eq("key", key)
+    // PostgREST orders an embed only when asked, and an unordered embed is a
+    // list that can reshuffle itself between two reads of the same page.
+    .order("created_at", { ascending: true, referencedTable: "item" })
     .maybeSingle();
 
   if (error) throw new Error(`Could not read opportunity: ${error.message}`);

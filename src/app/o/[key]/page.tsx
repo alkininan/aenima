@@ -7,7 +7,7 @@ import { getCurrentWorkspace } from "@/db/queries/workspace";
 import { getDictionary } from "@/i18n";
 import { ROUTES } from "@/lib/routes";
 
-import { ItemLine } from "./ItemLine";
+import { ItemsSection } from "./ItemsSection";
 import { OpportunityHeader } from "./OpportunityHeader";
 
 /**
@@ -65,34 +65,7 @@ export default async function OpportunityPage({ params }: PageProps<"/o/[key]">)
             }}
           />
 
-          <section aria-labelledby="opportunity-items" className="flex flex-col gap-[12px]">
-            <h2 id="opportunity-items" className="type-mono-micro text-n-secondary">
-              {t.opportunity.items}
-            </h2>
-
-            {/* §12: an opportunity nobody has bet on yet is a normal state, so
-                it gets a sentence rather than an empty region. Unlike §13's
-                buckets — which are a partition, where an empty one is silence —
-                this section was navigated to on purpose, and a heading over a
-                void answers nothing. */}
-            {opportunity.items.length === 0 ? (
-              <p className="type-ui-body text-n-secondary">{t.opportunity.noItems}</p>
-            ) : (
-              /* §8 (v2.15): one continuous surface, hairline-divided. The
-                 `gap-[1px]` over `--bg-base` is the hairline, and
-                 `overflow-hidden` is what makes the square-cornered lines
-                 inherit the group's rounded ends. No bucket accent: buckets are
-                 §13's ranking of a whole workspace, and this is one problem's
-                 items. */
-              <div className="flex flex-col gap-[1px] overflow-hidden rounded-sm bg-bg-base">
-                {opportunity.items.map((item) => (
-                  <div key={item.key} className="bg-surface-1">
-                    <ItemLine item={item} t={t} />
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
+          <ItemsSection items={opportunity.items} t={t} />
         </div>
 
         {/* §4's 380 chat column, reserved and empty — the item page's seam, held

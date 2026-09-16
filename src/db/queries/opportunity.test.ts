@@ -7,7 +7,13 @@ const calls = vi.hoisted(() => ({
   from: [] as string[],
   select: [] as string[],
   eq: [] as [string, unknown][],
-  order: [] as [string, boolean | undefined][],
+  /**
+   * Both arguments, unlike `item.test.ts`'s recorder: this layer orders an
+   * *embedded* table, and which table is in the options rather than in the
+   * column name. A recorder that kept only `ascending` could not tell an
+   * ordered embed from an ordered outer read.
+   */
+  order: [] as [string, { ascending?: boolean; referencedTable?: string } | undefined][],
   rows: [] as unknown[],
   single: null as unknown,
 }));
@@ -27,8 +33,8 @@ vi.mock("@/lib/supabase/server", () => {
       calls.eq.push([column, value]);
       return builder;
     },
-    order(column: string, options?: { ascending?: boolean }) {
-      calls.order.push([column, options?.ascending]);
+    order(column: string, options?: { ascending?: boolean; referencedTable?: string }) {
+      calls.order.push([column, options]);
       return builder;
     },
     maybeSingle() {
@@ -106,6 +112,12 @@ describe("listOpportunities", () => {
   });
 });
 
+/**
+ * `listOpportunities` predates this ticket and no criterion names it. Its one
+ * test is here because the file is the layer's, not the ticket's, and a query
+ * that names its tenant is the thing CLAUDE.md asks of every one of them.
+ */
+
 describe("getOpportunityByKey", () => {
   /**
    * The tenant filter is the half of product isolation this layer owns. RLS is
@@ -143,6 +155,22 @@ describe("getOpportunityByKey", () => {
       "item(key, title, type, artifact(kind, artifact_version(count)))",
     );
     expect(opportunity?.items.map((item) => item.key)).toEqual(["soc-1", "soc-2", "soc-5"]);
+  });
+
+  /**
+   * PostgREST orders an embed only when asked. Unordered, the item list can
+   * come back in a different order on two reads of the same page — which is
+   * what `OpportunityPageDetail.items` promising "creation order" would be
+   * lying about, and what a person watching a list reshuffle under them would
+   * see. The order is on the *embedded* table, so `referencedTable` is the
+   * half of this assertion that matters.
+   */
+  it("asks for the items in creation order, on the embed", async () => {
+    calls.single = pageRow("soc-3", [{ key: "soc-1", artifacts: [] }]);
+
+    await getOpportunityByKey(WORKSPACE, "soc-3");
+
+    expect(calls.order).toEqual([["created_at", { ascending: true, referencedTable: "item" }]]);
   });
 
   /** The layer returns a stage; it never asks the database for one. */

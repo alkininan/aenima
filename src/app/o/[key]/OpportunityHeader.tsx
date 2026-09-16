@@ -16,10 +16,10 @@ export type OpportunityHeaderData = {
  * in the same mono-micro line the item header gives its taxonomy.
  *
  * The summary sits in §4's subtitle slot, directly under the title, because it
- * is the sentence that says what the problem *is*. Unlike the item header's
- * opportunity line it wraps rather than truncates — a summary is prose, and a
- * problem statement cut off mid-clause says something other than what was
- * written.
+ * is the sentence that says what the problem *is* — and it takes the slot's rule
+ * whole: "ui-body, `--n-secondary`, 8 below the title … One line; it truncates
+ * rather than wraps on narrow widths." `ItemHeader`'s opportunity line reads it
+ * the same way, which is the point of a slot.
  *
  * Absent when there is none. §2 makes `summary` nullable, so an opportunity
  * carrying only a title is a legal one and there is nothing to report.
@@ -34,7 +34,7 @@ export function OpportunityHeader({ opportunity }: { opportunity: OpportunityHea
       <h1 className="type-display-xl text-n-primary">{opportunity.title}</h1>
 
       {opportunity.summary === null ? null : (
-        <p className="type-ui-body text-n-secondary">{opportunity.summary}</p>
+        <p className="type-ui-body truncate text-n-secondary">{opportunity.summary}</p>
       )}
 
       <p className="type-mono-micro flex flex-wrap items-center gap-[8px] text-n-secondary">

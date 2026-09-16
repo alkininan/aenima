@@ -140,8 +140,9 @@ export const en = {
     stageLabel: "Stage",
     /**
      * §2 lineage: the opportunity an item came out of, which is the thing that
-     * explains why it exists. Plain text for now — `/o/<key>` cannot be built
-     * because opportunities have no key column (build log, open question 9).
+     * explains why it exists. The label on a link to `/o/<key>` since T1.4 gave
+     * opportunities a key; it was plain text while the only thing left to route
+     * by was a uuid (build log, open question 9).
      */
     opportunity: "Opportunity",
     /** §8: the 8h meter's own name, for the screen reader. */
@@ -343,6 +344,13 @@ export const en = {
   },
   /** §2's opportunity, at `/o/<key>` — the page the item header now links to. */
   opportunity: {
+    /**
+     * Character-for-character `item.backToList`, and deliberately its own key:
+     * the two pages are separate surfaces and either sentence can change without
+     * the other. Deduplicating them would make a copy edit on one page silently
+     * a copy edit on the other, which is the kind of coupling a dictionary is
+     * for avoiding.
+     */
     backToList: "Back to the list",
     /** §8's section heading. mono-micro, so §3 uppercases it. */
     items: "Items",
