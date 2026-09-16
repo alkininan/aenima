@@ -13,6 +13,9 @@ const calls = vi.hoisted(() => ({
   /** Likewise `limit()`: an unbounded ledger read is a slow page nobody sees
    *  coming, and the cap is what a test has to be able to see. */
   limit: [] as number[],
+  /** An order or a cap placed on an embed rather than on the list — `[table, column, ascending]` and `[table, count]`. */
+  embedOrder: [] as [string, string, boolean | undefined][],
+  embedLimit: [] as [string, number][],
   rows: [] as unknown[],
   single: null as unknown,
 }));
@@ -33,12 +36,20 @@ vi.mock("@/lib/supabase/server", () => {
       calls.eq.push([column, value]);
       return builder;
     },
-    order(column: string, options?: { ascending?: boolean }) {
-      calls.order.push([column, options?.ascending]);
+    order(column: string, options?: { ascending?: boolean; referencedTable?: string }) {
+      if (options?.referencedTable) {
+        calls.embedOrder.push([options.referencedTable, column, options.ascending]);
+      } else {
+        calls.order.push([column, options?.ascending]);
+      }
       return builder;
     },
-    limit(count: number) {
-      calls.limit.push(count);
+    limit(count: number, options?: { referencedTable?: string }) {
+      if (options?.referencedTable) {
+        calls.embedLimit.push([options.referencedTable, count]);
+      } else {
+        calls.limit.push(count);
+      }
       return builder;
     },
     maybeSingle() {
@@ -100,6 +111,8 @@ describe("listItemsForProduct", () => {
     calls.eq = [];
     calls.order = [];
     calls.limit = [];
+    calls.embedOrder = [];
+    calls.embedLimit = [];
     calls.rows = [];
     calls.single = null;
   });
@@ -177,6 +190,8 @@ describe("getItem", () => {
     calls.eq = [];
     calls.order = [];
     calls.limit = [];
+    calls.embedOrder = [];
+    calls.embedLimit = [];
     calls.single = null;
   });
 
@@ -250,6 +265,8 @@ describe("listItemsForWorkspace", () => {
     calls.eq = [];
     calls.order = [];
     calls.limit = [];
+    calls.embedOrder = [];
+    calls.embedLimit = [];
     calls.rows = [];
     calls.single = null;
   });
@@ -260,6 +277,7 @@ describe("listItemsForWorkspace", () => {
     artifacts: { kind: string; versions: string[] }[] = [],
     gaps: { tag: string; createdAt: string }[] = [],
     updatedAt = "2026-01-01T00:00:00+00:00",
+    runs: { scoredAt: string; nextAttemptAt?: string | null }[] = [],
   ) => ({
     id: `id-${key}`,
     key,
@@ -280,6 +298,10 @@ describe("listItemsForWorkspace", () => {
       check_id: "MN-2",
       tag: g.tag,
       created_at: g.createdAt,
+    })),
+    scoring_run: runs.map((run) => ({
+      scored_at: run.scoredAt,
+      artifact: { next_scoring_attempt_at: run.nextAttemptAt ?? null },
     })),
   });
 
@@ -433,6 +455,68 @@ describe("listItemsForWorkspace", () => {
     expect(item?.productSlug).toBe("sociera");
     expect(item?.productName).toBe("Sociera");
   });
+
+  /**
+   * §10's clock on the row. Build-log open question 6 left the row on last
+   * activity because every row's newest run looked like a second read across
+   * the workspace. It is an embed on the one request the list already makes —
+   * ordered newest-first and capped at one *on the embed*, so open question 7's
+   * rule holds: nothing caps the list itself.
+   */
+  it("asks for each item's newest scoring run in the same request, newest first, one only", async () => {
+    await listItemsForWorkspace(WORKSPACE);
+
+    expect(calls.from).toEqual(["item"]);
+    expect(calls.select[0]).toMatch(
+      /scoring_run\(\s*scored_at,\s*artifact\(next_scoring_attempt_at\)\s*\)/,
+    );
+    expect(calls.embedOrder).toContainEqual(["scoring_run", "scored_at", false]);
+    expect(calls.embedLimit).toContainEqual(["scoring_run", 1]);
+    expect(calls.limit).toEqual([]);
+  });
+
+  it("carries the newest run's clock and the retry queued on its artifact", async () => {
+    calls.rows = [
+      listRow("soc-1", [], [], "2026-01-01T00:00:00+00:00", [
+        { scoredAt: "2026-05-01T06:00:00+00:00", nextAttemptAt: "2026-05-01T08:00:00+00:00" },
+      ]),
+    ];
+
+    const { items } = await listItemsForWorkspace(WORKSPACE);
+    const [item] = items;
+
+    expect(item?.scoredAt).toBe("2026-05-01T06:00:00+00:00");
+    expect(item?.nextScoringAttemptAt).toBe("2026-05-01T08:00:00+00:00");
+  });
+
+  // Ordered on the embed, and still scanned — `versionRange`'s reason: an order
+  // a plan happened to drop would put an old run's clock, and an old run's
+  // retry, on the row without anything noticing.
+  it("takes the newest run whatever order the rows arrive in", async () => {
+    calls.rows = [
+      listRow("soc-1", [], [], "2026-01-01T00:00:00+00:00", [
+        { scoredAt: "2026-03-01T00:00:00+00:00", nextAttemptAt: "2026-03-01T02:00:00+00:00" },
+        { scoredAt: "2026-05-01T00:00:00+00:00" },
+      ]),
+    ];
+
+    const { items } = await listItemsForWorkspace(WORKSPACE);
+    const [item] = items;
+
+    expect(item?.scoredAt).toBe("2026-05-01T00:00:00+00:00");
+    expect(item?.nextScoringAttemptAt).toBeNull();
+  });
+
+  // §10's hollow track: nothing has scored the item, and that is not an error.
+  it("reads no clock for an item nothing has scored", async () => {
+    calls.rows = [listRow("soc-1")];
+
+    const { items } = await listItemsForWorkspace(WORKSPACE);
+    const [item] = items;
+
+    expect(item?.scoredAt).toBeNull();
+    expect(item?.nextScoringAttemptAt).toBeNull();
+  });
 });
 
 /**
@@ -450,6 +534,8 @@ describe("getItemByKey", () => {
     calls.eq = [];
     calls.order = [];
     calls.limit = [];
+    calls.embedOrder = [];
+    calls.embedLimit = [];
     calls.single = null;
   });
 
