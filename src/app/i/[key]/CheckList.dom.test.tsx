@@ -13,6 +13,12 @@ type MoveableGap = import("./GapMoves").MoveableGap;
 /** No gap for any check, which is every case but the two that test the move. */
 const NO_GAPS = new Map<string, MoveableGap>();
 
+/**
+ * No gap closed by §4's engine — the ordinary case, and every test but the
+ * three that are about one.
+ */
+const NO_CLOSURES = new Map<string, string>();
+
 const t = getDictionary();
 
 const passed = (checkId: string, prose = "Problem written without the solution"): CheckLine => ({
@@ -55,6 +61,7 @@ describe("CheckList", () => {
         t={t}
         itemKey="soc-12"
         gapsByCheck={NO_GAPS}
+        noLongerApplicable={NO_CLOSURES}
         outcome={null}
       />,
     );
@@ -77,6 +84,7 @@ describe("CheckList", () => {
         t={t}
         itemKey="soc-12"
         gapsByCheck={NO_GAPS}
+        noLongerApplicable={NO_CLOSURES}
         outcome={null}
       />,
     );
@@ -97,6 +105,7 @@ describe("CheckList", () => {
         t={t}
         itemKey="soc-12"
         gapsByCheck={NO_GAPS}
+        noLongerApplicable={NO_CLOSURES}
         outcome={null}
       />,
     );
@@ -128,6 +137,7 @@ describe("CheckList", () => {
         t={t}
         itemKey="soc-12"
         gapsByCheck={NO_GAPS}
+        noLongerApplicable={NO_CLOSURES}
         outcome={null}
       />,
     );
@@ -150,6 +160,7 @@ describe("CheckList", () => {
         t={t}
         itemKey="soc-12"
         gapsByCheck={NO_GAPS}
+        noLongerApplicable={NO_CLOSURES}
         outcome={null}
       />,
     );
@@ -181,6 +192,7 @@ describe("CheckList", () => {
         t={t}
         itemKey="soc-12"
         gapsByCheck={NO_GAPS}
+        noLongerApplicable={NO_CLOSURES}
         outcome={null}
       />,
     );
@@ -223,6 +235,7 @@ describe("CheckList", () => {
         t={t}
         itemKey="soc-12"
         gapsByCheck={NO_GAPS}
+        noLongerApplicable={NO_CLOSURES}
         outcome={null}
       />,
     );
@@ -242,6 +255,7 @@ describe("CheckList", () => {
         t={t}
         itemKey="soc-12"
         gapsByCheck={NO_GAPS}
+        noLongerApplicable={NO_CLOSURES}
         outcome={null}
       />,
     );
@@ -268,6 +282,7 @@ describe("CheckList", () => {
         t={t}
         itemKey="soc-12"
         gapsByCheck={NO_GAPS}
+        noLongerApplicable={NO_CLOSURES}
         outcome={null}
       />,
     );
@@ -295,6 +310,7 @@ describe("CheckList", () => {
         t={t}
         itemKey="soc-12"
         gapsByCheck={NO_GAPS}
+        noLongerApplicable={NO_CLOSURES}
         outcome={null}
       />,
     );
@@ -341,6 +357,7 @@ describe("CheckList", () => {
             ["prd-10", must],
           ])
         }
+        noLongerApplicable={NO_CLOSURES}
         outcome={null}
       />,
     );
@@ -358,6 +375,7 @@ describe("CheckList", () => {
         checks={[unclear("prd-16", "must", "C.")]}
         t={t}
         itemKey="soc-12"
+        noLongerApplicable={NO_CLOSURES}
         gapsByCheck={
           new Map<string, MoveableGap>([
             [
@@ -378,5 +396,116 @@ describe("CheckList", () => {
     );
 
     expect(container.querySelector("#gap-g-accepted")).toBeNull();
+  });
+
+  /* ------------------------------------------------------------------ */
+  /* §4's closure, surfaced — build log open question 14 (T2.10)          */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * **The one closure a person might disagree with.**
+   *
+   * A check leaving the denominator closes the gap it had raised, and that is
+   * the engine making a judgment about the artifact rather than observing that
+   * a check now passes. The ledger has recorded it since T2.3 and nothing has
+   * shown it. It shows here, on the line that already says which condition
+   * stopped holding, with §5's exact quoted gap and a question.
+   */
+  it("shows the gap a not-asked check closed, quoted, and asks about it", () => {
+    const evidence = "MN-2: 'nearby' — same venue, or within 100 m? Two readings possible.";
+    render(
+      <CheckList
+        checks={[notAsked("prd-15", LIST_CONDITION)]}
+        t={t}
+        itemKey="soc-12"
+        gapsByCheck={NO_GAPS}
+        noLongerApplicable={new Map([["prd-15", evidence]])}
+        outcome={null}
+      />,
+    );
+
+    expect(screen.getByText(evidence)).not.toBeNull();
+    expect(screen.getByText(t.item.checkNotAskedClosedGap)).not.toBeNull();
+  });
+
+  /**
+   * §0 law 1 and the ticket's one rule: welcoming, never alarming. The notice
+   * is a question about a correct machine decision, not a report of a fault —
+   * so the vocabulary a failure would use is absent, as it is on the rest of
+   * this list.
+   */
+  it("asks rather than warns", () => {
+    render(
+      <CheckList
+        checks={[notAsked("prd-15", LIST_CONDITION)]}
+        t={t}
+        itemKey="soc-12"
+        gapsByCheck={NO_GAPS}
+        noLongerApplicable={new Map([["prd-15", "Something that was open."]])}
+        outcome={null}
+      />,
+    );
+
+    expect(document.body.textContent).not.toMatch(/fail|violation|error|warning/i);
+    expect(t.item.checkNotAskedClosedGap).toMatch(/\?$/);
+  });
+
+  /**
+   * The ordinary not-asked line is unchanged.
+   *
+   * Most checks that leave the denominator never had a gap — nothing was open
+   * when the condition stopped holding — and a line that spoke about a closure
+   * there would be the page inventing one.
+   */
+  it("says nothing about a closure on a not-asked check that had no gap", () => {
+    render(
+      <CheckList
+        checks={[notAsked("prd-15", LIST_CONDITION)]}
+        t={t}
+        itemKey="soc-12"
+        gapsByCheck={NO_GAPS}
+        noLongerApplicable={new Map([["prd-1", "A gap on some other check."]])}
+        outcome={null}
+      />,
+    );
+
+    expect(screen.queryByText(t.item.checkNotAskedClosedGap)).toBeNull();
+    expect(screen.queryByText("A gap on some other check.")).toBeNull();
+    // The line itself is untouched: the condition still says why it was skipped.
+    expect(
+      screen.getByText(`Only asked when: ${LIST_CONDITION} That is not true here.`),
+    ).not.toBeNull();
+  });
+
+  /**
+   * **The notice is about now, not about history.**
+   *
+   * A gap closed as no longer applicable stays closed, but its check can come
+   * back: a later run whose condition holds again asks it, and the line is then
+   * `unclear` or `passed`. Saying "this gap closed when the check stopped
+   * applying" beside a check the run *did* ask would be a claim about a state
+   * that has passed — and the closed gap it points at is history that a new open
+   * gap has already replaced. Only a check still outside the denominator can
+   * carry it.
+   */
+  it("carries no closure notice on a check the run asked", () => {
+    const closures = new Map([
+      ["prd-1", "Closed while this check was outside the denominator."],
+      ["prd-10", "Closed while this check was outside the denominator."],
+    ]);
+
+    render(
+      <CheckList
+        checks={[passed("prd-1"), unclear("prd-10", "must", "Still unclear.")]}
+        t={t}
+        itemKey="soc-12"
+        gapsByCheck={NO_GAPS}
+        noLongerApplicable={closures}
+        outcome={null}
+      />,
+    );
+
+    expect(screen.queryByText(t.item.checkNotAskedClosedGap)).toBeNull();
+    expect(screen.queryByText("Closed while this check was outside the denominator.")).toBeNull();
   });
 });
