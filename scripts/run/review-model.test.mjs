@@ -69,6 +69,11 @@ describe("causeOf", () => {
       "other",
     );
     expect(causeOf("API Error: 400 max_tokens: 512 is below the thinking budget")).toBe("other");
+    expect(
+      causeOf(
+        "Agent terminated early due to an API error: max_tokens: 512 is below the thinking budget (error type invalid_request, HTTP 400, request id req_1)",
+      ),
+    ).toBe("other");
     expect(causeOf("API Error: 401 authentication_error invalid x-api-key")).toBe("other");
     expect(causeOf("Tool Bash is not available to this agent")).toBe("other");
     expect(causeOf("the reviewer answered with usage limit notes and no verdict")).toBe("other");
