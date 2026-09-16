@@ -17,6 +17,9 @@ const NO_GAPS = new Map<string, MoveableGap>();
 
 const t = getDictionary();
 
+/** No gap closed by §4's engine — the ordinary case for every test here. */
+const NO_CLOSURES = new Map<string, string>();
+
 const NOW = Date.UTC(2026, 7, 23, 12, 0, 0);
 const HOUR = 60 * 60 * 1000;
 
@@ -71,6 +74,7 @@ describe("ReadinessPanel", () => {
         now={NOW}
         itemKey="soc-12"
         gapsByCheck={NO_GAPS}
+        noLongerApplicable={NO_CLOSURES}
         outcome={null}
       />,
     );
@@ -95,6 +99,7 @@ describe("ReadinessPanel", () => {
         now={NOW}
         itemKey="soc-12"
         gapsByCheck={NO_GAPS}
+        noLongerApplicable={NO_CLOSURES}
         outcome={null}
       />,
     );
@@ -129,6 +134,7 @@ describe("ReadinessPanel", () => {
         now={NOW}
         itemKey="soc-12"
         gapsByCheck={NO_GAPS}
+        noLongerApplicable={NO_CLOSURES}
         outcome={null}
       />,
     );
@@ -150,6 +156,7 @@ describe("ReadinessPanel", () => {
         now={NOW}
         itemKey="soc-12"
         gapsByCheck={NO_GAPS}
+        noLongerApplicable={NO_CLOSURES}
         outcome={null}
       />,
     );
@@ -166,6 +173,7 @@ describe("ReadinessPanel", () => {
         now={NOW}
         itemKey="soc-12"
         gapsByCheck={NO_GAPS}
+        noLongerApplicable={NO_CLOSURES}
         outcome={null}
       />,
     );
@@ -189,6 +197,7 @@ describe("ReadinessPanel", () => {
         now={NOW}
         itemKey="soc-12"
         gapsByCheck={NO_GAPS}
+        noLongerApplicable={NO_CLOSURES}
         outcome={null}
       />,
     );
@@ -210,6 +219,7 @@ describe("ReadinessPanel", () => {
         now={NOW}
         itemKey="soc-12"
         gapsByCheck={NO_GAPS}
+        noLongerApplicable={NO_CLOSURES}
         outcome={null}
       />,
     );
@@ -234,6 +244,7 @@ describe("ReadinessPanel", () => {
         now={NOW}
         itemKey="soc-12"
         gapsByCheck={NO_GAPS}
+        noLongerApplicable={NO_CLOSURES}
         outcome={null}
       />,
     );
@@ -253,6 +264,7 @@ describe("ReadinessPanel", () => {
         now={NOW}
         itemKey="soc-12"
         gapsByCheck={NO_GAPS}
+        noLongerApplicable={NO_CLOSURES}
         outcome={null}
       />,
     );
@@ -272,6 +284,7 @@ describe("ReadinessPanel", () => {
         now={NOW}
         itemKey="soc-12"
         gapsByCheck={NO_GAPS}
+        noLongerApplicable={NO_CLOSURES}
         outcome={null}
       />,
     );
@@ -299,6 +312,7 @@ describe("ReadinessPanel", () => {
         now={NOW}
         itemKey="soc-12"
         gapsByCheck={NO_GAPS}
+        noLongerApplicable={NO_CLOSURES}
         outcome={null}
       />,
     );
@@ -355,6 +369,7 @@ describe("ReadinessPanel", () => {
         now={NOW}
         itemKey="soc-12"
         gapsByCheck={gaps}
+        noLongerApplicable={NO_CLOSURES}
         outcome={null}
       />,
     );
@@ -403,6 +418,7 @@ describe("ReadinessPanel", () => {
         now={NOW}
         itemKey="soc-12"
         gapsByCheck={new Map([["prd-1", should]])}
+        noLongerApplicable={NO_CLOSURES}
         outcome={{ intent: "accept", kind: "reason-required", gapId: "g-should" }}
       />,
     );
@@ -447,6 +463,7 @@ describe("ReadinessPanel", () => {
         now={NOW}
         itemKey="soc-12"
         gapsByCheck={new Map([["prd-1", must]])}
+        noLongerApplicable={NO_CLOSURES}
         outcome={
           { intent: "accept", kind: "reason-required", gapId: "g-must" } satisfies GapMoveClaim
         }
@@ -478,6 +495,7 @@ describe("ReadinessPanel", () => {
         now={NOW}
         itemKey="soc-12"
         gapsByCheck={NO_GAPS}
+        noLongerApplicable={NO_CLOSURES}
         outcome={null}
       />,
     );
@@ -503,6 +521,7 @@ describe("ReadinessPanel", () => {
         now={NOW}
         itemKey="soc-12"
         gapsByCheck={NO_GAPS}
+        noLongerApplicable={NO_CLOSURES}
         outcome={null}
       />,
     );

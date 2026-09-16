@@ -1108,7 +1108,11 @@ describe("judge — reads the marker and the token file, then the thread", () =>
     ).toContain("Posting this default comment is refused");
     expect(
       await judge(
-        post(worktree, "3dc79daf-d42e-8137-be2e-c18de771596d", compose("gated", { paths: "x" })),
+        post(
+          worktree,
+          "3dc79daf-d42e-8137-be2e-c18de771596d",
+          compose("gated", { reasons: [{ rule: "it adds a migration", ungate: "apply it" }] }),
+        ),
         {
           deps,
         },

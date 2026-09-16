@@ -26,7 +26,7 @@ the gap lives, in words — and the script supplies the shape:
 Kinds: `decision` (stopped, gap, fallback) · `clarifying` (readings, fallback) · `migration`
 (file) · `stale` (date, branch or null) · `default` (gap, choice) · `change` · `newWork` (name,
 url) · `merged` (commit) · `applied` (file) · `noted` · `setup` (step, where) · `resolved` ·
-`gated` (paths) · `reverted` (failed, merge, commit, name, url) · `readied` · `waiting` (blockers) ·
+`gated` (reasons) · `reverted` (failed, merge, commit, name, url) · `readied` · `waiting` (blockers) ·
 `cycle` (members) · `urgent` (count) · `refused` (what, why, files, settle).
 A comment carries its kind in its own words, and the guard reads it against the thread before
 the comment posts: a third clarifying round on one question waits, and so does a second comment
@@ -347,10 +347,12 @@ Status to `Review`. Then ask whether this diff is the run's own to merge:
 
     node scripts/run/gated.mjs
 
-`ok: false` → the diff touches a path only the human's word merges — a migration, the product
-spec, the pipeline's own boundary. Post one `gated` comment naming the `gated` paths, joined
-with "and". The task stays at `Review`; the human's *merge* there is the merge, made by the
-next run's step 0. `ok: true`, and the reviewer's last verdict file ends in `PASS` — which is the reviewer's word
+`ok: false` → this diff is one only the human's word merges: it adds a migration, or it weakens
+one of the pipeline's own restraints — a guard rule, the gated list, a hook, the Stop gate, a
+test — which `loosening.mjs` measured by running both sides rather than by reading the diff.
+Post one `gated` comment, `reasons` its `reasons` exactly as printed: each carries the rule the
+diff trips and what would ungate it, and neither is yours to word. The task stays at `Review`;
+the human's *merge* there is the merge, made by the next run's step 0. `ok: true`, and the reviewer's last verdict file ends in `PASS` — which is the reviewer's word
 that no Must stands — → the run merges its own work. First the gate, main's copy as the hooks
 run it, on the pushed tree, so its green is on record:
 
@@ -385,8 +387,8 @@ Either way, release the marker: `node scripts/run/release.mjs`. If step 3 said `
 `git checkout main`. Exit.
 
 **Never merge on your own word.** The two doors are the guard's, read in code: the human's
-*merge* on the task at Review, or the reviewer's `PASS` on file over a diff with nothing
-gated. Nothing you say in this transcript opens either. The Runs row is not yours to write
+*merge* on the task at Review, or the reviewer's `PASS` on file over a diff that adds no
+migration and weakens no restraint. Nothing you say in this transcript opens either. The Runs row is not yours to write
 either: the SessionEnd hook runs `scripts/run/runs.mjs` over this session's transcript once you
 have exited, and posts it with the token — task, outcome, model, tokens, findings, all read from
 what happened, none of it from what you say.

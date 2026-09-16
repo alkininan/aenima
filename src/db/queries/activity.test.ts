@@ -7,6 +7,7 @@ const calls = vi.hoisted(() => ({
   from: [] as string[],
   select: [] as string[],
   eq: [] as [string, unknown][],
+  in: [] as [string, unknown[]][],
   order: [] as [string, boolean | undefined, boolean | undefined][],
   limit: [] as number[],
   rows: [] as unknown[],
@@ -21,6 +22,10 @@ vi.mock("@/lib/supabase/server", () => {
     },
     eq(column: string, value: unknown) {
       calls.eq.push([column, value]);
+      return builder;
+    },
+    in(column: string, values: unknown[]) {
+      calls.in.push([column, values]);
       return builder;
     },
     order(column: string, options?: { ascending?: boolean; nullsFirst?: boolean }) {
@@ -46,10 +51,17 @@ vi.mock("@/lib/supabase/server", () => {
   };
 });
 
-import { ACTIVITY_PAGE_SIZE, listItemActivity } from "@/db/queries/activity";
+import {
+  ACTIVITY_PAGE_SIZE,
+  listGapsClosedAsNoLongerApplicable,
+  listItemActivity,
+  NO_LONGER_APPLICABLE,
+} from "@/db/queries/activity";
 
 const WORKSPACE = "11111111-1111-4000-8000-000000000001";
 const ITEM = "22222222-2222-4000-8000-000000000002";
+const GAP_A = "33333333-3333-4000-8000-000000000003";
+const GAP_B = "44444444-4444-4000-8000-000000000004";
 
 /**
  * The item's ledger read.
@@ -65,6 +77,7 @@ describe("listItemActivity", () => {
     calls.from = [];
     calls.select = [];
     calls.eq = [];
+    calls.in = [];
     calls.order = [];
     calls.limit = [];
     calls.rows = [];
@@ -152,5 +165,78 @@ describe("listItemActivity", () => {
   it("returns an empty feed rather than failing when there is nothing", async () => {
     calls.rows = [];
     expect(await listItemActivity(WORKSPACE, ITEM)).toEqual([]);
+  });
+});
+
+/**
+ * Which of an item's gaps the engine closed because §4's condition stopped
+ * holding — the read T2.10's notice is drawn from.
+ *
+ * **The reason is only in the ledger**, and these assert that this read goes
+ * there for it rather than inferring it from anything the `gap` row carries. A
+ * closed row holds a time, no name and no note (`gap_resolution_shape`), so the
+ * two reasons `writeRun` can write — `passed` and `no longer applicable` — are
+ * indistinguishable on the gap itself. Guessing from the surrounding state is
+ * the defect this shape exists to make impossible.
+ */
+describe("listGapsClosedAsNoLongerApplicable", () => {
+  beforeEach(() => {
+    calls.from = [];
+    calls.select = [];
+    calls.eq = [];
+    calls.in = [];
+    calls.order = [];
+    calls.limit = [];
+    calls.rows = [];
+  });
+
+  // CLAUDE.md: every query filters workspace_id. RLS filters it again.
+  it("scopes to the workspace and to the gaps it was asked about", async () => {
+    await listGapsClosedAsNoLongerApplicable(WORKSPACE, [GAP_A, GAP_B]);
+
+    expect(calls.from).toEqual(["activity"]);
+    expect(calls.eq).toContainEqual(["workspace_id", WORKSPACE]);
+    expect(calls.in).toContainEqual(["subject_id", [GAP_A, GAP_B]]);
+  });
+
+  /**
+   * `subject_id` is a uuid from a column every subject kind shares, so
+   * `subject_table` is what keeps a row about something else out — the same
+   * reason `listItemActivity` filters on it.
+   */
+  it("filters on the subject table as well as the ids", async () => {
+    await listGapsClosedAsNoLongerApplicable(WORKSPACE, [GAP_A]);
+    expect(calls.eq).toContainEqual(["subject_table", "gap"]);
+  });
+
+  /**
+   * The action and the reason, both in the request.
+   *
+   * `gap.closed` alone is not the question: a gap closed because its check
+   * passed writes the same action with reason `passed`, and T2.4's narrowing
+   * keeps that one off the page for a reason that still holds. The reason is a
+   * jsonb key, which is why the filter is a `->>` path rather than a column.
+   */
+  it("asks for gap.closed rows and for that one reason", async () => {
+    await listGapsClosedAsNoLongerApplicable(WORKSPACE, [GAP_A]);
+
+    expect(calls.eq).toContainEqual(["action", "gap.closed"]);
+    expect(calls.eq).toContainEqual(["metadata->>reason", NO_LONGER_APPLICABLE]);
+  });
+
+  it("answers with the gap ids the ledger named", async () => {
+    calls.rows = [{ subject_id: GAP_B }];
+    expect(await listGapsClosedAsNoLongerApplicable(WORKSPACE, [GAP_A, GAP_B])).toEqual([GAP_B]);
+  });
+
+  /**
+   * An item whose gaps are all open holds nothing to ask about, and a request
+   * whose `in` list is empty is one that can only answer nothing. It is not
+   * sent: an item page renders this read on every load, and most items will
+   * never have a closed gap at all.
+   */
+  it("asks nothing when there are no gaps to ask about", async () => {
+    expect(await listGapsClosedAsNoLongerApplicable(WORKSPACE, [])).toEqual([]);
+    expect(calls.from).toEqual([]);
   });
 });

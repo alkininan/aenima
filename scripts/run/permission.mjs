@@ -214,8 +214,9 @@ export function gateState(dir = process.cwd()) {
 /**
  * The guard's second door for `merge` (T0.16): `{ ok, why, marker, task, gated }`. Open
  * when the claimed task's reviewer verdict, `docs/reviews/<id>.md`, ends in PASS, the diff
- * against origin/main touches no gated path (`gated.mjs`), and the Stop gate's last green is
- * this very tree (`gateState`). The task's branch comes from the marker's id — the file is
+ * against origin/main is not one only the human's word merges — since T0.21 that is a
+ * migration, or a restraint the diff weakens, measured by `gated.mjs` — and the Stop gate's
+ * last green is this very tree (`gateState`). The task's branch comes from the marker's id — the file is
  * named by it, so the two cannot name different tickets. Effects injected: `marker`,
  * `verdict(id)` (the file's text, or null), `diff()`, `gate()`.
  */
@@ -248,7 +249,7 @@ export function reviewed({ dir = process.cwd(), deps = {} } = {}) {
   if (!diff.ok) {
     return {
       ok: false,
-      why: `the diff touches ${diff.gated.join(", ")}, which only your word merges`,
+      why: `the diff is one only your word merges: ${diff.gated.join("; ")}`,
       marker,
       gated: diff.gated,
     };
