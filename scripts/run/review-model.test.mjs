@@ -210,6 +210,26 @@ describe("a pass stopped at its turn limit", () => {
     });
   });
 
+  // T0.23 review pass 1, Should 4
+  it("reads the note only where a result begins with it, never quoted inside a finished review", () => {
+    expect(
+      causeOf(
+        'PASS\n\n1. Should — the skill quotes "NOTE: this agent stopped at its 30-turn limit before finishing."',
+      ),
+    ).toBe("other");
+    expect(causeOf(`\n  ${TURN_LIMIT}`)).toBe("turn-limit");
+  });
+
+  // T0.23 review pass 1, Should 5
+  it("stops rather than resumes when the count it is handed is not a number", () => {
+    for (const resumed of ["once", Number.NaN, null]) {
+      expect(
+        nextReviewer({ chain: CHAIN, tried: ["fable"], error: TURN_LIMIT, resumed }),
+        String(resumed),
+      ).toMatchObject({ stop: true, resume: false });
+    }
+  });
+
   it("never resumes a refused call or one that failed otherwise", () => {
     expect(nextReviewer({ chain: CHAIN, tried: ["fable"], error: CREDITS })).toMatchObject({
       resume: false,

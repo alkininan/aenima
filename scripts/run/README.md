@@ -66,8 +66,8 @@ and never in between; a page whose header commit equals its file's is skipped. S
 children, and compares the letters and digits it holds with those of the chunks sent — a fence's
 language, a list's number, a link's target and an HTML comment aside — by length, within a slack
 of a handful that Notion renders its own way, and by whether it ends where the last chunk ends;
-a page that reads short is rewritten once from its sentinel and left under it the second time,
-so a write cut off partway is never headed as whole. The same ticket gave the preflight's
+a page that reads short, or long, is rewritten once from its sentinel and left under it the
+second time, so a write cut off partway, or a chunk written twice, is never headed as whole. The same ticket gave the preflight's
 connector queries a fallback: the connector's query draws on the workspace's shared usage limit,
 and when it answers that the limit is reached `rows.mjs` asks the same questions over the token —
 the Tasks rows at a status or the one an ID names, each with its `Commit`, or the Releases rows

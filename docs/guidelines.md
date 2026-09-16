@@ -200,9 +200,9 @@ callout first, the document in chunks, the *Mirrored from* heading last — so a
 whole and headed with its commit or visibly in progress, never in between. A sentinel still
 standing at the next preflight is a write that died, and that page is refreshed first. Since
 T0.23 each chunk is read back over the API once it is written (`mirror.mjs --verify`): a page that
-reads short of what was sent — a write cut off mid-chunk, which the sentinel cannot see, since the
-heading still goes on last — is rewritten once from its sentinel, and left under the sentinel if it
-reads short again. The Guidelines page is refreshed the same way.
+does not read as what was sent — a write cut off mid-chunk, which the sentinel cannot see, since the
+heading still goes on last, or a chunk written twice — is rewritten once from its sentinel, and left
+under the sentinel if it reads wrong again. The Guidelines page is refreshed the same way.
 
 ---
 
@@ -405,10 +405,10 @@ below is a script under `scripts/run/` with a test; the skill holds the judgment
                 first, each page header-last under a refresh-in-progress sentinel,
                 allow_async false on every write, a page whose header commit equals its
                 file's on main skipped · each chunk read back over the API (mirror.mjs
-                --verify): a page that reads short is rewritten once from its sentinel and
-                left under it if short again · a connector query refused at the workspace's
-                usage limit is asked over the token instead (rows.mjs), and the report line
-                says so
+                --verify): a page that reads short or long is rewritten once from its
+                sentinel and left under it if wrong again · a connector query refused at the
+                workspace's usage limit is asked over the token instead (rows.mjs), and the
+                report line says so
 1  Claim        the board read over the API (pick-next.mjs) · a Ready task whose Blockers are
                 all Done, by Priority — Urgent · High · Medium · Low · None, empty as Medium —
                 a Ready blocker at the highest priority of any task not Done it blocks,

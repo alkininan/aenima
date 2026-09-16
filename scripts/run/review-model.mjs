@@ -64,9 +64,10 @@ export function readChain(root = process.cwd(), read = (path) => readFileSync(pa
 
 /**
  * Claude Code's note on a subagent that reached its `maxTurns`: "NOTE: this agent stopped at its
- * 30-turn limit before finishing. …", followed by no report or by partial output.
+ * 30-turn limit before finishing. …", followed by no report or by partial output. Read only where
+ * the result begins with it — a finished review may quote it.
  */
-export const TURN_LIMIT = /\bthis agent stopped at its \d+-turn limit\b/i;
+export const TURN_LIMIT = /^\s*NOTE: this agent stopped at its \d+-turn limit\b/i;
 
 /**
  * Why a reviewer call came back without a review: `turn-limit`, `credits`, `availability`, or
@@ -130,7 +131,8 @@ export function nextReviewer({ chain = [], tried = [], error, resumed = 0 }) {
     );
   }
   if (cause === "turn-limit") {
-    if (resumed >= 1) {
+    // Only a pass never resumed is resumed; a count that is not 0 — or not a number — stops.
+    if (resumed !== 0) {
       return stop("the reviewer stopped at its turn limit twice, so the review did not run");
     }
     return { chain, cause, stop: false, resume: true, model: tried.at(-1), why: null, detail };

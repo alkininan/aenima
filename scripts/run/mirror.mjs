@@ -257,7 +257,8 @@ export async function readPlan({ dir = process.cwd(), deps = {} } = {}) {
 }
 
 /**
- * How many letters and digits a page may read short of what was sent and still be whole. Notion
+ * How many letters and digits a page may read short of what was sent, or long, and still be
+ * whole. Notion
  * renders a handful its own way — the eight mirrors, read back whole on 2026-09-16, were 0, 0,
  * 0, 0, 0, 7, 3 and −2 apart — and a chunk cut off is caught by its ending, not by this.
  */
@@ -310,7 +311,8 @@ export function held(blocks) {
 }
 
 /**
- * Whether a page holds every chunk sent to it so far. `chunks` the markdown of each, in order;
+ * Whether a page holds every chunk sent to it so far and nothing more — a chunk written twice
+ * reads long. `chunks` the markdown of each, in order;
  * `blocks` the page read back; `rewritten` how many times this page has been rewritten already.
  * Returns `{ ok, next, sent, found, short, ended }`: `next` is `continue`, `rewrite` — once, from
  * the sentinel — or `leave`, the page standing under its sentinel for the next preflight.
@@ -320,8 +322,9 @@ export function verify({ chunks = [], blocks = [], rewritten = 0 }) {
   const found = held(blocks);
   const short = sent.length - found.length;
   const ended = found.endsWith(sent.slice(-TAIL));
-  const ok = short <= SLACK && ended;
-  const next = ok ? "continue" : rewritten >= 1 ? "leave" : "rewrite";
+  const ok = Math.abs(short) <= SLACK && ended;
+  // Only a page never rewritten is rewritten; a count that is not 0 — or not a number — leaves it.
+  const next = ok ? "continue" : rewritten === 0 ? "rewrite" : "leave";
   return { ok, next, sent: sent.length, found: found.length, short, ended };
 }
 

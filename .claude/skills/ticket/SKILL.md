@@ -204,15 +204,16 @@ text verbatim), and after each one read the page back with the chunk files writt
 
     node scripts/run/mirror.mjs --verify <page> <chunk file 0> … <this chunk's file>
 
-`next: continue` → the next chunk. `next: rewrite` → the page reads short of what was sent — a
-write cut off partway, which the heading would otherwise cover: start that page again,
-`replace_content` with the `sentinel` alone and the chunks from the first, adding `--rewritten 1`
-to every read-back from there on, and say so in your report line. `next: leave` → it read short
-again: leave the sentinel standing, write no heading, say so in your report line and go on to the
-next page; the next preflight refreshes it first. Once the last chunk reads back whole,
-`update_content` replacing the sentinel with the page's `heading`. The heading goes last so a
-page is either whole and headed with its commit, or visibly *refresh in progress* — never in
-between, and never quietly cut short. A page marked `missing` is one the Documents page does not list;
+`next: continue` → the next chunk. `next: rewrite` → the page does not read as what was sent — a
+write cut off partway, which the heading would otherwise cover, or a chunk written twice: start
+that page again, `replace_content` with the `sentinel` alone and the chunks from the first, adding
+`--rewritten 1` to every read-back from there on, and say so in your report line. `next: leave` →
+it read wrong again: leave the sentinel standing, write no heading, say so in your report line and
+go on to the next page; the next preflight refreshes it first. A read-back that itself fails —
+it comes back with no `next`, an API error or a timeout — is `next: leave` too. Once the last
+chunk reads back whole, `update_content` replacing the sentinel with the page's `heading`. The
+heading goes last so a page is either whole and headed with its commit, or visibly *refresh in
+progress* — never in between, and never quietly cut short. A page marked `missing` is one the Documents page does not list;
 say so in the report and write nothing for it.
 
 ## 1 Claim

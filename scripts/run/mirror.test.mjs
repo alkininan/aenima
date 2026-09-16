@@ -365,6 +365,16 @@ describe("verify", () => {
     expect(SLACK).toBeLessThan(160);
   });
 
+  // T0.23 review pass 1, Should 1 — a page that reads long is no more whole than one that reads short.
+  it("finds a page that reads long — a chunk written twice", () => {
+    const twice = [...blocks, ...blocks.slice(1)];
+    expect(verify({ chunks: [markdown], blocks: twice })).toMatchObject({
+      ok: false,
+      short: -92,
+      ended: true,
+    });
+  });
+
   it("allows the handful of characters Notion renders its own way", () => {
     const near = blocks.map((b) => (b.type === "heading_1" ? block("heading_1", "Titl") : b));
     expect(verify({ chunks: [markdown], blocks: near })).toMatchObject({ ok: true, short: 1 });
@@ -375,6 +385,16 @@ describe("verify", () => {
     expect(verify({ chunks: [markdown], blocks: cut }).next).toBe("rewrite");
     expect(verify({ chunks: [markdown], blocks: cut, rewritten: 1 }).next).toBe("leave");
     expect(verify({ chunks: [markdown], blocks, rewritten: 1 }).next).toBe("continue");
+  });
+
+  // T0.23 review pass 1, Should 5
+  it("leaves a short page rather than rewriting it again when the count it is handed is not a number", () => {
+    const cut = blocks.slice(0, -1);
+    for (const rewritten of [Number.NaN, "once", null]) {
+      expect(verify({ chunks: [markdown], blocks: cut, rewritten }).next, String(rewritten)).toBe(
+        "leave",
+      );
+    }
   });
 
   it("reads a page's blocks back in order with their children — continuation lines and table rows — and never a child page's", async () => {
@@ -445,6 +465,8 @@ describe("the read-back, in the skill and guidelines §2", () => {
     expect(step0).toContain("`next: rewrite`");
     expect(step0).toContain("`next: leave`");
     expect(step0).toContain("--rewritten 1");
+    // T0.23 review pass 1, Should 2
+    expect(step0).toContain("comes back with no `next`");
   });
 
   it("says so in §2, where the mirrors are described", () => {
