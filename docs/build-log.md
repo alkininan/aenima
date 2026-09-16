@@ -91,6 +91,7 @@ One file per ticket under `docs/log/`, oldest first. This list is written by `no
 - [T2.9 — Applicability stability](log/T2.9.md) · 2026-09-16
 - [T0.22 — Reviewer model fallback](log/T0.22.md) · 2026-09-16
 - [T0.23 — Partial reviews and mirror verification](log/T0.23.md) · 2026-09-16
+- [T1.5 — Row roving and freshness](log/T1.5.md) · 2026-09-16
 
 ## Decisions made during the build
 
