@@ -48,8 +48,12 @@ import { emit, isMain } from "./cli.mjs";
 /** This file, relative to the repository root — the detector, gated whenever the diff has it. */
 export const DETECTOR = "scripts/run/loosening.mjs";
 
-/** How long one side gets to answer. Past it the side is unmeasured, and unmeasured is gated. */
-export const PROBE_TIMEOUT_MS = 60_000;
+/**
+ * How long one side gets to answer. Past it the side is unmeasured, and unmeasured is gated.
+ * Comfortably inside the 60 s the Bash hook gives the guard, or the hook would time out first
+ * and this branch would never be the one that answered (review pass 3, Should).
+ */
+export const PROBE_TIMEOUT_MS = 20_000;
 
 /** Where the guard's rule letters are written: `// (a) …` down the left of `decide()`. */
 const RULE_MARKER = /^[ \t]*\/\/[ \t]*\(([a-z])\)/gm;
@@ -188,6 +192,20 @@ export const DOOR_CORPUS = [
       }).ok,
   },
   {
+    // Review pass 3, Must 1: every other entry hands `reviewed` a `diff`, so the line that
+    // computes one — `deps.diff ? deps.diff() : gatedDiffOf({ cwd: dir })` — is outside the
+    // measurement, and so is `gatedDiff`'s own `...weakened` spread. Withholding `diff` puts
+    // both back inside it. The directory is deliberately no repository: `gatedDiffOf` then
+    // answers from `checkoutScripts` failing, in milliseconds and with no child process, so
+    // the measurement does not recurse into itself.
+    name: "a merge whose diff it has to work out for itself",
+    door: "reviewed",
+    refused: ({ reviewed }) => {
+      const { diff, ...rest } = DOOR_OPEN;
+      return !reviewed({ dir: NO_REPOSITORY, deps: rest }).ok;
+    },
+  },
+  {
     name: "a merge the Stop gate has not passed",
     door: "reviewed",
     refused: ({ reviewed }) =>
@@ -213,6 +231,9 @@ export const DOOR_CORPUS = [
       gateDecide({ red: 0, state: { session_id: "s", count: 1, greenHash: null } }).exit === 2,
   },
 ];
+
+/** A path that is no git repository, so `gatedDiffOf` answers without measuring anything. */
+const NO_REPOSITORY = "/aenima-no-such-directory";
 
 /** The four things `reviewed` needs before it opens, so an entry can withhold exactly one. */
 const DOOR_OPEN = {

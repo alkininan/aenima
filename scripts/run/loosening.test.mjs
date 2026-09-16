@@ -492,6 +492,20 @@ describe("loosenedBy over a repository", () => {
     ]);
   });
 
+  it("gates a diff that cuts the door's wiring to gated.mjs", { timeout: 60_000 }, () => {
+    // Review pass 3, Must 1: `reviewed` works its own diff out when nothing hands it one, and
+    // that line — and `gatedDiff`'s `...weakened` spread behind it — is what the corpus entry
+    // withholding `diff` reaches.
+    const dir = repoWith((at) =>
+      edit(at, "scripts/run/gated.mjs", (text) => text.replace("    ...weakened,\n", "")),
+    );
+    const found = loosenedBy({ cwd: dir, range: "main...HEAD" });
+    expect(found.ok).toBe(false);
+    expect(found.reasons.map((r) => r.rule)).toEqual([
+      "the guard's second door no longer refuses a merge whose diff it has to work out for itself",
+    ]);
+  });
+
   it("gates a diff whose before side cannot be read", { timeout: 60_000 }, () => {
     const dir = temp("aenima-loosening-empty-");
     git(["init", "-q", "-b", "main"], dir);

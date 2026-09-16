@@ -249,7 +249,8 @@ describe("postable", () => {
 
 // T0.16 TC2 → AC2 and TC3 → AC3. The guard's second door: `gh pr merge` is also allowed when
 // the claimed task's reviewer verdict is on file and ends in PASS, and the diff against
-// origin/main touches no gated path. Both are read in code; neither is the model's claim.
+// origin/main adds no migration and weakens no restraint. Both are read in code; neither is
+// the model's claim.
 describe("reviewed", () => {
   const passing = () => "# T0.16 — review\n\nFindings: none.\n\nPASS\n";
   const clean = () => ({ files: ["src/a.ts"], gated: [], ok: true });
@@ -285,15 +286,17 @@ describe("reviewed", () => {
     expect(empty.ok).toBe(false);
   });
 
-  it("refuses a diff on a gated path even with the PASS, and names the path", () => {
+  it("refuses a diff only the word merges even with the PASS, and names the rule", () => {
+    // T0.21: `gated` carries the rules the diff trips, not the paths it touches.
     const gated = () => ({
-      files: ["scripts/hooks/guard.mjs"],
-      gated: ["scripts/hooks/guard.mjs"],
+      files: ["drizzle/0022_x.sql"],
+      reasons: [{ rule: "it adds the migration drizzle/0022_x.sql", ungate: "apply it by hand" }],
+      gated: ["it adds the migration drizzle/0022_x.sql"],
       ok: false,
     });
     const result = reviewed({ deps: deps({ diff: gated }) });
     expect(result.ok).toBe(false);
-    expect(result.why).toContain("scripts/hooks/guard.mjs");
+    expect(result.why).toContain("it adds the migration drizzle/0022_x.sql");
     expect(result.why).toContain("your word");
   });
 
