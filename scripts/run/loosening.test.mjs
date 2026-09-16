@@ -4,11 +4,16 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
+import { decide as gate, MAX_RED, STEPS } from "../hooks/gate.mjs";
 import { decide } from "../hooks/guard.mjs";
+import { reviewed } from "./permission.mjs";
 import {
   coverageGaps,
   detectorLoosened,
   DETECTOR,
+  DOOR_CORPUS,
+  doorRefusals,
+  doorsLoosened,
   gateLoosened,
   GUARD_CORPUS,
   guardLoosened,
@@ -83,6 +88,17 @@ function edit(dir, path, change) {
   writeFileSync(file, after);
 }
 
+/** The probe's gate wrapper, as this checkout's own gate would be measured. */
+const gateDecide = ({ red = 0, state = null } = {}) => {
+  const step = STEPS.at(red);
+  return gate({
+    input: { session_id: "s" },
+    state,
+    fingerprint: "a tree the gate has not seen",
+    runStep: (each) => (each === step ? { ok: false, output: "boom" } : { ok: true, output: "" }),
+  });
+};
+
 describe("the corpus", () => {
   // AC3, AC4 — the measurement is only as good as what it measures. If the guard stops
   // refusing a corpus entry in this checkout, that shows up here rather than at a merge.
@@ -93,12 +109,14 @@ describe("the corpus", () => {
     }
   });
 
+  // TC3 → AC3: a rule with no corpus entry could be deleted unseen.
   it("has an entry for every rule letter the guard marks", () => {
     const letters = ruleLetters(readFileSync(join(root, "scripts/hooks/guard.mjs"), "utf8"));
     expect(letters).toEqual(["a", "b", "c", "d", "e", "f", "g", "h"]);
     expect(uncovered(letters)).toEqual([]);
   });
 
+  // TC3 → AC3
   it("reads a rule that nothing covers as a gap, naming the letter", () => {
     expect(uncovered(["a", "z"])).toEqual(["z"]);
     const gaps = coverageGaps(["a", "z"]);
@@ -107,12 +125,57 @@ describe("the corpus", () => {
     expect(gaps[0].ungate).toContain(DETECTOR);
   });
 
+  // TC5 → AC5: the path corpus is migrations, because nothing else is gated by name now.
   it("names only the paths a migration lives at", () => {
     expect(PATH_CORPUS.every((path) => path.startsWith("drizzle/"))).toBe(true);
+  });
+
+  // Review pass 2, Must 2. The guard's rule table only reacts to these two; they are what a
+  // merge and a close actually rest on, so they are measured in their own right.
+  it("is refused entry by entry by this checkout's two doors", () => {
+    const answers = doorRefusals({ reviewed, gateDecide });
+    for (const entry of DOOR_CORPUS) {
+      expect(answers[entry.name], entry.name).toBe(true);
+    }
+    expect(DOOR_CORPUS.map((entry) => entry.door)).toContain("reviewed");
+    expect(DOOR_CORPUS.map((entry) => entry.door)).toContain("gate");
+  });
+
+  it("reaches the gate's last step and its release count, whatever they are named", () => {
+    expect(STEPS.length).toBeGreaterThan(1);
+    expect(MAX_RED).toBeGreaterThan(1);
+    // The release is not a restraint: past MAX_RED the gate is meant to step aside.
+    expect(
+      gateDecide({ red: 0, state: { session_id: "s", count: MAX_RED, greenHash: null } }).exit,
+    ).toBe(0);
+  });
+});
+
+// Review pass 2, Must 2.
+describe("doorsLoosened", () => {
+  const name = DOOR_CORPUS[0].name;
+
+  it("names a door that stopped refusing, by the door it is", () => {
+    const found = doorsLoosened({ [name]: true }, { [name]: false });
+    expect(found).toHaveLength(1);
+    expect(found[0].rule).toBe(`the guard's second door no longer refuses ${name}`);
+  });
+
+  it("names the Stop gate as itself", () => {
+    const stop = DOOR_CORPUS.find((entry) => entry.door === "gate").name;
+    expect(doorsLoosened({ [stop]: true }, { [stop]: false })[0].rule).toBe(
+      `the Stop gate no longer refuses ${stop}`,
+    );
+  });
+
+  it("says nothing about a door that is refused on both sides, or tightened", () => {
+    expect(doorsLoosened({ [name]: true }, { [name]: true })).toEqual([]);
+    expect(doorsLoosened({ [name]: false }, { [name]: true })).toEqual([]);
   });
 });
 
 describe("ruleLetters", () => {
+  // TC3 → AC3: the letters are how the corpus knows which rules exist.
   it("reads the letters off the rule comments and nowhere else", () => {
     const source = ["  // (a) one", "// (b) two", "const x = 1; // (c) not at the start"].join(
       "\n",
@@ -135,6 +198,7 @@ describe("guardLoosened", () => {
   });
 });
 
+// TC5 → AC5: a migration taken off the list is a loosening like any other.
 describe("pathsLoosened", () => {
   it("names a path gated before and not after", () => {
     const found = pathsLoosened({ "drizzle/0015.sql": true }, { "drizzle/0015.sql": false });
@@ -311,12 +375,12 @@ describe("loosenings", () => {
   });
 
   it("puts the detector first, so the reason a diff cannot mark its own homework leads", () => {
-    const gate = { steps: [], maxRed: 3, scripts: '{"scripts":{}}' };
+    const gateSides = { steps: [], maxRed: 3, scripts: '{"scripts":{}}' };
     const found = loosenings({
       files: [DETECTOR],
       guard: { before: { a: true }, after: { a: false } },
       settings: { before: '{"hooks":{}}', after: '{"hooks":{}}' },
-      gate: { before: gate, after: gate },
+      gate: { before: gateSides, after: gateSides },
     });
     expect(found[0].rule).toContain(DETECTOR);
     expect(found).toHaveLength(2);
@@ -375,6 +439,57 @@ describe("loosenedBy over a repository", () => {
     const found = loosenedBy({ cwd: dir, range: "main...HEAD" });
     expect(found.ok).toBe(false);
     expect(found.reasons[0].rule).toContain(DETECTOR);
+  });
+
+  it("gates a diff that renames the detector away", { timeout: 60_000 }, () => {
+    // Review pass 2, Must 1: `git diff --name-only` prints a rename's destination alone, so
+    // without `--no-renames` the detector could be replaced wholesale by a self-merging diff.
+    const dir = repoWith((at) => {
+      git(["mv", DETECTOR, "scripts/run/loosen.mjs"], at);
+      git(["mv", "scripts/run/loosening.test.mjs", "scripts/run/loosen.test.mjs"], at);
+      edit(at, "scripts/run/gated.mjs", (text) =>
+        text.replace('from "./loosening.mjs"', 'from "./loosen.mjs"'),
+      );
+      edit(at, "scripts/run/loosen.mjs", (text) =>
+        text.replace('"scripts/run/loosening.mjs"', '"scripts/run/loosen.mjs"'),
+      );
+    });
+    const found = loosenedBy({ cwd: dir, range: "main...HEAD" });
+    expect(found.ok).toBe(false);
+    expect(found.reasons[0].rule).toContain(DETECTOR);
+  });
+
+  it("gates a diff that opens the guard's second door", { timeout: 60_000 }, () => {
+    // Review pass 2, Must 2: the rule table only reacts to `reviewed()`, so a diff that made
+    // it answer yes to everything would self-merge and every diff after it would too.
+    const dir = repoWith((at) =>
+      edit(at, "scripts/run/permission.mjs", (text) =>
+        text.replace(
+          "export function reviewed({ dir = process.cwd(), deps = {} } = {}) {",
+          "export function reviewed({ dir = process.cwd(), deps = {} } = {}) {\n  if (true) return { ok: true, why: null, task: { name: 'T0.1', branch: 't0-1' }, gated: [] };",
+        ),
+      ),
+    );
+    const found = loosenedBy({ cwd: dir, range: "main...HEAD" });
+    expect(found.ok).toBe(false);
+    expect(found.reasons.map((r) => r.rule)).toEqual(
+      DOOR_CORPUS.filter((entry) => entry.door === "reviewed").map(
+        (entry) => `the guard's second door no longer refuses ${entry.name}`,
+      ),
+    );
+  });
+
+  it("gates a diff that empties one of the gate's commands", { timeout: 60_000 }, () => {
+    // Review pass 1, Must 1 and review pass 2, Must 2, end to end: STEPS is untouched and the
+    // gate is toothless, and the gate's own decision stops refusing a red step.
+    const dir = repoWith((at) =>
+      edit(at, "package.json", (text) => text.replace(/"test": "[^"]*"/, '"test": "true"')),
+    );
+    const found = loosenedBy({ cwd: dir, range: "main...HEAD" });
+    expect(found.ok).toBe(false);
+    expect(found.reasons.map((r) => r.rule)).toEqual([
+      "the gate's test command is no longer main's",
+    ]);
   });
 
   it("gates a diff whose before side cannot be read", { timeout: 60_000 }, () => {

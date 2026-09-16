@@ -342,7 +342,9 @@ diff touching the detector itself — the one thing that cannot mark its own hom
 is always `origin/main`'s, because the guard runs main's copy. Everything else lands on main at
 close: the human owns a spec upstream, in the conversation that cuts the ticket, and a harness
 diff is not dangerous for where it lands but for what it does. `gated.mjs` and `loosening.mjs`
-hold the answer once, and the guard and the skill both read it there. Everywhere else a finished ticket merges itself at close: the
+hold the answer once, and the guard and the skill both read it there.
+
+A ticket that trips neither merges itself at close: the
 reviewer's verdict is a file, `docs/reviews/<id>.md`, ending in `PASS`; the Stop gate's green for
 that very tree is on record beside the marker, the run having run the gate once more before it
 merges; and the guard's second door reads that file, that record, the diff against `origin/main`

@@ -143,6 +143,92 @@ export const GUARD_CORPUS = [
   },
 ];
 
+/**
+ * The two doors a merge and a close actually rest on, which the guard's rule table only
+ * *reacts* to: `reviewed()` in `scripts/run/permission.mjs` decides whether the reviewer's
+ * PASS opens a merge, and `decide()` in `scripts/hooks/gate.mjs` decides whether a red suite
+ * may close a session. `PROBE_DEPS` hands the guard fixed refusals for both, so without this
+ * second corpus a diff could make either answer yes to everything and self-merge, after which
+ * the hooks run the gutted copy from `origin/main` (review pass 2, Must 2).
+ *
+ * Each entry says what must go on being refused, and runs it: `refused` is handed the two
+ * functions from the side under measurement and answers whether that side still refuses.
+ */
+export const DOOR_CORPUS = [
+  {
+    name: "a merge with no run marker",
+    door: "reviewed",
+    refused: ({ reviewed }) => !reviewed({ dir: "/nowhere", deps: { marker: () => null } }).ok,
+  },
+  {
+    name: "a merge with no verdict on file",
+    door: "reviewed",
+    refused: ({ reviewed }) =>
+      !reviewed({ dir: "/nowhere", deps: { ...DOOR_OPEN, verdict: () => null } }).ok,
+  },
+  {
+    name: "a merge whose verdict says FINDINGS",
+    door: "reviewed",
+    refused: ({ reviewed }) =>
+      !reviewed({
+        dir: "/nowhere",
+        deps: { ...DOOR_OPEN, verdict: () => "## Must\n1. something\n\nFINDINGS\n" },
+      }).ok,
+  },
+  {
+    name: "a merge whose diff waits for the word",
+    door: "reviewed",
+    refused: ({ reviewed }) =>
+      !reviewed({
+        dir: "/nowhere",
+        deps: {
+          ...DOOR_OPEN,
+          diff: () => ({ ok: false, gated: ["it adds the migration drizzle/0022_x.sql"] }),
+        },
+      }).ok,
+  },
+  {
+    name: "a merge the Stop gate has not passed",
+    door: "reviewed",
+    refused: ({ reviewed }) =>
+      !reviewed({
+        dir: "/nowhere",
+        deps: { ...DOOR_OPEN, gate: () => ({ green: "a".repeat(40), tree: "b".repeat(40) }) },
+      }).ok,
+  },
+  {
+    name: "a stop over a red first step",
+    door: "gate",
+    refused: ({ gateDecide }) => gateDecide(redAt(0)).exit === 2,
+  },
+  {
+    name: "a stop over a red last step",
+    door: "gate",
+    refused: ({ gateDecide }) => gateDecide(redAt(-1)).exit === 2,
+  },
+  {
+    name: "a stop over a second red in one session",
+    door: "gate",
+    refused: ({ gateDecide }) =>
+      gateDecide({ red: 0, state: { session_id: "s", count: 1, greenHash: null } }).exit === 2,
+  },
+];
+
+/** The four things `reviewed` needs before it opens, so an entry can withhold exactly one. */
+const DOOR_OPEN = {
+  marker: () => ({ task: "T0.1", page: "p", branch: "t0-1" }),
+  verdict: () => "## Findings\n\nnone\n\nPASS\n",
+  diff: () => ({ ok: true, gated: [] }),
+  gate: () => ({ green: "a".repeat(40), tree: "a".repeat(40) }),
+};
+
+/**
+ * A Stop the gate must refuse: one step of the side's own `STEPS` is red, the rest green.
+ * `red` indexes that list, so an entry follows a gate whose steps were renamed and only a
+ * gate that stopped refusing a red step reads as loosened. The probe fills in the rest.
+ */
+const redAt = (red) => ({ red });
+
 /** Paths `isGatedPath` must go on answering true for. */
 export const PATH_CORPUS = [
   "drizzle/0015_x.sql",
@@ -177,6 +263,25 @@ export function refusals(decide, corpus = GUARD_CORPUS) {
   return answers;
 }
 
+/** What each door is called in a sentence. */
+const DOORS = { reviewed: "the guard's second door", gate: "the Stop gate" };
+
+/** `{ name: refused }` for one side's two doors. */
+export function doorRefusals(doors, corpus = DOOR_CORPUS) {
+  const answers = {};
+  for (const entry of corpus) {
+    let refused;
+    try {
+      refused = Boolean(entry.refused(doors));
+    } catch {
+      // A door that throws on a corpus entry refuses nothing, which is the weaker answer.
+      refused = false;
+    }
+    answers[entry.name] = refused;
+  }
+  return answers;
+}
+
 /** `{ path: gated }` for one `isGatedPath`. */
 export function gating(isGatedPath, corpus = PATH_CORPUS) {
   return Object.fromEntries(corpus.map((path) => [path, Boolean(isGatedPath(path))]));
@@ -193,6 +298,19 @@ export function guardLoosened(before = {}, after = {}) {
       reason(
         `the guard no longer refuses ${name}`,
         `restore the rule so ${name} is refused again, or say merge here if the loosening is meant`,
+      ),
+    );
+}
+
+/** A door entry refused before and allowed after — the door itself opened, not the rule table. */
+export function doorsLoosened(before = {}, after = {}, corpus = DOOR_CORPUS) {
+  const named = new Map(corpus.map((entry) => [entry.name, entry.door]));
+  return Object.keys(before)
+    .filter((name) => before[name] && !after[name])
+    .map((name) =>
+      reason(
+        `${DOORS[named.get(name)] ?? "a door"} no longer refuses ${name}`,
+        "restore what it read before, or say merge here if the change is meant",
       ),
     );
 }
@@ -412,6 +530,7 @@ export function detectorLoosened(files = []) {
 export function loosenings({
   files = [],
   guard = {},
+  doors = {},
   paths = {},
   letters = [],
   settings = {},
@@ -421,6 +540,7 @@ export function loosenings({
   return [
     ...detectorLoosened(files),
     ...guardLoosened(guard.before, guard.after),
+    ...doorsLoosened(doors.before, doors.after),
     ...coverageGaps(letters),
     ...pathsLoosened(paths.before, paths.after),
     ...hooksLoosened(settings.before, settings.after),
@@ -489,7 +609,8 @@ export function probe(root, { cwd = process.cwd() } = {}) {
 
 /** `{ path, text }` for each file of `status` in the diff, read at the revision that has it. */
 function filesOf(cwd, range, status, rev) {
-  const out = git(["diff", "--name-status", `--diff-filter=${status}`, range], cwd) ?? "";
+  const out =
+    git(["diff", "--name-status", "--no-renames", `--diff-filter=${status}`, range], cwd) ?? "";
   return out
     .split("\n")
     .map((line) => line.split("\t"))
@@ -511,7 +632,7 @@ export function loosenedBy({
   const base = range.split("...")[0] || "origin/main";
   const names =
     files ??
-    (git(["diff", "--name-only", range], cwd) ?? "")
+    (git(["diff", "--name-only", "--no-renames", range], cwd) ?? "")
       .split("\n")
       .map((line) => line.trim())
       .filter(Boolean);
@@ -567,6 +688,7 @@ export function loosenedBy({
   const reasons = loosenings({
     files: names,
     guard: { before: before.guard, after: after.guard },
+    doors: { before: before.doors, after: after.doors },
     paths: { before: before.paths, after: after.paths },
     letters: [...new Set([...(before.letters ?? []), ...(after.letters ?? [])])],
     settings: {
@@ -587,9 +709,22 @@ async function runProbe(root) {
   const url = (file) => pathToFileURL(join(root, file)).href;
   const { decide } = await import(url("hooks/guard.mjs"));
   const { isGatedPath } = await import(url("run/gated.mjs"));
-  const { STEPS, MAX_RED } = await import(url("hooks/gate.mjs"));
+  const { reviewed } = await import(url("run/permission.mjs"));
+  const { STEPS, MAX_RED, decide: gate } = await import(url("hooks/gate.mjs"));
+  // One red step of *this* side's STEPS, the rest green: an entry follows a gate whose steps
+  // were renamed, and only one that stopped refusing a red step reads as loosened.
+  const gateDecide = ({ red = 0, state = null } = {}) => {
+    const step = STEPS.at(red);
+    return gate({
+      input: { session_id: "s" },
+      state,
+      fingerprint: "a tree the gate has not seen",
+      runStep: (each) => (each === step ? { ok: false, output: "boom" } : { ok: true, output: "" }),
+    });
+  };
   emit({
     guard: refusals(decide),
+    doors: doorRefusals({ reviewed, gateDecide }),
     paths: gating(isGatedPath),
     letters: ruleLetters(readFileSync(join(root, "hooks/guard.mjs"), "utf8")),
     gate: { steps: STEPS, maxRed: MAX_RED },

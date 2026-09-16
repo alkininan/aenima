@@ -81,7 +81,9 @@ const git = (args, cwd) => {
  * request from this branch merges, and it is both sides of the restraint comparison.
  */
 export function gatedDiffOf({ cwd = process.cwd(), range = "origin/main...HEAD" } = {}) {
-  const names = git(["diff", "--name-only", range], cwd);
+  // `--no-renames`: without it git prints the destination alone, and a diff that renames
+  // the detector would not list it — AC6 with a hole in it (review pass 2, Must 1).
+  const names = git(["diff", "--name-only", "--no-renames", range], cwd);
   const files = String(names ?? "")
     .split("\n")
     .map((line) => line.trim())
