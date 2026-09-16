@@ -99,3 +99,73 @@ export async function listItemActivity(
     occurredAt: row.occurred_at,
   }));
 }
+
+/**
+ * The reason `writeRun` stamps on a gap the applicability engine closed.
+ *
+ * The string the ledger holds, not a token — `writeRun` writes the words §4
+ * speaks in, and this is the one place that spelling is repeated. Exported so
+ * the test compares the request against the constant rather than against a
+ * second copy of the sentence.
+ */
+export const NO_LONGER_APPLICABLE = "no longer applicable";
+
+/**
+ * Of the gaps handed in, the ones the engine closed because §4's condition
+ * stopped holding — build log open question 14, and the read behind T2.10's
+ * notice.
+ *
+ * **The reason is only in the ledger, and it has to be asked for there.** A
+ * closed gap carries a time, no name and no note (`gap_resolution_shape`), so
+ * the two reasons `writeRun` can close one with — `passed` and
+ * `no longer applicable` — are the same row. Inferring which from the state
+ * around it would be right most of the time and silently wrong the rest: a gap
+ * closed by a pass, on a check a later run stopped asking, reads exactly like
+ * one closed by the engine. The schema's own doctrine is that the gap holds the
+ * current answer and the ledger holds how it got there; this is a caller
+ * taking it at its word.
+ *
+ * A gap is closed at most once. `reconcileGaps` only ever looks for an *open*
+ * gap, and `reopen_gap` moves `accepted` back and nothing else, so `closed` is
+ * terminal and one gap answers with at most one row.
+ *
+ * **Unordered and unbounded, unlike the feed.** It is bounded already by the
+ * ids it was handed, which are one item's gaps.
+ *
+ * **And it is the second unindexed scan on an item page.** Nothing covers
+ * `(subject_table, subject_id)` — the note above the feed says why — so this is
+ * a workspace-scoped scan too, on every item page that holds a closed gap. Fine
+ * at this size and wrong at some larger one, and the fix is the same one index
+ * for both reads rather than a different query shape for either. Recorded as an
+ * open question in T2.10's report.
+ */
+export async function listGapsClosedAsNoLongerApplicable(
+  workspaceId: string,
+  gapIds: readonly string[],
+): Promise<string[]> {
+  // A request whose `in` list is empty can only answer nothing, and most items
+  // hold no closed gap at all. Asking anyway would put a round trip on every
+  // item page to learn what the caller already knows.
+  if (gapIds.length === 0) return [];
+
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("activity")
+    .select("subject_id")
+    // CLAUDE.md: every query filters workspace_id. RLS filters it again.
+    .eq("workspace_id", workspaceId)
+    // As in the feed above: `subject_id` is a uuid from a column every subject
+    // kind shares, so the table is what makes a row about something else
+    // structurally unable to match rather than merely unlikely to.
+    .eq("subject_table", "gap")
+    .in("subject_id", [...gapIds])
+    .eq("action", "gap.closed")
+    // The jsonb key `writeRun` puts the reason in. `->>` rather than a column
+    // because there is no column — see the constant above.
+    .eq("metadata->>reason", NO_LONGER_APPLICABLE);
+
+  if (error) throw new Error(`Could not read gap closures: ${error.message}`);
+
+  return (data ?? []).map((row) => row.subject_id);
+}

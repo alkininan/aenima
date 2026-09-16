@@ -1,7 +1,13 @@
-<!-- guidelines.md · v1.12 · in the repo · the boundary reaches production: §5 Vercel's Production
+<!-- guidelines.md · v1.13 · in the repo · the boundary reaches production: §5 Vercel's Production
      DATABASE_URL is aenima_pipeline too, so the admin credential is on no path at all — not a
      run's, not the deployed app's — and .env.migrate in the primary checkout is its only home.
-     This change held v1.7 on its branch while it waited; that number never reached main.
+     This change held v1.7 and then v1.12 on its branch while it waited; neither number reached
+     main as this change, and v1.12 is T0.21's.
+     v1.12 · in the repo · the gated set is one sentence — a migration, or a
+     diff that weakens a restraint: §2 and §3 say it that way, §4 replaces the three gated-path
+     cases with the measurement `scripts/run/loosening.mjs` makes by running the restraints on
+     both sides of the diff, §5 step 9 names it and the comment that carries the rule and what
+     would ungate it; §8 names T0.21.
      v1.11 · in the repo · the cap counts clarifying rounds: §4 the cap per
      question, the kinds it never counts, a refusal that always reports, one comment of a kind
      per claim, and the guard reading all of it before a comment posts.
@@ -139,8 +145,8 @@ Body: Goal · Criteria (what must be true for the phase to be over). Timeline vi
 | Tasks | relation → Tasks | M | tasks whose branch is in this merge |
 | Specs | text | M | spec versions at that commit |
 
-A finished ticket merges itself at close and writes the row in the same run; a gated one merges on
-your word, and a merge you make by hand is detected by the next run. You never fill a form.
+A finished ticket merges itself at close and writes the row in the same run; one that adds a
+migration or weakens a restraint merges on your word, and a merge you make by hand is detected by the next run. You never fill a form.
 
 ### Runs
 
@@ -201,8 +207,8 @@ Guidelines page is refreshed the same way.
 | Decision | Ready | M | Your comment assessed as resolving — see §4. No manual override. |
 | Decision | In progress | M | Your reply on a migration question says `apply`: the run applies it, the guard having read the word from the board, and carries the ticket on — see §4. |
 | Review | Ready | M | Your reply at Review asks for a change: folded into the body as an addendum; the next run builds it on the same branch and pull request and brings it back to Review. |
-| Review | Done | M | The run's own move at close: the reviewer's PASS on file, the gate green and no gated path in the diff — merged with a merge commit, Done and the Release row in the same run (§5 step 9). |
-| Review | Done | M | On a gated path (§4) your reply at Review says `merge`: the run merges the pull request with a merge commit, the guard having read the word from the board. Release row written. |
+| Review | Done | M | The run's own move at close: the reviewer's PASS on file, the gate green, and a diff that adds no migration and weakens no restraint — merged with a merge commit, Done and the Release row in the same run (§5 step 9). |
+| Review | Done | M | On a gated diff (§4) your reply at Review says `merge`: the run merges the pull request with a merge commit, the guard having read the word from the board. Release row written. |
 | Done | Backlog | M | The deploy check after the merge failed (§5 step 0): the merge reverted on main, a Fix task filed at Backlog, this task back at Backlog with one comment. |
 | In progress | Ready | M | A stale run recovered while another stale task was claimed first — see §5 step 0. |
 | Review | Done | M | Next run finds the branch merged into main by hand. Release row written. |
@@ -326,13 +332,24 @@ through once it has read that the task is not at Backlog; a status write it coul
 task for is refused, and a move to Backlog is not read at all. Once the run has answered
 with its ⟡ note the word is consumed: the same reply grants nothing twice.
 
-**`merge` is still your word in three cases, and only three.** A migration — its word is `apply`,
-and the ticket that carries it waits at Review for `merge` as well; a change to
-`docs/product-spec.md` — a decision, not code; and a change to the pipeline's own boundary —
-`.claude/**`, `scripts/hooks/**`, `scripts/run/**`, `.worktreeinclude`, `.gitignore`, the
-`scripts` of `package.json` — because a run must never loosen what a run is allowed to do
-unattended. Those are the gated paths, listed once in `scripts/run/gated.mjs` and read there
-by the guard and the skill both. Everywhere else a finished ticket merges itself at close: the
+**`merge` is still your word in one case, said as one sentence.** A diff that adds a migration,
+or a diff that **weakens a restraint**. A migration's own word is `apply`, and the ticket that
+carries it waits at Review for `merge` as well: the schema is shared and applying one is yours
+either way. A weakening is the other half of the same idea — a run must never loosen what a run
+is allowed to do unattended — and since T0.21 it is a measurement rather than a list of paths.
+`scripts/run/loosening.mjs` runs the restraints themselves on both sides of the diff: the guard's
+`decide` and `gated.mjs`'s `isGatedPath` from `origin/main` and from the checkout, against one
+fixed corpus, a side to a child process; anything refused before and allowed after is a rule
+deleted or a matcher narrowed. A guard rule with no corpus entry counts too, and so do a hook
+gone from `.claude/settings.json` or no longer carrying main's command, a Stop-gate step dropped
+or its release count raised, a test file deleted whose criteria nothing added names, and any
+diff touching the detector itself — the one thing that cannot mark its own homework. The corpus
+is always `origin/main`'s, because the guard runs main's copy. Everything else lands on main at
+close: the human owns a spec upstream, in the conversation that cuts the ticket, and a harness
+diff is not dangerous for where it lands but for what it does. `gated.mjs` and `loosening.mjs`
+hold the answer once, and the guard and the skill both read it there.
+
+A ticket that trips neither merges itself at close: the
 reviewer's verdict is a file, `docs/reviews/<id>.md`, ending in `PASS`; the Stop gate's green for
 that very tree is on record beside the marker, the run having run the gate once more before it
 merges; and the guard's second door reads that file, that record, the diff against `origin/main`
@@ -340,7 +357,8 @@ and the pull request's head — which must be the very commit it read — before
 `gh pr merge` through. The model
 never asserts the PASS: the reviewer writes it through its own Bash, the guard reads it, and the
 guard refuses an Edit or a Write under `docs/reviews/` from the run. A gated diff stays at
-Review with one ⟡ comment naming the path, and your `merge` lands it.
+Review with one ⟡ comment naming the rule it trips and what would ungate it, and your `merge`
+lands it.
 
 Answers given inside an interactive Code tab session follow the same rule, applied by that session.
 
@@ -422,13 +440,14 @@ below is a script under `scripts/run/` with a test; the skill holds the judgment
                 written · open questions · write docs/log/<id>.md and regenerate the build
                 log's list from the directory (log-index.mjs)
 9  Close        commit, push branch, open the PR unless the branch has one → Review · a diff
-                on no gated path (gated.mjs) with the reviewer's PASS on file is merged by the
-                run itself once the gate, run again here, has its green for this tree on
-                record — gh pr merge --merge --delete-branch from the pushed commit — then
-                Done and the Release row in the same run · a gated diff stays at Review with
-                one comment naming the path and waits for `merge` from you, made by the next
-                run's step 0 · remove the marker · the Runs row is written after the session
-                by the SessionEnd hook, from the transcript (runs.mjs)
+                that adds no migration and weakens no restraint (gated.mjs, loosening.mjs)
+                with the reviewer's PASS on file is merged by the run itself once the gate,
+                run again here, has its green for this tree on record — gh pr merge --merge
+                --delete-branch from the pushed commit — then Done and the Release row in the
+                same run · a gated diff stays at Review with one comment naming the rule it
+                trips and what would ungate it, and waits for `merge` from you, made by the
+                next run's step 0 · remove the marker · the Runs row is written after the
+                session by the SessionEnd hook, from the transcript (runs.mjs)
 ```
 
 One run, one task. The run exits; the next scheduled run takes the next task. Chaining inside a
@@ -459,8 +478,9 @@ board connector's three writes — a page update, a page created, a comment — 
 whatever the connector's server is called. The guard and gate commands in `.claude/settings.json`
 do not run the checkout's `scripts/hooks/*.mjs`: each extracts `scripts/` from `origin/main` into a
 temporary directory (`git archive`) and runs the hook from there, so a run that edits its own
-guard, gate or run scripts changes nothing until a human merges it — which is what makes
-`.claude/**`, `scripts/hooks/**` and `scripts/run/**` gated paths rather than a hope. When
+guard, gate or run scripts changes nothing until it is merged — which is what lets a routine
+harness diff merge itself while a loosening one waits: the copy that judges the diff is never
+the copy in the diff. When
 `origin/main` cannot be read the guard refuses everything and the gate refuses to close, each
 saying so; nothing is judged by a copy nobody merged. `scripts/hooks/hooks.test.mjs` runs the
 command exactly as the file holds it against a checkout whose guard was edited to allow
@@ -572,7 +592,7 @@ moved anywhere but Ready, no task created at any status but Backlog, no comment 
 without the prefix, and no third clarifying round on one question or second comment of a kind
 in one claim — the connector's writes, not the token's, which a script could send over
 the API without passing the guard (a Backlog Fix, *Guard the token and duplicate routes*), and no `gh pr merge` until it
-has read your `merge` there or, on a diff touching no gated path, the reviewer's `PASS` on file
+has read your `merge` there or, on a diff that adds no migration and weakens no restraint, the reviewer's `PASS` on file
 and the gate's green for the very commit the pull request carries; a merge must be that task's own pull request and
 a merge commit. The guard reads commands, never text: prose inside a heredoc or a quoted string
 matches no rule.
@@ -621,7 +641,10 @@ Criteria means the same thing on a task and on a phase: what must be true to be 
   `ready` as a word the guard reads at the board's connector) — v1.9. `T0.12 Telemetry and
   mirror` (the Runs row from the transcript by the SessionEnd hook, the Documents and Guidelines
   mirrors refreshed in preflight header-last under a sentinel, the debts of the last three
-  reports) — this version.
+  reports) — v1.10. `T0.21 Merge by default` (the gated paths replaced by a measurement — the
+  guard's rules, the gated list, the hooks, the Stop gate and the tests run on both sides of the
+  diff by `scripts/run/loosening.mjs` — the specs and a routine harness change merging
+  themselves, the gated comment naming the rule and what would ungate it) — this version.
 - Documents: seven pages, headed as mirrors, content refreshed from `main` at every preflight
   since T0.12.
 

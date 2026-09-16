@@ -5,7 +5,7 @@ import type { GapMoveClaim } from "@/lib/gap-move";
 import { relativeTime } from "@/lib/relative-time";
 import type { RunView } from "@/lib/scoring/run-view";
 
-import { CheckList } from "./CheckList";
+import { CheckList, type NoLongerApplicable } from "./CheckList";
 import { gapHasCard } from "./GapList";
 import type { MoveableGap } from "./GapMoves";
 
@@ -51,19 +51,23 @@ export function ReadinessPanel({
   now,
   itemKey,
   gapsByCheck,
+  noLongerApplicable,
   outcome,
 }: {
   run: RunView | null;
   t: Dictionary;
   now: number;
   /**
-   * The three below are the expansion's, not the meter's — this component only
+   * The four below are the expansion's, not the meter's — this component only
    * carries them across. §5's moves belong to the checks inside `CheckList`,
    * and threading them keeps `composeRunView` a function of the stored run
    * alone: a gap's disposition is current state and does not belong in a run.
+   * The same holds for what §4's engine closed, which is a ledger fact rather
+   * than anything the run said.
    */
   itemKey: string;
   gapsByCheck: ReadonlyMap<string, MoveableGap>;
+  noLongerApplicable: NoLongerApplicable;
   outcome: GapMoveClaim | null;
 }) {
   if (run === null) {
@@ -150,6 +154,7 @@ export function ReadinessPanel({
           t={t}
           itemKey={itemKey}
           gapsByCheck={gapsByCheck}
+          noLongerApplicable={noLongerApplicable}
           outcome={outcome}
         />
 

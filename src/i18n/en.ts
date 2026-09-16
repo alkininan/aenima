@@ -178,6 +178,22 @@ export const en = {
      */
     checkNotAskedReason: (when: string) => `Only asked when: ${when} That is not true here.`,
     /**
+     * The gap that left the denominator with its check — build log open
+     * question 14.
+     *
+     * §4's engine closing a gap because a condition stopped holding is correct,
+     * and it is the one closure a person might disagree with: the safety layer
+     * turning off is a judgment about the artifact, not an observation that a
+     * check now passes. So the page asks. **A question and never a warning** —
+     * §0 law 1 keeps Warning and Danger off anything that is not destructive,
+     * and nothing here went wrong; §12 keeps the voice calm.
+     *
+     * "This gap" points at the quoted evidence directly above it, which is the
+     * whole of what closed. The check id and the condition that stopped holding
+     * are already on the line, so the sentence says only the part that is new.
+     */
+    checkNotAskedClosedGap: "This gap closed when the check stopped applying — is that right?",
+    /**
      * §8's mono-readout percentage beside the track.
      *
      * The sign is here rather than in the component because it is not
