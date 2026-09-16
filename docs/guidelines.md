@@ -1,4 +1,7 @@
-<!-- guidelines.md · v1.13 · in the repo · the boundary reaches production: §5 Vercel's Production
+<!-- guidelines.md · v1.14 · in the repo · the reviewer's model falls back along a configured
+     chain: §5 step 5 a call refused for credits or availability runs again on the next model, any
+     other failure a stop, and step 8 the report names every pass's model.
+     v1.13 · in the repo · the boundary reaches production: §5 Vercel's Production
      DATABASE_URL is aenima_pipeline too, so the admin credential is on no path at all — not a
      run's, not the deployed app's — and .env.migrate in the primary checkout is its only home.
      This change held v1.7 and then v1.12 on its branch while it waited; neither number reached
@@ -427,7 +430,15 @@ below is a script under `scripts/run/` with a test; the skill holds the judgment
                 out-of-scope findings → Backlog tasks (Type Fix, Epic inherited) · the reviewer
                 writes its verdict to docs/reviews/<id>.md, last line PASS when no Must stands
                 (Shoulds listed above it, recorded by the run) and FINDINGS when one does — the
-                file the guard reads at close
+                file the guard reads at close · a call refused for credits or availability
+                runs again on the next model of the configured chain, the model the reviewer's
+                definition pins and then .claude/settings.json's fallbackModel — review-model.mjs
+                reads the chain and the refusal, and the run never picks a model — in a fresh
+                session with the same one-line message: only the model changes, and
+                each pass starts again at the pinned model · the run
+                names every pass's model in the report · any other failure, or a chain with no
+                model left, is a stop: the review did not run, so the branch is pushed, one
+                comment, Decision — a ticket never closes unreviewed
 6  Migration    if the diff adds a migration file: commit, push, stop → Decision (§4). You
                 answer `apply` on the thread; a run in the primary checkout — a person's
                 `/ticket` there, until `.env.migrate` rides into worktrees — applies it, the
@@ -435,7 +446,8 @@ below is a script under `scripts/run/` with a test; the skill holds the judgment
 7  Gate         Stop hook runs pnpm lint && pnpm typecheck && pnpm test in the cwd it is
                 handed, not the project dir; red cannot close
 8  Report       write docs/reports/<id>.md — refused without the red-first record: per test,
-                the mutation that made it red and the count that went green — then mirror it
+                the mutation that made it red and the count that went green — and without the
+                model of every reviewer pass, one table row a pass — then mirror it
                 into the body Report section: ACs implemented (each with its test) · tests
                 written · open questions · write docs/log/<id>.md and regenerate the build
                 log's list from the directory (log-index.mjs)

@@ -89,6 +89,7 @@ One file per ticket under `docs/log/`, oldest first. This list is written by `no
 - [T0.19 — Spec: the comment path](log/T0.19.md) · 2026-09-16
 - [T0.21 — Merge by default](log/T0.21.md) · 2026-09-16
 - [T2.9 — Applicability stability](log/T2.9.md) · 2026-09-16
+- [T0.22 — Reviewer model fallback](log/T0.22.md) · 2026-09-16
 
 ## Decisions made during the build
 

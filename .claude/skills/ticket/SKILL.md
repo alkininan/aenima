@@ -293,6 +293,25 @@ and are recorded in the report — and `FINDINGS` when one does: that file, not 
 transcript, is what the guard reads at close. Never write or edit it yourself — a verdict
 the run wrote is the model's claim, and the guard's door would be open on nothing.
 
+**The reviewer's model** comes from one chain: the model `.claude/agents/reviewer.md` pins, then
+`.claude/settings.json`'s `fallbackModel` — never a model you pick. Invoke a pass without
+`model`, so each pass starts again at the pinned model. When the call comes back an error rather
+than a review, ask the script, with every model this pass has been called on, in order, and the
+error verbatim — JSON-escaped, in a quoted heredoc, since the refusal itself carries an
+apostrophe:
+
+    node scripts/run/review-model.mjs <<'EOF'
+    {"tried":["<the pinned model>"],"error":"<the error>"}
+    EOF
+
+`stop: false` → the call was refused for credits or availability: invoke the reviewer again with
+`model` set to the `model` it printed and the same message — the ticket file path and nothing
+else, a fresh session with no briefing; only the model changes. `stop: true` → the review did
+not run, and a ticket never closes unreviewed: commit and push the branch, post the claim's
+`default` comment if it holds one and one `refused` comment — `what` the review of this ticket,
+`why` its `why` and then its `detail` in quotes, `settle` what would settle it — release the
+marker, set `Decision`, and exit. Whichever model a pass ran on, the report names it (step 8).
+
 Each finding is tagged **Must** or **Should**. Fix every Must, then re-invoke. **Three passes
 maximum.** After the third, any remaining Must becomes an open question with owner `T-next`, and
 Shoulds are recorded in the report. A finding outside this ticket's scope becomes a Backlog task:
@@ -319,7 +338,9 @@ before a self-merge, so the green for the pushed tree is on record where the gua
 
 Write `docs/reports/<id>.md`: ACs implemented each with its test · **tests written, each
 observed red first** — one table, columns `test · reddened by · red → green`, the record from
-step 4 · reviewer passes and findings · changed since this ticket was cut · open questions. Then:
+step 4 · **reviewer passes and findings** — one table, columns `pass · commit · model · verdict`,
+a row for every pass with the model it ran on, then the findings · changed since this ticket was
+cut · open questions. Then:
 
     node scripts/run/report-check.mjs docs/reports/<id>.md
 
