@@ -55,7 +55,10 @@ describe("PROTOCOL_VERSION", () => {
     // stored run misses the cache and re-scores, which is the point.
     // 1.2.0 (T2.8): the protocol says what a probe is, and `renderCheck`
     // prints a check's probes beneath it. Every run stamped 1.1.0 re-scores.
-    expect(PROTOCOL_VERSION).toBe("1.2.0+6476334ca2123595");
+    // 1.3.0 (T2.9): the protocol says how a probed condition is decided, and
+    // `renderPack` prints a condition's probes beneath it. Every run stamped
+    // 1.2.0 re-scores.
+    expect(PROTOCOL_VERSION).toBe("1.3.0+1ef28b5d617ff4a0");
   });
 
   it("carries the release, so a stamp groups by generation", () => {
@@ -138,6 +141,53 @@ describe("renderPack", () => {
       "  probe: Is the second thing there?",
     ]);
     expect(lines[second + 1]).toBeUndefined();
+  });
+
+  it("renders a condition's probes beneath it, and nothing beneath a condition without", () => {
+    // §4 (v1.8): "A condition may carry probes the way a check does." T2.7 and
+    // T2.8 measured §4's applicability answer moving on identical bytes, and a
+    // probe is read where the condition is asked, so the scorer decides it in
+    // the condition's own light.
+    const pack: SkillPack = {
+      id: "probed-conditions",
+      version: "0.0.0",
+      artifactKind: "prd",
+      checks: [
+        {
+          id: "c-1",
+          prose: "A check whose condition carries probes",
+          tag: "must",
+          points: 50,
+          appliesWhen: {
+            id: "with-probes",
+            when: "the artifact has the thing",
+            probes: ["Does it name the thing?", "Does it say where the thing is?"],
+          },
+        },
+        {
+          id: "c-2",
+          prose: "A check whose condition carries none",
+          tag: "should",
+          points: 50,
+          appliesWhen: { id: "without-probes", when: "the artifact has the other thing" },
+        },
+      ],
+      layers: [],
+      interview: [],
+    };
+
+    const lines = renderPack(pack).split("\n");
+    const first = lines.indexOf("with-probes: the artifact has the thing");
+    const second = lines.indexOf("without-probes: the artifact has the other thing");
+
+    expect(first).toBeGreaterThan(-1);
+    expect(lines.slice(first + 1, second)).toEqual([
+      "  probe: Does it name the thing?",
+      "  probe: Does it say where the thing is?",
+    ]);
+    // The conditions block ends at the blank line before CHECKS; nothing sits
+    // under a condition that carries no probes.
+    expect(lines[second + 1]).toBe("");
   });
 
   it("puts a layer's checks under the layer", () => {

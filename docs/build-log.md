@@ -88,6 +88,7 @@ One file per ticket under `docs/log/`, oldest first. This list is written by `no
 - [T0.13 — Restrict Vercel's database role: the boundary reaches production](log/T0.13.md) · 2026-09-16
 - [T0.19 — Spec: the comment path](log/T0.19.md) · 2026-09-16
 - [T0.21 — Merge by default](log/T0.21.md) · 2026-09-16
+- [T2.9 — Applicability stability](log/T2.9.md) · 2026-09-16
 
 ## Decisions made during the build
 
@@ -879,7 +880,18 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
     — the cache was not hiding a rare event, it was preventing the observation. Any surface that
     re-scores (a re-baseline, open question 15) hits this immediately.
 
-    Candidates, none chosen:
+    **Answered by T2.9 (product-spec v1.8).** None of the three candidates below was taken; the
+    ticket's own Rules named a fourth — the condition oscillating is the scorer having no settled
+    answer, which a probe addresses and a vote cannot — and §4 now says a condition may carry
+    probes the way a check does, decided by its probes and by nothing else. Measured on
+    `sample-juno-feature.md`, eleven runs before and after on identical bytes:
+    `list-rendering-surface` held in 3 of 11 under pack 1.1.0 and in 11 of 11 under 1.2.0, the denominator went
+    from 99-in-8 / 105-in-3 to 105 in 11, and the score's spread from 0.3 to 0.0
+    (`docs/reports/T2.9.md`). The safety layer's own wobble above was on `soc-10`/`soc-11`, which
+    `sample*.md` gitignoring left unreachable for a re-score; its probes are measured only in that
+    they unsettled nothing — T2.9's open question 4.
+
+    Candidates as they stood before T2.9, none of which was taken:
     - **Pin the sampling temperature.** It is not pinned today — `anthropicBody` sets `model`,
       `max_tokens`, `system`, `messages` and `output_config` and no `temperature`, so every scoring
       call runs at the provider's default. Cheapest to try, and it narrows the variance rather than
