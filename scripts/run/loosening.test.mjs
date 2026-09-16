@@ -12,6 +12,7 @@ import {
   gateLoosened,
   GUARD_CORPUS,
   guardLoosened,
+  hookName,
   hooksLoosened,
   hooksOf,
   loosenedBy,
@@ -20,6 +21,7 @@ import {
   pathsLoosened,
   refusals,
   ruleLetters,
+  scriptsOf,
   testsLoosened,
   uncovered,
 } from "./loosening.mjs";
@@ -57,6 +59,8 @@ function repoWith(mutate) {
   cpSync(join(root, "scripts"), join(dir, "scripts"), { recursive: true });
   mkdirSync(join(dir, ".claude"), { recursive: true });
   cpSync(join(root, ".claude", "settings.json"), join(dir, ".claude", "settings.json"));
+  // The gate's commands live here, so both sides of the comparison need one.
+  cpSync(join(root, "package.json"), join(dir, "package.json"));
   git(["init", "-q", "-b", "main"], dir);
   git(["config", "user.email", "t@example.com"], dir);
   git(["config", "user.name", "T"], dir);
@@ -152,35 +156,57 @@ describe("detectorLoosened", () => {
   });
 });
 
+// Build 2's hook bullet: a guard nothing invokes refuses nothing, so every hook of main's
+// `.claude/settings.json` has to still be there carrying main's command.
 describe("hooksOf and hooksLoosened", () => {
   const settings = (hooks) => JSON.stringify({ hooks });
-  const one = (event, matcher, command) =>
-    settings({ [event]: [{ matcher, hooks: [{ type: "command", command }] }] });
+  const group = (event, matcher, ...commands) =>
+    settings({
+      [event]: [{ matcher, hooks: commands.map((command) => ({ type: "command", command })) }],
+    });
 
-  it("keys a hook by its event and matcher, and carries its command", () => {
-    expect([...hooksOf(one("PreToolUse", "Bash", "node guard.mjs"))]).toEqual([
-      ["PreToolUse Bash", "node guard.mjs"],
+  it("keys a group by its event and matcher and keeps every command in it", () => {
+    // Review pass 1, Must 2: `SessionEnd *` holds two hooks, and keeping one a group would
+    // let the other be deleted unseen.
+    expect([...hooksOf(group("SessionEnd", "*", "node release.mjs", "node runs.mjs"))]).toEqual([
+      ["SessionEnd *", ["node release.mjs", "node runs.mjs"]],
     ]);
     expect(hooksOf("{")).toBeNull();
   });
 
-  it("names a hook that is gone", () => {
-    const found = hooksLoosened(one("Stop", "*", "node gate.mjs"), settings({}));
-    expect(found).toHaveLength(1);
-    expect(found[0].rule).toBe("the Stop * hook is gone from .claude/settings.json");
-  });
-
-  it("names a hook whose command is no longer main's", () => {
+  it("names a hook deleted from a group that still has another", () => {
+    // Review pass 1, Must 2.
     const found = hooksLoosened(
-      one("PreToolUse", "Bash", "node guard.mjs"),
-      one("PreToolUse", "Bash", "true"),
+      group("SessionEnd", "*", "node scripts/run/release.mjs --hook", "node runs.mjs"),
+      group("SessionEnd", "*", "node runs.mjs"),
     );
     expect(found).toHaveLength(1);
-    expect(found[0].rule).toBe("the PreToolUse Bash hook's command is no longer main's");
+    expect(found[0].rule).toBe(
+      "the SessionEnd * hook that runs scripts/run/release.mjs no longer carries main's command",
+    );
+  });
+
+  it("names a whole group that is gone, and one whose command was rewritten", () => {
+    expect(hooksLoosened(group("Stop", "*", "node gate.mjs"), settings({}))[0].rule).toBe(
+      "the Stop * hook that runs gate.mjs no longer carries main's command",
+    );
+    expect(
+      hooksLoosened(
+        group("PreToolUse", "Bash", "node guard.mjs"),
+        group("PreToolUse", "Bash", "true"),
+      )[0].rule,
+    ).toBe("the PreToolUse Bash hook that runs guard.mjs no longer carries main's command");
+  });
+
+  it("names a hook by the last script its command runs, or by its opening words", () => {
+    expect(hookName('d=$(mktemp -d) && node "$d/scripts/hooks/guard.mjs"')).toBe(
+      "scripts/hooks/guard.mjs",
+    );
+    expect(hookName("true")).toBe("true");
   });
 
   it("says nothing about a hook added, and refuses a side it cannot read", () => {
-    const before = one("Stop", "*", "node gate.mjs");
+    const before = group("Stop", "*", "node gate.mjs");
     const after = JSON.stringify({
       hooks: {
         Stop: [{ matcher: "*", hooks: [{ type: "command", command: "node gate.mjs" }] }],
@@ -193,21 +219,49 @@ describe("hooksOf and hooksLoosened", () => {
   });
 });
 
+// Build 2's gate bullet. `STEPS` names the steps; package.json holds the commands they run.
 describe("gateLoosened", () => {
+  const pkg = (scripts) => JSON.stringify({ name: "aenima", scripts });
+  const real = pkg({ lint: "eslint .", typecheck: "tsc --noEmit", test: "vitest run" });
+  const side = (steps, maxRed, scripts = real) => ({ steps, maxRed, scripts });
+
   it("names a step the gate stopped running", () => {
     const found = gateLoosened(
-      { steps: ["lint", "typecheck", "test"], maxRed: 3 },
-      { steps: ["lint", "typecheck"], maxRed: 3 },
+      side(["lint", "typecheck", "test"], 3),
+      side(["lint", "typecheck"], 3),
     );
     expect(found).toHaveLength(1);
     expect(found[0].rule).toBe("the Stop gate no longer runs test");
   });
 
   it("names a release count raised, and lets one lowered through", () => {
-    expect(gateLoosened({ steps: [], maxRed: 3 }, { steps: [], maxRed: 5 })[0].rule).toBe(
+    expect(gateLoosened(side([], 3), side([], 5))[0].rule).toBe(
       "the gate now steps aside after 5 reds rather than 3",
     );
-    expect(gateLoosened({ steps: [], maxRed: 3 }, { steps: [], maxRed: 2 })).toEqual([]);
+    expect(gateLoosened(side([], 3), side([], 2))).toEqual([]);
+  });
+
+  it("names a gate command emptied in package.json, with STEPS left alone", () => {
+    // Review pass 1, Must 1: `"test": "true"` leaves STEPS three long and the gate toothless.
+    const steps = ["lint", "typecheck", "test"];
+    const found = gateLoosened(
+      side(steps, 3),
+      side(steps, 3, pkg({ lint: "eslint .", typecheck: "tsc --noEmit", test: "true" })),
+    );
+    expect(found).toHaveLength(1);
+    expect(found[0].rule).toBe("the gate's test command is no longer main's");
+    expect(found[0].ungate).toContain("package.json's test script");
+  });
+
+  it("says nothing about a script the gate does not run, and refuses a side it cannot read", () => {
+    const steps = ["lint", "typecheck", "test"];
+    expect(
+      gateLoosened(side(steps, 3), side(steps, 3, pkg({ ...scriptsOf(real), dev: "next" }))),
+    ).toEqual([]);
+    expect(gateLoosened(side(steps, 3), side(steps, 3, "{"))).toHaveLength(1);
+    expect(gateLoosened(side(steps, 3, "{"), side(steps, 3))[0].rule).toContain(
+      "could not be read",
+    );
   });
 });
 
@@ -247,17 +301,22 @@ describe("loosenings", () => {
         paths: { before: { p: true }, after: { p: true } },
         letters: ["a"],
         settings: { before: '{"hooks":{}}', after: '{"hooks":{}}' },
-        gate: { before: { steps: ["test"], maxRed: 3 }, after: { steps: ["test"], maxRed: 3 } },
+        gate: {
+          before: { steps: ["test"], maxRed: 3, scripts: '{"scripts":{"test":"vitest run"}}' },
+          after: { steps: ["test"], maxRed: 3, scripts: '{"scripts":{"test":"vitest run"}}' },
+        },
         tests: { deleted: [], added: [] },
       }),
     ).toEqual([]);
   });
 
   it("puts the detector first, so the reason a diff cannot mark its own homework leads", () => {
+    const gate = { steps: [], maxRed: 3, scripts: '{"scripts":{}}' };
     const found = loosenings({
       files: [DETECTOR],
       guard: { before: { a: true }, after: { a: false } },
       settings: { before: '{"hooks":{}}', after: '{"hooks":{}}' },
+      gate: { before: gate, after: gate },
     });
     expect(found[0].rule).toContain(DETECTOR);
     expect(found).toHaveLength(2);

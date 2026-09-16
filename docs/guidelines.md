@@ -1,5 +1,5 @@
 <!-- guidelines.md · v1.12 · in the repo · the gated set is one sentence — a migration, or a
-     diff that weakens a restraint: §1 and §3 say it that way, §4 replaces the three gated-path
+     diff that weakens a restraint: §2 and §3 say it that way, §4 replaces the three gated-path
      cases with the measurement `scripts/run/loosening.mjs` makes by running the restraints on
      both sides of the diff, §5 step 9 names it and the comment that carries the rule and what
      would ungate it; §8 names T0.21.

@@ -48,6 +48,9 @@ import { emit, isMain } from "./cli.mjs";
 /** This file, relative to the repository root — the detector, gated whenever the diff has it. */
 export const DETECTOR = "scripts/run/loosening.mjs";
 
+/** How long one side gets to answer. Past it the side is unmeasured, and unmeasured is gated. */
+export const PROBE_TIMEOUT_MS = 60_000;
+
 /** Where the guard's rule letters are written: `// (a) …` down the left of `decide()`. */
 const RULE_MARKER = /^[ \t]*\/\/[ \t]*\(([a-z])\)/gm;
 
@@ -216,7 +219,12 @@ export function pathsLoosened(before = {}, after = {}) {
     );
 }
 
-/** Every `(event, matcher)` hook of a settings text, by its command. Null when it does not parse. */
+/**
+ * Every `(event, matcher)` group of a settings text, mapped to **all** its commands. Null when
+ * the text does not parse. A group holds a list — `SessionEnd *` runs `release.mjs` and then
+ * `runs.mjs` — so keeping one command a group would let the other be deleted unseen (review
+ * pass 1, Must 2).
+ */
 export function hooksOf(text) {
   let settings;
   try {
@@ -227,13 +235,30 @@ export function hooksOf(text) {
   const found = new Map();
   for (const [event, groups] of Object.entries(settings?.hooks ?? {})) {
     for (const group of Array.isArray(groups) ? groups : []) {
-      const matcher = group?.matcher ?? "*";
-      for (const hook of Array.isArray(group?.hooks) ? group.hooks : []) {
-        found.set(`${event} ${matcher}`, String(hook?.command ?? ""));
-      }
+      const key = `${event} ${group?.matcher ?? "*"}`;
+      const commands = (Array.isArray(group?.hooks) ? group.hooks : []).map((hook) =>
+        String(hook?.command ?? ""),
+      );
+      found.set(key, [...(found.get(key) ?? []), ...commands]);
     }
   }
   return found;
+}
+
+/** A hook named in a sentence: the script it runs, or the head of its command line. */
+export function hookName(command) {
+  const last = String(command ?? "")
+    .match(/[\w./-]*\.mjs\b/g)
+    ?.at(-1);
+  if (last === undefined) {
+    return String(command ?? "")
+      .trim()
+      .slice(0, 40);
+  }
+  // The hooks' commands run out of a temporary directory — `node "$d/scripts/hooks/guard.mjs"`
+  // — and the shell variable is not part of the name anybody would recognise it by.
+  const at = last.indexOf("scripts/");
+  return at === -1 ? last : last.slice(at);
 }
 
 /** A hook of main's that is gone, or whose command is no longer main's. */
@@ -256,28 +281,41 @@ export function hooksLoosened(beforeText, afterText) {
       ),
     ];
   }
+  // Removed and rewritten are one event from the outside: main's command is no longer invoked.
   const gone = [];
-  for (const [key, command] of before) {
-    if (!after.has(key)) {
-      gone.push(
-        reason(
-          `the ${key} hook is gone from .claude/settings.json`,
-          "put it back — a guard nothing invokes refuses nothing",
-        ),
-      );
-    } else if (after.get(key) !== command) {
-      gone.push(
-        reason(
-          `the ${key} hook's command is no longer main's`,
-          "restore main's command, or say merge here if the change is meant",
-        ),
-      );
+  for (const [key, commands] of before) {
+    const kept = new Set(after.get(key) ?? []);
+    for (const command of commands) {
+      if (!kept.has(command)) {
+        gone.push(
+          reason(
+            `the ${key} hook that runs ${hookName(command)} no longer carries main's command`,
+            "restore it — a guard nothing invokes refuses nothing",
+          ),
+        );
+      }
     }
   }
   return gone;
 }
 
-/** The gate's steps shortened, or its release count raised. */
+/** A package.json text's `scripts`, or null when the text does not parse. */
+export function scriptsOf(text) {
+  try {
+    return JSON.parse(String(text ?? "")).scripts ?? {};
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The gate's steps shortened, its release count raised, or one of its commands rewritten.
+ *
+ * `STEPS` names the steps; the commands themselves are `package.json`'s, because the gate
+ * spawns `pnpm <step>` (`scripts/hooks/gate.mjs`). A `"test": "true"` would leave STEPS three
+ * long and the gate toothless, which is review pass 1's Must 1. `scripts` is each side's
+ * package.json text, and a side that does not parse is not one the run can vouch for.
+ */
 export function gateLoosened(before = {}, after = {}) {
   const found = [];
   const beforeSteps = before.steps ?? [];
@@ -290,6 +328,27 @@ export function gateLoosened(before = {}, after = {}) {
           `put ${step} back in STEPS, in scripts/hooks/gate.mjs`,
         ),
       );
+    }
+  }
+  const beforeScripts = scriptsOf(before.scripts);
+  const afterScripts = scriptsOf(after.scripts);
+  if (beforeScripts === null || afterScripts === null) {
+    found.push(
+      reason(
+        "a package.json the gate's commands live in could not be read",
+        "fix it so both sides of the gate's commands can be compared",
+      ),
+    );
+  } else {
+    for (const step of beforeSteps) {
+      if (beforeScripts[step] !== afterScripts[step]) {
+        found.push(
+          reason(
+            `the gate's ${step} command is no longer main's`,
+            `restore package.json's ${step} script, or say merge here if the change is meant`,
+          ),
+        );
+      }
     }
   }
   if (Number(after.maxRed) > Number(before.maxRed)) {
@@ -382,7 +441,14 @@ const git = (args, cwd) => {
   }
 };
 
-/** `origin/main`'s `scripts/` in a temporary directory, the way the hooks read it. */
+/**
+ * A revision's `scripts/` in a temporary directory, the way the hooks read `origin/main`'s.
+ *
+ * Both sides are read this way, `HEAD` included: the guard's door binds the pull request's
+ * head to this checkout's HEAD so that the diff it read is the diff that merges, and a
+ * restraint measured from an uncommitted working tree would not be on that commit (review
+ * pass 1, Should 4).
+ */
 function checkoutScripts(cwd, base) {
   const dir = mkdtempSync(join(tmpdir(), "aenima-loosening-"));
   const tar = join(dir, "scripts.tar");
@@ -410,6 +476,10 @@ export function probe(root, { cwd = process.cwd() } = {}) {
       cwd,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
+      // `loosenedBy` sits on the guard's path to `gh pr merge`. A probe that hangs would hang
+      // the guard; a probe that is killed reads as a side that could not be measured, which is
+      // the conservative answer (review pass 1, Should 6).
+      timeout: PROBE_TIMEOUT_MS,
     });
     return JSON.parse(out);
   } catch {
@@ -417,26 +487,15 @@ export function probe(root, { cwd = process.cwd() } = {}) {
   }
 }
 
-/** `{ path, text }` for each file of `status` in the diff, read from the side that has it. */
+/** `{ path, text }` for each file of `status` in the diff, read at the revision that has it. */
 function filesOf(cwd, range, status, rev) {
-  const out = git(["diff", "--name-status", "--diff-filter=" + status, range], cwd) ?? "";
+  const out = git(["diff", "--name-status", `--diff-filter=${status}`, range], cwd) ?? "";
   return out
     .split("\n")
     .map((line) => line.split("\t"))
     .filter((parts) => parts.length >= 2 && parts[1].trim() !== "")
     .map((parts) => parts[1].trim())
-    .map((path) => ({
-      path,
-      text: rev === null ? readHead(cwd, path) : git(["show", `${rev}:${path}`], cwd),
-    }));
-}
-
-function readHead(cwd, path) {
-  try {
-    return readFileSync(join(cwd, path), "utf8");
-  } catch {
-    return null;
-  }
+    .map((path) => ({ path, text: git(["show", `${rev}:${path}`], cwd) }));
 }
 
 /**
@@ -457,14 +516,19 @@ export function loosenedBy({
       .map((line) => line.trim())
       .filter(Boolean);
 
-  const dir = checkoutScripts(cwd, base);
-  if (dir === null) {
+  const head = range.split("...")[1] || "HEAD";
+  const dirs = { before: checkoutScripts(cwd, base), after: checkoutScripts(cwd, head) };
+  const unread = dirs.before === null ? base : dirs.after === null ? head : null;
+  if (unread !== null) {
+    for (const dir of Object.values(dirs)) {
+      if (dir !== null) rmSync(dir, { recursive: true, force: true });
+    }
     return {
       ok: false,
       reasons: [
         reason(
-          `scripts/ could not be read from ${base}`,
-          "the restraints before this diff are unknown, so nothing here can be vouched for",
+          `scripts/ could not be read from ${unread}`,
+          "the restraints on one side of this diff are unknown, so nothing here can be vouched for",
         ),
       ],
     };
@@ -472,10 +536,10 @@ export function loosenedBy({
   let before;
   let after;
   try {
-    before = probe(join(dir, "scripts"), { cwd });
-    after = probe(join(cwd, "scripts"), { cwd });
+    before = probe(join(dirs.before, "scripts"), { cwd });
+    after = probe(join(dirs.after, "scripts"), { cwd });
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    for (const dir of Object.values(dirs)) rmSync(dir, { recursive: true, force: true });
   }
   if (before === null) {
     return {
@@ -493,7 +557,7 @@ export function loosenedBy({
       ok: false,
       reasons: [
         reason(
-          "this checkout's restraints could not be run",
+          `the restraints at ${head} could not be run`,
           "fix scripts/hooks/guard.mjs, scripts/hooks/gate.mjs or scripts/run/gated.mjs so both sides can be measured",
         ),
       ],
@@ -507,10 +571,13 @@ export function loosenedBy({
     letters: [...new Set([...(before.letters ?? []), ...(after.letters ?? [])])],
     settings: {
       before: git(["show", `${base}:.claude/settings.json`], cwd),
-      after: readHead(cwd, ".claude/settings.json"),
+      after: git(["show", `${head}:.claude/settings.json`], cwd),
     },
-    gate: { before: before.gate, after: after.gate },
-    tests: { deleted: filesOf(cwd, range, "D", base), added: filesOf(cwd, range, "A", null) },
+    gate: {
+      before: { ...before.gate, scripts: git(["show", `${base}:package.json`], cwd) },
+      after: { ...after.gate, scripts: git(["show", `${head}:package.json`], cwd) },
+    },
+    tests: { deleted: filesOf(cwd, range, "D", base), added: filesOf(cwd, range, "A", head) },
   });
   return { ok: reasons.length === 0, reasons };
 }
@@ -533,10 +600,11 @@ if (isMain(import.meta.url)) {
   const args = process.argv.slice(2);
   const at = args.indexOf("--probe");
   if (at === -1) emit(loosenedBy({ range: args[0] ?? "origin/main...HEAD" }));
-  // Deliberately not awaited. `gated.mjs` imports this module, so probing *this* checkout's
-  // scripts/ re-enters this very file: a top-level await here would still be pending when the
-  // dynamic import asked for it, and the two would wait on each other forever. Letting the
-  // top level finish first means the import finds this module whole.
+  // Deliberately not awaited. `gated.mjs` imports this module, so a probe of a scripts root
+  // that is this file's own directory re-enters it: a top-level await here would still be
+  // pending when the dynamic import asked for it, and the two would wait on each other
+  // forever. Letting the top level finish first means the import finds this module whole.
+  // `loosenedBy` probes two temporary checkouts and never that root, but the CLI takes any.
   else
     runProbe(args[at + 1]).catch((error) => {
       process.stderr.write(`${error.message}\n`);
