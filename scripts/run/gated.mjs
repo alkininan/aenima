@@ -3,73 +3,65 @@
  * Step 9 — which diffs a run may merge on its own.
  *
  * A finished ticket merges itself (T0.16): the reviewer's PASS is on file and the gate is
- * green, so the human's word adds nothing — except where it still does. A migration, a
- * product-spec change and a change to the pipeline's own guard, gate, skill or run scripts
- * are the three places a human still decides, and a run must never loosen its own boundary
- * unattended. Those paths are gated: a diff that touches one stays at Review and waits for
- * the word `merge`; every other diff lands on main at close.
+ * green, so the human's word adds nothing — except where it still does. T0.16 kept three
+ * places: a migration, the product spec, and the pipeline's own guard, gate, skill and run
+ * scripts. T0.21 keeps one and a half. The human owns the documents upstream, in the
+ * conversation that cuts the ticket, so re-approving a spec diff adds nothing; and a harness
+ * diff is not dangerous because of where it lands but because of what it does. So:
  *
- * The list is read in two places and lives in one: the guard's second door
+ *   - a diff adding a migration waits for `apply`, and its ticket waits for `merge`: the
+ *     schema is shared, and applying one is the human's call either way (§4);
+ *   - a diff that **weakens a restraint** waits for `merge`, measured by running the
+ *     restraints on both sides of it (`scripts/run/loosening.mjs`) rather than read off the
+ *     paths it touches;
+ *   - everything else lands on main at close.
+ *
+ * The answer is read in two places and lives in one: the guard's second door
  * (`scripts/hooks/guard.mjs`, rule (f)) refuses `gh pr merge` on the reviewer's PASS while
- * the diff touches a gated path, and the skill's step 9 asks the same question before it
- * tries. Pure over injected inputs; the CLI reads the diff and the two package.json files.
+ * this says the diff is gated, and the skill's step 9 asks the same question before it
+ * tries. `gatedDiff` is pure over injected inputs; `gatedDiffOf` reads the diff and both
+ * sides of the restraints.
  */
 
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 
 import { emit, isMain } from "./cli.mjs";
+import { loosenedBy } from "./loosening.mjs";
+import { MIGRATIONS_DIR } from "./migration-check.mjs";
 
-/** Directories whose every file is gated. */
-export const GATED_DIRS = ["drizzle/", ".claude/", "scripts/hooks/", "scripts/run/"];
-
-/** Files gated by name. `package.json` is gated only when its scripts change (`scriptsChanged`). */
-export const GATED_FILES = ["docs/product-spec.md", ".worktreeinclude", ".gitignore"];
-
-/** True when a repo-relative path is one only the human's word merges. */
+/**
+ * True when a repo-relative path is one only the human's word merges on its own account —
+ * which since T0.21 is a migration and nothing else. Everything the harness used to gate by
+ * name is gated by measurement instead.
+ */
 export function isGatedPath(path) {
-  const p = String(path ?? "");
-  return GATED_FILES.includes(p) || GATED_DIRS.some((dir) => p.startsWith(dir));
+  return String(path ?? "").startsWith(MIGRATIONS_DIR);
 }
 
-/** The `scripts` of a package.json text, keys sorted; null when the text does not parse. */
-function scriptsOf(text) {
-  try {
-    const scripts = JSON.parse(String(text ?? "")).scripts ?? {};
-    return JSON.stringify(Object.fromEntries(Object.entries(scripts).sort()));
-  } catch {
-    return null;
-  }
+/** The migrations among `files`, in the diff's order. */
+export function gatedPaths(files = []) {
+  return files.filter(isGatedPath);
 }
+
+/** A reason a diff waits for the word: the rule it trips, and what would settle it. */
+const reason = (rule, ungate) => ({ rule, ungate });
 
 /**
- * True when the `scripts` object of package.json differs between the two texts. A side
- * that does not parse reads as changed: a package.json the run cannot read is not one it
- * can vouch for.
+ * `{ files, reasons, gated, ok }` for a diff whose restraint comparison has already been made.
+ * `weakened` is `loosenedBy`'s reasons. `gated` is the reasons' rules, which is what a caller
+ * naming them in a sentence wants; `reasons` carries what would ungate each.
  */
-export function scriptsChanged(mainText, headText) {
-  const main = scriptsOf(mainText);
-  const head = scriptsOf(headText);
-  return main === null || head === null || main !== head;
-}
-
-/** The gated paths among `files`, in the diff's order. */
-export function gatedPaths(files = [], { packageScriptsChanged = false } = {}) {
-  return files.filter(
-    (file) => isGatedPath(file) || (file === "package.json" && packageScriptsChanged),
-  );
-}
-
-/**
- * `{ files, gated, ok }` for a diff. `files` are the paths the diff touches; the two package
- * texts are consulted only when `package.json` is among them.
- */
-export function gatedDiff({ files = [], mainPackage = null, headPackage = null } = {}) {
-  const packageScriptsChanged =
-    files.includes("package.json") && scriptsChanged(mainPackage, headPackage);
-  const gated = gatedPaths(files, { packageScriptsChanged });
-  return { files, gated, ok: gated.length === 0 };
+export function gatedDiff({ files = [], weakened = [] } = {}) {
+  const reasons = [
+    ...gatedPaths(files).map((file) =>
+      reason(
+        `it adds the migration ${file}`,
+        "a migration is applied by hand, so this one waits for you either way",
+      ),
+    ),
+    ...weakened,
+  ];
+  return { files, reasons, gated: reasons.map((r) => r.rule), ok: reasons.length === 0 };
 }
 
 const git = (args, cwd) => {
@@ -86,7 +78,7 @@ const git = (args, cwd) => {
 
 /**
  * The diff of `range` in the checkout at `cwd`, judged. `origin/main...HEAD` is what a pull
- * request from this branch merges; the head side's package.json is the working tree's.
+ * request from this branch merges, and it is both sides of the restraint comparison.
  */
 export function gatedDiffOf({ cwd = process.cwd(), range = "origin/main...HEAD" } = {}) {
   const names = git(["diff", "--name-only", range], cwd);
@@ -94,17 +86,8 @@ export function gatedDiffOf({ cwd = process.cwd(), range = "origin/main...HEAD" 
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
-  const base = range.split("...")[0] ?? "origin/main";
-  let headPackage = null;
-  try {
-    headPackage = readFileSync(join(cwd, "package.json"), "utf8");
-  } catch {
-    headPackage = null;
-  }
-  return {
-    range,
-    ...gatedDiff({ files, mainPackage: git(["show", `${base}:package.json`], cwd), headPackage }),
-  };
+  const weakened = loosenedBy({ cwd, range, files }).reasons;
+  return { range, ...gatedDiff({ files, weakened }) };
 }
 
 /** CLI: `node gated.mjs [range]`, run from the checkout. */
