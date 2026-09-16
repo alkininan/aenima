@@ -6,7 +6,8 @@
  * ones where reading past is expensive: `drizzle-kit push` drops the RLS policies that are
  * the product isolation boundary, a migration applied without a human is a schema change
  * nobody approved, a write to `.env*` puts a secret somewhere it does not belong, and a
- * merge made by a run is the one move guidelines §3 keeps for the human.
+ * merge of a diff only the human's word merges — a migration, or a restraint the diff
+ * weakens — is the one move guidelines §3 keeps for the human.
  *
  * Reads the hook JSON on stdin. Exit 2 with a one-line reason on stderr refuses the call;
  * exit 0 lets it through. Refusal text names what was refused and where the rule lives —
@@ -20,11 +21,25 @@
  * never matches: T0.98 and T0.8's close were both refused for *mentioning* a command in a
  * file they were writing, which is what T0.9 replaces.
  *
- * Two rules — (b) a migration apply and (f) a pull-request merge — are allowed on one
- * condition only: the human said the word on the board. Before `decide()` runs, `judge()`
- * asks `scripts/run/permission.mjs` to read the claimed task's thread over the Notion API
- * with the integration token, and hands the answer in as `deps.permission`. The guard
- * verifies; the model never asserts (docs/guidelines.md §4).
+ * Two rules — (b) a migration apply and (f) a pull-request merge — are allowed on the
+ * human's word: before `decide()` runs, `judge()` asks `scripts/run/permission.mjs` to read
+ * the claimed task's thread over the Notion API with the integration token, and hands the
+ * answer in as `deps.permission`. Since T0.16 rule (f) has a second door, `deps.verdict`:
+ * the claimed task's reviewer verdict on file ends in PASS and the diff is not one only the
+ * word merges (`scripts/run/gated.mjs`, which since T0.21 measures the restraints on both
+ * sides of it rather than reading paths), and the pull request's head is this checkout's
+ * HEAD — the diff the guard read is the diff that merges. Rule (d) lets one push to main through: the
+ * revert of the merge at origin/main's tip, `HEAD:main`, one commit that restores the tree
+ * before the merge. The guard verifies; the model never asserts (docs/guidelines.md §4).
+ *
+ * Since T0.17 the guard also stands at the board's connector — the Notion tools the run writes
+ * the board through, whatever the server is called. Rule (h): a status write that sets a
+ * Backlog task Ready needs the human's `ready` on that page's thread, read over the API the
+ * same way; no task is created at Ready; and no comment is posted without the pipeline's
+ * prefix, because an unprefixed comment reads on the thread as the human's voice, and the
+ * human's voice is what grants `merge`, `apply` and `ready`. Since T0.20 a prefixed comment is
+ * read against its page's thread as well (`postable`): a clarifying round past the cap, or a
+ * second comment of a kind in one claim, waits; every other comment posts.
  *
  * `decide()` is pure and exported so scripts/hooks/guard.test.mjs can cover every rule and,
  * more importantly, every neighbouring call that must stay allowed.
@@ -34,7 +49,9 @@ import { execFileSync } from "node:child_process";
 import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { verify } from "../run/permission.mjs";
+import { kindOf } from "../run/comments.mjs";
+import { readBoard } from "../run/notion.mjs";
+import { postable, reviewed, unreadPost, verify } from "../run/permission.mjs";
 import { resolveDir } from "./gate.mjs";
 
 /** Words that run their remaining argv as the command. */
@@ -564,6 +581,16 @@ export function isEnvPath(path) {
 }
 
 /**
+ * True when a path is a reviewer's verdict file, `docs/reviews/<id>.md`, wherever the
+ * checkout sits. The second door reads it, so the run's own Edit and Write may not touch it
+ * (T0.16); the reviewer writes it through its Bash, which this rule does not read.
+ */
+export function isVerdictPath(path) {
+  const p = String(path ?? "").replaceAll("\\", "/");
+  return p.startsWith("docs/reviews/") || p.includes("/docs/reviews/");
+}
+
+/**
  * True when a refspec names `main` as the branch being written.
  *
  * `main`, `+main` (force by refspec), `HEAD:main`, `main:main`, `refs/heads/main` — the
@@ -617,6 +644,47 @@ function pushesMain(git, currentBranch) {
   return refs.length <= 1 && currentBranch() === "main";
 }
 
+/** `git rev-parse` of one ref at `cwd`, or null when it does not resolve. */
+function revAt(ref, cwd) {
+  try {
+    return execFileSync("git", ["rev-parse", "--verify", "--quiet", ref], {
+      cwd,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * True when HEAD at `cwd` is exactly the revert of the merge at origin/main's tip: its parent
+ * is that tip, the tip is a merge commit, and its tree is the tree of the tip's first
+ * parent — main as it was before the merge. Nothing else about HEAD is allowed to differ,
+ * which is what makes the one push to main rule (d) lets through a revert and not a change.
+ */
+export function revertOfTipAt(cwd) {
+  const head = revAt("HEAD", cwd);
+  const tip = revAt("origin/main", cwd);
+  if (head === null || tip === null) return false;
+  return (
+    revAt("HEAD^", cwd) === tip &&
+    revAt("origin/main^2", cwd) !== null &&
+    revAt("HEAD^{tree}", cwd) === revAt("origin/main^1^{tree}", cwd)
+  );
+}
+
+/**
+ * True when a `git push` is the revert's own shape and nothing else: one refspec, `HEAD:main`
+ * or `HEAD:refs/heads/main`, to one remote. A push of a branch to main, or of main itself,
+ * is not this even when HEAD happens to be a revert.
+ */
+function isRevertPush(git) {
+  if (git?.verb !== "push") return false;
+  const refs = operands(git.rest);
+  return refs.length === 2 && /^HEAD:(refs\/heads\/)?main$/.test(refs[1]);
+}
+
 /** The branch of the checkout the call is being made from, or null when git cannot say. */
 function branchAt(cwd) {
   try {
@@ -648,6 +716,21 @@ function prBranchAt(selector, cwd) {
   }
 }
 
+/** The head commit of the pull request `gh pr merge` names, from gh; null when it cannot say. */
+function prHeadAt(selector, cwd) {
+  try {
+    const args = ["pr", "view", ...(selector ? [selector] : []), "--json", "headRefOid"];
+    const view = execFileSync("gh", [...args, "--jq", ".headRefOid"], {
+      cwd,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    return view === "" ? null : view;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * True when a `gh pr merge` says `--merge` and nothing else about the method. A flagless
  * merge takes the repository's setting, which nothing here can see; a squash or a rebase
@@ -656,6 +739,53 @@ function prBranchAt(selector, cwd) {
 const mergeCommit = (rest) =>
   rest.some((token) => token === "--merge" || token === "-m") &&
   !rest.some((token) => ["--squash", "-s", "--rebase", "-r"].includes(token));
+
+/** The board's connector tools rule (h) reads, by the tool's own name after the server's. */
+const CONNECTOR = /^mcp__.+__notion-(update-page|create-pages|create-comment)$/;
+
+/** Which of the connector's writes a hook call is — `update-page` and so on — or null. */
+const connectorTool = (input) => String(input?.tool_name ?? "").match(CONNECTOR)?.[1] ?? null;
+
+/**
+ * True when an update-page call writes Status to anything but Backlog — every such write is
+ * read against the task first, since the one move out of Backlog is to Ready, on the word.
+ */
+const movesStatus = (input) => {
+  const properties = input?.tool_input?.properties;
+  return (
+    connectorTool(input) === "update-page" &&
+    properties !== null &&
+    typeof properties === "object" &&
+    Object.hasOwn(properties, "Status") &&
+    properties.Status !== "Backlog"
+  );
+};
+
+/** The text a create-comment call would post, from markdown or from rich text. */
+const commentText = (toolInput) =>
+  typeof toolInput?.markdown === "string"
+    ? toolInput.markdown
+    : (Array.isArray(toolInput?.rich_text) ? toolInput.rich_text : [])
+        .map((part) => part?.text?.content ?? part?.plain_text ?? "")
+        .join("");
+
+/** The pipeline's prefix from the board file at `dir`, the board's default when there is none. */
+function boardPrefix(dir) {
+  try {
+    return readBoard(dir).prefix ?? "⟡ ";
+  } catch {
+    return "⟡ ";
+  }
+}
+
+/** The words a hook call would need the board's permission for: a command's, or a Ready write's. */
+export function wantedBy(input) {
+  if (input?.tool_name === "Bash") {
+    const command = input?.tool_input?.command;
+    return typeof command === "string" ? wanted(command) : [];
+  }
+  return movesStatus(input) ? ["ready"] : [];
+}
 
 /** The words a command line would need the board's permission for, in the order met. */
 export function wanted(command) {
@@ -674,25 +804,92 @@ export function wanted(command) {
 /** When nothing read the board, nothing is granted. */
 const UNREAD = { ok: false, why: "the board was not read" };
 
+/** When nothing read the reviewer's verdict, the second door is shut. */
+const UNREVIEWED = { ok: false, why: "no reviewer verdict was read" };
+
 /**
  * The whole decision. Returns the refusal reason, or null to let the call through.
  *
- * `deps.currentBranch`, `deps.permission` and `deps.prBranch` are injected so the rules that
- * depend on where HEAD points, on what the board's thread says, and on which branch a pull
- * request carries can be tested without a repository or a board standing in a particular
- * state. Without `deps.permission` nothing is granted: the hook's `judge()` is what reads
- * the board.
+ * `deps.currentBranch`, `deps.permission`, `deps.verdict`, `deps.posting`, `deps.prBranch`,
+ * `deps.prHead`, `deps.localHead`, `deps.revertOfTip` and `deps.prefix` are injected so the rules
+ * that depend on where HEAD points, on what the board's thread says, on what the reviewer wrote,
+ * and on which branch and commit a pull request carries can be tested without a repository or a
+ * board standing in a particular state. Without `deps.permission` nothing is granted, without
+ * `deps.verdict` the second door is shut, and without `deps.posting` the thread was not read, so
+ * a clarifying round waits and every other comment posts: the hook's `judge()` reads all three.
  */
 export function decide(input, deps = {}) {
+  const dir = resolveDir(input);
   const currentBranch = deps.currentBranch ?? (() => branchAt(input?.cwd ?? process.cwd()));
   const permission = deps.permission ?? (() => UNREAD);
-  const prBranch = deps.prBranch ?? ((selector) => prBranchAt(selector, resolveDir(input)));
+  const verdict = deps.verdict ?? (() => UNREVIEWED);
+  const prBranch = deps.prBranch ?? ((selector) => prBranchAt(selector, dir));
+  const prHead = deps.prHead ?? ((selector) => prHeadAt(selector, dir));
+  const localHead = deps.localHead ?? (() => revAt("HEAD", dir));
+  const revertOfTip = deps.revertOfTip ?? (() => revertOfTipAt(dir));
+  const prefix = deps.prefix ?? (() => boardPrefix(dir));
+  const posting =
+    deps.posting ?? ((text) => unreadPost(kindOf(text, prefix()), "the thread was not read"));
   const tool = input?.tool_name;
 
   if (tool === "Edit" || tool === "Write") {
     const path = input?.tool_input?.file_path;
     if (typeof path === "string" && isEnvPath(path)) {
       return `Writing ${path} is refused — .env files carry secrets and are edited by hand. docs/guidelines.md §5, hard boundaries.`;
+    }
+    // (g) the reviewer's verdict is the reviewer's to write; the guard's second door reads it.
+    if (typeof path === "string" && isVerdictPath(path)) {
+      return `Writing ${path} is refused — a file under docs/reviews/ is the reviewer's to write, and the guard opens a merge on what it finds there. docs/guidelines.md §4.`;
+    }
+    return null;
+  }
+
+  // (h) the board's connector (T0.17). Backlog → Ready is the human's word, read from the
+  // board, and it is the one move out of Backlog (§3): a status write on a page the guard
+  // reads at Backlog is refused unless it sets Ready and "ready" is the newest reply there —
+  // otherwise Backlog → Decision, then Decision → Ready, would reach Ready with no word
+  // (review pass 1, Must 1). From Decision, Review or In progress a move to Ready is the run's
+  // on its reading of a reply, and the guard lets it through once it has read the page is not
+  // at Backlog. A move to Backlog grants nothing and is not read; a write the guard could not
+  // read the task for is refused — when nothing read the board, nothing is granted.
+  const connector = connectorTool(input);
+  if (connector === "update-page" && movesStatus(input)) {
+    const target = input.tool_input.properties.Status;
+    const granted = permission("ready");
+    const status = granted.task?.status ?? null;
+    const name = granted.task?.name || "this task";
+    if (target === "Ready" && !granted.ok && (status === null || status === "Backlog")) {
+      return `Setting ${name} Ready is refused — Backlog → Ready is your word, a reply beginning with "ready" on the task's thread, and the guard could not find it: ${granted.why}. docs/guidelines.md §3, §4.`;
+    }
+    if (status === null && target !== "Ready") {
+      return `Setting ${name} to ${target ?? "no status"} is refused — the guard reads a task before any status write but Backlog, and it could not: ${granted.why}. docs/guidelines.md §3.`;
+    }
+    if (status === "Backlog" && target !== "Ready") {
+      return `Moving ${name} from Backlog to ${target ?? "no status"} is refused — the one move out of Backlog is to Ready, on your word on the thread. docs/guidelines.md §3.`;
+    }
+    return null;
+  }
+  if (connector === "create-pages") {
+    const pages = Array.isArray(input?.tool_input?.pages) ? input.tool_input.pages : [];
+    const born = pages
+      .map((page) => page?.properties ?? {})
+      .find((properties) => Object.hasOwn(properties, "Status") && properties.Status !== "Backlog");
+    if (born !== undefined) {
+      return `Creating a task at ${born.Status ?? "no status"} is refused — every task starts at Backlog, and the one move out of it is to Ready, on your word on the thread. Create it at Backlog. docs/guidelines.md §3.`;
+    }
+    return null;
+  }
+  if (connector === "create-comment") {
+    const mark = prefix();
+    const text = commentText(input?.tool_input);
+    if (!text.startsWith(mark)) {
+      return `Posting a comment is refused unless it begins with ${mark.trim()} — without it the thread reads it as your voice, and your voice is what grants merge, apply and ready. Compose it with scripts/run/comments.mjs. docs/guidelines.md §4.`;
+    }
+    // (h, T0.20) the thread says whether a comment of this kind may post: a clarifying round
+    // past the cap waits, and so does a second comment of a kind in one claim.
+    const allowed = posting(text);
+    if (!allowed.ok) {
+      return `Posting this ${allowed.kind ?? "unshaped"} comment is refused — ${allowed.why}. docs/guidelines.md §4.`;
     }
     return null;
   }
@@ -732,8 +929,12 @@ export function decide(input, deps = {}) {
     if (isForcePush(git)) {
       return "Force-pushing is refused — it rewrites history the remote and every other checkout share. A plain git push is allowed. docs/guidelines.md §5, hard boundaries.";
     }
-    if (pushesMain(git, currentBranch)) {
-      return "Pushing main is refused — a ticket goes to a branch and reaches main through a merge you make. Push the ticket branch instead. docs/guidelines.md §5, hard boundaries.";
+    // One push to main is allowed: the revert of the merge at origin/main's tip, prepared by
+    // `scripts/run/revert.mjs` when the deploy check failed — `HEAD:main`, HEAD one commit
+    // past the tip with the tree the tip's first parent had (T0.16). Anything else that
+    // names main is refused as before.
+    if (pushesMain(git, currentBranch) && !(isRevertPush(git) && revertOfTip())) {
+      return "Pushing main is refused — a ticket goes to a branch and reaches main through a merge; the one push allowed is the revert of the merge at origin/main's tip, as HEAD:main. Push the ticket branch instead. docs/guidelines.md §5, hard boundaries.";
     }
     // `merge` the verb, not `merge-base` or `merge-tree` — those are reads, and `merge-base`
     // is the one the reviewer's own `main...HEAD` diff rests on.
@@ -741,17 +942,27 @@ export function decide(input, deps = {}) {
       return "Merging while main is checked out is refused — merges to main are made by hand. docs/guidelines.md §5, hard boundaries.";
     }
 
-    // (f) a pull request merged through the API writes main from any branch. Merging is the
-    // human's move (§3), and since T0.11 the human makes it with one word on the task at
-    // Review: the guard reads the claimed task's thread from the board, and the pull request
-    // must be that task's branch — derived from the task's name on the board, never from the
-    // marker the run wrote — merged with a merge commit, said as --merge: a squash rewrites
-    // the hash and `merge-detect.mjs` would never see the task land.
+    // (f) a pull request merged through the API writes main from any branch. Two doors. The
+    // human's word, since T0.11: one reply on the task at Review, read from the board, and the
+    // pull request must be that task's branch — derived from the task's name on the board,
+    // never from the marker the run wrote. The reviewer's PASS, since T0.16: the claimed
+    // task's verdict on file, a diff that weakens no restraint, and the pull request's head
+    // equal to this checkout's HEAD, so the diff the guard judged is the one that merges.
+    // Either way a merge commit, said as --merge: a squash rewrites the hash and
+    // `merge-detect.mjs` would never see the task land.
     const gh = ghWords(rest);
     if (name === "gh" && gh[0] === "pr" && gh[1] === "merge") {
-      const granted = permission("merge");
-      if (!granted.ok) {
-        return `Merging a pull request needs your word on the board — a reply beginning with "merge" on the task at Review — and the guard could not find it: ${granted.why}. docs/guidelines.md §4.`;
+      const word = permission("merge");
+      let granted = word;
+      let door = "word";
+      if (!word.ok) {
+        const passed = verdict();
+        if (passed.ok) {
+          granted = passed;
+          door = "verdict";
+        } else {
+          return `Merging a pull request needs your word on the board — a reply beginning with "merge" on the task at Review — and the guard could not find it: ${word.why}. The reviewer's door is shut too: ${passed.why}. docs/guidelines.md §4.`;
+        }
       }
       if (!mergeCommit(rest)) {
         return "Merging is refused unless it says --merge — a squash or a rebase rewrites the commit the board carries, a flagless merge takes whatever the repository is set to, and either way the task would never be seen to land. scripts/run/merge-detect.mjs.";
@@ -766,6 +977,14 @@ export function decide(input, deps = {}) {
       }
       if (head !== branch) {
         return `Merging is refused — the pull request is for ${head} and the claimed task's branch is ${branch}; the word on one task's thread does not merge another's. docs/guidelines.md §4.`;
+      }
+      if (door === "verdict") {
+        const oid = prHead(gh[2] ?? null);
+        const local = localHead();
+        if (oid === null || local === null || oid !== local) {
+          const at = (sha) => (sha === null ? "unknown" : sha.slice(0, 7));
+          return `Merging on the reviewer's PASS is refused — the pull request's head is ${at(oid)} and this checkout's HEAD is ${at(local)}, so the verdict on file and the diff the guard read are not the diff that would merge. Push, then merge from the pushed commit. docs/guidelines.md §4.`;
+        }
       }
     }
   }
@@ -791,14 +1010,33 @@ async function readStdin() {
  * needs no word reads nothing.
  */
 export async function judge(input, { dir = resolveDir(input), deps = {} } = {}) {
-  const command = input?.tool_name === "Bash" ? input?.tool_input?.command : null;
   const answers = {};
-  for (const word of typeof command === "string" ? wanted(command) : []) {
-    answers[word] = await verify(word, { dir, deps });
+  let passed = null;
+  for (const word of wantedBy(input)) {
+    // "ready" is read on the page the write names; the preflight sets Ready before any claim.
+    const page = word === "ready" ? (input?.tool_input?.page_id ?? null) : null;
+    answers[word] = await verify(word, { dir, page, deps });
+    // The reviewer's door is read only when the word is not there: a merge the human
+    // granted needs no verdict, and a verdict is never read for an apply.
+    if (word === "merge" && !answers[word].ok) passed = reviewed({ dir, deps });
   }
+  // A comment is read against the thread of the page it names (T0.20).
+  const posted =
+    connectorTool(input) === "create-comment"
+      ? await postable(commentText(input?.tool_input), {
+          dir,
+          page: input?.tool_input?.page_id ?? null,
+          deps,
+        })
+      : null;
   return decide(input, {
     permission: (word) => answers[word] ?? UNREAD,
+    verdict: () => passed ?? UNREVIEWED,
+    ...(posted ? { posting: () => posted } : {}),
     ...(deps.prBranch ? { prBranch: deps.prBranch } : {}),
+    ...(deps.prHead ? { prHead: deps.prHead } : {}),
+    ...(deps.localHead ? { localHead: deps.localHead } : {}),
+    ...(deps.prefix ? { prefix: deps.prefix } : {}),
   });
 }
 
@@ -816,10 +1054,10 @@ async function main() {
   try {
     reason = await judge(input);
   } catch (error) {
-    // A guard that cannot finish judging a merge or an apply refuses it: the board was not
-    // read, and an exit other than 2 would let the call through. Anything else proceeds.
-    const command = input?.tool_input?.command;
-    const needed = typeof command === "string" ? wanted(command) : [];
+    // A guard that cannot finish judging a merge, an apply or a Ready write refuses it: the
+    // board was not read, and an exit other than 2 would let the call through. Anything else
+    // proceeds.
+    const needed = wantedBy(input);
     reason =
       needed.length === 0
         ? null

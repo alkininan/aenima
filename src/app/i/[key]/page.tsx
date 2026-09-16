@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
-import { listItemActivity } from "@/db/queries/activity";
+import { listGapsClosedAsNoLongerApplicable, listItemActivity } from "@/db/queries/activity";
 import { getItemByKey } from "@/db/queries/item";
 import { getLatestRunForItem } from "@/db/queries/scoring";
 import { getSessionUser } from "@/db/queries/session";
@@ -19,6 +19,7 @@ import { DecisionList } from "./DecisionList";
 import { GapList } from "./GapList";
 import { ItemHeader } from "./ItemHeader";
 import { MoveMessage, type MoveableGap } from "./GapMoves";
+import { noLongerApplicableByCheck } from "./CheckList";
 import { ItemSection } from "./ItemSection";
 import { ReadinessPanel } from "./ReadinessPanel";
 
@@ -53,11 +54,16 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/i/[
   const item = await getItemByKey(workspace.id, key);
   if (!item) notFound();
 
-  // The second and third requests. Both need the uuid the first read returned,
-  // so they follow it — but not each other, so they go together.
-  const [activity, latestRun] = await Promise.all([
+  // The second, third and fourth requests. Each needs something the first read
+  // returned — its uuid, or the ids of the gaps it holds — so they follow it,
+  // but not each other, so they go together.
+  const [activity, latestRun, closedGapIds] = await Promise.all([
     listItemActivity(workspace.id, item.id),
     getLatestRunForItem(workspace.id, item.id),
+    listGapsClosedAsNoLongerApplicable(
+      workspace.id,
+      item.gaps.filter((gap) => gap.disposition === "closed").map((gap) => gap.id),
+    ),
   ]);
 
   /**
@@ -137,6 +143,25 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/i/[
   );
 
   /**
+   * What §4's engine closed, by the check it closed it on — build log open
+   * question 14.
+   *
+   * **The reason a gap closed is a ledger fact**, so the gaps this page already
+   * holds cannot answer it: a closed row carries a time, no name and no note,
+   * and `passed` and `no longer applicable` are the same row. The request above
+   * goes to `activity` for it, and asks nothing at all for an item holding no
+   * closed gap — which is most of them.
+   *
+   * Keyed by check id and holding the evidence, because that is what the
+   * expansion's line knows about itself and all the notice renders. Only a
+   * `not-asked` line reads it (`CheckList`), so a check whose condition came
+   * back says nothing about a closure that is now history — and where one check
+   * lost the argument twice, `noLongerApplicableByCheck` keeps the newest
+   * closure, which is the one its current absence is about.
+   */
+  const noLongerApplicable = noLongerApplicableByCheck(item.gaps, new Set(closedGapIds));
+
+  /**
    * The answer nobody on the page can speak for — §12's missing sentence.
    *
    * A move that named no gap, or one whose gap this item does not hold, has no
@@ -211,6 +236,7 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/i/[
               now={now}
               itemKey={item.key}
               gapsByCheck={gapsByCheck}
+              noLongerApplicable={noLongerApplicable}
               outcome={claimedMove}
             />
           </div>

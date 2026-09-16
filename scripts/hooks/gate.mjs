@@ -45,6 +45,16 @@ import { commonDir } from "../run/repo.mjs";
  */
 export const STATE_FILE = "aenima-gate-count";
 
+/**
+ * Where the state file lives for the repository containing `dir`: the same path from every
+ * worktree of it, beside the run marker. Null outside a repository — then `readState` reads
+ * nothing and `writeState` writes nothing, and a gate that cannot record its count still gates.
+ */
+export function statePath(dir) {
+  const common = commonDir(dir);
+  return common === null ? null : join(common, STATE_FILE);
+}
+
 export const STEPS = ["lint", "typecheck", "test"];
 export const MAX_RED = 3;
 export const TAIL_LINES = 40;
@@ -143,7 +153,7 @@ function git(args, cwd) {
  * what is in them, so two different edits to one file would fingerprint identically and
  * the second would inherit the first one's green.
  */
-function treeFingerprint(dir) {
+export function treeFingerprint(dir) {
   const hash = createHash("sha256");
   hash.update(git(["rev-parse", "HEAD"], dir).trim());
 
@@ -229,11 +239,8 @@ async function main() {
   }
 
   const dir = resolveDir(input);
-  // No repository, no state path: `readState` reads nothing and `writeState` writes nothing,
-  // and a gate that cannot record its own count still gates.
-  const common = commonDir(dir);
-  const statePath = common === null ? null : join(common, STATE_FILE);
-  const file = readState(statePath);
+  const stateFile = statePath(dir);
+  const file = readState(stateFile);
   const state = projectState(file, input.session_id ?? null);
 
   const { exit, stderr, nextState } = decide({
@@ -255,7 +262,7 @@ async function main() {
   // Re-read at write time. `file` was read before a ~76s suite; merging into that snapshot
   // would roll back whatever a sibling session recorded meanwhile — the fourth review's
   // finding 3. The window shrinks from a suite run to a few milliseconds.
-  if (nextState !== state) writeState(statePath, mergeState(readState(statePath), nextState));
+  if (nextState !== state) writeState(stateFile, mergeState(readState(stateFile), nextState));
   if (stderr) process.stderr.write(`${stderr}\n`);
   // On exit 0 a Stop hook's stderr goes to the debug log and nobody reads it, so the release
   // — the one exit-0 message this gate has — is also surfaced as a `systemMessage`, the JSON

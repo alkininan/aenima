@@ -21,16 +21,24 @@ command: `threads.mjs` queries every task and every task's comments over the Not
 through `notion.mjs` — the integration token in `.env.local`, never the connector, so forty
 tasks cost forty requests rather than forty model turns — and returns the tasks with a human
 reply newer than the pipeline's last prefixed comment, each with its status, the replies,
-whether the two-round cap still allows a post, and the shape the words settle. `comments.mjs`
-holds that reading: the prefixed comments are the pipeline's and everything else is the
-human's; `mentions` says whether a reply *begins* with a word, `permitted` whether the human's
-`merge` or `apply` is on the thread newer than the pipeline's last comment, and `shapeOf`
-names the two countable shapes — `merge` on a task at Review, `apply` on a Decision waiting on
-a migration — leaving `assess` for the skill: a change to the ticket, new work, an answer
-that resolves a question, a note, or a clarifying round. The same script composes every
-comment the run posts — decision, clarifying, migration, stale, default, change, newWork,
-merged, applied, noted, setup, resolved — in plain sentences with the prefix, from the
-sentences the skill supplies. `merge-detect.mjs` takes the Review tasks with their commits and asks `git
+how many clarifying rounds the open question has had and whether another may post, and the
+shape the words settle. `comments.mjs` holds that reading: the prefixed comments are the
+pipeline's and everything else is the human's; since T0.20 each of the pipeline's comments
+carries its kind in its own words, read back by `kindOf`, so the two-round cap counts the
+clarifying rounds on one question and nothing else, and `mayPost` — the one place that says
+whether a comment of a kind may post, the preflight asking it for a clarifying round and the
+guard, over the API, for every comment — lets every other kind through, once per claim; `mentions` says whether a reply *begins* with a word, `permitted` whether the human's
+`merge`, `apply` or `ready` is on the thread newer than the pipeline's last comment, and
+`shapeOf` names the three countable shapes — `merge` on a task at Review, `apply` on a Decision
+waiting on a migration, `ready` on a task at Backlog, which the run sets Ready through the
+connector only once the guard has read the word there too (T0.17) — leaving `assess` for the
+skill: a change to the ticket, new work, an answer that resolves a question, a note, or a
+clarifying round. The same script composes every comment the run posts — decision, clarifying,
+migration, stale, default, change, newWork, merged, applied, noted, setup, resolved, gated,
+reverted, readied, waiting, cycle, urgent, refused — in plain sentences with the prefix, from the
+sentences the skill supplies; a merge the guard let through and GitHub refused posts its
+`refused` comment with the files `conflicts.mjs` names, from `git merge-tree` against
+`origin/main`. `merge-detect.mjs` takes the Review tasks with their commits and asks `git
 merge-base --is-ancestor` against `origin/main` after a fetch, which is the only honest test of
 "merged" — whether the human merged by hand or a run merged on the human's word a moment
 earlier; every task it returns
@@ -38,13 +46,36 @@ as merged becomes Done and, when main has moved past the newest release, a Relea
 written. `stale.mjs` reads the In progress tasks against the repository's run marker: a fresh
 marker names a live run and the run exits; a task with no marker, or a marker older than three
 hours, is a run that died, and `stale.mjs --recover <id>` keeps its branch as
-`t<id>-stale-<HHMM>` — committing anything uncommitted onto it first — so the task can be
-claimed again from `origin/main` with one comment and no human.
+`t<id>-stale-<HHMM>` — committing anything uncommitted onto it first, and saying `wip: false`
+with the reason when that commit was refused — so the task can be claimed again from
+`origin/main` with one comment and no human. Then, once per commit of main, `health.mjs` asks
+the live site from outside — `/sign-in` 200, `/app` 307 — recording the commit it asked about
+beside the marker so one outage reverts one merge; a wrong answer has `revert.mjs` prepare the
+revert of the merge at `origin/main`'s tip on a detached HEAD, one commit restoring the tree
+before the merge, which the skill pushes as `HEAD:main` — the one push to main the guard lets
+through — before filing one Fix task, returning the reverted ticket to Backlog and posting one
+comment (T0.16). Last, since T0.12, the mirrors: `mirror.mjs` reads each Documents sub-page's
+and the Guidelines page's first block over the API for the commit it claims, compares it with
+the file's last commit on `origin/main` — after the deploy check, so a revert it pushed is what
+is mirrored — and plans the refresh: which pages, in what order (a *refresh in progress*
+sentinel left by a write that died comes first), the sentinel and heading texts, and the file
+split into chunks at blank lines outside fenced code, for the skill to write through the
+connector, header-last, so a page is whole and headed with its commit or visibly in progress
+and never in between.
 
 ## 1 Claim
 
-`pick-next.mjs` chooses the task: top Ready by Priority (Must, Should, Could — never Won't),
-then oldest created. The run sets it In progress and `claim.mjs` writes `aenima-run-active`
+`pick-next.mjs` chooses the task, reading the board itself over the API through `notion.mjs` —
+every task's Priority, Epic and Blockers, the epics' names — the way Linear orders a backlog
+(T0.17): a Ready task is claimable once every row in its Blockers is Done; claimable tasks go by
+Priority, Urgent · High · Medium · Low · None with an empty one read as Medium, a Ready blocker
+carrying the highest priority of any task not Done it blocks however far down the chain; ties
+go to the roadmap — the Epic's name, then the ID as numbers phase first, then the oldest — and
+a task with no Epic or no ID sorts after. It also prints the comments the run owes the tasks it
+passes by — a Ready task waiting on a blocker at Backlog, one member of a loop of tasks
+blocking each other that holds a Ready task, the newest of three or more Ready tasks at Urgent — composed by
+`comments.mjs`, having read those tasks' threads and dropped any the pipeline has already
+posted there, so a second run says nothing twice. The run sets the pick In progress and `claim.mjs` writes `aenima-run-active`
 — task, page, branch, start time, session — into the repository's shared `.git` directory,
 which `repo.mjs` locates and which is the same file from every worktree: the footprint the
 guard reads to find the claimed task's thread before it lets a merge or a migrate through,
@@ -98,7 +129,9 @@ section names plus every test file the diff touches — and the reviewer runs on
 Stop gate owns the full suite. Findings are Must or Should; every Must is fixed and the
 reviewer re-invoked, three passes at most. A Must still standing after the third becomes an
 open question, Shoulds are recorded in the report, and a finding outside the ticket's scope
-becomes a Backlog task of Type Fix under the same Epic.
+becomes a Backlog task of Type Fix under the same Epic. The reviewer writes its verdict to
+`docs/reviews/<id>.md`, last line `PASS` or `FINDINGS`; that file is what the guard reads at
+close, and the run never writes it (T0.16).
 
 ## 6 Migration
 
@@ -131,10 +164,34 @@ requests never edit the same lines.
 
 ## 9 Close
 
-No script of its own. The run commits on the branch, pushes it, opens the PR against `main`
-unless the branch already has one, sets the task's Commit to the short hash and its Status to
-Review, removes the marker with `release.mjs`, and returns a primary checkout to `main`. It
-never merges on its own: merging is the human's move, made with the word `merge` on the task
-at Review, and the guard refuses `gh pr merge` until `permission.mjs` has read that word from
-the board. `release.mjs` also runs from the SessionEnd hook, so a run that dies leaves no
-marker behind for the next preflight to trust. The Runs row is a later ticket's.
+The run commits on the branch, pushes it, opens the PR against `main` unless the branch already
+has one, sets the task's Commit to the short hash and its Status to Review, and then asks
+`gated.mjs` whether the diff is its own to merge: since T0.21 that is a diff adding a migration
+under `drizzle/`, or one that **weakens a restraint**, which `loosening.mjs` measures rather than
+reads off the paths — it runs the guard's `decide` and `gated.mjs`'s own `isGatedPath` from both
+`origin/main` and this checkout against one fixed corpus, in a child process a side (`--probe`),
+and anything refused before and allowed after is a rule deleted or a matcher narrowed; a guard
+rule with no corpus entry, a hook gone from `.claude/settings.json` or no longer carrying main's
+command, a gate step dropped or its release count raised, a deleted test whose criteria nothing
+added names, and any diff touching `loosening.mjs` itself are gated the same way. Each reason
+carries what would ungate it, and the answer is read by the guard and the skill both. A diff
+that trips none of them, with the reviewer's `PASS` on file, is merged by the run itself with `gh pr merge --merge --delete-branch` from the pushed commit — the gate run once
+more first, so its green for that tree is on record — and the task is Done with its Release row
+in the same run; the guard's second door (`permission.mjs` `reviewed`) reads the verdict file,
+the gate's record, the diff and the pull request's head before it opens. A
+gated diff stays at Review with one comment naming the rule it trips and what would ungate it,
+and merging is the human's move,
+made with the word `merge` there, which the guard refuses `gh pr merge` until `permission.mjs`
+has read from the board. Either way `release.mjs` removes the marker and a primary checkout
+returns to `main`; `release.mjs` also runs from the SessionEnd hook, so a run that dies leaves
+no marker behind for the next preflight to trust. Beside it at SessionEnd runs `runs.mjs`,
+which reads the session's transcript — the JSONL Claude Code wrote, handed over as the hook's
+`transcript_path` — and posts the Runs row with the token and no model: `R-nnnn T<id>`, the
+task from the claims that did not merge before writing a Status of their own (step 0 may claim a
+task to merge it) — the last of them that wrote a Status, or the last of them when none did —
+started and duration from the first and last timestamps, the model family (or `Fable→Opus` when
+the session fell back), input plus output tokens counted once per API message with cache reads and
+writes excluded, the outcome from the last Status the run wrote on its task before any later claim
+— a Decision set after the release included (Review and Done are Done, Decision is Decision,
+anything else is Stopped) — and the reviewer's findings counted from its replies. A session that
+was not a `/ticket` writes no row.

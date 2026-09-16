@@ -77,9 +77,18 @@ One file per ticket under `docs/log/`, oldest first. This list is written by `no
 - [T0.97 — Smoke C: plain sentences, a default taken, the first stale-run recovery](log/T0.97.md) · 2026-09-09 · `df9b0a6`
 - [T0.96 — Smoke D: a package script and its test, on the schedule](log/T0.96.md) · 2026-09-13
 - [T0.10 — Schedule: nobody types /ticket](log/T0.10.md) · 2026-09-13
+- [T0.14 — Ignore worktrees in lint](log/T0.14.md) · 2026-09-13
 - [T0.11 — Comments: a comment on the board is enough](log/T0.11.md) · 2026-09-13
 - [T2.8 — Sufficiency probes](log/T2.8.md) · 2026-09-14
+- [T0.12 — Telemetry and mirror: every run leaves a row, the mirrors keep up](log/T0.12.md) · 2026-09-14
 - [T2.9 — Applicability stability](log/T2.9.md) · 2026-09-14
+- [T0.16 — Self-merge: a finished ticket merges itself](log/T0.16.md) · 2026-09-14
+- [T0.17 — Linear ordering](log/T0.17.md) · 2026-09-15
+- [T0.20 — Cap counts clarifying rounds](log/T0.20.md) · 2026-09-15
+- [T2.10 — Surface no-longer-applicable closures](log/T2.10.md) · 2026-09-16
+- [T0.13 — Restrict Vercel's database role: the boundary reaches production](log/T0.13.md) · 2026-09-16
+- [T0.19 — Spec: the comment path](log/T0.19.md) · 2026-09-16
+- [T0.21 — Merge by default](log/T0.21.md) · 2026-09-16
 
 ## Decisions made during the build
 
@@ -712,13 +721,22 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
     long-context cached rate of exactly 2× the short one — consistent across all three models, and
     consistent with the stated "2x input" multiplier, so the table was taken as authoritative.
 
-14. **A gap closed as "no longer applicable" is a case T2.5's surface should show.** The machine
-    closing a gap because §4's condition stopped holding is correct and it is also the one closure
-    a person might disagree with — the safety layer turning off is a judgment about the artifact,
-    not an observation that a check now passes. The ledger records it (`gap.closed`, reason "no
-    longer applicable") and nothing surfaces it. **T2.5 owns the human-facing view**, where §5's
-    first negotiation move already lives: the place to say "the safety layer turned off on this
-    version — is that right?" is beside the move that argues applicability.
+14. **~~A gap closed as "no longer applicable" is a case T2.5's surface should show.~~ Answered by
+    T2.10, on the check line rather than the gap card.** The machine closing a gap because §4's
+    condition stopped holding is correct and it is also the one closure a person might disagree
+    with — the safety layer turning off is a judgment about the artifact, not an observation that a
+    check now passes. The ledger records it (`gap.closed`, reason "no longer applicable") and
+    nothing surfaced it.
+
+    It surfaces on the `not-asked` line in the meter's expansion, not as a card in the gap list.
+    The list is what §13 says an item *owes* a person, and a closed gap owes nothing — putting one
+    there would have fought T2.4's narrowing and needed a card with no move on it. The check line
+    already speaks about applicability: it carries the condition that stopped holding, negated. The
+    quoted gap and the question go directly beneath it, so the whole of §4's renormalization is one
+    reading. **The notice is gated on the run's own `not-asked` state**, which keeps it a claim
+    about the denominator now: a check whose condition came back is asked again, and the closure it
+    would point at is history a new gap has already replaced. §5's first negotiation move, when it
+    ships, lands on the same line.
 
 15. **The re-baseline pass has no trigger yet.** §5: "Switching AI provider or editing a rubric
     triggers a quiet re-baseline pass so numbers never wobble without explanation." Every run stamps
@@ -862,7 +880,7 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
     — the cache was not hiding a rare event, it was preventing the observation. Any surface that
     re-scores (a re-baseline, open question 15) hits this immediately.
 
-    **Answered by T2.9 (product-spec v1.7).** None of the three candidates below was taken; the
+    **Answered by T2.9 (product-spec v1.8).** None of the three candidates below was taken; the
     ticket's own Rules named a fourth — the condition oscillating is the scorer having no settled
     answer, which a probe addresses and a vote cannot — and §4 now says a condition may carry
     probes the way a check does, decided by its probes and by nothing else. Measured on

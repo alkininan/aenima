@@ -1,5 +1,5 @@
 ---
-description: Run one dev-board ticket end to end, per docs/guidelines.md §5 — recover a stale run, assess every task's comments (change, new work, merge, apply, an answer), claim the top Ready task, build it on a branch, review it, report, set Review, exit. One run, one ticket.
+description: Run one dev-board ticket end to end, per docs/guidelines.md §5 — recover a stale run, assess every task's comments (change, new work, merge, apply, ready, an answer), claim the first Ready task in the board's order, build it on a branch, review it, report, set Review, exit. One run, one ticket.
 disable-model-invocation: true
 ---
 
@@ -25,9 +25,20 @@ the gap lives, in words — and the script supplies the shape:
 
 Kinds: `decision` (stopped, gap, fallback) · `clarifying` (readings, fallback) · `migration`
 (file) · `stale` (date, branch or null) · `default` (gap, choice) · `change` · `newWork` (name,
-url) · `merged` (commit) · `applied` (file) · `noted` · `setup` (step, where) · `resolved`.
+url) · `merged` (commit) · `applied` (file) · `noted` · `setup` (step, where) · `resolved` ·
+`gated` (reasons) · `reverted` (failed, merge, commit, name, url) · `readied` · `waiting` (blockers) ·
+`cycle` (members) · `urgent` (count) · `refused` (what, why, files, settle).
+A comment carries its kind in its own words, and the guard reads it against the thread before
+the comment posts: a third clarifying round on one question waits, and so does a second comment
+of one kind in one claim — say every default a claim takes in its one `default` comment. Every
+other comment posts, cap or no cap. A step the guard let through that fails anyway always
+reports, as one `refused` comment: what was refused, why, the files in the way, what would
+settle it.
 Never set a task to Ready without a human comment that asks for it — an answer that resolves a
-question, or a change request at Review. Every reply you assess ends with one ⟡ comment: that
+question, a change request at Review, or `ready` on a Backlog task. The guard reads that last one
+from the board before the connector's write goes through, and it refuses any comment you post
+without the prefix: an unprefixed comment is the human's voice, and that voice is what grants the
+words. Every reply you assess ends with one ⟡ comment: that
 comment is how the next run knows the reply was read.
 
 ## 0 Preflight
@@ -59,9 +70,10 @@ marker besides, so a claim made in error here stops rather than clobbers.)
 `token: false` means `NOTION_TOKEN` is not in `.env.local`: say so in your report line and go
 on to c — nothing else reads comments. Otherwise each `threads` entry is a task with a human
 reply newer than the pipeline's last ⟡ comment, with its `Status`, the `unanswered` replies,
-`mayPost`, and `shape`. Give each task **exactly one** assessment, and end it with one ⟡
-comment on that task — except where `mayPost` is false: two clarifying rounds is the cap;
-keep reading, post nothing.
+`clarifyingRounds`, `mayClarify`, and `shape`. Give each task **exactly one** assessment, and
+end it with one ⟡ comment on that task. The cap withholds one comment only: where `mayClarify`
+is false and your assessment is a clarifying round, two clarifying rounds on that question is
+the cap — keep reading, post nothing. Every other assessment posts its comment, cap or no cap.
 
 - `shape: merge` (Review, the newest reply begins with *merge*). Claim it so the guard knows
   the task — `node scripts/run/claim.mjs --task <id> --page <page id> --branch t<id>` — then
@@ -69,8 +81,11 @@ keep reading, post nothing.
       gh pr merge t<id> --merge
 
   The guard reads the thread itself before it lets that through; if it refuses, the reason
-  says which of the four things was missing — quote it in your report and post nothing. On
-  success post one `merged` comment with the merge commit's short hash. Either way, then:
+  says which of the four things was missing — quote it in your report and post nothing. If
+  the guard lets it through and GitHub refuses — the pull request no longer merges cleanly —
+  run `node scripts/run/conflicts.mjs t<id>` and post one `refused` comment: `files` its
+  `files`, and `settle` what would settle them; the task stays at Review. On success post one
+  `merged` comment with the merge commit's short hash. Any of the three, then:
   `node scripts/run/release.mjs`. Step c fetches, sets Done and writes the Release row; the
   remote branch is left for GitHub's own deletion and the worktree for `prune.mjs`.
 - `shape: apply` (Decision waiting on a migration, the newest reply begins with *apply*). Only
@@ -79,9 +94,15 @@ keep reading, post nothing.
   check the ticket's branch out — `node scripts/run/branch.mjs <id>` reuses origin's copy,
   which is where the migration file is; the primary sits on `main` until then — and only then
   `pnpm db:migrate`; the guard reads the thread first. If it refuses, release the marker and
-  post nothing. On success post one `applied` comment naming the file, set the task
+  post nothing. If the guard lets it through and the migration itself fails, post one
+  `refused` comment with the error's first line and what would settle it, release the marker,
+  and leave the task at Decision. On success post one `applied` comment naming the file, set the task
   `In progress`, and continue from step 1's marker with this task: skip the pick, step 3 is
   already done, and the ticket carries on from where it stopped.
+- `shape: ready` (Backlog, the newest reply begins with *ready*). Set the task `Ready` through
+  the connector first — the guard reads the thread itself before it lets that write through, and
+  your own comment would consume the word — then post one `readied` comment. If the guard
+  refuses, quote its reason in your report and post nothing.
 - `shape: assess`, task at **Review** — read the reply:
   - It asks for a change to what was built → append to the body an `# Addendum` section:
     the date, then the reply verbatim as a quote. Set `Ready`. Post one `change` comment. The
@@ -103,7 +124,7 @@ keep reading, post nothing.
 **New work.** Draft the body — `echo '{"request":"<the reply>","from":{"name":"<task
 name>","url":"<task url>"},"date":"<YYYY-MM-DD>","prefix":"⟡ "}' | node scripts/run/draft.mjs`
 — and create one Tasks row at `Backlog`: Name an imperative of six words at most and no ID
-(claim assigns it), the original's Epic, Priority `Should`, the Type from product-spec §4 the
+(claim assigns it), the original's Epic, Priority `Medium`, the Type from product-spec §4 the
 reply describes. Never Ready. Then post one `newWork` comment on the original with the new
 task's name and URL.
 
@@ -125,23 +146,74 @@ itself — one file for every worktree:
 
   Post one `stale` comment on the task with the date and `renamed` (null when there was no
   branch). The stale task is the one you re-claim: skip step 1's pick, leave it `In progress`,
-  and continue from step 1's marker with it. With several stale tasks, order them with
-  `pick-next.mjs` over those rows alone: the first is yours, the rest go back to `Ready`.
+  and continue from step 1's marker with it. With several stale tasks, ask the board's order
+  of those alone — `node scripts/run/pick-next.mjs --among <id>,<id>` reads them as if they were
+  Ready — and `pick` is yours; the rest go back to `Ready`. A `pick` of null means every one of them is
+  now blocked: all go back to `Ready`, and step 1 picks as usual.
 
-Do not refresh the Documents or Guidelines mirrors. That is a later ticket's.
+**e. The deploy.** Main deploys with nobody watching, so once per commit of main the run asks the
+live site from outside:
+
+    node scripts/run/health.mjs
+
+`changed: false` → main is the commit last checked; go on. `waiting: true` → the commit is
+younger than the deploy window and the previous deployment would answer for it; say so in the
+report line and go on. `ok: true` → say so in the report line and go on. `ok: false` → the merge
+at the tip is reverted, no human needed:
+
+    node scripts/run/revert.mjs
+    git push origin HEAD:main
+    git checkout <the previous branch it printed>
+
+`revert.mjs` prepares one commit on a detached HEAD — the revert of the merge at
+`origin/main`'s tip — and prints `push`, `merge`, `head`, `id` and `previous`. The push is your
+own command so the guard reads it: it lets exactly that shape through, HEAD one commit past
+`origin/main` with the tree main had before the merge, and nothing else that names main. An
+`ok: false` from `revert.mjs` (the tip is not a merge commit, the tree is dirty) means nothing
+to revert: quote its `why` in the report and go on. On success: query Tasks for the task whose
+Name begins with `id`, set it `Backlog`; draft one Fix task with `draft.mjs` (`from` that task,
+`reason` the `failedText` health printed), create it at `Backlog`, Type `Fix`, the same Epic,
+Priority `Medium`; then post one `reverted` comment on the reverted task — `failed` the
+`failedText`, `merge` and `commit` the two short hashes, `name` and `url` the Fix task's.
+
+**f. The mirrors.** Notion holds mirrors of the repo documents, each headed with the commit it
+mirrors (§1, §2), and this is where they catch up with `main` — after the deploy check, so a
+revert it pushed is what they mirror:
+
+    node scripts/run/mirror.mjs
+
+`token: false` → say so in your report line and go on. Otherwise every `pages` entry with
+`refresh: true` is behind `origin/main` — or a refresh that stopped partway, which comes first
+in the list — and you rewrite it, in the order given, through the connector with
+`allow_async: false` on **every** write: `replace_content` with the page's `sentinel` alone;
+then `insert_content` at the end with each chunk file's text, in order (`cat` the file, pass the
+text verbatim); then `update_content` replacing the sentinel with the page's `heading`. The
+heading goes last so a page is either whole and headed with its commit, or visibly *refresh in
+progress* — never in between. A page marked `missing` is one the Documents page does not list;
+say so in the report and write nothing for it.
 
 ## 1 Claim
 
-Query Tasks and pick:
+The picker reads the board itself over the API — every task's Priority, Epic and Blockers, the
+epics' names, and the threads it would comment on:
 
-    node scripts/run/pick-next.mjs --file <rows.json>
+    node scripts/run/pick-next.mjs
 
-Nothing back → report `nothing to do` and exit. An idle run writes one thing at most: if
-step 0 itself went red — a script that failed, a gate that refused, a worktree that could not
-be removed — draft one task with `draft.mjs` (`from` null, `reason` the one sentence on what
-went red) and create it at `Backlog`, Type `Fix`, Epic E0.2 Pipeline, Priority `Should`. A
-preflight that met nothing wrong writes nothing. Otherwise set the picked task `In progress`
-and write the marker — the run's footprint, in the repository's shared `.git` directory so every
+`token: false` → say so in the report line and exit: without the token nothing reads Blockers.
+Otherwise `pick` is the task to claim and `as` the priority it is claimed at — a Ready blocker
+carries the highest priority of the tasks waiting on it. `blocked` and `cycles` are for the
+report line. Post each of `notices` as one page-level comment on its task, its `text` exactly
+as printed: a Ready task waiting on a blocker at Backlog (never move the blocker), a loop of
+tasks blocking each other, three or more Ready tasks at Urgent. The script has already dropped
+any notice the thread holds, so what it prints is what is new.
+
+`pick` null → report `nothing to do` and exit. An idle run writes the notices and one thing more
+at most: if step 0 itself went red — a script that failed, a gate that refused, a worktree that
+could not be removed — draft one task with `draft.mjs` (`from` null, `reason` the one sentence
+on what went red) and create it at `Backlog`, Type `Fix`, Epic E0.2 Pipeline, Priority
+`Medium`. A preflight that met nothing wrong writes nothing else.
+
+Otherwise set the picked task `In progress` and write the marker — the run's footprint, in the repository's shared `.git` directory so every
 worktree sees the same file, which the guard and the next preflight read and you never reason
 about:
 
@@ -153,7 +225,7 @@ Then fill what is missing:
   rename. An `error` back means the Epic carries no phase; that is a question, not a number to
   invent — set `Decision` and ask.
 - **No Epic** → read the body and the Epics list, propose the one that fits, set it.
-- **No Priority** → `Should`. **No Type** → the one from product-spec §4 the body describes.
+- **No Priority** → `Medium`. **No Type** → the one from product-spec §4 the body describes.
 - **Spec** → `node scripts/run/version-drift.mjs "<Spec>"`. Anything `drifted` goes in the report
   under *changed since this ticket was cut*. Build against the repo, which is the record.
 
@@ -184,6 +256,8 @@ worktree Desktop made for it; it stays on its branch and the next run's step 0 r
 worktree once the branch is merged. `reused` true means the branch was already on origin —
 an addendum round, or a ticket continuing after its migration was applied — and the pull
 request is already open: build on it, and step 9 pushes to it rather than opening another.
+`ok: false` means the claim cannot go on: post one `refused` comment with its `detail` and what
+would settle it, release the marker, set `Decision`, and exit.
 
 ## 4 Build
 
@@ -192,10 +266,15 @@ Plan first. Then the smallest complete implementation that satisfies the Criteri
 **Where the ticket is silent, stop only when a wrong guess is expensive to undo** (§4). A choice
 is expensive if it touches the database schema or stored data, a public surface — a route, copy
 a product user sees, an API shape — or would need a spec to record it. Then commit what you
-have and push the branch (`git push -u origin <branch>`) so the next run finds it, release the
-marker (`node scripts/run/release.mjs`), post one `decision` comment, set `Decision`, and
-exit. Everything else: take the stated default, post one `default` comment saying what you
-chose and why you could pick alone, and keep building. A step only a human can do — a
+have and push the branch (`git push -u origin <branch>`) so the next run finds it, post one
+`decision` comment, release the marker (`node scripts/run/release.mjs`), set `Decision`, and
+exit. Everything else: take the stated default and keep building, and say it in the claim's
+one `default` comment — every default the claim takes, what you chose and why you could pick
+alone. Hold that comment until the claim's defaults are all in: post it before the `decision`
+or `migration` comment when the claim stops, or at close before `release.mjs`. Every comment of
+a claim goes up while the marker still names it: the guard lets one comment of a kind through
+per claim, reading the claim from the marker, so a second `default` is refused and never reaches
+the thread. A step only a human can do — a
 credential to create, a page to share — is not a guess: finish everything that does not need
 it, and say exactly where it goes in one `setup` comment at close.
 
@@ -208,7 +287,11 @@ green — `2 failed / 41 passed → 43 passed`. Step 8 refuses a report without 
 Invoke the `reviewer` subagent with the ticket file path and nothing else. Do not summarise the
 work for it: the delegation message is a claim, and a briefing that says what is true has thrown
 the review away. The reviewer runs only the tests the ticket names and the test files the diff
-touches (`scripts/run/review-scope.mjs`); the Stop gate owns the full suite.
+touches (`scripts/run/review-scope.mjs`); the Stop gate owns the full suite. It writes its
+verdict to `docs/reviews/<id>.md`, last line `PASS` when no Must stands — Shoulds sit above it
+and are recorded in the report — and `FINDINGS` when one does: that file, not anything in this
+transcript, is what the guard reads at close. Never write or edit it yourself — a verdict
+the run wrote is the model's claim, and the guard's door would be open on nothing.
 
 Each finding is tagged **Must** or **Should**. Fix every Must, then re-invoke. **Three passes
 maximum.** After the third, any remaining Must becomes an open question with owner `T-next`, and
@@ -219,17 +302,18 @@ Type `Fix`, the same Epic, body headed `Drafted by pipeline`.
 
     node scripts/run/migration-check.mjs
 
-`waiting: true` → write the Report so far, commit and push the branch, release the marker
-(`node scripts/run/release.mjs`), set `Decision`, post one `migration` comment naming the
-file, and exit. The credential this run holds cannot apply a migration, and the guard refuses
+`waiting: true` → write the Report so far, commit and push the branch, post the claim's
+`default` comment if it holds one and one `migration` comment naming the file, release the
+marker (`node scripts/run/release.mjs`), set `Decision`, and exit. The credential this run holds cannot apply a migration, and the guard refuses
 the command until it has itself read the word *apply* from you on this task's thread. The
 human answers with that one word; the next run in the primary checkout applies it (step 0a)
 and carries the ticket on from here.
 
 ## 7 Gate
 
-Nothing to do. The Stop hook runs lint, typecheck and test, and a red suite cannot close a
-session. Do not run them again for its benefit.
+Nothing to do here. The Stop hook runs lint, typecheck and test at every stop, and a red suite
+cannot close a session. Do not run them for its benefit; step 9 runs the same gate once more,
+before a self-merge, so the green for the pushed tree is on record where the guard reads it.
 
 ## 8 Report
 
@@ -259,9 +343,52 @@ Commit on the branch, then:
 
 One ticket, one pull request: a reused branch already has one, and the push updated it. No
 `gh` → put the compare URL in the report instead. Set the task's Commit to the short hash and
-Status to `Review`. Release the marker: `node scripts/run/release.mjs`. If step 3 said
-`primary`, `git checkout main`. Exit.
+Status to `Review`. Then ask whether this diff is the run's own to merge:
 
-**Never merge on your own word.** Merging to main is the human's move, made with one reply —
-*merge* — on the task at Review, and the guard refuses `gh pr merge` until it has read that
-reply from the board itself. The Runs row is a later ticket's.
+    node scripts/run/gated.mjs
+
+`ok: false` → this diff is one only the human's word merges: it adds a migration, or it weakens
+one of the pipeline's own restraints — a guard rule, the gated list, a hook, the Stop gate, a
+test — which `loosening.mjs` measured by running both sides rather than by reading the diff.
+Post one `gated` comment, `reasons` its `reasons` exactly as printed: each carries the rule the
+diff trips and what would ungate it, and neither is yours to word. The task stays at `Review`;
+the human's *merge* there is the merge, made by the next run's step 0. `ok: true`, and the reviewer's last verdict file ends in `PASS` — which is the reviewer's word
+that no Must stands — → the run merges its own work. First the gate, main's copy as the hooks
+run it, on the pushed tree, so its green is on record:
+
+    d=$(mktemp -d) && d=$(cd "$d" && pwd -P) && git archive -o "$d/scripts.tar" origin/main scripts && tar -xf "$d/scripts.tar" -C "$d" && printf '{"session_id":"%s","cwd":"%s"}' "$CLAUDE_CODE_SESSION_ID" "$PWD" | node "$d/scripts/hooks/gate.mjs"; s=$?; rm -rf "$d"; (exit $s)
+
+Exit 0 is the green, written beside the marker as this tree's fingerprint; exit 2 is the same
+red the Stop hook would give — fix it, commit, push, and run the gate again. Then:
+
+    git checkout --detach
+    git branch -D <branch>
+    gh pr merge <branch> --merge --delete-branch
+
+The guard opens its second door on its own reading — the verdict file, the gate's green for
+this tree, the diff, and the pull request's head being this checkout's HEAD — and refuses with
+the reason otherwise; a refusal
+here means the task stays at `Review` with that reason in the report and no comment, and
+`git checkout -B <branch> origin/<branch>` puts the local branch back. If the guard lets it
+through and GitHub refuses — main moved and the pull request no longer merges cleanly — run
+`node scripts/run/conflicts.mjs <branch>` and post one `refused` comment before `release.mjs`:
+`files` its `files`, `settle` what would settle them. The task stays at `Review`, and the same
+`git checkout -B` puts the local branch back. Detach and drop the
+local branch first: gh's `--delete-branch` asks which branch is checked out only while a local
+copy of the pull request's branch exists, and on a detached HEAD that question fails after the
+merge has already landed; with no local copy gh goes straight on to delete the remote one. The
+branch is on origin, so nothing is lost either way. On success: `git fetch origin`, then the merge
+commit is `git rev-parse --short origin/main`; set the task `Done`, and create one Releases
+row — Name `YYYY-MM-DD <short hash>`, Commit, Date, Deploy `https://aeni.ma`, Tasks this
+task, Specs the four header versions at that commit — and relate the task to it. The next
+run's step 0e checks the deploy.
+
+Either way, release the marker: `node scripts/run/release.mjs`. If step 3 said `primary`,
+`git checkout main`. Exit.
+
+**Never merge on your own word.** The two doors are the guard's, read in code: the human's
+*merge* on the task at Review, or the reviewer's `PASS` on file over a diff that adds no
+migration and weakens no restraint. Nothing you say in this transcript opens either. The Runs row is not yours to write
+either: the SessionEnd hook runs `scripts/run/runs.mjs` over this session's transcript once you
+have exited, and posts it with the token — task, outcome, model, tokens, findings, all read from
+what happened, none of it from what you say.

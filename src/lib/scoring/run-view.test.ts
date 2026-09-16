@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ITEM_GAPS, ITEM_RUN } from "@/app/dev/item-fixture";
+import { ITEM_GAPS, ITEM_NO_LONGER_APPLICABLE, ITEM_RUN } from "@/app/dev/item-fixture";
 import { composeRunView, type StoredRunInput } from "@/lib/scoring/run-view";
 import { featurePrdPack } from "@/packs/feature-prd";
 
@@ -404,14 +404,50 @@ describe("the /dev/item fixture", () => {
   });
 
   // The list the browser tests count. Three rows survive §13's narrowing, and
-  // the two that do not are the ones that must not render.
+  // the three that do not are the ones that must not render there. **Two of
+  // them are closed, and that is deliberate**: closure has two reasons, and
+  // T2.10 surfaces exactly one of them. A fixture holding only the `passed`
+  // one could not tell the notice apart from a notice on every closed gap.
   it("keeps one of every disposition, so the narrowing has something to narrow", () => {
     expect(ITEM_GAPS.map((gap) => gap.disposition).sort()).toEqual([
       "accepted",
+      "closed",
       "closed",
       "excluded",
       "open",
       "open",
     ]);
+  });
+
+  /**
+   * The closures the fixture surfaces are ones `reconcileGaps` could have
+   * written — the same constraint the pairing above holds the gaps to.
+   *
+   * A gap closes as `no longer applicable` only in a run that did **not** ask
+   * its check, so the fixture's map may name a check id only where the gap is
+   * closed and the run's line for it is `not-asked`. Staging one against an
+   * asked check would put the notice on screen in a state the product cannot
+   * reach, and the browser test built on it would prove something about the
+   * mock. The `passed` closure is the other half: it stays out of the map, so
+   * the fixture can show that the two are told apart rather than that closed
+   * gaps are surfaced.
+   */
+  it("surfaces only closures a run that stopped asking could have written", () => {
+    const closed = new Map(
+      ITEM_GAPS.filter((gap) => gap.disposition === "closed").map((gap) => [
+        gap.checkId,
+        gap.evidence,
+      ]),
+    );
+
+    for (const [checkId, evidence] of ITEM_NO_LONGER_APPLICABLE) {
+      expect(closed.get(checkId), `${checkId} is surfaced without a closed gap`).toBe(evidence);
+      expect(verdictFor(checkId), `${checkId} is surfaced on a check the run asked`).toBe(
+        "not-asked",
+      );
+    }
+
+    // And the one closed by a pass is not in it — the check passing is the record.
+    expect(ITEM_NO_LONGER_APPLICABLE.has("prd-19")).toBe(false);
   });
 });
