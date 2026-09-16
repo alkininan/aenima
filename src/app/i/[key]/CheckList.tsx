@@ -29,6 +29,50 @@ import { GapMoves, type MoveableGap } from "./GapMoves";
 export type NoLongerApplicable = ReadonlyMap<string, string>;
 
 /**
+ * Builds that map from an item's gaps and the ids the ledger named.
+ *
+ * **A check can lose the same argument twice.** It leaves the denominator and
+ * its open gap closes; a later version brings the condition back, the check is
+ * asked, it fails, and `reconcileGaps` raises a fresh gap; a version after that
+ * takes the condition away again and closes that one too. The item then holds
+ * two gaps closed as no longer applicable on one check id, and a map keyed by
+ * check can show one of them.
+ *
+ * **The newest wins**, because the notice sits on a line that is about the
+ * denominator *now*: the closure that explains the check's current absence is
+ * the last one, and the earlier gap is a debt a later run already restated and
+ * settled again. Taking whichever the read happened to return last would be the
+ * same answer most of the time and silently the wrong one the rest.
+ *
+ * A closed gap always carries `resolved_at` (`gap_resolution_shape`), so the
+ * comparison has something to run on; a null sorts as oldest rather than
+ * throwing, which keeps a row the schema should not permit from deciding the
+ * page.
+ */
+export function noLongerApplicableByCheck(
+  gaps: readonly {
+    id: string;
+    checkId: string;
+    evidence: string;
+    resolvedAt: string | null;
+  }[],
+  closedGapIds: ReadonlySet<string>,
+): NoLongerApplicable {
+  const newest = new Map<string, { evidence: string; resolvedAt: string }>();
+
+  for (const gap of gaps) {
+    if (!closedGapIds.has(gap.id)) continue;
+    const at = gap.resolvedAt ?? "";
+    const held = newest.get(gap.checkId);
+    if (held === undefined || held.resolvedAt <= at) {
+      newest.set(gap.checkId, { evidence: gap.evidence, resolvedAt: at });
+    }
+  }
+
+  return new Map([...newest].map(([checkId, held]) => [checkId, held.evidence]));
+}
+
+/**
  * One run, every check — product-spec.md §1 law 3 rendered literally.
  *
  * "Every score, flag, and suggestion expands into the exact quoted gap. A

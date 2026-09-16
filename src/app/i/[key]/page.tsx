@@ -19,7 +19,7 @@ import { DecisionList } from "./DecisionList";
 import { GapList } from "./GapList";
 import { ItemHeader } from "./ItemHeader";
 import { MoveMessage, type MoveableGap } from "./GapMoves";
-import type { NoLongerApplicable } from "./CheckList";
+import { noLongerApplicableByCheck } from "./CheckList";
 import { ItemSection } from "./ItemSection";
 import { ReadinessPanel } from "./ReadinessPanel";
 
@@ -155,12 +155,11 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/i/[
    * Keyed by check id and holding the evidence, because that is what the
    * expansion's line knows about itself and all the notice renders. Only a
    * `not-asked` line reads it (`CheckList`), so a check whose condition came
-   * back says nothing about a closure that is now history.
+   * back says nothing about a closure that is now history — and where one check
+   * lost the argument twice, `noLongerApplicableByCheck` keeps the newest
+   * closure, which is the one its current absence is about.
    */
-  const closed = new Set(closedGapIds);
-  const noLongerApplicable: NoLongerApplicable = new Map(
-    item.gaps.filter((gap) => closed.has(gap.id)).map((gap) => [gap.checkId, gap.evidence]),
-  );
+  const noLongerApplicable = noLongerApplicableByCheck(item.gaps, new Set(closedGapIds));
 
   /**
    * The answer nobody on the page can speak for — §12's missing sentence.

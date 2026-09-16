@@ -7,7 +7,7 @@ import type { CheckLine } from "@/lib/scoring/run-view";
 // An unclear check now carries §5's third move, which reaches the server action.
 vi.mock("./actions", () => ({ settleGap: async () => {} }));
 
-const { CheckList } = await import("./CheckList");
+const { CheckList, noLongerApplicableByCheck } = await import("./CheckList");
 type MoveableGap = import("./GapMoves").MoveableGap;
 
 /** No gap for any check, which is every case but the two that test the move. */
@@ -426,6 +426,16 @@ describe("CheckList", () => {
 
     expect(screen.getByText(evidence)).not.toBeNull();
     expect(screen.getByText(t.item.checkNotAskedClosedGap)).not.toBeNull();
+
+    // AC1 says *beneath* the condition line, and the order is the reading:
+    // the condition explains why the check left, the quote is what left with
+    // it, and the question is asked once both have been read.
+    const line = screen.getByText("prd-15").closest("li");
+    expect(line?.textContent).toBe(
+      `prd-15Empty / first-use statesNot asked` +
+        `Only asked when: ${LIST_CONDITION} That is not true here.` +
+        `${evidence}${t.item.checkNotAskedClosedGap}`,
+    );
   });
 
   /**
@@ -446,8 +456,11 @@ describe("CheckList", () => {
       />,
     );
 
-    expect(document.body.textContent).not.toMatch(/fail|violation|error|warning/i);
+    // The notice's own words, which is the thing this ticket added — the
+    // page-wide scan below would also go red on a label it did not write.
+    expect(t.item.checkNotAskedClosedGap).not.toMatch(/fail|violation|error|warning/i);
     expect(t.item.checkNotAskedClosedGap).toMatch(/\?$/);
+    expect(document.body.textContent).not.toMatch(/fail|violation|error|warning/i);
   });
 
   /**
@@ -507,5 +520,65 @@ describe("CheckList", () => {
 
     expect(screen.queryByText(t.item.checkNotAskedClosedGap)).toBeNull();
     expect(screen.queryByText("Closed while this check was outside the denominator.")).toBeNull();
+  });
+});
+
+/**
+ * The map the item page hands the list, built from its gaps and the ids the
+ * ledger named.
+ *
+ * Its whole job is the collision: a check can leave the denominator, come back
+ * and fail, and leave again, which puts two closed-as-no-longer-applicable gaps
+ * on one check id. Keyed by check, one of them renders, and which one is a
+ * judgment rather than whatever the read returned last.
+ */
+describe("noLongerApplicableByCheck", () => {
+  const gap = (id: string, checkId: string, evidence: string, resolvedAt: string | null) => ({
+    id,
+    checkId,
+    evidence,
+    resolvedAt,
+  });
+
+  it("takes only the gaps the ledger named", () => {
+    const map = noLongerApplicableByCheck(
+      [
+        gap("g1", "prd-15", "The one that closed.", "2026-03-01T00:00:00Z"),
+        gap("g2", "prd-19", "Closed by a pass.", "2026-03-02T00:00:00Z"),
+      ],
+      new Set(["g1"]),
+    );
+
+    expect([...map]).toEqual([["prd-15", "The one that closed."]]);
+  });
+
+  /**
+   * **The newest closure wins**, because the line it renders on is about the
+   * denominator now: the closure that explains the check's current absence is
+   * the last one, and the earlier gap is a debt a later run already raised
+   * again and settled again. Both orderings are staged, so a build that took
+   * whatever came last cannot pass by luck.
+   */
+  it("keeps the newest closure when a check lost the argument twice", () => {
+    const older = gap("g-old", "prd-15", "The first time.", "2026-03-01T00:00:00Z");
+    const newer = gap("g-new", "prd-15", "The second time.", "2026-06-01T00:00:00Z");
+    const ids = new Set(["g-old", "g-new"]);
+
+    expect(noLongerApplicableByCheck([older, newer], ids).get("prd-15")).toBe("The second time.");
+    expect(noLongerApplicableByCheck([newer, older], ids).get("prd-15")).toBe("The second time.");
+  });
+
+  /**
+   * `gap_resolution_shape` gives every closed row a `resolved_at`, so a null is
+   * a row the schema should not permit. It sorts as oldest rather than throwing
+   * or winning: a malformed row does not get to decide what the page says.
+   */
+  it("lets a dated closure beat an undated one, whichever order they arrive in", () => {
+    const undated = gap("g-null", "prd-15", "No time on it.", null);
+    const dated = gap("g-dated", "prd-15", "Dated.", "2026-01-01T00:00:00Z");
+    const ids = new Set(["g-null", "g-dated"]);
+
+    expect(noLongerApplicableByCheck([undated, dated], ids).get("prd-15")).toBe("Dated.");
+    expect(noLongerApplicableByCheck([dated, undated], ids).get("prd-15")).toBe("Dated.");
   });
 });

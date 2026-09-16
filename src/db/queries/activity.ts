@@ -131,6 +131,13 @@ export const NO_LONGER_APPLICABLE = "no longer applicable";
  *
  * **Unordered and unbounded, unlike the feed.** It is bounded already by the
  * ids it was handed, which are one item's gaps.
+ *
+ * **And it is the second unindexed scan on an item page.** Nothing covers
+ * `(subject_table, subject_id)` — the note above the feed says why — so this is
+ * a workspace-scoped scan too, on every item page that holds a closed gap. Fine
+ * at this size and wrong at some larger one, and the fix is the same one index
+ * for both reads rather than a different query shape for either. Recorded as an
+ * open question in T2.10's report.
  */
 export async function listGapsClosedAsNoLongerApplicable(
   workspaceId: string,
