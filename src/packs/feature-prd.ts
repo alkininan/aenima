@@ -109,7 +109,7 @@ const SAFETY_SURFACE: ApplicabilityCondition = {
  * applicability answer — `prd-15`'s condition held in four runs of eleven,
  * then three, and open question 22 saw the safety layer enter one run's
  * denominator and not the next's, so a Must was asked or not asked on the
- * scorer's mood. §4 (v1.7) lets a condition carry probes the way a check does;
+ * scorer's mood. §4 (v1.8) lets a condition carry probes the way a check does;
  * each probe here is a question the artifact answers yes or no, a yes meaning
  * the condition holds, and the protocol decides the condition by those
  * answers and by nothing else. T2.9 is where they were written and measured.
@@ -388,7 +388,7 @@ export const featurePrdPack: SkillPack = {
   // check, and the version is what makes the re-baseline findable — every run
   // stamped 1.0.0 misses the cache and re-scores against 1.1.0. 1.2.0 is the
   // same rows and the same five probe sets, with probes under the three
-  // conditions (T2.9, §4 v1.7): what the scorer reads to decide the
+  // conditions (T2.9, §4 v1.8): what the scorer reads to decide the
   // denominator moved, so the version moves with it.
   version: "1.2.0",
   artifactKind: "prd",

@@ -120,7 +120,7 @@ describe("the Feature PRD pack", () => {
 
   // T2.7 and T2.8 measured §4's applicability answer moving on identical bytes
   // — `prd-15`'s condition held in four runs of eleven, then three — after the
-  // checks' own verdicts had settled. §4 (v1.7): a condition may carry probes
+  // checks' own verdicts had settled. §4 (v1.8): a condition may carry probes
   // the way a check does. All three carry them, because a condition that
   // wobbles moves a Must in and out of the denominator (build-log open
   // question 22), and any of the three can.

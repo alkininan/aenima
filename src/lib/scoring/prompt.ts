@@ -138,7 +138,7 @@ function renderCheck(check: {
  * above all types" and enter the denominator rather than leaving it.
  *
  * A condition's probes are rendered under the condition, as a check's are
- * under the check (§4, v1.7): the protocol says once how a probed condition is
+ * under the check (§4, v1.8): the protocol says once how a probed condition is
  * decided, and the pack says what each probe asks, where it asks it.
  */
 export function renderPack(pack: SkillPack): string {

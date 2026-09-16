@@ -59,7 +59,7 @@ export type ApplicabilityCondition = {
   id: string;
   when: string;
   /**
-   * §4 (v1.7): "A condition may carry probes the way a check does."
+   * §4 (v1.8): "A condition may carry probes the way a check does."
    *
    * T2.7 and T2.8 scored one document eleven times on identical bytes; the
    * checks' verdicts settled once they carried probes, and the applicability

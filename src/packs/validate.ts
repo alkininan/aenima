@@ -73,7 +73,7 @@ export function validatePack(pack: SkillPack): string[] {
     }
   }
 
-  // A condition's probes render under the condition the same way (§4, v1.7),
+  // A condition's probes render under the condition the same way (§4, v1.8),
   // and a blank one is the same blank line the model is told to answer.
   for (const condition of packConditions(pack)) {
     if (condition.probes?.some((probe) => probe.trim().length === 0)) {

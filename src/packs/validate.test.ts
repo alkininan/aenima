@@ -58,7 +58,7 @@ describe("validatePack", () => {
     expect(matching(pack, 'check "prd-4" carries an empty probe')).toHaveLength(1);
   });
 
-  // A condition's probes render under the condition the same way (§4, v1.7),
+  // A condition's probes render under the condition the same way (§4, v1.8),
   // and a blank one is the same blank line.
   it("rejects an empty condition probe", () => {
     const pack = broken({

@@ -144,7 +144,7 @@ describe("renderPack", () => {
   });
 
   it("renders a condition's probes beneath it, and nothing beneath a condition without", () => {
-    // §4 (v1.7): "A condition may carry probes the way a check does." T2.7 and
+    // §4 (v1.8): "A condition may carry probes the way a check does." T2.7 and
     // T2.8 measured §4's applicability answer moving on identical bytes, and a
     // probe is read where the condition is asked, so the scorer decides it in
     // the condition's own light.
