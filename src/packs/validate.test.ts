@@ -47,6 +47,35 @@ describe("validatePack", () => {
     expect(matching(clash, 'duplicate check id "prd-20"')).toHaveLength(1);
   });
 
+  // A probe is a question the scorer reads under its check. An empty one
+  // renders as a blank line the model is told to answer — a rule nobody wrote.
+  it("rejects an empty probe", () => {
+    const pack = broken({
+      checks: featurePrdPack.checks.map((check) =>
+        check.id === "prd-4" ? { ...check, probes: ["Is the source named?", "   "] } : check,
+      ),
+    });
+    expect(matching(pack, 'check "prd-4" carries an empty probe')).toHaveLength(1);
+  });
+
+  // A condition's probes render under the condition the same way (§4, v1.8),
+  // and a blank one is the same blank line.
+  it("rejects an empty condition probe", () => {
+    const pack = broken({
+      checks: featurePrdPack.checks.map((check) =>
+        check.id === "prd-15" && check.appliesWhen
+          ? {
+              ...check,
+              appliesWhen: { ...check.appliesWhen, probes: ["Does it render a list?", ""] },
+            }
+          : check,
+      ),
+    });
+    expect(
+      matching(pack, 'condition "list-rendering-surface" carries an empty probe'),
+    ).toHaveLength(1);
+  });
+
   it("rejects points that are zero, negative or fractional", () => {
     for (const points of [0, -5, 2.5]) {
       const pack = broken({

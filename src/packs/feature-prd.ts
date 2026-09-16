@@ -40,6 +40,10 @@ import type { ApplicabilityCondition, ConditionalLayer, RubricCheck, SkillPack }
 const LIST_SURFACE: ApplicabilityCondition = {
   id: "list-rendering-surface",
   when: "The feature renders a list, so it has empty and first-use states.",
+  probes: [
+    "Does the feature show a screen or section whose content is a set of items of one kind drawn from data — a feed, a list, a table, search results, a history, an inbox, a gallery — so that on first use, or with nothing to show, it would be empty? Name the screen. A fixed set of choices, one item's detail view, a form, a prompt or a notification is not such a set.",
+    "Does the artifact describe scrolling, sorting, filtering, paging or a 'no results' state for such a set? Name where.",
+  ],
 };
 
 /**
@@ -49,6 +53,10 @@ const LIST_SURFACE: ApplicabilityCondition = {
 const NETWORK_DEPENDENT: ApplicabilityCondition = {
   id: "network-dependent-surface",
   when: "The feature depends on the network or on a permission, so it can be denied, offline or degraded.",
+  probes: [
+    "Does the feature ask the person for a permission the phone or browser can refuse — location, camera, microphone, contacts, notifications, photos? Name the permission.",
+    "Does any step of the feature need the network at the moment the person uses it — a search, a send, a fetch, a map, a payment, a live update — so that being offline or on a slow connection changes what they see? Name the step.",
+  ],
 };
 
 /**
@@ -59,6 +67,11 @@ const NETWORK_DEPENDENT: ApplicabilityCondition = {
 const SAFETY_SURFACE: ApplicabilityCondition = {
   id: "user-to-user-or-location",
   when: "The feature carries user-to-user visibility, interaction, or location.",
+  probes: [
+    "Can one person see another person, or something about them — a profile, a name, a photo, a message, a rating, an answer — through this feature? Name where.",
+    "Can one person act on another through this feature — message, propose, invite, match, rate, report, block, meet? Name the action.",
+    "Does the feature read, store, show or act on a person's location, precise or coarse, at any point? Name where.",
+  ],
 };
 
 /* -------------------------------------------------------------------------- */
@@ -68,6 +81,38 @@ const SAFETY_SURFACE: ApplicabilityCondition = {
 /**
  * Rows 1–19. These are the rubric, and they sum to 100 with nine Musts —
  * `prd-6`, `9`, `10`, `11`, `14`, `15`, `16`, `17`, `19`.
+ *
+ * **Five checks carry probes, and the prose of none of them changed.** T2.7
+ * scored one document eleven times on identical bytes and found that fourteen
+ * checks held one state and six moved — and the five whose *verdicts* moved
+ * (`prd-15`'s was its condition) are exactly the checks that ask whether what
+ * is present is *enough*: side effects, per-story failure, denied/offline/
+ * degraded, the data footprint, and the misreading sweep. A check that asks
+ * "is it there?" answered a clean absence eleven times; a check that asks "is
+ * it enough?" had no settled reading of enough. The probes are that reading,
+ * in §5's sense — "behind each check sits an open-ended probe library of
+ * follow-up questions" — put to the artifact before the verdict. They carry
+ * no points (§5's budget is untouched) and §7.2's wording stands as
+ * transcribed; T2.8 is where they were written and measured.
+ *
+ * One of them reaches less far than its row reads. Row 19 says "no sentence
+ * two developers could read two ways", and `prd-19`'s probes put the sweep to
+ * "each requirement, story and acceptance line … not the background prose".
+ * That is §7.2's own example — check 19 failing *at* `MN-2`, a requirement —
+ * and Appendix B item 19, whose critic returns two-readings sentences as
+ * pointed choices a developer must pick between: a background sentence read
+ * two ways produces no two implementations. It is a default taken on T2.8,
+ * recorded in its report, and the row's wording is not changed here.
+ *
+ * **The three conditions carry probes too, and their `when` is unchanged.**
+ * With the verdicts settled, what still moved on identical bytes was §4's
+ * applicability answer — `prd-15`'s condition held in four runs of eleven,
+ * then three, and open question 22 saw the safety layer enter one run's
+ * denominator and not the next's, so a Must was asked or not asked on the
+ * scorer's mood. §4 (v1.8) lets a condition carry probes the way a check does;
+ * each probe here is a question the artifact answers yes or no, a yes meaning
+ * the condition holds, and the protocol decides the condition by those
+ * answers and by nothing else. T2.9 is where they were written and measured.
  */
 const CHECKS: RubricCheck[] = [
   {
@@ -116,6 +161,12 @@ const CHECKS: RubricCheck[] = [
     prose: "Side effects: other flows, emails, notifications, systems, teams this touches",
     tag: "should",
     points: 4,
+    probes: [
+      "Does it name each existing flow or screen outside this feature that changes because of it, or say outright that none does?",
+      "Does it say which emails, notifications or messages it sends or changes, or that it sends none?",
+      "Does it name each system, service or team outside this feature that has to change or be told, or say there is none?",
+      "A list that covers some of these and is silent on the rest is not enough: silence is a gap, and an explicit 'none' is an answer.",
+    ],
   },
   { id: "prd-13", prose: "Ship scope: platforms, locales, audience", tag: "should", points: 4 },
   {
@@ -123,6 +174,11 @@ const CHECKS: RubricCheck[] = [
     prose: "Per story: what the user sees on failure (EARS)",
     tag: "must",
     points: 8,
+    probes: [
+      "Take every story in turn. Does each have at least one failure line — what happens when the action cannot complete?",
+      "Is each failure line in EARS shape — WHEN [condition] THE SYSTEM SHALL [behaviour] — and does the behaviour say what the user sees: a screen, a message, a state?",
+      "One story with no failure line fails the check, however many others have one; name that story.",
+    ],
   },
   {
     id: "prd-15",
@@ -137,6 +193,12 @@ const CHECKS: RubricCheck[] = [
     tag: "must",
     points: 6,
     appliesWhen: NETWORK_DEPENDENT,
+    probes: [
+      "Is there one described behaviour for permission denied — including what the user sees after refusing, not only that permission is asked?",
+      "Is there one described behaviour for offline, and one for degraded — slow, partial or stale data?",
+      "Does each behaviour say what the user sees? 'Handle gracefully' or 'show an error' with no content is not a behaviour.",
+      "Every one of the three conditions this feature can meet needs its behaviour; one missing fails the check.",
+    ],
   },
   {
     id: "prd-17",
@@ -150,12 +212,22 @@ const CHECKS: RubricCheck[] = [
     prose: "Data footprint declared, personal data flagged (triggers compliance layer)",
     tag: "should",
     points: 4,
+    probes: [
+      "Is there a list of what this feature stores or reads about a person — the fields, not a category?",
+      "Is each item marked personal or not, or the whole list explicitly said to hold nothing personal?",
+      "A list with no flag, or a flag with no list, is not enough.",
+    ],
   },
   {
     id: "prd-19",
     prose: "Misreading sweep: no sentence two developers could read two ways",
     tag: "must",
     points: 8,
+    probes: [
+      "Take each requirement, story and acceptance line in turn — not the background prose. Could two developers implement it differently and each claim to have followed it?",
+      "Look for the usual shapes: a quantity without a unit or threshold ('nearby', 'soon', 'a few'), a pronoun with two possible referents, 'and/or', a behaviour with no trigger, a condition with no outcome.",
+      "One such sentence fails the check; quote it. Wording that is vague but binds no behaviour does not count.",
+    ],
   },
 ];
 
@@ -310,10 +382,15 @@ const INTERVIEW = [
 
 export const featurePrdPack: SkillPack = {
   id: "feature-prd",
-  // First encoding of §7.2. The rubric's own content has not changed, so this
-  // is 1.0.0 rather than a draft version — §5 versions rubrics like documents,
-  // and this is the document as written.
-  version: "1.0.0",
+  // 1.0.0 was the first encoding of §7.2, the document as written. 1.1.0 is
+  // the same twenty rows with probes under five of them (T2.8): §5 versions
+  // rubrics like documents, a probe changes what the scorer reads for its
+  // check, and the version is what makes the re-baseline findable — every run
+  // stamped 1.0.0 misses the cache and re-scores against 1.1.0. 1.2.0 is the
+  // same rows and the same five probe sets, with probes under the three
+  // conditions (T2.9, §4 v1.8): what the scorer reads to decide the
+  // denominator moved, so the version moves with it.
+  version: "1.2.0",
   artifactKind: "prd",
   checks: CHECKS,
   layers: [SAFETY_LAYER],

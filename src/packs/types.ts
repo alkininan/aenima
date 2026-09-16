@@ -58,6 +58,22 @@ export type CheckTag = "must" | "should";
 export type ApplicabilityCondition = {
   id: string;
   when: string;
+  /**
+   * §4 (v1.8): "A condition may carry probes the way a check does."
+   *
+   * T2.7 and T2.8 scored one document eleven times on identical bytes; the
+   * checks' verdicts settled once they carried probes, and the applicability
+   * answer did not — `prd-15`'s condition held in four runs of eleven, then
+   * three, and open question 22 saw the safety layer enter one run's
+   * denominator and not the next's. A probe here is the same cure in the same
+   * shape: a question the scorer answers from the artifact before it decides
+   * the condition, plain text with no points, no id and no verdict of its own.
+   * The protocol says how a probed condition is decided; the pack says what
+   * each probe asks.
+   *
+   * Absent means the condition's `when` stands alone.
+   */
+  probes?: string[];
 };
 
 export type RubricCheck = {
@@ -73,6 +89,22 @@ export type RubricCheck = {
    * denominator, which is what §4 means by renormalization.
    */
   appliesWhen?: ApplicabilityCondition;
+  /**
+   * §5: "Checks are expensive and few; probes are free and infinite. … behind
+   * each check sits an open-ended probe library of follow-up questions."
+   *
+   * A probe is a question the scorer puts to the artifact before it reaches
+   * this check's verdict, in the pack's own words, so that a check asking
+   * whether what is present is *enough* has a settled reading of "enough" —
+   * T2.7 measured exactly those checks as the ones whose verdicts move on
+   * identical bytes. A probe is plain text and nothing else: no points, no
+   * tag, no id. That is the rule "a probe never becomes a check" as a type —
+   * the only way a probe can earn points is to be promoted into a check and
+   * take them from an existing one (§5's zero-sum budget).
+   *
+   * Absent means the check's prose stands alone.
+   */
+  probes?: string[];
 };
 
 /**

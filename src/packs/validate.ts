@@ -1,4 +1,4 @@
-import { denominatorFor } from "./scoring";
+import { denominatorFor, packConditions } from "./scoring";
 import type { RubricCheck, SkillPack } from "./types";
 
 /**
@@ -63,6 +63,21 @@ export function validatePack(pack: SkillPack): string[] {
       problems.push(
         `check "${check.id}" has points ${check.points}; points must be a positive integer`,
       );
+    }
+
+    // A probe is rendered under its check as a question the scorer answers. An
+    // empty one is a blank line the model is told to answer — a rule nobody
+    // wrote, and a prompt that differs from the pack a human reviews.
+    if (check.probes?.some((probe) => probe.trim().length === 0)) {
+      problems.push(`check "${check.id}" carries an empty probe`);
+    }
+  }
+
+  // A condition's probes render under the condition the same way (§4, v1.8),
+  // and a blank one is the same blank line the model is told to answer.
+  for (const condition of packConditions(pack)) {
+    if (condition.probes?.some((probe) => probe.trim().length === 0)) {
+      problems.push(`condition "${condition.id}" carries an empty probe`);
     }
   }
 

@@ -109,6 +109,7 @@ export const ITEM_ARTIFACTS: ArtifactView[] = [
  * | `prd-20` excluded | passed | same, and it is the layer check §4 let in |
  * | `prd-8` open Should | unclear | fails; §13 files it under the score |
  * | `prd-19` closed | passed | the re-score found it passing and closed it |
+ * | `prd-15` closed | not asked | §4's condition stopped holding; the gap closed with it |
  */
 export const ITEM_GAPS: GapView[] = [
   // The failing Must. Its evidence is the same sentence `renderEvidence` builds
@@ -164,7 +165,32 @@ export const ITEM_GAPS: GapView[] = [
     resolvedBy: null,
     resolutionNote: null,
   },
+  // Closed by §4's engine rather than by a pass: `prd-15` is the check
+  // `GHOST_MODE_RUN` did not ask, so the run that stopped asking it closed the
+  // gap it had raised. No card either — but unlike `g5` this one is surfaced,
+  // on the not-asked line in the expansion, by `ITEM_NO_LONGER_APPLICABLE`.
+  {
+    id: "g6",
+    checkId: "prd-15",
+    tag: "must",
+    disposition: "closed",
+    evidence: "No empty state is described for the digest list.",
+    resolvedBy: null,
+    resolutionNote: null,
+  },
 ];
+
+/**
+ * What §4's engine closed, as the item page builds it from the ledger read.
+ *
+ * Only `g6`: `g5` closed because its check came to pass, and that closure still
+ * renders nowhere — the check passing is the record. The real page tells the
+ * two apart by asking `activity` for the reason; here the fixture states it,
+ * which is the one thing a fixture may do that the page may not.
+ */
+export const ITEM_NO_LONGER_APPLICABLE: ReadonlyMap<string, string> = new Map([
+  ["prd-15", "No empty state is described for the digest list."],
+]);
 
 export const ITEM_DECISIONS: DecisionView[] = [
   {
