@@ -659,7 +659,14 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
    for the retry — and renders both states. The *row* still shows last activity, because §13's list
    is a workspace-wide ranking and giving every row its newest run is a second read across the whole
    workspace, not a column on the one it already makes. Decide it with the list's pagination question
-   (open question 7), which is the same read.
+   (open question 7), which is the same read. **Answered for the walker and the row by T1.5; park is
+   T1.6's.** Arrow keys walk the rows across the three buckets (`src/app/app/RowWalker.tsx`, the
+   list's one client island). The row reads the item page's clock after all, and without a second
+   read: `scoring_run(scored_at, artifact(next_scoring_attempt_at))` is an embed on the request the
+   list already makes, ordered newest-first and capped at one *on the embed*, so open question 7's
+   rule holds and nothing caps the list. A row nothing has scored keeps last activity. Park — the
+   mutation, the activity rows, the undo toast, and where a parked item is stored — split out to
+   T1.6 Park move, which owns the migration; the chip still renders and does nothing until then.
 7. **The list read is unpaginated, deliberately — revisit when a workspace gets large.** The buckets
    are a ranking over the whole workspace, so there is no page of rows that could be bucketed
    correctly: you cannot tell that an item belongs at the top of Your move from a slice of the
