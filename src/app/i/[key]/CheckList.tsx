@@ -45,9 +45,15 @@ export type NoLongerApplicable = ReadonlyMap<string, string>;
  * same answer most of the time and silently the wrong one the rest.
  *
  * A closed gap always carries `resolved_at` (`gap_resolution_shape`), so the
- * comparison has something to run on; a null sorts as oldest rather than
- * throwing, which keeps a row the schema should not permit from deciding the
- * page.
+ * comparison has something to run on; a null — or a stamp that will not
+ * parse — sorts as oldest rather than throwing, which keeps a row the schema
+ * should not permit from deciding the page.
+ *
+ * **Parsed rather than compared as text.** Both stamps come from one column in
+ * one format, so string order would agree with time order today; it would stop
+ * agreeing the moment anything handed this a stamp written another way, and it
+ * would stop quietly. `Date.parse` makes the format not matter, which is also
+ * what lets the tests state times without having to spell PostgREST's `+00:00`.
  */
 export function noLongerApplicableByCheck(
   gaps: readonly {
@@ -58,11 +64,12 @@ export function noLongerApplicableByCheck(
   }[],
   closedGapIds: ReadonlySet<string>,
 ): NoLongerApplicable {
-  const newest = new Map<string, { evidence: string; resolvedAt: string }>();
+  const newest = new Map<string, { evidence: string; resolvedAt: number }>();
 
   for (const gap of gaps) {
     if (!closedGapIds.has(gap.id)) continue;
-    const at = gap.resolvedAt ?? "";
+    const parsed = gap.resolvedAt === null ? Number.NaN : Date.parse(gap.resolvedAt);
+    const at = Number.isNaN(parsed) ? Number.NEGATIVE_INFINITY : parsed;
     const held = newest.get(gap.checkId);
     if (held === undefined || held.resolvedAt <= at) {
       newest.set(gap.checkId, { evidence: gap.evidence, resolvedAt: at });

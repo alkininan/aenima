@@ -543,8 +543,8 @@ describe("noLongerApplicableByCheck", () => {
   it("takes only the gaps the ledger named", () => {
     const map = noLongerApplicableByCheck(
       [
-        gap("g1", "prd-15", "The one that closed.", "2026-03-01T00:00:00Z"),
-        gap("g2", "prd-19", "Closed by a pass.", "2026-03-02T00:00:00Z"),
+        gap("g1", "prd-15", "The one that closed.", "2026-03-01T00:00:00+00:00"),
+        gap("g2", "prd-19", "Closed by a pass.", "2026-03-02T00:00:00+00:00"),
       ],
       new Set(["g1"]),
     );
@@ -560,8 +560,8 @@ describe("noLongerApplicableByCheck", () => {
    * whatever came last cannot pass by luck.
    */
   it("keeps the newest closure when a check lost the argument twice", () => {
-    const older = gap("g-old", "prd-15", "The first time.", "2026-03-01T00:00:00Z");
-    const newer = gap("g-new", "prd-15", "The second time.", "2026-06-01T00:00:00Z");
+    const older = gap("g-old", "prd-15", "The first time.", "2026-03-01T00:00:00+00:00");
+    const newer = gap("g-new", "prd-15", "The second time.", "2026-06-01T00:00:00+00:00");
     const ids = new Set(["g-old", "g-new"]);
 
     expect(noLongerApplicableByCheck([older, newer], ids).get("prd-15")).toBe("The second time.");
@@ -575,10 +575,27 @@ describe("noLongerApplicableByCheck", () => {
    */
   it("lets a dated closure beat an undated one, whichever order they arrive in", () => {
     const undated = gap("g-null", "prd-15", "No time on it.", null);
-    const dated = gap("g-dated", "prd-15", "Dated.", "2026-01-01T00:00:00Z");
+    const dated = gap("g-dated", "prd-15", "Dated.", "2026-01-01T00:00:00+00:00");
     const ids = new Set(["g-null", "g-dated"]);
 
     expect(noLongerApplicableByCheck([undated, dated], ids).get("prd-15")).toBe("Dated.");
     expect(noLongerApplicableByCheck([dated, undated], ids).get("prd-15")).toBe("Dated.");
+  });
+
+  /**
+   * A stamp that will not parse is the null case, not a winner.
+   *
+   * The comparison reads times rather than text so that the format stops
+   * mattering — which only helps if something unreadable is still ordered
+   * rather than turned into `NaN`, where every comparison is false and the
+   * *first* row would win by accident.
+   */
+  it("treats an unparseable stamp as the oldest, not as the newest", () => {
+    const broken = gap("g-broken", "prd-15", "Not a time.", "whenever");
+    const dated = gap("g-dated", "prd-15", "Dated.", "2026-01-01T00:00:00+00:00");
+    const ids = new Set(["g-broken", "g-dated"]);
+
+    expect(noLongerApplicableByCheck([broken, dated], ids).get("prd-15")).toBe("Dated.");
+    expect(noLongerApplicableByCheck([dated, broken], ids).get("prd-15")).toBe("Dated.");
   });
 });
