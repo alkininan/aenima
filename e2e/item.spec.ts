@@ -175,15 +175,16 @@ test.describe("at 1440", () => {
    * §2 lineage: the opportunity is the thing that explains why an item exists,
    * so an item that shows its product but not its opportunity hides it.
    *
-   * **Text, not a link.** `/o/<key>` is reserved and unbuildable — opportunities
-   * have no key column — and a link that navigates nowhere is worse than none.
-   * The assertion is that the title is on the page *and* that nothing around it
-   * is an anchor, because "add a link later" is exactly the change that would
-   * otherwise slip in untested.
+   * **A link, since T1.4.** This test read the other way until then — the title
+   * as text, and nothing around it an anchor — because `/o/<key>` was reserved
+   * and unbuildable while opportunities had no key column, and a link that
+   * navigates nowhere is worse than none. `opportunity.key` exists now
+   * (`drizzle/0015`), so the assertion inverts with the thing it was guarding:
+   * the title is on the page *and* it is the anchor, pointed at the key rather
+   * than at a uuid, which is the whole reason `routes.ts` keeps its segments
+   * short.
    */
-  test("shows the opportunity as text, with no link to a page that does not exist", async ({
-    page,
-  }) => {
+  test("shows the opportunity as a link to its own page", async ({ page }) => {
     // Exact: the fixture's brief opens with the same sentence, which is what a
     // real one would do — an item's opportunity is usually restated in its
     // artifacts, so a loose matcher finds two things here and would find two on
@@ -193,8 +194,8 @@ test.describe("at 1440", () => {
     });
 
     await expect(lineage).toBeVisible();
-    expect(await lineage.evaluate((node) => node.closest("a") !== null)).toBe(false);
-    await expect(page.locator('main a[href^="/o/"]')).toHaveCount(0);
+    expect(await lineage.evaluate((node) => node.closest("a") !== null)).toBe(true);
+    await expect(page.locator('main a[href="/o/soc-2"]')).toHaveCount(1);
   });
 
   // §0 law 4: anything the machine did is visibly the machine's.

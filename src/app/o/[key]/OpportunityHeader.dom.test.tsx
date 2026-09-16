@@ -34,8 +34,17 @@ describe("OpportunityHeader", () => {
     expect(screen.getByText("Retention drops sharply between day 3 and day 7.")).toBeTruthy();
   });
 
+  /**
+   * The element count is the assertion, not the text query. A `<p>` rendered
+   * around a null summary is *empty*, so it is invisible to `queryByText` — the
+   * defect this guards against would pass a text-absence check while painting
+   * the 8px gap and the line box §4's subtitle slot reserves. The text query is
+   * here too, saying what the count means.
+   */
   it("renders no summary line when there is none", () => {
     const { container } = render(<OpportunityHeader opportunity={header({ summary: null })} />);
+
+    expect(screen.queryByText("Retention drops sharply between day 3 and day 7.")).toBeNull();
 
     // One `<p>` remains — the product eyebrow — and it is not the summary slot.
     const paragraphs = container.querySelectorAll("p");
