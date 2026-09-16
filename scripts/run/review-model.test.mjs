@@ -12,7 +12,7 @@ import {
 
 const root = join(import.meta.dirname, "..", "..");
 
-/** The failure the reviewer's pinned model returned on T0.19, T0.20, T0.21, T0.13 and T2.9. */
+/** The failure the reviewer's pinned model returned, as five earlier runs' transcripts hold it. */
 const CREDITS =
   "Agent terminated early due to an API error: You're out of usage credits. Switch to another model, or manage usage credits at claude.ai/settings/usage?from=cc_cli_limit_message, to continue. (error type rate_limit, HTTP 429, request id req_011Cf5dz2qYUQoGvCV8LM)";
 const OVERLOADED =
