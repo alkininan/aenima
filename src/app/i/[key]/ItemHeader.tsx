@@ -1,4 +1,7 @@
+import Link from "next/link";
+
 import type { Dictionary } from "@/i18n";
+import { opportunityHref } from "@/lib/routes";
 import type { Stage } from "@/lib/stage";
 
 export type ItemHeaderData = {
@@ -7,8 +10,14 @@ export type ItemHeaderData = {
   type: keyof Dictionary["itemTypes"];
   stage: Stage;
   productName: string;
-  /** §2 lineage. Null when the item is unlinked, which is legal and common. */
-  opportunityTitle: string | null;
+  /**
+   * §2 lineage. Null when the item is unlinked, which is legal and common.
+   *
+   * One nullable object rather than a nullable title beside a nullable key:
+   * `opportunity.key` is NOT NULL (drizzle/0015), so a linked opportunity always
+   * has both, and two fields could be made to say otherwise.
+   */
+  opportunity: { key: string; title: string } | null;
 };
 
 /**
@@ -38,18 +47,23 @@ export function ItemHeader({ item, t }: { item: ItemHeaderData; t: Dictionary })
             explains why this item exists, so it sits directly under the title
             rather than among the taxonomy below it.
 
-            Plain text, not a link. `/o/<key>` is reserved but unbuildable —
-            opportunities have no key column, and routing one by uuid would
-            defeat the reason routes.ts keeps segments short (build log, open
-            question 9).
+            A link now, to `/o/<key>` — T1.4 gave opportunities the same key
+            `item.key` carries, which is what `routes.ts` was keeping its
+            segments short for (build log, open question 9). It was plain text
+            until then because the only thing left to route by was a uuid.
 
             Absent when the item is unlinked. §2 makes that legal — "an item may
             be unlinked from any opportunity … never a block" — so there is
             nothing to report and nothing is said. */}
-      {item.opportunityTitle === null ? null : (
+      {item.opportunity === null ? null : (
         <p className="flex items-baseline gap-[8px]">
           <span className="type-mono-micro shrink-0 text-n-secondary">{t.item.opportunity}</span>
-          <span className="type-ui-body truncate text-n-secondary">{item.opportunityTitle}</span>
+          <Link
+            href={opportunityHref(item.opportunity.key)}
+            className="type-ui-body truncate text-n-secondary hover:text-n-primary"
+          >
+            {item.opportunity.title}
+          </Link>
         </p>
       )}
 

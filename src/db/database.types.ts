@@ -6,6 +6,16 @@
  * route is the Supabase MCP server's `generate_typescript_types` against the
  * project the migration was just applied to.
  *
+ * T1.4 added `opportunity.key` (drizzle/0015) **by hand**, and this is the one
+ * block below that the generator has not seen. It could not: the generator
+ * reads the live database, and 0015 is applied by a human after the run that
+ * writes it (docs/guidelines.md §5 step 6), so there was no applied schema to
+ * read. The shape is `item.key`'s exactly — required on Row and Insert,
+ * optional on Update, which is what a NOT NULL column with no default gets, and
+ * which T2.4's regeneration confirmed for `item.key` itself. **Regenerate this
+ * file in the run that applies 0015 and diff it**: a clean diff retires this
+ * note, and a dirty one means the typed client has been lying about a column.
+ *
  * T2.5 added `accept_gap` and `reopen_gap` (drizzle/0012) to the `Functions`
  * block. `app.may_settle_must` is absent by design: PostgREST exposes only
  * `public`, and a predicate no client can call needs no client type.
@@ -530,6 +540,7 @@ export type Database = {
         Row: {
           created_at: string;
           id: string;
+          key: string;
           product_id: string;
           summary: string | null;
           title: string;
@@ -539,6 +550,7 @@ export type Database = {
         Insert: {
           created_at?: string;
           id?: string;
+          key: string;
           product_id: string;
           summary?: string | null;
           title: string;
@@ -548,6 +560,7 @@ export type Database = {
         Update: {
           created_at?: string;
           id?: string;
+          key?: string;
           product_id?: string;
           summary?: string | null;
           title?: string;

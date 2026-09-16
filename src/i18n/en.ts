@@ -341,6 +341,17 @@ export const en = {
     actorSelf: "You",
     actorOther: "Someone",
   },
+  /** §2's opportunity, at `/o/<key>` — the page the item header now links to. */
+  opportunity: {
+    backToList: "Back to the list",
+    /** §8's section heading. mono-micro, so §3 uppercases it. */
+    items: "Items",
+    /**
+     * §12: an opportunity with nothing bet on it yet is a normal state, not an
+     * error — the sentence says what is true and asks for nothing.
+     */
+    noItems: "Nothing is being worked on here yet.",
+  },
   /** Relative time for the row's mono-readout. §12: calm, never exact-to-the-second. */
   relativeTime: {
     justNow: "just now",

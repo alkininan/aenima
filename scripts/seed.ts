@@ -685,11 +685,16 @@ async function main() {
     ]);
 
     const secondOpportunityId = randomUUID();
+    // `key` is assigned by `app.assign_opportunity_key()`; Drizzle needs the
+    // column present. Whatever is passed here is overwritten unconditionally —
+    // that is the rule, and src/db/opportunity-key.db.test.ts is where it is
+    // held. Same shape as `seedItem`'s `key: ""` below.
     await db.insert(opportunity).values([
       {
         id: opportunityId,
         workspaceId,
         productId,
+        key: "",
         title: "New users don't return after week 1",
         summary: "Retention drops sharply between day 3 and day 7.",
       },
@@ -697,6 +702,7 @@ async function main() {
         id: randomUUID(),
         workspaceId,
         productId,
+        key: "",
         title: "People miss what changed while they were away",
         summary: "No digest, so a week off means scrolling to catch up.",
       },
@@ -704,6 +710,7 @@ async function main() {
         id: secondOpportunityId,
         workspaceId,
         productId: secondProductId,
+        key: "",
         title: "Readers have no way to share a shelf",
         summary: "Lists are private, and the workaround is screenshots.",
       },

@@ -162,12 +162,30 @@ export const opportunity = pgTable(
       .notNull()
       .references(() => workspace.id, { onDelete: "cascade" }),
     productId: uuid("product_id").notNull(),
+    /**
+     * What people call this opportunity out loud — `soc-3`. The product's key
+     * prefix plus a per-product counter, exactly as `item.key` is built.
+     *
+     * Assigned by `app.assign_opportunity_key()` on insert and never by the
+     * client (`drizzle/0015`), the same discipline `item.key` and
+     * `artifact_version.version_no` are under. It exists so `/o/<key>` can be a
+     * URL a person reads out; `src/lib/routes.ts` keeps its segments short for
+     * that one reason, and a uuid would defeat it.
+     *
+     * The shape is shared with `item.key` and the counters are not, so `soc-3`
+     * can name an item and an opportunity in the same product. `/i/` and `/o/`
+     * tell them apart; a person saying the key does not.
+     */
+    key: text("key").notNull(),
     title: text("title").notNull(),
     summary: text("summary"),
     ...timestamps,
   },
   (t) => [
     unique("opportunity_workspace_id").on(t.workspaceId, t.id),
+    // Keys are unique per workspace — the backstop on the MAX+1 race the
+    // counter leaves open, as `item_workspace_key` is for items.
+    unique("opportunity_workspace_key").on(t.workspaceId, t.key),
     foreignKey({
       columns: [t.workspaceId, t.productId],
       foreignColumns: [product.workspaceId, product.id],
@@ -175,6 +193,7 @@ export const opportunity = pgTable(
     }).onDelete("cascade"),
     index("opportunity_product_idx").on(t.workspaceId, t.productId),
     check("opportunity_title_len", sql`length(btrim(${t.title})) between 1 and 200`),
+    check("opportunity_key_shape", sql`${t.key} ~ '^[a-z][a-z0-9]{1,7}-[0-9]+$'`),
   ],
 );
 
