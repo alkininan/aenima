@@ -99,7 +99,11 @@ describe("scan", () => {
       compose("waiting", { blockers: ["T3.1"] }, P),
       compose("urgent", { count: 3 }, P),
       compose("default", { gap: "The body is silent.", choice: "the first" }, P),
-      compose("gated", { paths: "scripts/run/x.mjs" }, P),
+      compose(
+        "gated",
+        { reasons: [{ rule: "it adds a migration", ungate: "apply it by hand" }] },
+        P,
+      ),
       compose("stale", { date: "9 September", branch: null }, P),
     ].map((text, i) => c(text, `2026-09-15T10:0${i}:00.000Z`));
     const { threads: found } = await scan(

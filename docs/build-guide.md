@@ -1,4 +1,6 @@
-<!-- build-guide.md · v2.6 · in the repo · the hooks paragraph: a finished ticket merges itself
+<!-- build-guide.md · v2.7 · in the repo · the hooks paragraph: your word is left for one
+     sentence — a migration, or a diff that weakens a restraint, measured on both sides.
+     v2.6 · in the repo · the hooks paragraph: a finished ticket merges itself
      on the reviewer's PASS on file; your word stays for the gated paths; hooks run main's copy.
      v2.5 · in the repo · the hooks paragraph: a migration applies and a pull
      request merges on one word from you on the board, read by the guard over the API.
@@ -106,11 +108,13 @@ rule stands a credential a run cannot migrate with: `.env.local`'s `DATABASE_URL
 writes rows and cannot change schema, and the admin URL in `.env.migrate` is read by
 `pnpm db:migrate` alone and never copied into a worktree (`docs/guidelines.md` §5). A diff that
 adds a migration sets Decision and waits for one word from you on the task's thread, `apply`;
-a pull request on a gated path — a migration, the product spec, the pipeline's own guard, gate,
-skill or run scripts — merges on the word `merge` at Review, and any other merges at close on the
-reviewer's `PASS` in `docs/reviews/<id>.md`, read by the guard at the pushed commit — the pull
-request's head must be the checkout's HEAD, so the file and the gated-path check are the ones on
-the commit that merges (`docs/guidelines.md` §4, T0.16). Neither word is taken from the model: the guard
+a pull request that adds one, or that **weakens a restraint** — a guard rule, the gated list, a
+hook, the Stop gate, a test — merges on the word `merge` at Review, and any other merges at close
+on the reviewer's `PASS` in `docs/reviews/<id>.md`, read by the guard at the pushed commit — the
+pull request's head must be the checkout's HEAD, so the file and the weakening check are the ones
+on the commit that merges (`docs/guidelines.md` §4, T0.16, T0.21). The weakening is a measurement
+and not a reading: `scripts/run/loosening.mjs` runs the restraints themselves on both sides of the
+diff against one fixed corpus, and anything refused before and allowed after is the answer. Neither word is taken from the model: the guard
 reads the thread itself, over the Notion API with the integration token in `.env.local`, and
 refuses the command until the reply is there and newer than the run's own last comment. The
 hooks themselves run from `origin/main`'s copy of `scripts/`, never the checkout's, so a run

@@ -166,15 +166,21 @@ requests never edit the same lines.
 
 The run commits on the branch, pushes it, opens the PR against `main` unless the branch already
 has one, sets the task's Commit to the short hash and its Status to Review, and then asks
-`gated.mjs` whether the diff is its own to merge: the gated paths — `drizzle/`, `.claude/`,
-`scripts/hooks/`, `scripts/run/`, `docs/product-spec.md`, `.worktreeinclude`, `.gitignore`, and
-`package.json` when its scripts change — are listed there once and read by the guard and the
-skill both. A diff touching none of them, with the reviewer's `PASS` on file, is merged by the
-run itself with `gh pr merge --merge --delete-branch` from the pushed commit — the gate run once
+`gated.mjs` whether the diff is its own to merge: since T0.21 that is a diff adding a migration
+under `drizzle/`, or one that **weakens a restraint**, which `loosening.mjs` measures rather than
+reads off the paths — it runs the guard's `decide` and `gated.mjs`'s own `isGatedPath` from both
+`origin/main` and this checkout against one fixed corpus, in a child process a side (`--probe`),
+and anything refused before and allowed after is a rule deleted or a matcher narrowed; a guard
+rule with no corpus entry, a hook gone from `.claude/settings.json` or no longer carrying main's
+command, a gate step dropped or its release count raised, a deleted test whose criteria nothing
+added names, and any diff touching `loosening.mjs` itself are gated the same way. Each reason
+carries what would ungate it, and the answer is read by the guard and the skill both. A diff
+that trips none of them, with the reviewer's `PASS` on file, is merged by the run itself with `gh pr merge --merge --delete-branch` from the pushed commit — the gate run once
 more first, so its green for that tree is on record — and the task is Done with its Release row
 in the same run; the guard's second door (`permission.mjs` `reviewed`) reads the verdict file,
 the gate's record, the diff and the pull request's head before it opens. A
-gated diff stays at Review with one comment naming the path, and merging is the human's move,
+gated diff stays at Review with one comment naming the rule it trips and what would ungate it,
+and merging is the human's move,
 made with the word `merge` there, which the guard refuses `gh pr merge` until `permission.mjs`
 has read from the board. Either way `release.mjs` removes the marker and a primary checkout
 returns to `main`; `release.mjs` also runs from the SessionEnd hook, so a run that dies leaves
