@@ -77,14 +77,15 @@ const related = (property) =>
 
 /**
  * One Tasks row as the run reads it: `{ id, url, Name, Status, Priority, Epic, Blockers,
- * created }`.
+ * created, Commit }`.
  *
  * The Tasks data source holds Status as a select property, not a status property, and the
  * API returns it under `select` (T0.15, T0.16). That shape alone is read: a status-typed
  * property is not the board's and reads null, which the guard then refuses at "no status".
  * Priority is a select too; Epic and Blockers are relations, read as the page ids they hold,
  * which is what the picker orders and sequences by (T0.17). A relation lists its first 25
- * pages inline — far more Blockers than any task carries.
+ * pages inline — far more Blockers than any task carries. Commit is the text the run writes at
+ * close, which `merge-detect.mjs` asks of a Review row read over the token (T0.23).
  */
 export function task(raw) {
   const props = raw?.properties ?? {};
@@ -97,6 +98,7 @@ export function task(raw) {
     Epic: related(props.Epic),
     Blockers: related(props.Blockers),
     created: raw?.created_time ?? null,
+    Commit: plain(props.Commit?.rich_text),
   };
 }
 

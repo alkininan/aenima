@@ -1,4 +1,10 @@
-<!-- guidelines.md · v1.14 · in the repo · the reviewer's model falls back along a configured
+<!-- guidelines.md · v1.15 · in the repo · a run tells the truth when something partial happens:
+     §3 the In progress → Decision row names the review that could not run; §5 step 5 a pass
+     stopped at its turn limit is resumed once and marked resumed, a second stop a stop; step 8
+     the reviewer table's resumed column; step 0 and §2 each mirror chunk read back and a page
+     that reads short rewritten once from its sentinel, a current page skipped, and the token as
+     the connector query's fallback when the workspace's usage limit is reached (rows.mjs).
+     v1.14 · in the repo · the reviewer's model falls back along a configured
      chain: §5 step 5 a call refused for credits or availability runs again on the next model, any
      other failure a stop, and step 8 the report names every pass's model.
      v1.13 · in the repo · the boundary reaches production: §5 Vercel's Production
@@ -192,8 +198,11 @@ reads each page's first block over the API for the commit it claims and plans th
 `main`; the run rewrites each through the connector **header-last** — a *refresh in progress*
 callout first, the document in chunks, the *Mirrored from* heading last — so a page is either
 whole and headed with its commit or visibly in progress, never in between. A sentinel still
-standing at the next preflight is a write that died, and that page is refreshed first. The
-Guidelines page is refreshed the same way.
+standing at the next preflight is a write that died, and that page is refreshed first. Since
+T0.23 each chunk is read back over the API once it is written (`mirror.mjs --verify`): a page that
+reads short of what was sent — a write cut off mid-chunk, which the sentinel cannot see, since the
+heading still goes on last — is rewritten once from its sentinel, and left under the sentinel if it
+reads short again. The Guidelines page is refreshed the same way.
 
 ---
 
@@ -206,7 +215,7 @@ Guidelines page is refreshed the same way.
 | Backlog | Ready | M | The same go, said on the thread: your newest reply begins with `ready`. The run sets Ready, the guard having read the word from the board — see §4. |
 | Ready | In progress | M | Run claims it. A branch already on origin is reused, with its pull request. |
 | In progress | Review | M | Branch pushed, Report written. |
-| In progress | Decision | M | Run stopped on a question, or a migration awaits your apply. |
+| In progress | Decision | M | Run stopped on a question, a migration awaits your apply, or the review could not run. |
 | Decision | Ready | M | Your comment assessed as resolving — see §4. No manual override. |
 | Decision | In progress | M | Your reply on a migration question says `apply`: the run applies it, the guard having read the word from the board, and carries the ticket on — see §4. |
 | Review | Ready | M | Your reply at Review asks for a change: folded into the body as an addendum; the next run builds it on the same branch and pull request and brings it back to Review. |
@@ -394,7 +403,12 @@ below is a script under `scripts/run/` with a test; the skill holds the judgment
                 comment · then refresh the Documents and Guidelines mirrors behind main
                 (mirror.mjs plans; the skill writes through the connector): a stopped refresh
                 first, each page header-last under a refresh-in-progress sentinel,
-                allow_async false on every write
+                allow_async false on every write, a page whose header commit equals its
+                file's on main skipped · each chunk read back over the API (mirror.mjs
+                --verify): a page that reads short is rewritten once from its sentinel and
+                left under it if short again · a connector query refused at the workspace's
+                usage limit is asked over the token instead (rows.mjs), and the report line
+                says so
 1  Claim        the board read over the API (pick-next.mjs) · a Ready task whose Blockers are
                 all Done, by Priority — Urgent · High · Medium · Low · None, empty as Medium —
                 a Ready blocker at the highest priority of any task not Done it blocks,
@@ -435,7 +449,9 @@ below is a script under `scripts/run/` with a test; the skill holds the judgment
                 definition pins and then .claude/settings.json's fallbackModel — review-model.mjs
                 reads the chain and the refusal, and the run never picks a model — in a fresh
                 session with the same one-line message: only the model changes, and
-                each pass starts again at the pinned model · the run
+                each pass starts again at the pinned model · a pass stopped at its turn limit
+                is neither a refusal nor a verdict: it is resumed once, in the same session,
+                and marked resumed in the report; a second stop at the limit is a stop · the run
                 names every pass's model in the report · any other failure, or a chain with no
                 model left, is a stop: the review did not run, so the branch is pushed, one
                 comment, Decision — a ticket never closes unreviewed
@@ -447,7 +463,8 @@ below is a script under `scripts/run/` with a test; the skill holds the judgment
                 handed, not the project dir; red cannot close
 8  Report       write docs/reports/<id>.md — refused without the red-first record: per test,
                 the mutation that made it red and the count that went green — and without the
-                model of every reviewer pass, one table row a pass — then mirror it
+                model of every reviewer pass and whether it was resumed, one table row a pass
+                carrying PASS or FINDINGS — then mirror it
                 into the body Report section: ACs implemented (each with its test) · tests
                 written · open questions · write docs/log/<id>.md and regenerate the build
                 log's list from the directory (log-index.mjs)
@@ -545,7 +562,12 @@ thread before it lets a merge or a migration apply through, and a Backlog task's
 lets the connector set it Ready (§4). Since T0.12 two more use it, still without a model:
 `mirror.mjs` reads each mirror page's first block before a refresh, and `runs.mjs` posts the Runs
 row at session end — so the integration needs insert-content capability besides read and
-comment. The token is read from the file and never printed; an API error names the endpoint and
+comment. Since T0.23 `mirror.mjs --verify` reads each mirror page back after every chunk, and the
+token answers the preflight's own questions when the connector cannot: the connector's query
+draws on the workspace's shared usage limit, and on 2026-09-16 a run met it spent — *Your
+workspace has reached the usage limit for Query Data Source* — so the In progress and Review rows,
+the newest release and the task a revert names are asked over the token with `rows.mjs`, and the
+report line says the board was read that way. The token is read from the file and never printed; an API error names the endpoint and
 the status and nothing else. Without it a run says so in its report line, reads no comments and
 claims nothing — the picker reads Blockers over the API too — refreshes no mirror and writes no
 Runs row, and a gated merge, an apply, a Ready write or a clarifying round is refused on that

@@ -55,6 +55,19 @@ A fresh worktree has no `node_modules`; the gate and the suite need them. It has
     test -d node_modules || pnpm install --frozen-lockfile
     test -d .next/types || pnpm next typegen
 
+**The connector's query.** Steps a, c and e ask the board through the connector's query, which
+draws on the workspace's shared usage limit. When the connector answers that the workspace has
+*reached the usage limit for Query Data Source*, ask the same question over the token instead,
+and say so in your report line:
+
+    node scripts/run/rows.mjs --status "In progress"
+    node scripts/run/rows.mjs --status "Review"
+    node scripts/run/rows.mjs --releases
+    node scripts/run/rows.mjs --id <id>
+
+The first for step a, the next two for step c (`--releases` newest first), the last for step e.
+Each row carries the `Name`, `Status`, `Commit` and `url` the steps below read.
+
 **a. A live run?** Query Tasks for `Status = 'In progress'`. With none, go on. Otherwise:
 
     echo '{"inProgress":[…]}' | node scripts/run/stale.mjs
@@ -187,9 +200,19 @@ revert it pushed is what they mirror:
 in the list — and you rewrite it, in the order given, through the connector with
 `allow_async: false` on **every** write: `replace_content` with the page's `sentinel` alone;
 then `insert_content` at the end with each chunk file's text, in order (`cat` the file, pass the
-text verbatim); then `update_content` replacing the sentinel with the page's `heading`. The
-heading goes last so a page is either whole and headed with its commit, or visibly *refresh in
-progress* — never in between. A page marked `missing` is one the Documents page does not list;
+text verbatim), and after each one read the page back with the chunk files written so far:
+
+    node scripts/run/mirror.mjs --verify <page> <chunk file 0> … <this chunk's file>
+
+`next: continue` → the next chunk. `next: rewrite` → the page reads short of what was sent — a
+write cut off partway, which the heading would otherwise cover: start that page again,
+`replace_content` with the `sentinel` alone and the chunks from the first, adding `--rewritten 1`
+to every read-back from there on, and say so in your report line. `next: leave` → it read short
+again: leave the sentinel standing, write no heading, say so in your report line and go on to the
+next page; the next preflight refreshes it first. Once the last chunk reads back whole,
+`update_content` replacing the sentinel with the page's `heading`. The heading goes last so a
+page is either whole and headed with its commit, or visibly *refresh in progress* — never in
+between, and never quietly cut short. A page marked `missing` is one the Documents page does not list;
 say so in the report and write nothing for it.
 
 ## 1 Claim
@@ -312,6 +335,20 @@ not run, and a ticket never closes unreviewed: commit and push the branch, post 
 `why` its `why` and then its `detail` in quotes, `settle` what would settle it — release the
 marker, set `Decision`, and exit. Whichever model a pass ran on, the report names it (step 8).
 
+**A pass that stops at its turn limit** comes back as a result, not an error: Claude Code's note
+that the agent *stopped at its 30-turn limit before finishing*, over no report or a partial one.
+What it holds is never a verdict, whatever it says. Ask the same script, `error` the note verbatim
+and `resumed` the times this pass has already been resumed:
+
+    node scripts/run/review-model.mjs <<'EOF'
+    {"tried":["<the models this pass was called on>"],"error":"<the note>","resumed":0}
+    EOF
+
+`resume: true` → continue that same session once, `SendMessage` to the agent with one line and no
+briefing — *Continue from where you stopped, and write the verdict file.* — and the report marks
+the pass resumed. If it stops at the limit again, ask again with `"resumed":1`: `stop: true` → the
+review did not run, and the stop is the one above.
+
 Each finding is tagged **Must** or **Should**. Fix every Must, then re-invoke. **Three passes
 maximum.** After the third, any remaining Must becomes an open question with owner `T-next`, and
 Shoulds are recorded in the report. A finding outside this ticket's scope becomes a Backlog task:
@@ -338,9 +375,11 @@ before a self-merge, so the green for the pushed tree is on record where the gua
 
 Write `docs/reports/<id>.md`: ACs implemented each with its test · **tests written, each
 observed red first** — one table, columns `test · reddened by · red → green`, the record from
-step 4 · **reviewer passes and findings** — one table, columns `pass · commit · model · verdict`,
-a row for every pass with the model it ran on, then the findings · changed since this ticket was
-cut · open questions. Then:
+step 4 · **reviewer passes and findings** — one table,
+columns `pass · commit · model · resumed · verdict`, a row for every pass with
+the model it ran on, `yes` under resumed when it stopped at its turn limit and was continued and
+`no` otherwise, and `PASS` or `FINDINGS` under verdict — a pass that reached neither is not a row
+— then the findings · changed since this ticket was cut · open questions. Then:
 
     node scripts/run/report-check.mjs docs/reports/<id>.md
 

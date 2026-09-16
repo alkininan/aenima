@@ -18,6 +18,15 @@ const CREDITS =
 const OVERLOADED =
   "Agent terminated early due to an API error: Overloaded (error type overloaded, HTTP 529, request id req_011Cf5dz2qYUQoGvCV8LM)";
 
+/**
+ * Claude Code's note when a subagent stops at its `maxTurns`, in the two shapes the reviewer's
+ * transcripts hold (T0.17, T0.19, T1.4, T2.9, T2.10): no report yet, or a partial one.
+ */
+const TURN_LIMIT =
+  "NOTE: this agent stopped at its 30-turn limit before finishing. It was still calling tools and had produced no report. Send the agent a message (SendMessage) to let it continue from where it stopped.\n\nagentId: a6cd2cef965f190e1 (use SendMessage with to: 'a6cd2cef965f190e1', summary: '<5-10 word recap>' to continue this agent)";
+const TURN_LIMIT_PARTIAL =
+  "NOTE: this agent stopped at its 30-turn limit before finishing. The text below is PARTIAL output; treat it as incomplete. Send the agent a message (SendMessage) to let it continue from where it stopped.\n\nI'll start by reading the ticket and the diff.\nPASS";
+
 const AGENT =
   "---\nname: reviewer\ntools: Read, Grep, Glob, Bash\nmodel: fable\nmaxTurns: 30\n---\n\nBody.\n";
 const SETTINGS = JSON.stringify({ fallbackModel: ["opus"], hooks: {} });
@@ -96,6 +105,7 @@ describe("nextReviewer", () => {
       chain: CHAIN,
       cause: "credits",
       stop: false,
+      resume: false,
       model: "opus",
       why: null,
       detail: CREDITS,
@@ -118,6 +128,7 @@ describe("nextReviewer", () => {
       chain: CHAIN,
       cause: "other",
       stop: true,
+      resume: false,
       model: null,
       why: "the reviewer's call failed for a reason that is neither credits nor availability, so the review did not run",
       detail: "API Error: 400 prompt is too long: 212500 tokens > 200000 maximum",
@@ -150,6 +161,66 @@ describe("nextReviewer", () => {
   });
 });
 
+// T0.23 TC1 → AC1 — a pass that stops at its turn limit is neither a refusal nor a verdict.
+describe("a pass stopped at its turn limit", () => {
+  it("reads Claude Code's turn-limit note as turn-limit in both its shapes, and a finished review's footer as nothing of the kind", () => {
+    expect(causeOf(TURN_LIMIT)).toBe("turn-limit");
+    expect(causeOf(TURN_LIMIT_PARTIAL)).toBe("turn-limit");
+    expect(
+      causeOf(
+        "PASS\nagentId: a1b2 (use SendMessage with to: 'a1b2', summary: '<5-10 word recap>' to continue this agent)",
+      ),
+    ).toBe("other");
+  });
+
+  it("resumes the pass once, in the same session on the model it ran on", () => {
+    expect(
+      nextReviewer({
+        chain: CHAIN,
+        tried: ["fable", "opus"],
+        error: TURN_LIMIT_PARTIAL,
+        resumed: 0,
+      }),
+    ).toEqual({
+      chain: CHAIN,
+      cause: "turn-limit",
+      stop: false,
+      resume: true,
+      model: "opus",
+      why: null,
+      detail:
+        "NOTE: this agent stopped at its 30-turn limit before finishing. The text below is PARTIAL output; treat it as incomplete. Send the agent a message (SendMessage) to let it continue from where it stopped.",
+    });
+    expect(nextReviewer({ chain: CHAIN, tried: ["fable"], error: TURN_LIMIT })).toMatchObject({
+      stop: false,
+      resume: true,
+      model: "fable",
+    });
+  });
+
+  it("stops a pass that reaches its turn limit a second time — the review did not run", () => {
+    expect(
+      nextReviewer({ chain: CHAIN, tried: ["fable"], error: TURN_LIMIT, resumed: 1 }),
+    ).toMatchObject({
+      cause: "turn-limit",
+      stop: true,
+      resume: false,
+      model: null,
+      why: "the reviewer stopped at its turn limit twice, so the review did not run",
+    });
+  });
+
+  it("never resumes a refused call or one that failed otherwise", () => {
+    expect(nextReviewer({ chain: CHAIN, tried: ["fable"], error: CREDITS })).toMatchObject({
+      resume: false,
+      model: "opus",
+    });
+    expect(
+      nextReviewer({ chain: CHAIN, tried: ["fable"], error: "Tool Bash is not available" }),
+    ).toMatchObject({ resume: false, stop: true });
+  });
+});
+
 // T0.22 TC1 → AC1
 describe("guidelines §5 step 5", () => {
   const guidelines = readFileSync(join(root, "docs/guidelines.md"), "utf8");
@@ -177,5 +248,34 @@ describe("guidelines §5 step 5", () => {
     expect(skillStep5).toContain("each pass starts again at the pinned model");
     expect(skillStep5).toContain("fallbackModel");
     expect(skillStep5).toContain("`refused`");
+  });
+
+  // T0.23 TC1 → AC1
+  it("resumes a pass stopped at its turn limit once, marks it resumed, and stops on the second", () => {
+    expect(step5).toContain("turn limit");
+    expect(step5).toContain("resumed once, in the same session");
+    expect(step5).toContain("marked resumed in the report");
+    expect(step5).toContain("a second stop at the limit is a stop");
+  });
+
+  // T0.23 TC1 → AC1
+  it("is what the skill's step 5 tells a run to do at the turn limit", () => {
+    const skillStep5 = skill.match(/^## 5 Review\n[\s\S]*?(?=^## 6 )/m)?.[0] ?? "";
+    expect(skillStep5).toContain("turn limit");
+    expect(skillStep5).toContain('"resumed":0');
+    expect(skillStep5).toContain("`resume: true`");
+    expect(skillStep5).toContain("SendMessage");
+    expect(skillStep5).toContain("never a verdict");
+  });
+});
+
+// T0.23 TC2 → AC2
+describe("guidelines §3", () => {
+  const guidelines = readFileSync(join(root, "docs/guidelines.md"), "utf8");
+
+  it("names the review that could not run on the In progress → Decision row", () => {
+    const row = guidelines.match(/^\| In progress \| Decision \|[^\n]*$/m)?.[0] ?? "";
+    expect(row).toContain("a migration awaits your apply");
+    expect(row).toContain("the review could not run");
   });
 });

@@ -18,12 +18,20 @@
  * progress — never in between. A sentinel still standing at the next preflight is a write
  * that died partway, and that page is refreshed first, whatever its commit.
  *
- * Pure parts — `parseHeader`, `heading`, `sentinel`, `chunk`, `decide`, `order` — are
- * tested; `readPlan` gathers the observations with git and the API and is injected.
+ * Read back after every chunk (T0.23). The sentinel covers a chunk that never arrives; a chunk
+ * that arrives cut off — two did, mid-sentence, when the write carrying them was itself cut
+ * short — would leave a page headed as whole and missing its ending. So once a chunk is written
+ * the page is read back over the API and its text compared with what was sent: its length, and
+ * whether it ends where the last chunk ends. A page that reads short is rewritten once from its
+ * sentinel, and left under the sentinel if it reads short again.
+ *
+ * Pure parts — `parseHeader`, `heading`, `sentinel`, `chunk`, `decide`, `order`, `written`,
+ * `held`, `verify` — are tested; `readPlan` and `readVerify` gather the observations with git
+ * and the API and are injected.
  */
 
 import { spawnSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -248,9 +256,127 @@ export async function readPlan({ dir = process.cwd(), deps = {} } = {}) {
   return { token: true, pages: ordered };
 }
 
-/** CLI: `node mirror.mjs`, run from the checkout. */
+/**
+ * How many letters and digits a page may read short of what was sent and still be whole. Notion
+ * renders a handful its own way — the eight mirrors, read back whole on 2026-09-16, were 0, 0,
+ * 0, 0, 0, 7, 3 and −2 apart — and a chunk cut off is caught by its ending, not by this.
+ */
+export const SLACK = 64;
+
+/** How many of the last letters and digits sent the page must end with. */
+export const TAIL = 48;
+
+/** A text's letters and digits alone, its HTML comments aside — a page may keep or drop one. */
+const letters = (text) =>
+  String(text ?? "")
+    .normalize("NFC")
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/[^\p{L}\p{N}]/gu, "");
+
+/**
+ * What a page keeps of the markdown written to it, as letters and digits. A fence's language, an
+ * ordered list's number (bolded or not) and a link's target are markup the page holds as a
+ * property or not at all; inline code keeps all of its text.
+ */
+export function written(markdown) {
+  let fenced = false;
+  const lines = String(markdown ?? "")
+    .split("\n")
+    .map((line) => {
+      if (/^\s*(```|~~~)/.test(line)) {
+        fenced = !fenced;
+        return "";
+      }
+      if (fenced) return line;
+      return line
+        .replace(/^(\s*(?:\*\*|\*|__|_)?)\d+[.)]\s/, "$1")
+        .split("`")
+        .map((part, i) => (i % 2 === 0 ? part.replace(/\]\([^)\s]*\)/g, "]") : part))
+        .join("`");
+    });
+  return letters(lines.join("\n"));
+}
+
+/** The plain text of one block the API hands back: its rich text, or a table row's cells. */
+const blockText = (block) => {
+  const body = block?.[block?.type] ?? {};
+  if (block?.type === "table_row") return (body.cells ?? []).map(plain).join("\n");
+  return plain(body.rich_text);
+};
+
+/** The letters and digits a page holds, its first block — the header — aside. */
+export function held(blocks) {
+  return letters((blocks ?? []).slice(1).map(blockText).join("\n"));
+}
+
+/**
+ * Whether a page holds every chunk sent to it so far. `chunks` the markdown of each, in order;
+ * `blocks` the page read back; `rewritten` how many times this page has been rewritten already.
+ * Returns `{ ok, next, sent, found, short, ended }`: `next` is `continue`, `rewrite` — once, from
+ * the sentinel — or `leave`, the page standing under its sentinel for the next preflight.
+ */
+export function verify({ chunks = [], blocks = [], rewritten = 0 }) {
+  const sent = written(chunks.join("\n\n"));
+  const found = held(blocks);
+  const short = sent.length - found.length;
+  const ended = found.endsWith(sent.slice(-TAIL));
+  const ok = short <= SLACK && ended;
+  const next = ok ? "continue" : rewritten >= 1 ? "leave" : "rewrite";
+  return { ok, next, sent: sent.length, found: found.length, short, ended };
+}
+
+/** Every block of a page in document order, each followed by its children — a child page's aside. */
+export async function readBlocks(api, id) {
+  const blocks = [];
+  for (const block of await api.children(id)) {
+    blocks.push(block);
+    if (block?.has_children && block.type !== "child_page" && block.type !== "child_database") {
+      blocks.push(...(await readBlocks(api, block.id)));
+    }
+  }
+  return blocks;
+}
+
+/**
+ * The read-back for `page` after the chunk files in `files` were written to it, in order. Effects
+ * injected: `token`, `client`, `read`.
+ */
+export async function readVerify({
+  page,
+  files = [],
+  rewritten = 0,
+  dir = process.cwd(),
+  deps = {},
+}) {
+  const token = deps.token ? deps.token() : readToken(dir);
+  if (token === null) {
+    return { token: false, page, ok: false, why: `${TOKEN_VAR} is not in .env.local` };
+  }
+  const api = deps.client ?? client(token, { fetch: deps.fetch });
+  const read = deps.read ?? ((file) => readFileSync(file, "utf8"));
+  const chunks = files.map((file) => read(file));
+  return {
+    token: true,
+    page,
+    ...verify({ chunks, blocks: await readBlocks(api, page), rewritten }),
+  };
+}
+
+/**
+ * CLI: `node mirror.mjs`, run from the checkout, plans the refresh; `node mirror.mjs --verify
+ * <page> [--rewritten <n>] <chunk file>…` reads the page back after the chunks named were written.
+ */
 async function main() {
-  emit(await readPlan());
+  const args = process.argv.slice(2);
+  if (args[0] !== "--verify") return emit(await readPlan());
+  let rewritten = 0;
+  const rest = [];
+  for (let i = 1; i < args.length; i++) {
+    if (args[i] === "--rewritten") rewritten = Number(args[++i]);
+    else rest.push(args[i]);
+  }
+  const [page, ...files] = rest;
+  emit(await readVerify({ page, files, rewritten }));
 }
 
 if (isMain(import.meta.url)) await main();

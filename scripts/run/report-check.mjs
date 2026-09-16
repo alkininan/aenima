@@ -15,6 +15,10 @@
  * every row names the model that pass ran on — a model of the configured chain when the chain
  * is given, which the command reads from the repo. A reader sees which mind passed which code,
  * and a pass on a model the run picked for itself cannot be reported as though it were not.
+ *
+ * Since T0.23 every row also says under `resumed`, `yes` or `no`, whether the pass stopped at its
+ * turn limit and was continued, and under `verdict` carries PASS or FINDINGS and nothing else: a
+ * pass that reached no verdict is not a row, because a partial review is never reported as one.
  */
 
 import { spawnSync } from "node:child_process";
@@ -57,9 +61,16 @@ export function tableRows(section) {
   return rows.length === 0 ? null : { header: rows[0], body: rows.slice(1) };
 }
 
+/** A table cell as it reads, code and bold markers aside. */
+const bare = (cell) =>
+  String(cell ?? "")
+    .replace(/[`*]/g, "")
+    .trim();
+
 /**
- * The problems with a report's reviewer passes: no section, no table, no `model` column, or a
- * pass whose model is empty or — when `chain` is given — outside it.
+ * The problems with a report's reviewer passes: no section, no table, no `model`, `resumed` or
+ * `verdict` column, or a pass whose model is empty or — when `chain` is given — outside it,
+ * whose `resumed` is not `yes` or `no`, or whose verdict is not PASS or FINDINGS.
  */
 export function reviewerProblems(text, chain = null) {
   const section = reviewerSection(text);
@@ -67,23 +78,42 @@ export function reviewerProblems(text, chain = null) {
   const table = tableRows(section);
   if (table === null) return ["no table under Reviewer passes"];
   const head = table.header.map((cell) => cell.toLowerCase());
-  const model = head.findIndex((cell) => cell.includes("model"));
-  if (model === -1) return ["no `model` column under Reviewer passes"];
+  const column = (name) => head.findIndex((cell) => cell.includes(name));
+  const model = column("model");
+  const resumed = column("resumed");
+  const verdict = column("verdict");
+  for (const [index, name] of [
+    [model, "model"],
+    [resumed, "resumed"],
+    [verdict, "verdict"],
+  ]) {
+    if (index === -1) return [`no \`${name}\` column under Reviewer passes`];
+  }
   if (table.body.length === 0) return ["the reviewer table has no rows"];
 
-  const pass = head.findIndex((cell) => cell.includes("pass"));
+  const pass = column("pass");
   const allowed = chain?.map((name) => name.toLowerCase());
   const problems = [];
   table.body.forEach((row, i) => {
     const label = (pass === -1 ? "" : row[pass]) || String(i + 1);
-    const cell = String(row[model] ?? "")
-      .replace(/[`*]/g, "")
-      .trim();
+    const cell = bare(row[model]);
     if (cell === "") {
       problems.push(`reviewer pass ${label} names no model`);
     } else if (allowed && !allowed.includes(cell.toLowerCase())) {
       problems.push(
         `reviewer pass ${label} ran on ${cell}, which is not in the configured chain — ${chain.join(", ")}`,
+      );
+    }
+    const again = bare(row[resumed]);
+    if (!["yes", "no"].includes(again.toLowerCase())) {
+      problems.push(
+        `reviewer pass ${label} says ${again || "nothing"} under resumed, not yes or no`,
+      );
+    }
+    const said = bare(row[verdict]);
+    if (!["PASS", "FINDINGS"].includes(said)) {
+      problems.push(
+        `reviewer pass ${label} carries ${said || "nothing"} where a verdict stands — PASS or FINDINGS`,
       );
     }
   });
