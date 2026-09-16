@@ -33,8 +33,12 @@ export type ItemLineData = {
 export function ItemLine({ item, t }: { item: ItemLineData; t: Dictionary }) {
   return (
     <div className="relative flex h-[56px] items-center gap-[12px] px-[12px] transition-colors duration-[var(--t-fast)] ease-brand hover:bg-surface-3">
-      {/* The whole line is the target, stretched rather than wrapping, so the
-          taxonomy on the right stays selectable text. */}
+      {/* The whole line is the target, stretched over the row rather than
+          wrapping it — `ItemRow`'s reason, which is that anything else on the
+          row stays clickable in its own right rather than being swallowed by an
+          outer anchor. This line has neither a menu nor chips, so the pattern is
+          here for consistency with §8's row; the overlay covers the taxonomy
+          too, which is why that text is not selectable. */}
       <Link
         href={itemHref(item.key)}
         className="min-w-0 flex-1 after:absolute after:inset-0 after:content-['']"

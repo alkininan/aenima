@@ -1,8 +1,9 @@
 import "server-only";
 
 import type { Database } from "@/db/database.types";
+import { toArtifacts } from "@/db/queries/item";
 import { createClient } from "@/lib/supabase/server";
-import { deriveStage, type ArtifactPresence, type Stage } from "@/lib/stage";
+import { deriveStage, type Stage } from "@/lib/stage";
 
 /**
  * Opportunities in a product — §2's "problem or outcome … holds an evidence
@@ -72,18 +73,6 @@ const OPPORTUNITY_PAGE_TREE = `id, key, title, summary,
    product(name),
    item(key, title, type, artifact(kind, artifact_version(count)))`;
 
-/** PostgREST returns an embedded `count` as `[{ count: n }]`. */
-type CountRow = { count: number }[];
-
-function toArtifacts(
-  rows: { kind: ArtifactPresence["kind"]; artifact_version: CountRow }[] | null,
-): ArtifactPresence[] {
-  return (rows ?? []).map((row) => ({
-    kind: row.kind,
-    versionCount: row.artifact_version[0]?.count ?? 0,
-  }));
-}
-
 /**
  * One opportunity by the key people say out loud — `soc-3` — and the items that
  * belong to it.
@@ -111,7 +100,14 @@ export async function getOpportunityByKey(
     .eq("key", key)
     // PostgREST orders an embed only when asked, and an unordered embed is a
     // list that can reshuffle itself between two reads of the same page.
+    //
+    // Two columns because one is not a total order: rows written by a single
+    // statement share `now()`, which is exactly why `drizzle/0015`'s own
+    // backfill tie-breaks on `(created_at, id)`. Today's seed writes items one
+    // at a time, so the tie is not reachable yet — the second key is what keeps
+    // "creation order" true the day something inserts a batch.
     .order("created_at", { ascending: true, referencedTable: "item" })
+    .order("key", { ascending: true, referencedTable: "item" })
     .maybeSingle();
 
   if (error) throw new Error(`Could not read opportunity: ${error.message}`);

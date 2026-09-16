@@ -75,9 +75,16 @@ const ITEM_TREE =
   "id, title, type, flow_intent, opportunity_id, artifact(kind, artifact_version(count))";
 
 /** PostgREST returns an embedded `count` as `[{ count: n }]`. */
-type CountRow = { count: number }[];
+export type CountRow = { count: number }[];
 
-function toArtifacts(
+/**
+ * Exported because `opportunity.ts` reads the same embed for the same reason,
+ * and two copies of this would be two readings of PostgREST's count shape that
+ * can drift apart. It lives here rather than in a shared module because this is
+ * where `ITEM_TREE` is: the shape and the query that asks for it belong
+ * together, and a second caller is not yet a third.
+ */
+export function toArtifacts(
   rows: { kind: ArtifactPresence["kind"]; artifact_version: CountRow }[] | null,
 ): ArtifactPresence[] {
   return (rows ?? []).map((row) => ({
