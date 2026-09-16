@@ -90,6 +90,7 @@ describe("comment and task", () => {
       Epic: [],
       Blockers: [],
       created: null,
+      Commit: "",
     });
     expect(task({ id: "t2", properties: {} }).Status).toBeNull();
   });
@@ -120,6 +121,20 @@ describe("comment and task", () => {
       created: "2026-09-14T17:11:24.354Z",
     });
     expect(task({ id: "t7", properties: { Priority: { select: null } } }).Priority).toBeNull();
+  });
+
+  // T0.23 TC5 → AC5 — the Review rows read over the token carry the commit merge-detect asks of
+  // them, as the connector's query did.
+  it("reads a Tasks row's Commit as its text, empty when the row has none", () => {
+    const raw = {
+      id: "t8",
+      properties: {
+        Name: { title: [{ plain_text: "T1.5 Park move and row roving" }] },
+        Commit: { type: "rich_text", rich_text: [{ plain_text: "33ece73" }] },
+      },
+    };
+    expect(task(raw).Commit).toBe("33ece73");
+    expect(task({ id: "t9", properties: {} }).Commit).toBe("");
   });
 
   // T0.16 TC1 → AC1 (carries T0.15). The Tasks data source holds Status as a select property, not a status
@@ -266,6 +281,7 @@ describe("client", () => {
       Epic: [],
       Blockers: [],
       created: null,
+      Commit: "",
     });
     expect(calls[0].method).toBe("GET");
   });

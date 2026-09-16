@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -12,8 +14,13 @@ import {
   MIRRORS,
   order,
   parseHeader,
+  readBlocks,
   readPlan,
+  readVerify,
   sentinel,
+  SLACK,
+  verify,
+  written,
 } from "./mirror.mjs";
 
 // T0.12 — TC2 → AC2. A mirror page is whole and headed with its commit, or visibly in
@@ -265,6 +272,21 @@ describe("readPlan", () => {
     expect(plan.pages.filter((p) => p.refresh).map((p) => p.title)).toEqual(["schema"]);
   });
 
+  // T0.23 TC4 → AC4 — a page whose header commit equals main's is skipped: no write, no chunk.
+  it("skips every page whose header commit equals the file's on main — nothing refreshed, no chunk planned", async () => {
+    const headers = Object.fromEntries(
+      MIRRORS.map((m) => [
+        m.title === "Guidelines" ? "guide-page" : `${m.title}-page`,
+        heading({ path: m.path, doc: m.doc, version: null, commit: "c0ffee1" }),
+      ]),
+    );
+    const plan = await readPlan({ deps: deps(headers) });
+    expect(plan.pages).toHaveLength(MIRRORS.length);
+    for (const page of plan.pages) {
+      expect(page, page.title).toMatchObject({ refresh: false, reason: "current", chunks: [] });
+    }
+  });
+
   it("reports a sub-page the Documents page does not list as missing rather than planning a write to nowhere", async () => {
     const client = api({});
     const children = client.children;
@@ -277,5 +299,179 @@ describe("readPlan", () => {
       page: null,
       missing: true,
     });
+  });
+});
+
+// T0.23 TC3 → AC3 — a chunk that arrives cut off is found by reading the page back, and the page
+// is rewritten once: whole, visibly in progress, or rewritten, never quietly truncated.
+describe("verify", () => {
+  const block = (type, text) => ({ type, [type]: { rich_text: [{ plain_text: text }] } });
+  const header = block("callout", "Mirror — refresh in progress. docs/x.md · Started earlier");
+  const markdown = [
+    "# Title\n\n1. **Bold** `code [a](b.md)` and a line that runs on",
+    "   past its wrap.\n\n```sql\ncreate role x;\n```\n\n<!-- a note\n     over two lines -->",
+    "\n\n| a | b |\n|---|---|\n| one | two |\n\n[link](https://x.y) end of the chunk, said in full.",
+  ].join("");
+  /** The same document as Notion hands its blocks back: plain text, markers and targets gone. */
+  const blocks = [
+    header,
+    block("heading_1", "Title"),
+    block("numbered_list_item", "Bold code [a](b.md) and a line that runs on"),
+    block("paragraph", "past its wrap."),
+    block("code", "create role x;"),
+    { type: "table", table: {} },
+    { type: "table_row", table_row: { cells: [[{ plain_text: "a" }], [{ plain_text: "b" }]] } },
+    { type: "table_row", table_row: { cells: [[{ plain_text: "one" }], [{ plain_text: "two" }]] } },
+    block("paragraph", "link end of the chunk, said in full."),
+  ];
+
+  it("reads markdown as the letters and digits a page keeps — a fence's language, a list's number, a link's target and a comment aside", () => {
+    expect(written(markdown)).toBe(
+      "TitleBoldcodeabmdandalinethatrunsonpastitswrapcreaterolexabonetwolinkendofthechunksaidinfull",
+    );
+    expect(written("**4. Every mutating action**")).toBe("Everymutatingaction");
+  });
+
+  it("passes a page that holds every chunk sent so far", () => {
+    const at = markdown.indexOf("\n\n| a |");
+    const [first, second] = [markdown.slice(0, at), markdown.slice(at + 2)];
+    expect(verify({ chunks: [first, second], blocks })).toEqual({
+      ok: true,
+      next: "continue",
+      sent: 92,
+      found: 92,
+      short: 0,
+      ended: true,
+    });
+  });
+
+  it("finds a chunk cut off mid-sentence, however few characters it lost", () => {
+    const cut = [...blocks.slice(0, -1), block("paragraph", "link end of the chunk, said in")];
+    expect(verify({ chunks: [markdown], blocks: cut })).toMatchObject({
+      ok: false,
+      short: 4,
+      ended: false,
+    });
+  });
+
+  it("finds a chunk that lost more than the slack from its middle, its ending intact", () => {
+    const long = `${"word ".repeat(40)}\n\n${markdown}`;
+    const lost = [header, ...blocks.slice(1)];
+    expect(verify({ chunks: [long], blocks: lost })).toMatchObject({
+      ok: false,
+      short: 160,
+      ended: true,
+    });
+    expect(SLACK).toBeLessThan(160);
+  });
+
+  // T0.23 review pass 1, Should 1 — a page that reads long is no more whole than one that reads short.
+  it("finds a page that reads long — a chunk written twice", () => {
+    const twice = [...blocks, ...blocks.slice(1)];
+    expect(verify({ chunks: [markdown], blocks: twice })).toMatchObject({
+      ok: false,
+      short: -92,
+      ended: true,
+    });
+  });
+
+  it("allows the handful of characters Notion renders its own way", () => {
+    const near = blocks.map((b) => (b.type === "heading_1" ? block("heading_1", "Titl") : b));
+    expect(verify({ chunks: [markdown], blocks: near })).toMatchObject({ ok: true, short: 1 });
+  });
+
+  it("rewrites a short page once, and leaves it under its sentinel the second time", () => {
+    const cut = blocks.slice(0, -1);
+    expect(verify({ chunks: [markdown], blocks: cut }).next).toBe("rewrite");
+    expect(verify({ chunks: [markdown], blocks: cut, rewritten: 1 }).next).toBe("leave");
+    expect(verify({ chunks: [markdown], blocks, rewritten: 1 }).next).toBe("continue");
+  });
+
+  // T0.23 review pass 1, Should 5
+  it("leaves a short page rather than rewriting it again when the count it is handed is not a number", () => {
+    const cut = blocks.slice(0, -1);
+    for (const rewritten of [Number.NaN, "once", null]) {
+      expect(verify({ chunks: [markdown], blocks: cut, rewritten }).next, String(rewritten)).toBe(
+        "leave",
+      );
+    }
+  });
+
+  it("reads a page's blocks back in order with their children — continuation lines and table rows — and never a child page's", async () => {
+    const tree = {
+      page: [
+        { id: "p1", type: "paragraph", has_children: true },
+        { id: "t1", type: "table", has_children: true },
+        { id: "c1", type: "child_page", has_children: true },
+        { id: "p2", type: "paragraph", has_children: false },
+      ],
+      p1: [{ id: "p1a", type: "paragraph", has_children: false }],
+      t1: [
+        { id: "r1", type: "table_row", has_children: false },
+        { id: "r2", type: "table_row", has_children: false },
+      ],
+      c1: [{ id: "inside", type: "paragraph", has_children: false }],
+    };
+    const api = { children: async (id) => tree[id] ?? [] };
+    expect((await readBlocks(api, "page")).map((b) => b.id)).toEqual([
+      "p1",
+      "p1a",
+      "t1",
+      "r1",
+      "r2",
+      "c1",
+      "p2",
+    ]);
+  });
+
+  it("says so and reads nothing without the token", async () => {
+    const result = await readVerify({ page: "x", files: [], deps: { token: () => null } });
+    expect(result).toMatchObject({ token: false, ok: false });
+    expect(result.why).toContain("NOTION_TOKEN");
+  });
+
+  it("reads the chunk files sent so far and the page, and answers for both", async () => {
+    const at = markdown.indexOf("\n\n| a |");
+    const files = { "c0.md": markdown.slice(0, at), "c1.md": markdown.slice(at + 2) };
+    const api = { children: async (id) => (id === "page-1" ? blocks : []) };
+    const result = await readVerify({
+      page: "page-1",
+      files: ["c0.md", "c1.md"],
+      rewritten: 1,
+      deps: { token: () => "t", client: api, read: (file) => files[file] },
+    });
+    expect(result).toEqual({
+      token: true,
+      page: "page-1",
+      ok: true,
+      next: "continue",
+      sent: 92,
+      found: 92,
+      short: 0,
+      ended: true,
+    });
+  });
+});
+
+// T0.23 TC3 → AC3 — what the skill's step 0 and guidelines §2 tell a run to do after each chunk.
+describe("the read-back, in the skill and guidelines §2", () => {
+  const root = join(import.meta.dirname, "..", "..");
+  const skill = readFileSync(join(root, ".claude/skills/ticket/SKILL.md"), "utf8");
+  const guidelines = readFileSync(join(root, "docs/guidelines.md"), "utf8");
+
+  it("reads each chunk back, rewrites a short page once from its sentinel, and leaves it there the second time", () => {
+    const step0 = skill.match(/^## 0 Preflight\n[\s\S]*?(?=^## 1 )/m)?.[0] ?? "";
+    expect(step0).toContain("node scripts/run/mirror.mjs --verify");
+    expect(step0).toContain("`next: rewrite`");
+    expect(step0).toContain("`next: leave`");
+    expect(step0).toContain("--rewritten 1");
+    // T0.23 review pass 1, Should 2
+    expect(step0).toContain("comes back with no `next`");
+  });
+
+  it("says so in §2, where the mirrors are described", () => {
+    const documents = guidelines.match(/^### Documents\n[\s\S]*?(?=^---)/m)?.[0] ?? "";
+    expect(documents).toContain("mirror.mjs --verify");
+    expect(documents).toContain("rewritten once from its sentinel");
   });
 });

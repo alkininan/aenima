@@ -13,6 +13,11 @@
  * runs again in a fresh session with the same one-line message, and only the model changes.
  * Any other failure — and a chain with no step left — is a stop: the review did not run, and
  * a ticket never closes unreviewed.
+ *
+ * A pass that stops at its `maxTurns` is neither (T0.23). Claude Code hands it back as a result
+ * with a note to continue it, not as an error, and what it holds is partial — never a verdict.
+ * It is resumed once, in the same session on the model it ran on; a second stop at the limit
+ * is a stop like any review that could not run.
  */
 
 import { readFileSync } from "node:fs";
@@ -58,16 +63,26 @@ export function readChain(root = process.cwd(), read = (path) => readFileSync(pa
 }
 
 /**
- * Why a reviewer call failed: `credits`, `availability`, or `other`.
+ * Claude Code's note on a subagent that reached its `maxTurns`: "NOTE: this agent stopped at its
+ * 30-turn limit before finishing. …", followed by no report or by partial output. Read only where
+ * the result begins with it — a finished review may quote it.
+ */
+export const TURN_LIMIT = /^\s*NOTE: this agent stopped at its \d+-turn limit\b/i;
+
+/**
+ * Why a reviewer call came back without a review: `turn-limit`, `credits`, `availability`, or
+ * `other`.
  *
- * Only a refusal from the model's API counts for either of the first two, which Claude Code
- * reports as "…an API error: … (error type rate_limit, HTTP 429, …)" or "API Error: 429 …"; a
- * connection lost mid-response is the service not answering, so it is availability. A
- * status is read where a status stands, never as any three digits in the message: "max_tokens:
- * 512" is a bad request, not a server that did not answer.
+ * `turn-limit` is the note above, read first, since the partial output under it may say
+ * anything — a `PASS` included. Only a refusal from the model's API counts for credits or
+ * availability, which Claude Code reports as "…an API error: … (error type rate_limit, HTTP
+ * 429, …)" or "API Error: 429 …"; a connection lost mid-response is the service not answering,
+ * so it is availability. A status is read where a status stands, never as any three digits in
+ * the message: "max_tokens: 512" is a bad request, not a server that did not answer.
  */
 export function causeOf(error) {
   const text = String(error ?? "");
+  if (TURN_LIMIT.test(text)) return "turn-limit";
   if (!/\bAPI error\b/i.test(text)) return "other";
   const status = text.match(/\bHTTP (\d{3})\b/i)?.[1] ?? text.match(/\bAPI Error: (\d{3})\b/i)?.[1];
   if (
@@ -90,18 +105,21 @@ export function causeOf(error) {
 }
 
 /**
- * The step after a refused call. `tried` is every model this pass has been called on, in order,
- * which must be the start of the chain — a model from anywhere else is the run's own pick. Each
- * pass starts again at the pinned model, so a second pass on a model still out of credits falls
- * back the way the first did. Returns `{ chain, cause, stop, model, why, detail }`: `model` the one to call next when
- * `stop` is false, `why` the sentence a stop reports, `detail` the failure's first line.
+ * The step after a call that came back without a review. `tried` is every model this pass has
+ * been called on, in order, which must be the start of the chain — a model from anywhere else is
+ * the run's own pick. Each pass starts again at the pinned model, so a second pass on a model
+ * still out of credits falls back the way the first did. `resumed` is how many times this pass
+ * has already been resumed at its turn limit. Returns `{ chain, cause, stop, resume, model, why,
+ * detail }`: `resume` true when the pass is continued in its own session on `model`, the model
+ * it ran on; otherwise `model` the one to call next in a fresh session when `stop` is false;
+ * `why` the sentence a stop reports, `detail` the failure's first line.
  */
-export function nextReviewer({ chain = [], tried = [], error }) {
+export function nextReviewer({ chain = [], tried = [], error, resumed = 0 }) {
   const cause = causeOf(error);
   const detail = String(error ?? "")
     .split("\n")[0]
     .trim();
-  const stop = (why) => ({ chain, cause, stop: true, model: null, why, detail });
+  const stop = (why) => ({ chain, cause, stop: true, resume: false, model: null, why, detail });
   const named = chain.join(", ") || "none";
 
   const inOrder =
@@ -111,6 +129,13 @@ export function nextReviewer({ chain = [], tried = [], error }) {
     return stop(
       `the models tried (${tried.join(", ") || "none"}) are not the start of the configured chain — ${named}`,
     );
+  }
+  if (cause === "turn-limit") {
+    // Only a pass never resumed is resumed; a count that is not 0 — or not a number — stops.
+    if (resumed !== 0) {
+      return stop("the reviewer stopped at its turn limit twice, so the review did not run");
+    }
+    return { chain, cause, stop: false, resume: true, model: tried.at(-1), why: null, detail };
   }
   if (cause === "other") {
     return stop(
@@ -123,13 +148,20 @@ export function nextReviewer({ chain = [], tried = [], error }) {
       `every model in the configured chain — ${named} — refused the call, so the review did not run`,
     );
   }
-  return { chain, cause, stop: false, model, why: null, detail };
+  return { chain, cause, stop: false, resume: false, model, why: null, detail };
 }
 
-/** CLI: `echo '{"tried":["fable"],"error":"…"}' | node review-model.mjs`. */
+/** CLI: `echo '{"tried":["fable"],"error":"…","resumed":0}' | node review-model.mjs`. */
 async function main() {
   const input = JSON.parse((await readStdin()) || "{}");
-  emit(nextReviewer({ chain: readChain(), tried: input.tried ?? [], error: input.error }));
+  emit(
+    nextReviewer({
+      chain: readChain(),
+      tried: input.tried ?? [],
+      error: input.error,
+      resumed: Number(input.resumed ?? 0),
+    }),
+  );
 }
 
 if (isMain(import.meta.url)) await main();
