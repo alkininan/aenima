@@ -84,9 +84,9 @@ One file per ticket under `docs/log/`, oldest first. This list is written by `no
 - [T0.16 — Self-merge: a finished ticket merges itself](log/T0.16.md) · 2026-09-14
 - [T0.17 — Linear ordering](log/T0.17.md) · 2026-09-15
 - [T0.20 — Cap counts clarifying rounds](log/T0.20.md) · 2026-09-15
-- [T0.19 — Spec: the comment path](log/T0.19.md) · 2026-09-15
 - [T2.10 — Surface no-longer-applicable closures](log/T2.10.md) · 2026-09-16
 - [T0.13 — Restrict Vercel's database role: the boundary reaches production](log/T0.13.md) · 2026-09-16
+- [T0.19 — Spec: the comment path](log/T0.19.md) · 2026-09-16
 - [T0.21 — Merge by default](log/T0.21.md) · 2026-09-16
 
 ## Decisions made during the build
