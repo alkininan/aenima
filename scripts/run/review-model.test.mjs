@@ -20,7 +20,7 @@ const OVERLOADED =
 
 /**
  * Claude Code's note when a subagent stops at its `maxTurns`, in the two shapes the reviewer's
- * transcripts hold (T0.17, T0.19, T1.4, T2.9, T2.10): no report yet, or a partial one.
+ * transcripts hold (T0.12, T0.17, T1.4, T2.9, T2.10): no report yet, or a partial one.
  */
 const TURN_LIMIT =
   "NOTE: this agent stopped at its 30-turn limit before finishing. It was still calling tools and had produced no report. Send the agent a message (SendMessage) to let it continue from where it stopped.\n\nagentId: a6cd2cef965f190e1 (use SendMessage with to: 'a6cd2cef965f190e1', summary: '<5-10 word recap>' to continue this agent)";
