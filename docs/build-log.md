@@ -84,6 +84,7 @@ One file per ticket under `docs/log/`, oldest first. This list is written by `no
 - [T0.16 — Self-merge: a finished ticket merges itself](log/T0.16.md) · 2026-09-14
 - [T0.17 — Linear ordering](log/T0.17.md) · 2026-09-15
 - [T0.20 — Cap counts clarifying rounds](log/T0.20.md) · 2026-09-15
+- [T2.10 — Surface no-longer-applicable closures](log/T2.10.md) · 2026-09-16
 
 ## Decisions made during the build
 
@@ -716,13 +717,22 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
     long-context cached rate of exactly 2× the short one — consistent across all three models, and
     consistent with the stated "2x input" multiplier, so the table was taken as authoritative.
 
-14. **A gap closed as "no longer applicable" is a case T2.5's surface should show.** The machine
-    closing a gap because §4's condition stopped holding is correct and it is also the one closure
-    a person might disagree with — the safety layer turning off is a judgment about the artifact,
-    not an observation that a check now passes. The ledger records it (`gap.closed`, reason "no
-    longer applicable") and nothing surfaces it. **T2.5 owns the human-facing view**, where §5's
-    first negotiation move already lives: the place to say "the safety layer turned off on this
-    version — is that right?" is beside the move that argues applicability.
+14. **~~A gap closed as "no longer applicable" is a case T2.5's surface should show.~~ Answered by
+    T2.10, on the check line rather than the gap card.** The machine closing a gap because §4's
+    condition stopped holding is correct and it is also the one closure a person might disagree
+    with — the safety layer turning off is a judgment about the artifact, not an observation that a
+    check now passes. The ledger records it (`gap.closed`, reason "no longer applicable") and
+    nothing surfaced it.
+
+    It surfaces on the `not-asked` line in the meter's expansion, not as a card in the gap list.
+    The list is what §13 says an item *owes* a person, and a closed gap owes nothing — putting one
+    there would have fought T2.4's narrowing and needed a card with no move on it. The check line
+    already speaks about applicability: it carries the condition that stopped holding, negated. The
+    quoted gap and the question go directly beneath it, so the whole of §4's renormalization is one
+    reading. **The notice is gated on the run's own `not-asked` state**, which keeps it a claim
+    about the denominator now: a check whose condition came back is asked again, and the closure it
+    would point at is history a new gap has already replaced. §5's first negotiation move, when it
+    ships, lands on the same line.
 
 15. **The re-baseline pass has no trigger yet.** §5: "Switching AI provider or editing a rubric
     triggers a quiet re-baseline pass so numbers never wobble without explanation." Every run stamps
