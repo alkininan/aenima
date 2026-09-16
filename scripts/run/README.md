@@ -131,7 +131,13 @@ reviewer re-invoked, three passes at most. A Must still standing after the third
 open question, Shoulds are recorded in the report, and a finding outside the ticket's scope
 becomes a Backlog task of Type Fix under the same Epic. The reviewer writes its verdict to
 `docs/reviews/<id>.md`, last line `PASS` or `FINDINGS`; that file is what the guard reads at
-close, and the run never writes it (T0.16).
+close, and the run never writes it (T0.16). The reviewer's model comes from one chain, the
+model its definition pins and then `.claude/settings.json`'s `fallbackModel`, and
+`review-model.mjs` reads it (T0.22): a call refused for credits or availability — an API
+error with a 429, a 5xx or an overloaded model — names the next model, and the run calls the
+reviewer again on it with the same message; any other failure, a chain with no model left, or
+models tried out of the chain's order is a stop, because a review that did not run is not a
+pass.
 
 ## 6 Migration
 
@@ -154,10 +160,11 @@ not run them again for its benefit.
 ## 8 Report
 
 The run writes `docs/reports/<id>.md` — ACs implemented each with its test, tests written
-each observed red first as a table of test, mutation and count, reviewer passes and findings,
-what changed since the ticket was cut, open questions — and `report-check.mjs` refuses it
-while any test lacks its mutation or its count, or a test file in the diff is missing from
-the record. Once it passes, the run mirrors it into the task body's Report section, writes
+each observed red first as a table of test, mutation and count, reviewer passes and findings
+with a table row for every pass, what changed since the ticket was cut, open questions — and
+`report-check.mjs` refuses it while any test lacks its mutation or its count, a test file in
+the diff is missing from the record, or a reviewer pass does not name a model of the
+configured chain. Once it passes, the run mirrors it into the task body's Report section, writes
 the ticket's build-log entry as its own file under `docs/log/`, and runs `log-index.mjs`,
 which rewrites the build log's Tickets done list from that directory so two open pull
 requests never edit the same lines.

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { checkReport, tableRows, testsWrittenSection } from "./report-check.mjs";
+import { checkReport, reviewerSection, tableRows, testsWrittenSection } from "./report-check.mjs";
 
 const good = `# T0.9 — report
 
@@ -21,7 +21,12 @@ const good = `# T0.9 — report
 
 ## Reviewer passes and findings
 
-None.
+| pass | commit | model | verdict |
+|---|---|---|---|
+| 1 | \`a1b2c3d\` | Opus | FINDINGS |
+| 2 | \`d4e5f6a\` | \`fable\` | PASS |
+
+1. Must — rule (f) ignored the marker. Fixed.
 `;
 
 describe("report-check", () => {
@@ -89,5 +94,45 @@ describe("report-check", () => {
     expect(result.problems).toEqual([
       "scripts/run/stale.test.mjs is in the diff and not in the record",
     ]);
+  });
+
+  // T0.22 TC2 → AC2
+  describe("the model of every reviewer pass", () => {
+    const chain = ["fable", "opus"];
+
+    it("finds the Reviewer passes section and accepts a pass on every model of the chain", () => {
+      expect(reviewerSection(good)).toContain("| pass | commit | model | verdict |");
+      expect(reviewerSection("# report\n\n## Tests written\n")).toBeNull();
+      expect(checkReport(good, { chain })).toEqual({ ok: true, problems: [], rows: 2 });
+    });
+
+    it("refuses a report with no Reviewer passes section, no table there, or no model column", () => {
+      const cut = good.slice(0, good.indexOf("## Reviewer passes"));
+      expect(checkReport(cut, { chain }).problems).toEqual(["no `## Reviewer passes…` section"]);
+
+      const prose = good.replace(/\| pass \| commit[\s\S]*\| PASS \|\n/, "Two passes, on Opus.\n");
+      expect(checkReport(prose, { chain }).problems).toEqual(["no table under Reviewer passes"]);
+
+      const noModel = good.replace(
+        "| pass | commit | model | verdict |",
+        "| pass | commit | note | verdict |",
+      );
+      expect(checkReport(noModel, { chain }).problems).toEqual([
+        "no `model` column under Reviewer passes",
+      ]);
+    });
+
+    it("refuses a pass that names no model", () => {
+      const report = good.replace("| 1 | `a1b2c3d` | Opus |", "| 1 | `a1b2c3d` |  |");
+      expect(checkReport(report).problems).toEqual(["reviewer pass 1 names no model"]);
+    });
+
+    it("refuses a pass on a model outside the configured chain — never one the run picked", () => {
+      const report = good.replace("| `fable` |", "| Sonnet |");
+      expect(checkReport(report, { chain }).problems).toEqual([
+        "reviewer pass 2 ran on Sonnet, which is not in the configured chain — fable, opus",
+      ]);
+      expect(checkReport(report).ok).toBe(true);
+    });
   });
 });

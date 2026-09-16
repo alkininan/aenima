@@ -10,18 +10,36 @@
  * The report's section headed `## Tests written…` holds one table with a `reddened by`
  * column and a `red → green` column. Every row has all three cells filled, and every test
  * file the diff adds or changes is named somewhere in that section.
+ *
+ * Since T0.22 the section headed `## Reviewer passes…` holds a table too, one row a pass, and
+ * every row names the model that pass ran on — a model of the configured chain when the chain
+ * is given, which the command reads from the repo. A reader sees which mind passed which code,
+ * and a pass on a model the run picked for itself cannot be reported as though it were not.
  */
 
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 import { emit, isMain } from "./cli.mjs";
+import { readChain } from "./review-model.mjs";
 import { touchedTests } from "./review-scope.mjs";
+
+/** The section of a report whose `## ` heading starts with `title`, up to the next heading. */
+function sectionOf(text, title) {
+  const match = String(text ?? "").match(
+    new RegExp(`^## ${title}[^\\n]*\\n([\\s\\S]*?)(?=^## |(?![\\s\\S]))`, "m"),
+  );
+  return match ? match[1] : null;
+}
 
 /** The `## Tests written…` section of a report, up to the next `## ` heading. */
 export function testsWrittenSection(text) {
-  const match = String(text ?? "").match(/^## Tests written[^\n]*\n([\s\S]*?)(?=^## |(?![\s\S]))/m);
-  return match ? match[1] : null;
+  return sectionOf(text, "Tests written");
+}
+
+/** The `## Reviewer passes…` section of a report, up to the next `## ` heading. */
+export function reviewerSection(text) {
+  return sectionOf(text, "Reviewer passes");
 }
 
 /** The rows of the first markdown table in `section`: header cells, then body rows. */
@@ -40,10 +58,44 @@ export function tableRows(section) {
 }
 
 /**
- * Check a report. `testFiles` are the test files the diff touches; each must be named in
- * the section. Returns `{ ok, problems, rows }`.
+ * The problems with a report's reviewer passes: no section, no table, no `model` column, or a
+ * pass whose model is empty or — when `chain` is given — outside it.
  */
-export function checkReport(text, { testFiles = [] } = {}) {
+export function reviewerProblems(text, chain = null) {
+  const section = reviewerSection(text);
+  if (section === null) return ["no `## Reviewer passes…` section"];
+  const table = tableRows(section);
+  if (table === null) return ["no table under Reviewer passes"];
+  const head = table.header.map((cell) => cell.toLowerCase());
+  const model = head.findIndex((cell) => cell.includes("model"));
+  if (model === -1) return ["no `model` column under Reviewer passes"];
+  if (table.body.length === 0) return ["the reviewer table has no rows"];
+
+  const pass = head.findIndex((cell) => cell.includes("pass"));
+  const allowed = chain?.map((name) => name.toLowerCase());
+  const problems = [];
+  table.body.forEach((row, i) => {
+    const label = (pass === -1 ? "" : row[pass]) || String(i + 1);
+    const cell = String(row[model] ?? "")
+      .replace(/[`*]/g, "")
+      .trim();
+    if (cell === "") {
+      problems.push(`reviewer pass ${label} names no model`);
+    } else if (allowed && !allowed.includes(cell.toLowerCase())) {
+      problems.push(
+        `reviewer pass ${label} ran on ${cell}, which is not in the configured chain — ${chain.join(", ")}`,
+      );
+    }
+  });
+  return problems;
+}
+
+/**
+ * Check a report. `testFiles` are the test files the diff touches; each must be named in
+ * the section. `chain` is the reviewer's configured models; without it a pass need only name
+ * one. Returns `{ ok, problems, rows }`.
+ */
+export function checkReport(text, { testFiles = [], chain = null } = {}) {
   const problems = [];
   const section = testsWrittenSection(text);
   if (section === null) {
@@ -72,6 +124,8 @@ export function checkReport(text, { testFiles = [] } = {}) {
     if (!section.includes(file)) problems.push(`${file} is in the diff and not in the record`);
   }
 
+  problems.push(...reviewerProblems(text, chain));
+
   return { ok: problems.length === 0, problems, rows: table?.body.length ?? 0 };
 }
 
@@ -85,6 +139,7 @@ function main() {
   const run = (args) => spawnSync("git", args, { encoding: "utf8" });
   const result = checkReport(readFileSync(report, "utf8"), {
     testFiles: touchedTests(run, base ?? "main"),
+    chain: readChain(),
   });
   emit(result);
   process.exit(result.ok ? 0 : 1);
