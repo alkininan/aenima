@@ -81,7 +81,6 @@ One file per ticket under `docs/log/`, oldest first. This list is written by `no
 - [T0.11 — Comments: a comment on the board is enough](log/T0.11.md) · 2026-09-13
 - [T2.8 — Sufficiency probes](log/T2.8.md) · 2026-09-14
 - [T0.12 — Telemetry and mirror: every run leaves a row, the mirrors keep up](log/T0.12.md) · 2026-09-14
-- [T2.9 — Applicability stability](log/T2.9.md) · 2026-09-14
 - [T0.16 — Self-merge: a finished ticket merges itself](log/T0.16.md) · 2026-09-14
 - [T0.17 — Linear ordering](log/T0.17.md) · 2026-09-15
 - [T0.20 — Cap counts clarifying rounds](log/T0.20.md) · 2026-09-15
@@ -89,6 +88,7 @@ One file per ticket under `docs/log/`, oldest first. This list is written by `no
 - [T0.13 — Restrict Vercel's database role: the boundary reaches production](log/T0.13.md) · 2026-09-16
 - [T0.19 — Spec: the comment path](log/T0.19.md) · 2026-09-16
 - [T0.21 — Merge by default](log/T0.21.md) · 2026-09-16
+- [T2.9 — Applicability stability](log/T2.9.md) · 2026-09-16
 
 ## Decisions made during the build
 
@@ -884,8 +884,8 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
     ticket's own Rules named a fourth — the condition oscillating is the scorer having no settled
     answer, which a probe addresses and a vote cannot — and §4 now says a condition may carry
     probes the way a check does, decided by its probes and by nothing else. Measured on
-    `sample-juno-feature.md`, eleven runs before and after on identical bytes: `list-rendering-
-    surface` held in 3 of 11 under pack 1.1.0 and in 11 of 11 under 1.2.0, the denominator went
+    `sample-juno-feature.md`, eleven runs before and after on identical bytes:
+    `list-rendering-surface` held in 3 of 11 under pack 1.1.0 and in 11 of 11 under 1.2.0, the denominator went
     from 99-in-8 / 105-in-3 to 105 in 11, and the score's spread from 0.3 to 0.0
     (`docs/reports/T2.9.md`). The safety layer's own wobble above was on `soc-10`/`soc-11`, which
     `sample*.md` gitignoring left unreachable for a re-score; its probes are measured only in that
