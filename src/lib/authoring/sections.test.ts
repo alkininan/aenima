@@ -103,6 +103,12 @@ describe("spliceSection", () => {
     expect(ids(next)).toEqual([PREAMBLE_ID, "one", "two"]);
   });
 
+  it("keeps the section's own run of trailing line breaks, so a section returned unchanged reads unchanged", () => {
+    const spaced = "## One\nold\n\n## Two\nkeep\n";
+    expect(spliceSection(parseSections(spaced), "one", "## One\nold\n")).toBe(spaced);
+    expect(spliceSection(parseSections(spaced), "one", "## One\nold\n\n\n\n")).toBe(spaced);
+  });
+
   it("refuses to splice a section the document does not have", () => {
     expect(() => spliceSection(parseSections(body), "three", "x")).toThrow(/three/);
   });

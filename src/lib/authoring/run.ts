@@ -47,6 +47,13 @@ export function seamAgents(context: CallContext): Agents {
   };
 }
 
+/**
+ * A write the ledger refused. Tagged where it happens so that a bug elsewhere in
+ * the loop — its pass limit, a thrown invariant — is not reported as the
+ * database refusing a round.
+ */
+class LedgerWriteError extends Error {}
+
 export type RefineArtifactInput = {
   workspaceId: string;
   artifactId: string;
@@ -99,15 +106,20 @@ export async function refineArtifactSection(
 
   const ledger: Ledger = {
     rounds: () => readRounds(input.workspaceId, input.artifactId),
-    record: (round) =>
-      writeRound({
-        workspaceId: input.workspaceId,
-        productId: artifact.productId,
-        itemId: artifact.itemId,
-        artifactId: artifact.artifactId,
-        round,
-        actor: input.actor,
-      }),
+    record: async (round) => {
+      try {
+        return await writeRound({
+          workspaceId: input.workspaceId,
+          productId: artifact.productId,
+          itemId: artifact.itemId,
+          artifactId: artifact.artifactId,
+          round,
+          actor: input.actor,
+        });
+      } catch (error) {
+        throw new LedgerWriteError(error instanceof Error ? error.message : String(error));
+      }
+    },
   };
 
   try {
@@ -129,12 +141,12 @@ export async function refineArtifactSection(
     );
   } catch (error) {
     // Each round's transaction rolled back whole, so the ledger still says
-    // exactly what happened up to the write that failed.
-    return {
-      ok: false,
-      reason: "write",
-      detail: error instanceof Error ? error.message : String(error),
-    };
+    // exactly what happened up to the write that failed. Anything else that
+    // throws is a bug, and is left to be one.
+    if (error instanceof LedgerWriteError) {
+      return { ok: false, reason: "write", detail: error.message };
+    }
+    throw error;
   }
 }
 

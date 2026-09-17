@@ -65,6 +65,16 @@ describe("nextMove — the two-round cap", () => {
     });
   });
 
+  it("surfaces with the position of the latest draft the document kept, not a refused one", () => {
+    const rows = [round(1, { outcome: "revised" }), round(2, { outcome: "refused" })];
+    expect(nextMove(rows, "scheduling", "prd-4")).toMatchObject({ authorPosition: "position 1" });
+
+    const neither = [round(1, { outcome: "refused" }), round(2, { outcome: "refused" })];
+    expect(nextMove(neither, "scheduling", "prd-4")).toMatchObject({
+      authorPosition: "position 2",
+    });
+  });
+
   it("spends a refused or held round like a revised one", () => {
     const rows = [round(1, { outcome: "refused" }), round(2, { outcome: "held" })];
     expect(nextMove(rows, "scheduling", "prd-4").kind).toBe("surface");

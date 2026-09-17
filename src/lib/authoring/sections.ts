@@ -153,12 +153,15 @@ export function joinSections(sections: readonly Section[]): string {
 /**
  * The body with one section's text replaced, and nothing else touched.
  *
- * The one tidy it makes: a section that ended in a line break keeps ending in
- * one. A model returns a section without its trailing newline as often as with
- * it, and without the break the next section's heading would run on from the
- * last line and stop being a heading — a revision refused for a character
- * nobody wrote. That is formatting at the seam, not the author's change, and it
- * is the only one. Everything else in `text` reaches the wall as it came.
+ * The one tidy it makes: the section keeps the run of line breaks it ended in.
+ * A model returns a section with one trailing newline, two or none whatever it
+ * was given, and those are not edits. Without the break the next section's
+ * heading would run on from the last line and stop being a heading — a revision
+ * refused for a character nobody wrote — and with a blank line dropped or added
+ * an unchanged section would read as changed and cut a version for no edit,
+ * which invalidates §5's cached results for nothing. That is formatting at the
+ * seam, not the author's change, and it is the only one. Everything else in
+ * `text` reaches the wall as it came.
  *
  * Throws when the id names no section: the caller asked to revise a section
  * the document does not have, which is a bug and not a round.
@@ -166,8 +169,8 @@ export function joinSections(sections: readonly Section[]): string {
 export function spliceSection(sections: readonly Section[], id: string, text: string): string {
   const index = sections.findIndex((section) => section.id === id);
   if (index === -1) throw new Error(`no section "${id}" to replace`);
-  const was = sections[index]!.text;
-  const kept = was.endsWith("\n") && !text.endsWith("\n") ? `${text}\n` : text;
+  const breaks = /(?:\r?\n)*$/.exec(sections[index]!.text)![0];
+  const kept = `${text.replace(/(?:\r?\n)*$/, "")}${breaks}`;
   return joinSections(
     sections.map((section, i) => (i === index ? { id: section.id, text: kept } : section)),
   );

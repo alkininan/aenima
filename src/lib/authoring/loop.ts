@@ -5,11 +5,11 @@ import type { SkillPack } from "@/packs";
 import { admitObjections } from "./objection";
 import { draftRequest, criticRequest, revisionRequest } from "./prompt";
 import type { AssembledRequest, Turn } from "./prompt";
-import { SURFACING_ROUND, nextMove } from "./rounds";
+import { ROUND_TEXT_MAX, SURFACING_ROUND, nextMove } from "./rounds";
 import type { RoundOutcome, StoredRound } from "./rounds";
 import type { AuthorAnswer, CriticAnswer } from "./schema";
 import { checkRevisionScope } from "./scope";
-import { parseSections, slugOf, spliceSection } from "./sections";
+import { PREAMBLE_ID, parseSections, slugOf, spliceSection } from "./sections";
 
 /**
  * The author-critic loop — product-spec.md §6, one section at a time.
@@ -90,7 +90,7 @@ export type RefineResult =
   | { ok: false; reason: "no-section"; detail: string }
   /** A call did not come back. The rounds written before it stand. */
   | ({ ok: false; reason: "provider"; failure: AiFailure } & Standing)
-  /** The author answered without a position, so a round could not say what it held. */
+  /** The author answered with no position, or one longer than a round can hold. */
   | ({ ok: false; reason: "answer"; detail: string } & Standing);
 
 export async function refineSection(
@@ -99,6 +99,16 @@ export async function refineSection(
   ledger: Ledger,
 ): Promise<RefineResult> {
   const { pack, checkIds, sectionId, conversation } = input;
+  // The text before the first `##` heading is a section only so that the scope
+  // wall can see it. The addendum's section is a `##` block, and nothing is
+  // refined — or stored under a section id — that is not one.
+  if (sectionId === PREAMBLE_ID) {
+    return {
+      ok: false,
+      reason: "no-section",
+      detail: "the text before the first ## heading is not a section to refine",
+    };
+  }
   let body = input.body;
   let versionId = input.versionId;
   const written: RoundWrite[] = [];
@@ -129,8 +139,13 @@ export async function refineSection(
     // quoting the text the critic was shown. Then scope: the critic was shown
     // one section, and an objection that names another cannot be acted on by a
     // call that receives only this one.
+    // An objection whose reason or evidence is longer than a round can hold is
+    // one the loop could not record, so it cannot be acted on either.
     const objections = admitObjections(pack, section.text, tested.value.objections).filter(
-      (objection) => objection.scope === section.id,
+      (objection) =>
+        objection.scope === section.id &&
+        objection.reason.length <= ROUND_TEXT_MAX &&
+        objection.evidence.length <= ROUND_TEXT_MAX,
     );
 
     let retest = false;
@@ -172,11 +187,14 @@ export async function refineSection(
         return { ok: false, reason: "provider", failure: answered.failure, ...standing() };
       }
       const authorPosition = answered.value.position.trim();
-      if (authorPosition === "") {
+      if (authorPosition === "" || authorPosition.length > ROUND_TEXT_MAX) {
         return {
           ok: false,
           reason: "answer",
-          detail: "the author's revision came back with no position",
+          detail:
+            authorPosition === ""
+              ? "the author's revision came back with no position"
+              : `the author's position runs past ${ROUND_TEXT_MAX} characters`,
           ...standing(),
         };
       }

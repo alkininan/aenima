@@ -339,6 +339,35 @@ describe("refineSection — the doors before the author", () => {
     expect(result.ok).toBe(true);
   });
 
+  it("discards an objection whose reason or evidence is longer than a round can hold", async () => {
+    const long = "x".repeat(2001);
+    const { agents, sent } = scripted(
+      [objects(objection({ reason: long }), objection({ evidence: long })), none],
+      [],
+    );
+    const { ledger, recorded } = memoryLedger();
+
+    const result = await refineSection(
+      input({ body: `# Juno\n\n## Scheduling\n${long}\n\n${MEET}` }),
+      agents,
+      ledger,
+    );
+
+    expect(sent.author).toHaveLength(0);
+    expect(recorded).toHaveLength(0);
+    expect(result.ok).toBe(true);
+  });
+
+  it("refines nothing under the preamble, which is not a ## section", async () => {
+    const { agents, sent } = scripted([], []);
+    const { ledger } = memoryLedger();
+
+    const result = await refineSection(input({ sectionId: "_preamble" }), agents, ledger);
+
+    expect(!result.ok && result.reason).toBe("no-section");
+    expect(sent.critic).toHaveLength(0);
+  });
+
   it("sends the author only the scoped section of the document", async () => {
     const { agents, sent } = scripted([objects(objection()), none], [revision(1)]);
     const { ledger } = memoryLedger();
@@ -352,6 +381,29 @@ describe("refineSection — the doors before the author", () => {
 });
 
 describe("refineSection — how a round ends", () => {
+  it("records a section returned with only its trailing blank line dropped as held", async () => {
+    const { agents } = scripted(
+      [objects(objection()), none],
+      [{ section: SCHEDULING.trimEnd(), position: "Nothing new to add." }],
+    );
+    const { ledger, recorded } = memoryLedger();
+
+    const result = await refineSection(input(), agents, ledger);
+
+    expect(recorded.map((r) => r.outcome)).toEqual(["held"]);
+    expect(result.ok && result.body).toBe(BODY);
+  });
+
+  it("stops on a position longer than a round can hold, writing no round for it", async () => {
+    const { agents } = scripted([objects(objection())], [revision(1, "p".repeat(2001))]);
+    const { ledger, recorded } = memoryLedger();
+
+    const result = await refineSection(input(), agents, ledger);
+
+    expect(!result.ok && result.reason).toBe("answer");
+    expect(recorded).toHaveLength(0);
+  });
+
   it("records a revision that changed nothing as held, cutting no version", async () => {
     const { agents } = scripted(
       [objects(objection()), none],

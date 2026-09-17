@@ -960,7 +960,7 @@ export const refinementRound = pgTable(
     artifactId: uuid("artifact_id").notNull(),
     /** The version the critic read when it raised this objection. */
     artifactVersionId: uuid("artifact_version_id").notNull(),
-    /** A `##` heading's slug, or `_preamble` for the text before the first one. */
+    /** A `##` heading's slug. The text before the first heading is never refined, so never stored. */
     sectionId: text("section_id").notNull(),
     /** A rubric check id (`prd-4`), never a requirement id. */
     checkId: text("check_id").notNull(),

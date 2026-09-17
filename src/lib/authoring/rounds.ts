@@ -24,6 +24,14 @@ export const MAX_REFINEMENTS = 2;
 export const SURFACING_ROUND = MAX_REFINEMENTS + 1;
 
 /**
+ * The longest reason, evidence or author position a round can hold —
+ * `refinement_round`'s length checks. Read by the loop before a round is
+ * written, so an over-long answer is turned away where it arrives rather than
+ * refused by the database after a paid call.
+ */
+export const ROUND_TEXT_MAX = 2000;
+
+/**
  * How a round ended.
  *
  * - `revised` — the author changed the section inside its scope; a new version was cut.
@@ -76,8 +84,8 @@ export type Move =
   /** Ask the author for a revision; the row it writes carries this round number. */
   | { kind: "revise"; roundNo: number }
   /**
-   * Stop revising. Write the surfacing row with the author's latest position —
-   * the one the section as it stands was written under.
+   * Stop revising. Write the surfacing row with the author's position for the
+   * section as it stands — the latest round the document kept or held.
    */
   | { kind: "surface"; roundNo: number; authorPosition: string }
   /** The question is already open. The human owns it, and nothing more is written. */
@@ -96,6 +104,14 @@ export function nextMove(rounds: readonly StoredRound[], sectionId: string, chec
   }
   if (count < MAX_REFINEMENTS) return { kind: "revise", roundNo: count + 1 };
 
-  const latest = mine.find((round) => round.roundNo === count)!;
-  return { kind: "surface", roundNo: count + 1, authorPosition: latest.authorPosition };
+  // The position the document as it stands was written under: the latest round
+  // whose revision the document kept or held. A refused revision is not in the
+  // document, so its position is used only when no round's was.
+  const byRound = [...mine].sort((a, b) => b.roundNo - a.roundNo);
+  const standing = byRound.find((round) => round.outcome === "revised" || round.outcome === "held");
+  return {
+    kind: "surface",
+    roundNo: count + 1,
+    authorPosition: (standing ?? byRound[0]!).authorPosition,
+  };
 }

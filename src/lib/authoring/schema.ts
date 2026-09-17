@@ -37,9 +37,10 @@ export type AuthorAnswer = z.infer<typeof authorAnswerSchema>;
  * A critic's answer is a short list of short objections and an author's is one
  * section, but **the model's thinking counts against the same ceiling**. The
  * generation tier takes the provider's default effort (`ResolvedRequest.effort`
- * is null off the pinned path), and the first live draft through this seam spent
- * about 3,400 of a 4,000-token ceiling thinking and was cut off mid-JSON — a
- * `schema-invalid` for an answer that was never finished. Room for the thinking
+ * is null off the pinned path), and the first live draft through this seam used
+ * all 4,000 output tokens of its ceiling and returned about 2,500 characters of
+ * JSON, cut off mid-string — most of the tokens went on thinking, and the answer
+ * was a `schema-invalid` that was never finished. Room for the thinking
  * as well as the answer, in the proportion `maxTokensFor` gives the scorer.
  */
 export const CRITIC_MAX_TOKENS = 12_000;

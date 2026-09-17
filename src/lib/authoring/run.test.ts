@@ -16,6 +16,7 @@ const db = vi.hoisted(() => ({
   rounds: [] as unknown[],
   writes: [] as Record<string, unknown>[],
   writeError: null as Error | null,
+  readError: null as Error | null,
 }));
 
 const ai = vi.hoisted(() => ({
@@ -29,7 +30,10 @@ vi.mock("@/db/queries/scoring", () => ({
 
 vi.mock("@/db/queries/refinement", () => ({
   readLatestConditions: async () => db.conditions,
-  readRounds: async () => db.rounds,
+  readRounds: async () => {
+    if (db.readError) throw db.readError;
+    return db.rounds;
+  },
   writeRound: async (write: Record<string, unknown>) => {
     if (db.writeError) throw db.writeError;
     db.writes.push(write);
@@ -77,6 +81,7 @@ beforeEach(() => {
   db.rounds = [];
   db.writes = [];
   db.writeError = null;
+  db.readError = null;
   ai.calls = [];
   ai.replies = [];
 });
@@ -155,6 +160,24 @@ describe("refineArtifactSection", () => {
     const result = await refineArtifactSection(INPUT);
 
     expect(result).toEqual({ ok: false, reason: "write", detail: "refinement_round_key" });
+  });
+
+  it("leaves a failure that is not a ledger write to throw, rather than reporting it as one", async () => {
+    db.readError = new Error("connection reset");
+    ai.replies = [
+      {
+        objections: [
+          {
+            checkId: "prd-4",
+            reason: "r",
+            evidence: "Propose 2 time options",
+            scope: "scheduling",
+          },
+        ],
+      },
+    ];
+
+    await expect(refineArtifactSection(INPUT)).rejects.toThrow("connection reset");
   });
 
   it("refines nothing for content with no markdown body, and calls no model", async () => {
