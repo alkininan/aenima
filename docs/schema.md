@@ -15,7 +15,7 @@ convention — a rule that lives only in TypeScript gets broken by the first
 script that talks to Postgres directly.
 
 **1. `artifact_version`, `activity`, `decision`, `ai_usage`, `scoring_run`,
-`scoring_check_result` and `scoring_check_not_asked` are append-only.**
+`scoring_check_result`, `scoring_check_not_asked` and `refinement_round` are append-only.**
 No UPDATE, no DELETE, ever. New content is a new row with an incrementing
 `version_no`. Three independent layers enforce it, because the first two have a
 hole the third closes:
@@ -165,6 +165,7 @@ assertion, never a null `user_id`.
 | `scoring_run` | One run: artifact version, rubric version, protocol version, provider, model, earned out of denominator. Append-only. |
 | `scoring_check_result` | One check's verdict inside a run, with the quote behind a failure. Append-only. |
 | `scoring_check_not_asked` | Its sibling: one check §4 took out of the run's denominator, and the condition that did it. Append-only. |
+| `refinement_round` | One round of §6's author-critic loop: a section, a check, the critic's objection, the author's position, how it ended. Round 3 marked `surfaced` is the open question. Append-only. |
 
 ### Enums
 
@@ -181,6 +182,7 @@ assertion, never a null `user_id`.
 | `ai_provider` | anthropic · openai | §12, the certified providers |
 | `ai_tier` | routine · analysis · generation | §12, the three intra-provider tiers |
 | `ai_outcome` | ok · schema_invalid · refused · unavailable · rate_limited · rejected | §12, how a call ended |
+| `refinement_outcome` | revised · held · refused · surfaced | §6, how a refinement round ended. `surfaced` is the open question |
 
 `item_type` is a real Postgres enum rather than free text: "one of seven" is a
 constraint the database should be able to state.
@@ -225,6 +227,7 @@ driver underneath.
 | `scoring_run` | member + visible | **none** — written server-side | **never** | **never** |
 | `scoring_check_result` | member + visible (through its run) | **none** — written server-side | **never** | **never** |
 | `scoring_check_not_asked` | member + visible (through its run) | **none** — written server-side | **never** | **never** |
+| `refinement_round` | member + visible | **none** — written server-side | **never** | **never** |
 
 Viewer appears in no write policy anywhere: §14 read-only means read-only.
 
@@ -377,6 +380,22 @@ tests pin each half — the Viewer refused on all three routes, the Decider's
 direct writes bounded to the settle — and the one that proves the policy change
 is load-bearing rather than decorative.
 
+`drizzle/0015_refinement_round.sql` — T3.1, §6's two-round cap stored rather
+than inferred. One append-only row per round of the author-critic loop, unique on
+(artifact, section, check, round number) — T3.1's addendum: a row per artifact
+version could not stay append-only, because a refused revision cuts no version and
+the next round tests the same one. **The count is the highest round number for the
+key.** A section is a `##` heading block of the body and `section_id` its slug; the
+body itself is unchanged, since sectioning is a parse. **The open question is the
+round-3 row marked `surfaced`** — the check, the critic's evidence and reason, the
+author's latest position — and no open-question table exists; T3.2 and T3.4 read
+these rows. `refinement_round_shape` says which outcome carries which part and holds
+the cap in the database: `revised`, `held` and `refused` are rounds 1 and 2, only
+`revised` names the version it cut, only `refused` names the sections it strayed
+into, and `surfaced` is round 3. `RESTRICT` on every parent, no INSERT policy (a
+client that could write a round could spend or skip the cap), and SELECT through
+the item's product like `scoring_run`.
+
 ```
 pnpm db:generate   # diff the schema files into a new migration
 pnpm db:migrate    # apply pending migrations to DATABASE_URL
@@ -384,6 +403,7 @@ pnpm db:baseline   # once per environment: record migrations already applied by 
 pnpm db:seed       # one workspace, two products, three opportunities, eleven items
 pnpm score:smoke   # score the seeded Ghost mode PRD with the workspace's key
 pnpm score:file <path>  # score any markdown file — a real document the scorer has never seen
+pnpm refine:file <path> [--heading "…"] [--memory]  # draft a section from a file and run §6's loop on it
 ```
 
 The seed is **idempotent**: it finds the workspace by name and stops, and the

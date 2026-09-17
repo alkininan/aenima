@@ -15,6 +15,7 @@
     "ai:smoke": "tsx --conditions=react-server --env-file=.env.local scripts/ai-smoke.ts",
     "score:smoke": "tsx --conditions=react-server --env-file=.env.local scripts/score-smoke.ts",
     "score:file": "tsx --conditions=react-server --env-file=.env.local scripts/score-file.ts",
+    "refine:file": "tsx --conditions=react-server --env-file=.env.local scripts/refine-file.ts",
     "lint": "eslint . && prettier --check .",
     "typecheck": "tsc --noEmit",
     "score:spread": "tsx --conditions=react-server --env-file=.env.local scripts/score-spread.ts",

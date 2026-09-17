@@ -49,6 +49,8 @@ export type Purpose =
   | "evidence"
   /** §6: the author drafting from what exists. Generation. */
   | "draft"
+  /** §6: the critic testing one section against the checks in play. Generation. */
+  | "critique"
   /** §6: the next unanswered interview question. Generation. */
   | "question"
   /** §11: a spec patch. Generation. */

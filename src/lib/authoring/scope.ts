@@ -9,9 +9,10 @@
  * (§5: "only checks whose artifact changed re-run").
  *
  * This works over a list of sections and says nothing about where the list
- * came from. How an artifact's content divides into sections is not written
- * down anywhere yet (T3.1's Decision), and whichever way that is answered the
- * wall reads the same thing: ids, their text, and their order.
+ * came from. The loop hands it `parseSections` over the document before and
+ * after the revision is spliced in (`sections.ts` — a section is a `##` heading
+ * block, T3.1's addendum), and the wall reads only what any list would give it:
+ * ids, their text, and their order.
  */
 
 export type Section = {

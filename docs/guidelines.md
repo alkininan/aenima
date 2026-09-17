@@ -1,4 +1,8 @@
-<!-- guidelines.md · v1.15 · in the repo · a run tells the truth when something partial happens:
+<!-- guidelines.md · v1.16 · in the repo · §5 step 0 regenerates the route types whenever they
+     are stale, not only when .next/types is missing: route-types.mjs stamps the route files,
+     the Next config and the Next version the types were generated from, and a worktree whose
+     types were generated for another tree gets them regenerated (T3.1's addendum, AA4).
+     v1.15 · in the repo · a run tells the truth when something partial happens:
      §3 the In progress → Decision row names the review that could not run; §5 step 5 a pass
      stopped at its turn limit is resumed once and marked resumed, a second stop a stop; step 8
      the reviewer table's resumed column; step 0 and §2 each mirror chunk read back and a page
@@ -384,9 +388,10 @@ below is a script under `scripts/run/` with a test; the skill holds the judgment
 
 ```
 0  Preflight    stamp this worktree as a run's and remove the ones earlier runs left (prune.mjs) ·
-                install when node_modules is absent, typegen when .next/types is · a task In
-                progress whose marker is fresh is a live run: exit, before anything is read or
-                claimed · read every task's thread over the API in one command (threads.mjs)
+                install when node_modules is absent, typegen when the route types are missing
+                or stale (route-types.mjs: a stamp of the route files they were generated
+                from) · a task In progress whose marker is fresh is a live run: exit, before
+                anything is read or claimed · read every task's thread over the API in one command (threads.mjs)
                 and give each reply newer than the pipeline's last comment one assessment
                 (§4): a change at Review → addendum, Ready · merge at Review → claim, gh pr
                 merge --merge, one comment, release · apply on a migration question → claim,
