@@ -38,10 +38,18 @@ const APP_DIRS = ["src/app", "app"];
 
 /**
  * A file whose presence makes or shapes a route: pages, layouts, route handlers and the
- * special files a segment can carry.
+ * special files a segment can carry. Metadata files are routes too, below.
  */
 const ROUTE_FILE =
   /^(page|layout|route|default|template|loading|error|not-found|global-error|forbidden|unauthorized)\.(tsx|ts|jsx|js|mdx|md)$/;
+
+/**
+ * A metadata file, which Next turns into a route of its own (`discoverRoutes` in
+ * `next/dist/build/route-discovery.js`): the favicon, icons and social images, numbered or
+ * not, the sitemap, robots and the manifest, as a static file or as code.
+ */
+const METADATA_FILE =
+  /^(favicon|icon\d*|apple-icon\d*|opengraph-image\d*|twitter-image\d*|sitemap|robots|manifest)\.[a-z]+$/;
 
 const CONFIG_FILE = /^next\.config\.(ts|mts|mjs|cjs|js)$/;
 
@@ -58,7 +66,7 @@ function routeFiles(root, dir) {
     for (const entry of entries) {
       const path = `${relative}/${entry.name}`;
       if (entry.isDirectory()) walk(path);
-      else if (ROUTE_FILE.test(entry.name)) found.push(path);
+      else if (ROUTE_FILE.test(entry.name) || METADATA_FILE.test(entry.name)) found.push(path);
     }
   };
   walk(dir);

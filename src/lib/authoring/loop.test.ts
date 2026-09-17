@@ -368,6 +368,20 @@ describe("refineSection — the doors before the author", () => {
     expect(sent.critic).toHaveLength(0);
   });
 
+  it("refines nothing under a heading whose id is longer than a round can store", async () => {
+    const heading = "Scheduling ".repeat(20);
+    const { agents, sent } = scripted([], []);
+    const { ledger } = memoryLedger();
+    const body = `## ${heading}\n${EVIDENCE}.\n`;
+    const id = heading.trim().toLowerCase().replace(/ /g, "-");
+    expect(id.length).toBeGreaterThan(200);
+
+    const result = await refineSection(input({ body, sectionId: id }), agents, ledger);
+
+    expect(!result.ok && result.reason).toBe("no-section");
+    expect(sent.critic).toHaveLength(0);
+  });
+
   it("sends the author only the scoped section of the document", async () => {
     const { agents, sent } = scripted([objects(objection()), none], [revision(1)]);
     const { ledger } = memoryLedger();

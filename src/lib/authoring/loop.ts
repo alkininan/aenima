@@ -5,7 +5,7 @@ import type { SkillPack } from "@/packs";
 import { admitObjections } from "./objection";
 import { draftRequest, criticRequest, revisionRequest } from "./prompt";
 import type { AssembledRequest, Turn } from "./prompt";
-import { ROUND_TEXT_MAX, SURFACING_ROUND, nextMove } from "./rounds";
+import { ROUND_TEXT_MAX, SECTION_ID_MAX, SURFACING_ROUND, nextMove } from "./rounds";
 import type { RoundOutcome, StoredRound } from "./rounds";
 import type { AuthorAnswer, CriticAnswer } from "./schema";
 import { checkRevisionScope } from "./scope";
@@ -107,6 +107,15 @@ export async function refineSection(
       ok: false,
       reason: "no-section",
       detail: "the text before the first ## heading is not a section to refine",
+    };
+  }
+  // A heading whose slug is longer than a round can store could be argued over
+  // and never recorded; turned away before the first paid call.
+  if (sectionId.length > SECTION_ID_MAX) {
+    return {
+      ok: false,
+      reason: "no-section",
+      detail: `a section id longer than ${SECTION_ID_MAX} characters cannot be refined`,
     };
   }
   let body = input.body;

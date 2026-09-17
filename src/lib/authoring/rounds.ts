@@ -31,6 +31,9 @@ export const SURFACING_ROUND = MAX_REFINEMENTS + 1;
  */
 export const ROUND_TEXT_MAX = 2000;
 
+/** The longest section id a round can hold — `refinement_round_section_len`. */
+export const SECTION_ID_MAX = 200;
+
 /**
  * How a round ended.
  *

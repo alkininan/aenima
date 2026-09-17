@@ -76,6 +76,13 @@ describe("routeInputs — TA4 → AA4", () => {
     expect(after).not.toBe(before);
   });
 
+  it("moves when a metadata file is added, since Next makes a route of it", () => {
+    const base = fingerprint(routeInputs(checkout(TREE)));
+    for (const file of ["src/app/sitemap.ts", "src/app/opengraph-image.tsx", "src/app/icon1.png"]) {
+      expect(fingerprint(routeInputs(checkout({ ...TREE, [file]: "" }))), file).not.toBe(base);
+    }
+  });
+
   it("does not move for a file that makes no route, or for a route file's contents", () => {
     const base = fingerprint(routeInputs(checkout(TREE)));
     const component = checkout({ ...TREE, "src/app/i/[key]/GapList.tsx": "x" });
