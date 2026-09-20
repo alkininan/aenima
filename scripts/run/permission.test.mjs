@@ -245,6 +245,47 @@ describe("postable", () => {
     expect((await postable(clarifying, { page: "p", deps: down })).why).toContain("502");
     expect(await postable(noted, { page: "p", deps: down })).toMatchObject({ ok: true });
   });
+
+  // T0.24 TC5 → AC5. A word outlives a refusal now, so the attempt is made again each run
+  // until what stands in the way is settled; the guard is where the repeated sentence is
+  // held back, and that needs the comment's own words, not only its kind.
+  it("holds back a refusal the thread still carries, and lets a different one through", async () => {
+    const refused = compose(
+      "refused",
+      {
+        what: "Applying drizzle/0015_x.sql",
+        why: "Postgres answered: relation workspace already exists",
+        files: [],
+        settle: "Say apply once the table is settled",
+      },
+      P,
+    );
+    const other = compose(
+      "refused",
+      {
+        what: "Applying drizzle/0015_x.sql",
+        why: "Postgres answered: could not connect to server",
+        files: [],
+        settle: "Say apply once the database is up",
+      },
+      P,
+    );
+    const deps = {
+      marker: () => null,
+      token: () => "t",
+      board,
+      comments: async () => [
+        c(MIGRATION, "2026-09-20T10:00:00Z"),
+        c(refused, "2026-09-20T11:00:00Z"),
+      ],
+    };
+
+    expect(await postable(refused, { page: "p", deps })).toMatchObject({
+      ok: false,
+      kind: "refused",
+    });
+    expect(await postable(other, { page: "p", deps })).toMatchObject({ ok: true, kind: "refused" });
+  });
 });
 
 // T0.16 TC2 → AC2 and TC3 → AC3. The guard's second door: `gh pr merge` is also allowed when

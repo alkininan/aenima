@@ -269,6 +269,7 @@ describe("what a tier-routed request may be for", () => {
       "translate",
       "applicability",
       "draft",
+      "critique",
       "question",
       "patch",
     ];
@@ -280,7 +281,7 @@ describe("what a tier-routed request may be for", () => {
       purpose,
     }));
 
-    expect(requests).toHaveLength(6);
+    expect(requests).toHaveLength(7);
   });
 });
 

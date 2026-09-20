@@ -14,7 +14,7 @@ export type ItemHeaderData = {
    * §2 lineage. Null when the item is unlinked, which is legal and common.
    *
    * One nullable object rather than a nullable title beside a nullable key:
-   * `opportunity.key` is NOT NULL (drizzle/0015), so a linked opportunity always
+   * `opportunity.key` is NOT NULL (drizzle/0016), so a linked opportunity always
    * has both, and two fields could be made to say otherwise.
    */
   opportunity: { key: string; title: string } | null;

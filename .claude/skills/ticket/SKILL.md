@@ -30,7 +30,9 @@ url) · `merged` (commit) · `applied` (file) · `noted` · `setup` (step, where
 `cycle` (members) · `urgent` (count) · `refused` (what, why, files, settle).
 A comment carries its kind in its own words, and the guard reads it against the thread before
 the comment posts: a third clarifying round on one question waits, and so does a second comment
-of one kind in one claim — say every default a claim takes in its one `default` comment. Every
+of one kind in one claim — say every default a claim takes in its one `default` comment — and so
+does a `refused` the thread already carries word for word, since an attempt the board still
+grants is made again every run until what stands in the way is settled. Every
 other comment posts, cap or no cap. A step the guard let through that fails anyway always
 reports, as one `refused` comment: what was refused, why, the files in the way, what would
 settle it.
@@ -49,11 +51,12 @@ is never touched:
 
     node scripts/run/prune.mjs
 
-A fresh worktree has no `node_modules`; the gate and the suite need them. It has no
-`.next/types` either, and the gate's typecheck reads Next's route types from there:
+A fresh worktree has no `node_modules`; the gate and the suite need them. The gate's
+typecheck reads Next's route types from `.next/types`, which a worktree may lack or may hold
+generated for another tree; the script regenerates them whenever they are missing or stale:
 
     test -d node_modules || pnpm install --frozen-lockfile
-    test -d .next/types || pnpm next typegen
+    node scripts/run/route-types.mjs
 
 **The connector's query.** Steps a, c and e ask the board through the connector's query, which
 draws on the workspace's shared usage limit. When the connector answers that the workspace has
@@ -101,17 +104,27 @@ the cap — keep reading, post nothing. Every other assessment posts its comment
   `merged` comment with the merge commit's short hash. Any of the three, then:
   `node scripts/run/release.mjs`. Step c fetches, sets Done and writes the Release row; the
   remote branch is left for GitHub's own deletion and the worktree for `prune.mjs`.
-- `shape: apply` (Decision waiting on a migration, the newest reply begins with *apply*). Only
-  where `.env.migrate` exists — the primary checkout; a worktree has no admin URL and leaves
-  the reply for a run that does, and says so in its report line. Claim it the same way, then
-  check the ticket's branch out — `node scripts/run/branch.mjs <id>` reuses origin's copy,
-  which is where the migration file is; the primary sits on `main` until then — and only then
-  `pnpm db:migrate`; the guard reads the thread first. If it refuses, release the marker and
-  post nothing. If the guard lets it through and the migration itself fails, post one
-  `refused` comment with the error's first line and what would settle it, release the marker,
-  and leave the task at Decision. On success post one `applied` comment naming the file, set the task
-  `In progress`, and continue from step 1's marker with this task: skip the pick, step 3 is
-  already done, and the ticket carries on from where it stopped.
+- `shape: apply` (Decision waiting on a migration, the newest reply begins with *apply*). From
+  whichever checkout this run is in. Claim it the same way — `node scripts/run/claim.mjs
+  --task <id> --page <page id> --branch t<id>` — and then, **before** the branch is checked
+  out:
+
+      node scripts/run/apply.mjs --ref origin/t<id>
+
+  the guard reading the thread first. Before, because the ticket's branch was cut before this
+  script existed and checking it out would take the script away with it; `--ref` reads that
+  branch's `drizzle/` out of git instead. The credential is the primary checkout's and stays
+  there. If the guard refuses, release the marker and post nothing. `ok: false` is the apply
+  itself answering no — the database's own error, or a migration drizzle would pass over in
+  silence because another branch's landed first: post one `refused` comment with its `why`,
+  which carries that sentence and what would settle it, release the marker, and leave the task
+  at Decision — your word stands, so the next run makes the apply again once the thing in the
+  way is settled, and you are not asked for it twice. `ok: true` → post one `applied` comment,
+  its `file` the `tag` and `idx` of every entry of `applied`, or **no `file` at all** when
+  `applied` is empty, which is the database having already carried them; then set the task
+  `In progress`, run `node scripts/run/branch.mjs <id>`, and continue from step 1's marker
+  with this task: skip the pick, step 3 is done there, and the ticket carries on from where it
+  stopped. Step 8's report names every entry of `applied`, its `tag` and its `idx`.
 - `shape: ready` (Backlog, the newest reply begins with *ready*). Set the task `Ready` through
   the connector first — the guard reads the thread itself before it lets that write through, and
   your own comment would consume the word — then post one `readied` comment. If the guard
@@ -361,10 +374,11 @@ Type `Fix`, the same Epic, body headed `Drafted by pipeline`.
 
 `waiting: true` → write the Report so far, commit and push the branch, post the claim's
 `default` comment if it holds one and one `migration` comment naming the file, release the
-marker (`node scripts/run/release.mjs`), set `Decision`, and exit. The credential this run holds cannot apply a migration, and the guard refuses
-the command until it has itself read the word *apply* from you on this task's thread. The
-human answers with that one word; the next run in the primary checkout applies it (step 0a)
-and carries the ticket on from here.
+marker (`node scripts/run/release.mjs`), set `Decision`, and exit. Applying a migration is the
+human's word and not this run's reading of it: the guard refuses every shape of the apply until
+it has itself read *apply* from you on this task's thread. The human answers with that one
+word; the next run applies it (step 0a) from whichever checkout it is in, and carries the
+ticket on from here.
 
 ## 7 Gate
 

@@ -93,6 +93,8 @@ One file per ticket under `docs/log/`, oldest first. This list is written by `no
 - [T0.22 — Reviewer model fallback](log/T0.22.md) · 2026-09-16
 - [T0.23 — Partial reviews and mirror verification](log/T0.23.md) · 2026-09-16
 - [T1.5 — Row roving and freshness](log/T1.5.md) · 2026-09-16
+- [T0.24 — Apply from a worktree run](log/T0.24.md) · 2026-09-20
+- [T3.1 — Author-critic loop](log/T3.1.md) · 2026-09-20
 
 ## Decisions made during the build
 
@@ -692,7 +694,7 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
 
 9. **~~Opportunities have no key column, so `/o/<key>` cannot be built.~~ Closed by T1.4.**
    `opportunity.key` is `item.key` one table over — a `key_prefix` counter assigned by
-   `app.assign_opportunity_key()` on insert (`drizzle/0015`), unique per workspace, and ignored when
+   `app.assign_opportunity_key()` on insert (`drizzle/0016`), unique per workspace, and ignored when
    a client supplies one. `/o/<key>` renders the problem and the items bet on it, and the item
    header's opportunity line is a link. **One property of the mirror is worth knowing:** the two
    counters are independent and the two unique constraints are on different tables, so `soc-3` can
@@ -1173,7 +1175,7 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
 
     Also from T1.4, and closed by the same apply: `src/db/database.types.ts` carries one hand-written
     block, `opportunity.key`. The generator reads the live database and there was none to read.
-    **Regenerate and diff it in the run that applies `drizzle/0015`** — open question 5's rule, which
+    **Regenerate and diff it in the run that applies `drizzle/0016`** — open question 5's rule, which
     T2.4 vindicated for `item.key`.
 
 ## On the horizon

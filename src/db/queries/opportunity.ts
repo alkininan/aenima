@@ -102,7 +102,7 @@ export async function getOpportunityByKey(
     // list that can reshuffle itself between two reads of the same page.
     //
     // Two columns because one is not a total order: rows written by a single
-    // statement share `now()`, which is exactly why `drizzle/0015`'s own
+    // statement share `now()`, which is exactly why `drizzle/0016`'s own
     // backfill tie-breaks on `(created_at, id)`. Today's seed writes items one
     // at a time, so the tie is not reachable yet — the second key is what keeps
     // "creation order" true the day something inserts a batch.

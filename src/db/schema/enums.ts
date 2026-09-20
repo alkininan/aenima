@@ -107,3 +107,20 @@ export const aiOutcome = pgEnum("ai_outcome", [
   "rate_limited",
   "rejected",
 ]);
+
+/**
+ * product-spec.md §6 — how one refinement round ended (T3.1).
+ *
+ * `revised` cut a new artifact version inside the objection's scope; `held` is
+ * the author returning the section unchanged, so there was nothing to version;
+ * `refused` is the scope wall turning back a revision that touched another
+ * section. All three spend a round. `surfaced` is the third disagreement: no
+ * revision is asked for, and the row itself is the open question the human owns
+ * — there is no open-question table (T3.1's addendum, answer 2).
+ */
+export const refinementOutcome = pgEnum("refinement_outcome", [
+  "revised",
+  "held",
+  "refused",
+  "surfaced",
+]);

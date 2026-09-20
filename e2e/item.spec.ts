@@ -179,7 +179,7 @@ test.describe("at 1440", () => {
    * as text, and nothing around it an anchor — because `/o/<key>` was reserved
    * and unbuildable while opportunities had no key column, and a link that
    * navigates nowhere is worse than none. `opportunity.key` exists now
-   * (`drizzle/0015`), so the assertion inverts with the thing it was guarding:
+   * (`drizzle/0016`), so the assertion inverts with the thing it was guarding:
    * the title is on the page *and* it is the anchor, pointed at the key rather
    * than at a uuid, which is the whole reason `routes.ts` keeps its segments
    * short.

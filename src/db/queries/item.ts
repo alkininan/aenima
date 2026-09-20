@@ -498,7 +498,7 @@ export type ItemPageDetail = {
    * Null is a real state rather than a hole in the data — §2: "an item may be
    * **unlinked** from any opportunity; that shows as a small advisory gap, never
    * a block." One nullable object rather than two nullable fields:
-   * `opportunity.key` is NOT NULL (drizzle/0015), so a linked opportunity always
+   * `opportunity.key` is NOT NULL (drizzle/0016), so a linked opportunity always
    * has both.
    */
   opportunity: { key: string; title: string } | null;

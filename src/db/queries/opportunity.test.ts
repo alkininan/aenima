@@ -173,7 +173,7 @@ describe("getOpportunityByKey", () => {
     expect(calls.order).toEqual([
       ["created_at", { ascending: true, referencedTable: "item" }],
       // Not a total order on its own: rows from one statement share `now()`,
-      // which is why `drizzle/0015`'s backfill tie-breaks the same way.
+      // which is why `drizzle/0016`'s backfill tie-breaks the same way.
       ["key", { ascending: true, referencedTable: "item" }],
     ]);
   });
