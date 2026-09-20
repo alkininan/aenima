@@ -52,7 +52,9 @@ const NOTICES = new Set(["waiting", "cycle", "urgent", null]);
  *
  * Returns `{ pipeline, human, unanswered, clarifyingRounds }`:
  *   pipeline          prefixed comments, oldest first, each with the `kind` its words carry
- *   unanswered        human comments newer than the last prefixed one, oldest first
+ *   unanswered        human comments newer than the last prefixed one that answered something,
+ *                     oldest first. A `refused` comment is not one: it reports an attempt that
+ *                     failed, and the word that granted the attempt outlives it (T0.24).
  *   clarifyingRounds  clarifying comments since the pipeline last asked or answered anything
  *                     else on the thread. Human replies between them do not end the run of
  *                     rounds — every round answers one — and nor does a notice about the
@@ -69,7 +71,12 @@ export function readThread(comments = [], prefix = "⟡ ") {
     .filter(isPipeline)
     .map((comment) => ({ ...comment, kind: kindOf(comment.text, prefix) }));
   const human = ordered.filter((comment) => !isPipeline(comment));
-  const lastPipelineAt = pipeline.length === 0 ? "" : at(pipeline.at(-1));
+  // A refusal reports an attempt that failed; it does not answer the reply that asked for it,
+  // so the word the reply carries is still granted and the next run acts on it rather than
+  // asking for it again (T0.24, AC5). `awaitingMigration` has read past a refusal since T0.20
+  // for the same reason: the question it reported on is still the question standing.
+  const answered = pipeline.findLast((comment) => comment.kind !== "refused");
+  const lastPipelineAt = answered === undefined ? "" : at(answered);
 
   let clarifyingRounds = 0;
   for (const comment of [...pipeline].reverse()) {
@@ -101,12 +108,30 @@ const minuteOf = (time) => {
  *   - A clarifying round past the cap waits: two on one question, and the run stops asking.
  *   - The same kind twice in one claim waits: uncapped is not unlimited. A comment's time
  *     comes from the API to the minute, so the claim's first minute counts as the claim's.
+ *   - A refusal still standing on the thread word for word waits, whatever claim it is from
+ *     (T0.24). Still standing: nothing of another kind has been said since. A word outlives a refusal now, so the run makes the attempt again every hour
+ *     until the thing in the way is settled, and saying the same sentence every hour tells
+ *     the human nothing: §5 step 1's rule that words already on the thread are not said
+ *     again, one door along. A refusal that says something new posts as before.
  *
  * Every other comment posts, whatever the thread holds. A stop, a default taken, a merge, a
  * gated diff, a notice, a refusal: each tells the human something new, and the cap is never the
  * reason a human is not told.
  */
-export function mayPost(thread, kind, { since = null } = {}) {
+export function mayPost(thread, kind, { since = null, text = null } = {}) {
+  if (kind === "refused" && text !== null) {
+    // Only a refusal that still stands: one from an earlier round, with an answer of some
+    // other kind since, is history, and the same error met again is news (review pass 3).
+    const pipeline = thread?.pipeline ?? [];
+    const answered = pipeline.findLastIndex((comment) => comment.kind !== "refused");
+    const standing = pipeline.slice(answered + 1).findLast((comment) => comment.kind === "refused");
+    if (standing !== undefined && sameWords(standing.text, text)) {
+      return {
+        ok: false,
+        why: "this refusal is already the newest one on the thread, word for word — the attempt is made again each run until what stands in the way is settled, and saying so again says nothing new",
+      };
+    }
+  }
   if (kind === "clarifying" && (thread?.clarifyingRounds ?? 0) >= CLARIFYING_CAP) {
     return {
       ok: false,
@@ -127,6 +152,19 @@ export function mayPost(thread, kind, { since = null } = {}) {
   }
   return { ok: true, why: null };
 }
+
+/**
+ * Two comments saying the same thing: whitespace and the markdown the API strips aside. The
+ * text a thread hands back has been through Notion and back, so an exact string match on what
+ * the composer wrote would never hold.
+ */
+const sameWords = (a, b) => words(a) === words(b);
+
+const words = (text) =>
+  String(text ?? "")
+    .replace(/[*_`]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 
 /**
  * True when a reply *begins* with the word — `merge`, `Merge it`, `apply, then carry on` —
@@ -230,7 +268,7 @@ const SIGNATURES = [
   ["change", /^I've read that as a change to this ticket and folded it into the body /],
   ["newWork", /^I've read that as new work rather than a change to this ticket, /],
   ["merged", /^Merged into main at .+ with a merge commit, and the task is Done\./],
-  ["applied", /^Applied .+ to the shared database\. The ticket picks up /],
+  ["applied", /^Applied .+\. The ticket picks up from where it stopped\.$/],
   ["noted", /^Read that, thanks\. Nothing for me to do here, /],
   ["resolved", /^Read that as the answer, thanks\. /],
   [
@@ -318,7 +356,7 @@ export function compose(kind, fields = {}, prefix = "⟡ ") {
       return `${prefix}Thanks, I read that, but it still fits two readings: ${clause(a)}, or ${clause(b)}. If you say "default" I'll ${clause(fields.fallback)}.`;
     }
     case "migration":
-      return `${prefix}This change adds a migration, ${clause(fields.file)}, and applying it to the shared database is your call. I've left it in the diff and stopped here. Once you've applied it, say so on this thread and the next run picks the ticket back up.`;
+      return `${prefix}This change adds a migration, ${clause(fields.file)}, and applying it to the shared database is your call. I've left it in the diff and stopped here. Say "apply" on this thread and the next run applies it and picks the ticket back up from there.`;
     case "stale":
       return fields.branch
         ? `${prefix}This run stopped partway on ${clause(fields.date)}. I've kept the branch as ${clause(fields.branch)} in case anything on it is worth salvaging, and started again from main.`
@@ -332,7 +370,12 @@ export function compose(kind, fields = {}, prefix = "⟡ ") {
     case "merged":
       return `${prefix}Merged into main at ${clause(fields.commit)} with a merge commit, and the task is Done. The release row follows.`;
     case "applied":
-      return `${prefix}Applied ${clause(fields.file)} to the shared database. The ticket picks up from where it stopped.`;
+      // Two forms, like `stale`'s: an apply that found the database already current applied
+      // nothing, and naming a file it did not write would be reporting what did not happen
+      // (T0.24).
+      return fields.file
+        ? `${prefix}Applied ${clause(fields.file)} to the shared database. The ticket picks up from where it stopped.`
+        : `${prefix}Applied nothing: the shared database already had every migration on this branch. The ticket picks up from where it stopped.`;
     case "noted":
       return `${prefix}Read that, thanks. Nothing for me to do here, so I've left the ticket as it is.`;
     case "resolved":

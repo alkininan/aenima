@@ -189,6 +189,7 @@ describe("kindOf", () => {
       ["cycle", { members: ["T3.1"] }],
       ["refused", { ...all.refused, files: ["docs/guidelines.md"] }],
       ["refused", { ...all.refused, files: [] }],
+      ["applied", { file: null }],
     ];
     for (const [kind, fields] of variants) {
       expect(kindOf(compose(kind, fields, P), P), `${kind} ${JSON.stringify(fields)}`).toBe(kind);
@@ -315,6 +316,55 @@ describe("mayPost", () => {
     expect(mayPost(capped, "refused")).toEqual({ ok: true, why: null });
   });
 
+  // T0.24 TC5 → AC5, the other half of a word that outlives a refusal: the run tries again
+  // every hour until the thing in the way is settled, and saying the same sentence every hour
+  // is not telling the human anything. §5 step 1's rule, one door along: words already on the
+  // thread are not said again (review pass 1, Should 4).
+  it("holds back a refusal the thread already carries, word for word", () => {
+    const standing = said("refused", {
+      what: "Applying drizzle/0013_activity_trigger.sql",
+      why: "Postgres answered: relation activity already exists",
+      settle: "Say apply once the table is settled",
+    });
+    const thread = readThread(timeline(said("migration"), "apply", standing), P);
+
+    expect(mayPost(thread, "refused", { text: standing }).ok).toBe(false);
+    expect(mayPost(thread, "refused", { text: standing }).why).toContain("already");
+  });
+
+  // Review pass 3, Should 2: only a refusal that still stands holds one back. One from an
+  // earlier round, with an answer since, is history — the same error met again is news.
+  it("posts a refusal again once something else has answered since", () => {
+    const standing = said("refused", {
+      what: "Applying drizzle/0013_activity_trigger.sql",
+      why: "Postgres answered: relation activity already exists",
+      settle: "Say apply once the table is settled",
+    });
+    const thread = readThread(
+      timeline(said("migration"), "apply", standing, said("applied", { file: "drizzle/0013.sql" })),
+      P,
+    );
+
+    expect(mayPost(thread, "refused", { text: standing })).toEqual({ ok: true, why: null });
+  });
+
+  it("posts a refusal that says something the thread does not", () => {
+    const standing = said("refused", {
+      what: "Applying drizzle/0013_activity_trigger.sql",
+      why: "Postgres answered: relation activity already exists",
+      settle: "Say apply once the table is settled",
+    });
+    const different = said("refused", {
+      what: "Applying drizzle/0013_activity_trigger.sql",
+      why: "Postgres answered: could not connect to server",
+      settle: "Say apply once the database is up",
+    });
+    const thread = readThread(timeline(said("migration"), "apply", standing), P);
+
+    expect(mayPost(thread, "refused", { text: different })).toEqual({ ok: true, why: null });
+    expect(mayPost(thread, "refused")).toEqual({ ok: true, why: null });
+  });
+
   // T0.20 TC4 → AC4
   it("holds one claim to one comment of a kind, and only from the claim's start", () => {
     const thread = readThread(
@@ -419,9 +469,11 @@ describe("compose", () => {
     );
   });
 
+  // T0.24: and says the word that makes it happen. Until then this told the human to apply by
+  // hand and "say so", which is the one thing the pipeline can now do for them.
   it("leaves a migration in the diff and says whose move applying it is", () => {
     expect(compose("migration", all.migration, P)).toBe(
-      `${P}This change adds a migration, drizzle/0013_activity_trigger.sql, and applying it to the shared database is your call. I've left it in the diff and stopped here. Once you've applied it, say so on this thread and the next run picks the ticket back up.`,
+      `${P}This change adds a migration, drizzle/0013_activity_trigger.sql, and applying it to the shared database is your call. I've left it in the diff and stopped here. Say "apply" on this thread and the next run applies it and picks the ticket back up from there.`,
     );
   });
 
@@ -460,6 +512,12 @@ describe("compose", () => {
     );
     expect(compose("applied", all.applied, P)).toBe(
       `${P}Applied drizzle/0015_x.sql to the shared database. The ticket picks up from where it stopped.`,
+    );
+    // T0.24: the apply ran and found the database already current — a word granted twice, or
+    // a migration somebody applied by hand. Saying "Applied drizzle/0015_x.sql" there would
+    // be reporting something that did not happen (review pass 2, Must 1's other half).
+    expect(compose("applied", { file: null }, P)).toBe(
+      `${P}Applied nothing: the shared database already had every migration on this branch. The ticket picks up from where it stopped.`,
     );
   });
 
@@ -691,6 +749,42 @@ describe("shapeOf and awaitingMigration", () => {
     expect(shapeOf("Decision", again)).toBe("apply");
     const refusedAlone = thread(timeline(said("refused"), "apply"));
     expect(shapeOf("Decision", refusedAlone)).toBe("assess");
+  });
+
+  // T0.24 TC5 → AC5: and the human does not have to say it twice. A refusal reports an
+  // attempt that failed; it answers nothing, so the word that granted the attempt outlives
+  // it and the next run acts on it rather than waiting to be told again.
+  it("leaves the word standing: a refusal reports, it does not answer", () => {
+    const after = thread(
+      timeline(
+        said("migration"),
+        "apply",
+        said("refused", {
+          what: "Applying drizzle/0013_activity_trigger.sql",
+          why: "Postgres answered: relation activity already exists",
+          settle: "Say apply once the table is settled",
+        }),
+      ),
+    );
+    expect(after.unanswered.map((x) => x.text)).toEqual(["apply"]);
+    expect(shapeOf("Decision", after)).toBe("apply");
+  });
+
+  // The same rule at the other word: a merge the guard let through and GitHub refused leaves
+  // the merge standing, so settling the conflict is all the human has to do.
+  it("leaves a merge standing after the merge itself was refused", () => {
+    const after = thread(timeline("merge", said("refused")));
+    expect(shapeOf("Review", after)).toBe("merge");
+  });
+
+  // But a comment that *does* answer still consumes it, which is what keeps a word from
+  // granting twice: the run said it applied, so there is nothing outstanding.
+  it("consumes the word once the run has said it applied", () => {
+    const after = thread(
+      timeline(said("migration"), "apply", said("applied", { file: "drizzle/0013_x.sql" })),
+    );
+    expect(after.unanswered).toEqual([]);
+    expect(shapeOf("Decision", after)).toBe("assess");
   });
 
   it("is assess with nothing unanswered, and assess when the newest reply takes the word back", () => {
