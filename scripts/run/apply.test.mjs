@@ -16,7 +16,7 @@ import {
   scrub,
   work,
 } from "./apply.mjs";
-import { readThread, shapeOf } from "./comments.mjs";
+import { compose, readThread, shapeOf } from "./comments.mjs";
 
 const JOURNAL = {
   version: "7",
@@ -45,6 +45,13 @@ afterEach(() => {
   if (fx) rmSync(fx.root, { recursive: true, force: true });
   fx = null;
 });
+
+/** postgres.js as this code uses it: a tagged template, answering each query in turn. */
+const fakePostgres = (answers) => {
+  const sql = () => answers.shift();
+  sql.end = async () => {};
+  return () => sql;
+};
 
 /** A worker that answers with `payload` as the run reads it: JSON on stdout. */
 const worker = (payload, status = 0) => ({
@@ -205,13 +212,32 @@ describe("exportMigrations", () => {
   });
 
   it("fails rather than applying an empty folder when the ref carries none", () => {
+    // Only `git archive` fails here, so the sentence has to be the archive's: with tar left
+    // to answer for it the test would pass on the wrong branch (red-first, by mutation).
     const result = exportMigrations("origin/nope", {
       cwd: "/repo",
       dir: "/tmp/e",
-      git: () => ({ status: 128, stdout: "", stderr: "fatal: not a valid object name\n" }),
+      git: (argv) =>
+        argv[0] === "git"
+          ? { status: 128, stdout: "", stderr: "fatal: not a valid object name\n" }
+          : { status: 0, stdout: "", stderr: "" },
     });
     expect(result.ok).toBe(false);
+    expect(result.why).toContain("git archive origin/nope failed");
     expect(result.why).toContain("not a valid object name");
+  });
+
+  it("fails when the tarball cannot be unpacked, and says which step it was", () => {
+    const result = exportMigrations("origin/t3-1", {
+      cwd: "/repo",
+      dir: "/tmp/e",
+      git: (argv) =>
+        argv[0] === "tar"
+          ? { status: 2, stdout: "", stderr: "tar: Error opening archive\n" }
+          : { status: 0, stdout: "", stderr: "" },
+    });
+    expect(result.ok).toBe(false);
+    expect(result.why).toContain("tar -xf failed");
   });
 });
 
@@ -311,7 +337,7 @@ describe("apply — TC3 · AC3 the word is consumed once", () => {
 
   it("does not read it again once the run has said it applied", () => {
     const answered = {
-      text: "⟡ Applied drizzle/0015_refinement_round.sql to the shared database. The ticket picks up where it stopped.",
+      text: compose("applied", { file: "drizzle/0015_refinement_round.sql" }, "⟡ "),
       created_time: "2026-09-20T12:05:00.000Z",
     };
     const after = thread([asked, said, answered]);
@@ -374,13 +400,14 @@ describe("apply — TC1 · AC1 a migration drizzle would skip is refused, not re
   it("refuses before running the migrator, and says what would settle it", async () => {
     fx = fixture();
     let migrated = false;
-    const sql = () => [{ present: true }, { created_at: "1300" }, { created_at: "9999" }];
-    sql.end = async () => {};
     const result = await work({
       folder: join(fx.worktree, MIGRATIONS),
       url: "postgresql://u:pw@h/db",
       deps: {
-        postgres: () => sql,
+        postgres: fakePostgres([
+          [{ present: true }],
+          [{ created_at: "1300" }, { created_at: "9999" }],
+        ]),
         drizzle: (s) => s,
         migrate: async () => {
           migrated = true;
@@ -416,7 +443,16 @@ describe("apply — TC5 · AC5 a failed apply quotes the database and keeps the 
       },
       { text: "apply", created_time: "2026-09-20T11:59:00.000Z" },
       {
-        text: '⟡ Applying drizzle/0015_refinement_round.sql was refused: syntax error at or near "CRATE". Fixing the migration on the branch would settle it; your apply still stands.',
+        text: compose(
+          "refused",
+          {
+            what: "Applying drizzle/0015_refinement_round.sql",
+            why: 'syntax error at or near "CRATE"',
+            files: [],
+            settle: "Fixing the migration on the branch would settle it; your apply still stands",
+          },
+          "⟡ ",
+        ),
         created_time: "2026-09-20T12:05:00.000Z",
       },
     ];
@@ -430,13 +466,6 @@ describe("apply — TC5 · AC5 a failed apply quotes the database and keeps the 
 // bracket that yields the tag and index, and the catch that yields the database's own
 // sentence, were both reachable only through a real Postgres until these.
 describe("work — the half that holds the credential", () => {
-  /** postgres.js as this code uses it: a tagged template, answering each query in turn. */
-  const fakePostgres = (answers) => {
-    const sql = () => answers.shift();
-    sql.end = async () => {};
-    return () => sql;
-  };
-
   const folder = () => {
     fx = fixture();
     return join(fx.worktree, MIGRATIONS);

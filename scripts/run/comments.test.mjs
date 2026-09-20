@@ -332,6 +332,22 @@ describe("mayPost", () => {
     expect(mayPost(thread, "refused", { text: standing }).why).toContain("already");
   });
 
+  // Review pass 3, Should 2: only a refusal that still stands holds one back. One from an
+  // earlier round, with an answer since, is history — the same error met again is news.
+  it("posts a refusal again once something else has answered since", () => {
+    const standing = said("refused", {
+      what: "Applying drizzle/0013_activity_trigger.sql",
+      why: "Postgres answered: relation activity already exists",
+      settle: "Say apply once the table is settled",
+    });
+    const thread = readThread(
+      timeline(said("migration"), "apply", standing, said("applied", { file: "drizzle/0013.sql" })),
+      P,
+    );
+
+    expect(mayPost(thread, "refused", { text: standing })).toEqual({ ok: true, why: null });
+  });
+
   it("posts a refusal that says something the thread does not", () => {
     const standing = said("refused", {
       what: "Applying drizzle/0013_activity_trigger.sql",

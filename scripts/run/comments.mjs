@@ -108,8 +108,8 @@ const minuteOf = (time) => {
  *   - A clarifying round past the cap waits: two on one question, and the run stops asking.
  *   - The same kind twice in one claim waits: uncapped is not unlimited. A comment's time
  *     comes from the API to the minute, so the claim's first minute counts as the claim's.
- *   - A refusal the thread already carries word for word waits, whatever claim it is from
- *     (T0.24). A word outlives a refusal now, so the run makes the attempt again every hour
+ *   - A refusal still standing on the thread word for word waits, whatever claim it is from
+ *     (T0.24). Still standing: nothing of another kind has been said since. A word outlives a refusal now, so the run makes the attempt again every hour
  *     until the thing in the way is settled, and saying the same sentence every hour tells
  *     the human nothing: §5 step 1's rule that words already on the thread are not said
  *     again, one door along. A refusal that says something new posts as before.
@@ -120,7 +120,11 @@ const minuteOf = (time) => {
  */
 export function mayPost(thread, kind, { since = null, text = null } = {}) {
   if (kind === "refused" && text !== null) {
-    const standing = (thread?.pipeline ?? []).findLast((comment) => comment.kind === "refused");
+    // Only a refusal that still stands: one from an earlier round, with an answer of some
+    // other kind since, is history, and the same error met again is news (review pass 3).
+    const pipeline = thread?.pipeline ?? [];
+    const answered = pipeline.findLastIndex((comment) => comment.kind !== "refused");
+    const standing = pipeline.slice(answered + 1).findLast((comment) => comment.kind === "refused");
     if (standing !== undefined && sameWords(standing.text, text)) {
       return {
         ok: false,

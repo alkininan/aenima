@@ -176,8 +176,8 @@ any the run commits and pushes the branch, writes the report so far, releases th
 sets Decision and posts one migration comment naming the file. The human answers with one
 word, `apply`, on the thread, and the next run applies it through `apply.mjs` (step 0),
 whichever checkout it is in: the guard lets a migration apply — `db:migrate`, `drizzle-kit
-migrate`, that script, or anything handed `.env.migrate` —
-— `db:baseline` too — through only when `permission.mjs` has itself found that word on the claimed task's thread
+migrate`, `db:baseline`, that script, or anything handed `.env.migrate` — through only when
+`permission.mjs` has itself found that word on the claimed task's thread
 over the API — the marker names the task, the token opens the board, the reply must be the
 human's newest since the pipeline's question, and the task must be at the state the word is
 for, the same `shapeOf` the preflight reads — and the same check gates `gh pr merge` on the
