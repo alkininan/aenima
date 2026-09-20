@@ -7,10 +7,11 @@ import {
   ADMIN_ENV,
   appliedBetween,
   apply,
+  blockedOf,
   exportMigrations,
   journalEntries,
   MIGRATIONS,
-  pendingAfter,
+  pendingOf,
   readAnswer,
   scrub,
   work,
@@ -178,6 +179,7 @@ describe("apply — TC1 · AC1 the migrations come from the ref, not from a chec
   });
 });
 
+// TC1 → AC1, the git half: the ref is read, never entered.
 describe("exportMigrations", () => {
   it("asks git for the ref's migrations and unpacks them", () => {
     const seen = [];
@@ -319,27 +321,76 @@ describe("apply — TC3 · AC3 the word is consumed once", () => {
 });
 
 describe("apply — TC4 · AC4 the report names the migration and its journal index", () => {
-  it("names every entry the ledger moved over", () => {
-    const entries = journalEntries(JSON.stringify(JOURNAL));
-    expect(appliedBetween(entries, 1400, 1500)).toEqual([
+  const entries = () => journalEntries(JSON.stringify(JOURNAL));
+
+  it("names every entry the ledger gained a row for", () => {
+    expect(appliedBetween(entries(), [1300, 1400], [1300, 1400, 1500])).toEqual([
       { idx: 15, tag: "0015_refinement_round" },
     ]);
   });
 
   it("names them all when the ledger was empty", () => {
-    const entries = journalEntries(JSON.stringify(JOURNAL));
-    expect(appliedBetween(entries, null, 1500).map((e) => e.idx)).toEqual([13, 14, 15]);
+    expect(appliedBetween(entries(), [], [1300, 1400, 1500]).map((e) => e.idx)).toEqual([
+      13, 14, 15,
+    ]);
   });
 
   it("names none when the ledger did not move", () => {
-    const entries = journalEntries(JSON.stringify(JOURNAL));
-    expect(appliedBetween(entries, 1500, 1500)).toEqual([]);
+    expect(appliedBetween(entries(), [1300, 1400, 1500], [1300, 1400, 1500])).toEqual([]);
   });
 
-  it("says what is pending before anything is run", () => {
-    const entries = journalEntries(JSON.stringify(JOURNAL));
-    expect(pendingAfter(entries, 1400)).toEqual([{ idx: 15, tag: "0015_refinement_round" }]);
-    expect(pendingAfter(entries, null)).toHaveLength(3);
+  it("says what is pending by which rows the ledger has, not by how new they are", () => {
+    expect(pendingOf(entries(), [1300, 1400])).toMatchObject([{ idx: 15 }]);
+    expect(pendingOf(entries(), [])).toHaveLength(3);
+    // A row the journal has no entry for — another branch's — leaves this branch's own
+    // entries pending all the same.
+    expect(pendingOf(entries(), [1300, 1400, 9999])).toMatchObject([{ idx: 15 }]);
+  });
+});
+
+// TC1 → AC1, review pass 2, Must 1. Two branches each generated an 0015, and T1.4's is
+// stamped older than T3.1's. drizzle's migrator applies only what is newer than the ledger's
+// newest row (node_modules/drizzle-orm/pg-core/dialect.js), so once T3.1 lands, T1.4's
+// migration is never applied and never mentioned — the run would post that it applied a file
+// the database never saw. The collision is drizzle's; being silent about it would have been
+// this script's.
+describe("apply — TC1 · AC1 a migration drizzle would skip is refused, not reported applied", () => {
+  const entries = () => journalEntries(JSON.stringify(JOURNAL));
+
+  it("names the entries the ledger has left behind", () => {
+    // 13 and 14 are recorded, and so is a *later* 15 from another branch; this branch's own
+    // 15 is older than that, so the migrator will pass over it for ever.
+    expect(blockedOf(entries(), [1300, 1400, 9999])).toMatchObject([
+      { idx: 15, tag: "0015_refinement_round" },
+    ]);
+  });
+
+  it("blocks nothing while the pending entries are the newest there are", () => {
+    expect(blockedOf(entries(), [1300, 1400])).toEqual([]);
+    expect(blockedOf(entries(), [])).toEqual([]);
+    expect(blockedOf(entries(), [1300, 1400, 1500])).toEqual([]);
+  });
+
+  it("refuses before running the migrator, and says what would settle it", async () => {
+    fx = fixture();
+    let migrated = false;
+    const sql = () => [{ present: true }, { created_at: "1300" }, { created_at: "9999" }];
+    sql.end = async () => {};
+    const result = await work({
+      folder: join(fx.worktree, MIGRATIONS),
+      url: "postgresql://u:pw@h/db",
+      deps: {
+        postgres: () => sql,
+        drizzle: (s) => s,
+        migrate: async () => {
+          migrated = true;
+        },
+      },
+    });
+
+    expect(migrated).toBe(false);
+    expect(result).toMatchObject({ ok: false, applied: [] });
+    expect(result.why).toContain("0015_refinement_round");
   });
 });
 
@@ -398,9 +449,9 @@ describe("work — the half that holds the credential", () => {
       deps: {
         postgres: fakePostgres([
           [{ present: true }],
-          [{ last: "1400" }],
+          [{ created_at: "1300" }, { created_at: "1400" }],
           [{ present: true }],
-          [{ last: "1500" }],
+          [{ created_at: "1300" }, { created_at: "1400" }, { created_at: "1500" }],
         ]),
         drizzle: (sql) => sql,
         migrate: async () => {},
@@ -419,7 +470,11 @@ describe("work — the half that holds the credential", () => {
       folder: folder(),
       url: "postgresql://u:pw@h/db",
       deps: {
-        postgres: fakePostgres([[{ present: false }], [{ present: true }], [{ last: "1500" }]]),
+        postgres: fakePostgres([
+          [{ present: false }],
+          [{ present: true }],
+          [{ created_at: "1300" }, { created_at: "1400" }, { created_at: "1500" }],
+        ]),
         drizzle: (sql) => sql,
         migrate: async () => {},
       },
@@ -432,7 +487,10 @@ describe("work — the half that holds the credential", () => {
       folder: folder(),
       url: "postgresql://u:pw@h/db",
       deps: {
-        postgres: fakePostgres([[{ present: true }], [{ last: "1400" }]]),
+        postgres: fakePostgres([
+          [{ present: true }],
+          [{ created_at: "1300" }, { created_at: "1400" }],
+        ]),
         drizzle: (sql) => sql,
         migrate: async () => {
           throw new Error(
@@ -450,7 +508,10 @@ describe("work — the half that holds the credential", () => {
       folder: folder(),
       url: "postgresql://u:pw@h/db",
       deps: {
-        postgres: fakePostgres([[{ present: true }], [{ last: "1400" }]]),
+        postgres: fakePostgres([
+          [{ present: true }],
+          [{ created_at: "1300" }, { created_at: "1400" }],
+        ]),
         drizzle: (sql) => sql,
         migrate: async () => {
           throw new Error("connect ECONNREFUSED postgresql://u:pw@h/db");
@@ -477,6 +538,7 @@ describe("work — the half that holds the credential", () => {
   });
 });
 
+// TC4 → AC4: the answer the report is written from has to survive pretty printing.
 describe("readAnswer", () => {
   it("takes the object from the last line-initial brace, not the last brace", () => {
     const pretty = JSON.stringify({ ok: true, applied: [{ idx: 15, tag: "t" }] }, null, 2);

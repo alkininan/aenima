@@ -139,23 +139,45 @@ export function journalEntries(text) {
 }
 
 /**
- * The entries a ledger that moved from `before` to `after` applied. drizzle-orm's pg migrator
- * applies by the journal's `when` against the newest `created_at` in `drizzle.__drizzle_migrations`
- * (node_modules/drizzle-orm/pg-core/dialect.js → `migrate()`), so the two marks bracket exactly
- * what ran. `before` null is an empty ledger.
+ * The ledger's `created_at` values as a set. drizzle writes the journal's `when` there, one row
+ * per migration (node_modules/drizzle-orm/pg-core/dialect.js → `migrate()`), so a journal entry
+ * is applied exactly when its `when` is among them — asked of the rows themselves rather than of
+ * the newest one, which is what review pass 2's Must 1 turns on.
  */
-export function appliedBetween(entries = [], before = null, after = null) {
-  if (after === null) return [];
+const stampSet = (stamps = []) => new Set(stamps.map(Number));
+
+/** The entries the ledger gained a row for between `before` and `after`. */
+export function appliedBetween(entries = [], before = [], after = []) {
+  const was = stampSet(before);
+  const now = stampSet(after);
   return entries
-    .filter((entry) => (before === null || entry.when > before) && entry.when <= after)
+    .filter((entry) => !was.has(Number(entry.when)) && now.has(Number(entry.when)))
     .map((entry) => ({ idx: entry.idx, tag: entry.tag }));
 }
 
-/** The entries not yet applied, given the ledger's newest `created_at` — null for an empty one. */
-export function pendingAfter(entries = [], last = null) {
+/** The entries the ledger has no row for, whatever their age. */
+export function pendingOf(entries = [], stamps = []) {
+  const recorded = stampSet(stamps);
   return entries
-    .filter((entry) => last === null || entry.when > last)
-    .map((entry) => ({ idx: entry.idx, tag: entry.tag }));
+    .filter((entry) => !recorded.has(Number(entry.when)))
+    .map((entry) => ({ idx: entry.idx, tag: entry.tag, when: entry.when }));
+}
+
+/**
+ * The pending entries drizzle's migrator will pass over in silence.
+ *
+ * It applies a migration only when the ledger's newest `created_at` is *less* than the entry's
+ * `when` — not when the entry is absent. So a migration generated on one branch while another
+ * branch's later-stamped migration reached the database first is skipped for ever, with no
+ * error: `migrate()` returns cleanly having done nothing. Both branches waiting on this
+ * pipeline are in exactly that position — T1.4's 0015 is stamped 1788982026724 and T3.1's
+ * 1789644802697 — so whichever lands second would have been reported applied and never have
+ * been (review pass 2, Must 1). Nothing here fixes drizzle; it refuses to be silent about it.
+ */
+export function blockedOf(entries = [], stamps = []) {
+  if (stamps.length === 0) return [];
+  const newest = Math.max(...stamps.map(Number));
+  return pendingOf(entries, stamps).filter((entry) => Number(entry.when) <= newest);
 }
 
 /**
@@ -310,10 +332,21 @@ export async function work({ folder, url, deps = {} } = {}) {
 
   const sql = postgres(url, { max: 1, prepare: false, onnotice: () => {} });
   try {
-    const before = await lastApplied(sql);
-    const pending = pendingAfter(entries, before);
+    const before = await ledgerStamps(sql);
+    // `when` is `blockedOf`'s to read; what the run reports is the tag and the index.
+    const pending = pendingOf(entries, before).map(({ idx, tag }) => ({ idx, tag }));
+    const blocked = blockedOf(entries, before);
+    if (blocked.length > 0) {
+      const named = blocked.map((entry) => `${entry.tag} (journal ${entry.idx})`).join(", ");
+      return {
+        ok: false,
+        applied: [],
+        pending,
+        why: `${named} would be passed over in silence: drizzle applies only what is stamped later than the newest row in its ledger, and another branch's migration got there first. Regenerate it on the branch — pnpm db:generate restamps it — and say apply again.`,
+      };
+    }
     await migrate(drizzle(sql), { migrationsFolder: folder });
-    const after = await lastApplied(sql);
+    const after = await ledgerStamps(sql);
     return { ok: true, applied: appliedBetween(entries, before, after), pending, why: null };
   } catch (error) {
     // The database's own sentence, scrubbed: postgres.js attaches what it was given to an
@@ -325,19 +358,19 @@ export async function work({ folder, url, deps = {} } = {}) {
 }
 
 /**
- * The newest `created_at` drizzle's ledger holds, or null when there is no ledger yet — an
- * empty ledger and a missing one mean the same thing to the migrator: nothing has been applied.
+ * Every `created_at` drizzle's ledger holds, oldest first — empty when there is no ledger yet,
+ * which means the same to the migrator as an empty one: nothing has been applied.
  */
-async function lastApplied(sql) {
+async function ledgerStamps(sql) {
   const [present] = await sql`
     select exists (
       select 1 from information_schema.tables
        where table_schema = 'drizzle' and table_name = '__drizzle_migrations'
     ) as present`;
-  if (!present?.present) return null;
-  const [row] = await sql`select max(created_at) as last from "drizzle"."__drizzle_migrations"`;
-  const last = row?.last;
-  return last === null || last === undefined ? null : Number(last);
+  if (!present?.present) return [];
+  const rows = await sql`
+    select created_at from "drizzle"."__drizzle_migrations" order by created_at`;
+  return rows.map((row) => Number(row.created_at)).filter((stamp) => Number.isFinite(stamp));
 }
 
 /**

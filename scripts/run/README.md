@@ -49,8 +49,12 @@ directory is that checkout and whose `--env-file` is that file, handed the ticke
 this script and entering it would take the script away with it — so the credential comes from
 where it lives, the migrations from where the ticket is and the machinery from the checkout
 the run stands in, no two of the three needing to be the same tree; it reports the tag and
-journal index of every migration the ledger moved over, with any connection string scrubbed
-out of what it says. `merge-detect.mjs` takes the Review tasks with their commits and asks `git
+journal index of every migration the ledger gained a row for, with any connection string
+scrubbed out of what it says. It reads drizzle's ledger as a set of stamps rather than a
+high-water mark, because drizzle's own migrator applies only what is stamped later than its
+newest row: a migration generated on one branch while another branch's later-stamped one
+reached the database first would be passed over in silence, so `blockedOf` names it and the
+apply answers no rather than reporting a file the database never saw. `merge-detect.mjs` takes the Review tasks with their commits and asks `git
 merge-base --is-ancestor` against `origin/main` after a fetch, which is the only honest test of
 "merged" — whether the human merged by hand or a run merged on the human's word a moment
 earlier; every task it returns

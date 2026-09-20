@@ -114,13 +114,16 @@ the cap — keep reading, post nothing. Every other assessment posts its comment
   script existed and checking it out would take the script away with it; `--ref` reads that
   branch's `drizzle/` out of git instead. The credential is the primary checkout's and stays
   there. If the guard refuses, release the marker and post nothing. `ok: false` is the apply
-  itself failing: post one `refused` comment with its `why`, which is the database's own
-  sentence, and what would settle it, release the marker, and leave the task at Decision — the
-  word stands, so the next run makes the apply again once the thing in the way is settled, and
-  you are not asked for it twice. `ok: true` → post one `applied` comment naming the file, set
-  the task `In progress`, then `node scripts/run/branch.mjs <id>` and continue from step 1's
-  marker with this task: skip the pick, step 3 is done there, and the ticket carries on from
-  where it stopped. Step 8's report names every entry of `applied`, its `tag` and its `idx`.
+  itself answering no — the database's own error, or a migration drizzle would pass over in
+  silence because another branch's landed first: post one `refused` comment with its `why`,
+  which carries that sentence and what would settle it, release the marker, and leave the task
+  at Decision — your word stands, so the next run makes the apply again once the thing in the
+  way is settled, and you are not asked for it twice. `ok: true` → post one `applied` comment,
+  its `file` the `tag` and `idx` of every entry of `applied`, or **no `file` at all** when
+  `applied` is empty, which is the database having already carried them; then set the task
+  `In progress`, run `node scripts/run/branch.mjs <id>`, and continue from step 1's marker
+  with this task: skip the pick, step 3 is done there, and the ticket carries on from where it
+  stopped. Step 8's report names every entry of `applied`, its `tag` and its `idx`.
 - `shape: ready` (Backlog, the newest reply begins with *ready*). Set the task `Ready` through
   the connector first — the guard reads the thread itself before it lets that write through, and
   your own comment would consume the word — then post one `readied` comment. If the guard

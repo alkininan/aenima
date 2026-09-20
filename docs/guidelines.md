@@ -620,7 +620,12 @@ checkout's `.env.migrate`, handed the ticket branch's `drizzle/` — read out of
 that applies it and entering it would take the script away with it. The credential is read
 where it lives, into that child and nowhere else; the migrations are read where the ticket is;
 the machinery is the checkout's the run stands in; and no two of the three need be the same
-tree. Nothing is
+tree. One thing the apply refuses outright: a migration drizzle's own migrator would pass over
+in silence. It applies only what is stamped later than the newest row in its ledger, so a
+migration generated on one branch while another branch's later-stamped one reached the
+database first is skipped for ever and `migrate()` still returns cleanly — both tickets waiting
+here were in exactly that position. The run names it and answers no rather than reporting a
+file the database never saw; regenerating it on the branch restamps it. Nothing is
 copied into the worktree, nothing is put on the run's own environment — `DATABASE_URL` is
 deleted from what the child inherits, so the file is its only source — and nothing is printed:
 the child scrubs any connection string out of the error it reports, and the parent scrubs

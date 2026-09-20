@@ -189,6 +189,7 @@ describe("kindOf", () => {
       ["cycle", { members: ["T3.1"] }],
       ["refused", { ...all.refused, files: ["docs/guidelines.md"] }],
       ["refused", { ...all.refused, files: [] }],
+      ["applied", { file: null }],
     ];
     for (const [kind, fields] of variants) {
       expect(kindOf(compose(kind, fields, P), P), `${kind} ${JSON.stringify(fields)}`).toBe(kind);
@@ -452,9 +453,11 @@ describe("compose", () => {
     );
   });
 
+  // T0.24: and says the word that makes it happen. Until then this told the human to apply by
+  // hand and "say so", which is the one thing the pipeline can now do for them.
   it("leaves a migration in the diff and says whose move applying it is", () => {
     expect(compose("migration", all.migration, P)).toBe(
-      `${P}This change adds a migration, drizzle/0013_activity_trigger.sql, and applying it to the shared database is your call. I've left it in the diff and stopped here. Once you've applied it, say so on this thread and the next run picks the ticket back up.`,
+      `${P}This change adds a migration, drizzle/0013_activity_trigger.sql, and applying it to the shared database is your call. I've left it in the diff and stopped here. Say "apply" on this thread and the next run applies it and picks the ticket back up from there.`,
     );
   });
 
@@ -493,6 +496,12 @@ describe("compose", () => {
     );
     expect(compose("applied", all.applied, P)).toBe(
       `${P}Applied drizzle/0015_x.sql to the shared database. The ticket picks up from where it stopped.`,
+    );
+    // T0.24: the apply ran and found the database already current — a word granted twice, or
+    // a migration somebody applied by hand. Saying "Applied drizzle/0015_x.sql" there would
+    // be reporting something that did not happen (review pass 2, Must 1's other half).
+    expect(compose("applied", { file: null }, P)).toBe(
+      `${P}Applied nothing: the shared database already had every migration on this branch. The ticket picks up from where it stopped.`,
     );
   });
 
