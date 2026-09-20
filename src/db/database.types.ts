@@ -8,11 +8,14 @@
  *
  * T3.1 added `refinement_round` and `refinement_outcome` (drizzle/0015) **by
  * hand, before the migration was applied**: the generator reads a live
- * database, and a run's credential cannot apply a migration. The block is
+ * database, and a run's credential cannot apply a migration. The block was
  * written in the generator's shape — NOT NULL without a default required on Row
  * and Insert, a default or a null optional on Insert, everything optional on
- * Update, relationships by constraint name — and the run after `apply`
- * regenerates against the project to confirm it, as T2.4 confirmed T1.2's.
+ * Update, relationships by constraint name. **The run after `apply` regenerated
+ * the file against the project and the block came back identical**, line for
+ * line and relationship for relationship, as T2.4 confirmed T1.2's; so did the
+ * `refinement_outcome` entries under `Enums` and `Constants`, and
+ * `PostgrestVersion` is still `14.5`. Nothing else in the file moved.
  *
  * T2.5 added `accept_gap` and `reopen_gap` (drizzle/0012) to the `Functions`
  * block. `app.may_settle_must` is absent by design: PostgREST exposes only
