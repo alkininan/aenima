@@ -93,6 +93,7 @@ One file per ticket under `docs/log/`, oldest first. This list is written by `no
 - [T0.23 — Partial reviews and mirror verification](log/T0.23.md) · 2026-09-16
 - [T1.5 — Row roving and freshness](log/T1.5.md) · 2026-09-16
 - [T0.24 — Apply from a worktree run](log/T0.24.md) · 2026-09-20
+- [T3.1 — Author-critic loop](log/T3.1.md) · 2026-09-20
 
 ## Decisions made during the build
 

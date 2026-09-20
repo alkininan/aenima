@@ -51,11 +51,12 @@ is never touched:
 
     node scripts/run/prune.mjs
 
-A fresh worktree has no `node_modules`; the gate and the suite need them. It has no
-`.next/types` either, and the gate's typecheck reads Next's route types from there:
+A fresh worktree has no `node_modules`; the gate and the suite need them. The gate's
+typecheck reads Next's route types from `.next/types`, which a worktree may lack or may hold
+generated for another tree; the script regenerates them whenever they are missing or stale:
 
     test -d node_modules || pnpm install --frozen-lockfile
-    test -d .next/types || pnpm next typegen
+    node scripts/run/route-types.mjs
 
 **The connector's query.** Steps a, c and e ask the board through the connector's query, which
 draws on the workspace's shared usage limit. When the connector answers that the workspace has

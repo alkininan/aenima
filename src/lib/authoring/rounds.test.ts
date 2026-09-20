@@ -1,0 +1,103 @@
+import { getTableName, is } from "drizzle-orm";
+import { PgTable } from "drizzle-orm/pg-core";
+import { describe, expect, it } from "vitest";
+
+import * as schema from "@/db/schema";
+import { refinementOutcome } from "@/db/schema";
+
+import { MAX_REFINEMENTS, SURFACING_ROUND, nextMove, roundCount } from "./rounds";
+import type { StoredRound } from "./rounds";
+
+/** A stored round on `section`/`check`, round `roundNo`. */
+function round(roundNo: number, overrides: Partial<StoredRound> = {}): StoredRound {
+  return {
+    sectionId: "scheduling",
+    checkId: "prd-4",
+    roundNo,
+    outcome: "revised",
+    reason: `reason ${roundNo}`,
+    evidence: "Propose 2 time options",
+    authorPosition: `position ${roundNo}`,
+    ...overrides,
+  };
+}
+
+describe("roundCount — TA3 → AA3", () => {
+  it("reads two rounds on one (artifact, section, check) as two rows counting to the highest round number", () => {
+    const rows = [round(1), round(2)];
+    expect(rows).toHaveLength(2);
+    expect(roundCount(rows, "scheduling", "prd-4")).toBe(2);
+  });
+
+  it("takes the highest round number, not the row count and not the last row read", () => {
+    expect(roundCount([round(2), round(1)], "scheduling", "prd-4")).toBe(2);
+    expect(roundCount([round(2)], "scheduling", "prd-4")).toBe(2);
+  });
+
+  it("is 0 when the ledger holds no round for the key", () => {
+    expect(roundCount([], "scheduling", "prd-4")).toBe(0);
+  });
+
+  it("counts only its own section and check", () => {
+    const rows = [
+      round(1),
+      round(2),
+      round(1, { checkId: "prd-5" }),
+      round(1, { sectionId: "meet" }),
+    ];
+    expect(roundCount(rows, "scheduling", "prd-5")).toBe(1);
+    expect(roundCount(rows, "meet", "prd-4")).toBe(1);
+  });
+});
+
+describe("nextMove — the two-round cap", () => {
+  it("revises twice", () => {
+    expect(MAX_REFINEMENTS).toBe(2);
+    expect(nextMove([], "scheduling", "prd-4")).toEqual({ kind: "revise", roundNo: 1 });
+    expect(nextMove([round(1)], "scheduling", "prd-4")).toEqual({ kind: "revise", roundNo: 2 });
+  });
+
+  it("surfaces the third objection with the author's latest position", () => {
+    expect(nextMove([round(2), round(1)], "scheduling", "prd-4")).toEqual({
+      kind: "surface",
+      roundNo: SURFACING_ROUND,
+      authorPosition: "position 2",
+    });
+  });
+
+  it("surfaces with the position of the latest draft the document kept, not a refused one", () => {
+    const rows = [round(1, { outcome: "revised" }), round(2, { outcome: "refused" })];
+    expect(nextMove(rows, "scheduling", "prd-4")).toMatchObject({ authorPosition: "position 1" });
+
+    const neither = [round(1, { outcome: "refused" }), round(2, { outcome: "refused" })];
+    expect(nextMove(neither, "scheduling", "prd-4")).toMatchObject({
+      authorPosition: "position 2",
+    });
+  });
+
+  it("spends a refused or held round like a revised one", () => {
+    const rows = [round(1, { outcome: "refused" }), round(2, { outcome: "held" })];
+    expect(nextMove(rows, "scheduling", "prd-4").kind).toBe("surface");
+  });
+
+  it("writes nothing more once the question is open", () => {
+    const rows = [round(1), round(2), round(3, { outcome: "surfaced" })];
+    expect(nextMove(rows, "scheduling", "prd-4")).toEqual({ kind: "closed" });
+  });
+});
+
+describe("the open question — TA2 → AA2", () => {
+  it("is a round row marked surfaced: the outcome exists on the round ledger", () => {
+    expect(refinementOutcome.enumValues).toContain("surfaced");
+    const outcomes: StoredRound["outcome"][] = [...refinementOutcome.enumValues];
+    expect(outcomes).toEqual(["revised", "held", "refused", "surfaced"]);
+  });
+
+  it("has no table of its own: no table in the schema is named for a question", () => {
+    const tables = Object.values(schema)
+      .filter((value) => is(value, PgTable))
+      .map((table) => getTableName(table as PgTable));
+    expect(tables).toContain("refinement_round");
+    expect(tables.filter((name) => /question/i.test(name))).toEqual([]);
+  });
+});

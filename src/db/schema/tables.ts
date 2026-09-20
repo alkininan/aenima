@@ -26,6 +26,7 @@ import {
   gapTag,
   itemType,
   memberRole,
+  refinementOutcome,
 } from "./enums";
 
 /**
@@ -911,6 +912,123 @@ export const scoringCheckNotAsked = pgTable(
     check(
       "scoring_check_not_asked_condition_when_len",
       sql`length(btrim(${t.conditionWhen})) between 1 and 2000`,
+    ),
+  ],
+);
+
+/**
+ * product-spec.md §6 — one round of the author-critic loop on one section of an
+ * artifact, for one check (T3.1).
+ *
+ * "Two refinement rounds per section, maximum — after two, the disagreement
+ * surfaces to the human as an open question." This is where the count lives, so
+ * that it survives a reload and "why does this section have an open question" is
+ * answerable later. T3.1's addendum fixed the shape:
+ *
+ * - **One append-only row per round**, unique on (artifact, section, check, round
+ *   number). A row per artifact version could not stay append-only: a refused
+ *   revision cuts no new version, so the next round tests the same one, and
+ *   only an UPDATE of a count could say so. The round number makes each attempt
+ *   its own row, and **the count is the highest round number for the key**.
+ * - **The open question is the row whose outcome is `surfaced`** — round 3,
+ *   carrying the check, the critic's evidence and reason, and the author's
+ *   latest position. No open-question table exists; T3.2's Open Questions
+ *   section and T3.4's rendering read these rows.
+ * - **A section is a `##` heading block of the body, its id the heading's slug**
+ *   (`src/lib/authoring/sections.ts`). `section_id` is that id. Stored content
+ *   is unchanged: sectioning is a parse, not a column.
+ *
+ * `artifact_version_id` is the version the critic read. A `revised` round names
+ * the version its revision cut in `revised_version_id`; a `refused` one names
+ * the sections the revision strayed into in `outside_sections`. The shape
+ * constraint says which outcome carries which, and it also holds §6's cap in
+ * the database: a revision is round 1 or 2, a surfacing is round 3, and there is
+ * no round 4.
+ *
+ * Append-only the same three ways as every other ledger, `RESTRICT` on every
+ * parent for the reason `scoring_run` gives, and written server-side only: no
+ * INSERT policy, like `scoring_run`, because a client that could write its own
+ * round could spend or skip the cap.
+ */
+export const refinementRound = pgTable(
+  "refinement_round",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id").notNull(),
+    /** Denormalized from the artifact so RLS and the item's open questions read it directly. */
+    itemId: uuid("item_id").notNull(),
+    artifactId: uuid("artifact_id").notNull(),
+    /** The version the critic read when it raised this objection. */
+    artifactVersionId: uuid("artifact_version_id").notNull(),
+    /** A `##` heading's slug. The text before the first heading is never refined, so never stored. */
+    sectionId: text("section_id").notNull(),
+    /** A rubric check id (`prd-4`), never a requirement id. */
+    checkId: text("check_id").notNull(),
+    roundNo: integer("round_no").notNull(),
+    outcome: refinementOutcome("outcome").notNull(),
+    /** The critic's position: what it found unclear. */
+    reason: text("reason").notNull(),
+    /** Quoted from the section the critic read, and verified to occur in it before the row is written. */
+    evidence: text("evidence").notNull(),
+    /** The author's position — its account of its revision, or, surfaced, the latest one it gave. */
+    authorPosition: text("author_position").notNull(),
+    /** `revised` only: the version the revision cut. */
+    revisedVersionId: uuid("revised_version_id"),
+    /** `refused` only: the sections the revision touched outside its scope. */
+    outsideSections: text("outside_sections").array(),
+    createdAt: timestamps.createdAt,
+  },
+  (t) => [
+    unique("refinement_round_workspace_id").on(t.workspaceId, t.id),
+    // T3.1's addendum, answer 3, word for word: the round number is the key.
+    unique("refinement_round_key").on(t.artifactId, t.sectionId, t.checkId, t.roundNo),
+    foreignKey({
+      columns: [t.workspaceId],
+      foreignColumns: [workspace.id],
+      name: "refinement_round_workspace_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.workspaceId, t.itemId],
+      foreignColumns: [item.workspaceId, item.id],
+      name: "refinement_round_item_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.workspaceId, t.artifactId],
+      foreignColumns: [artifact.workspaceId, artifact.id],
+      name: "refinement_round_artifact_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.workspaceId, t.artifactVersionId],
+      foreignColumns: [artifactVersion.workspaceId, artifactVersion.id],
+      name: "refinement_round_version_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.workspaceId, t.revisedVersionId],
+      foreignColumns: [artifactVersion.workspaceId, artifactVersion.id],
+      name: "refinement_round_revised_version_fk",
+    }).onDelete("restrict"),
+    check("refinement_round_section_len", sql`length(btrim(${t.sectionId})) between 1 and 200`),
+    check("refinement_round_check_len", sql`length(btrim(${t.checkId})) between 1 and 120`),
+    check("refinement_round_reason_len", sql`length(btrim(${t.reason})) between 1 and 2000`),
+    check("refinement_round_evidence_len", sql`length(btrim(${t.evidence})) between 1 and 2000`),
+    check(
+      "refinement_round_position_len",
+      sql`length(btrim(${t.authorPosition})) between 1 and 2000`,
+    ),
+    // Which outcome carries which part, and §6's cap: two revisions, then the
+    // human. `cardinality` rather than `array_length`, which is NULL on an empty
+    // array — and a CHECK whose expression is NULL passes (0009).
+    check(
+      "refinement_round_shape",
+      sql`(${t.outcome} = 'revised' and ${t.roundNo} between 1 and 2
+             and ${t.revisedVersionId} is not null and ${t.outsideSections} is null)
+       or (${t.outcome} = 'held' and ${t.roundNo} between 1 and 2
+             and ${t.revisedVersionId} is null and ${t.outsideSections} is null)
+       or (${t.outcome} = 'refused' and ${t.roundNo} between 1 and 2
+             and ${t.revisedVersionId} is null and ${t.outsideSections} is not null
+             and cardinality(${t.outsideSections}) > 0)
+       or (${t.outcome} = 'surfaced' and ${t.roundNo} = 3
+             and ${t.revisedVersionId} is null and ${t.outsideSections} is null)`,
     ),
   ],
 );

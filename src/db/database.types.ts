@@ -6,6 +6,17 @@
  * route is the Supabase MCP server's `generate_typescript_types` against the
  * project the migration was just applied to.
  *
+ * T3.1 added `refinement_round` and `refinement_outcome` (drizzle/0015) **by
+ * hand, before the migration was applied**: the generator reads a live
+ * database, and a run's credential cannot apply a migration. The block was
+ * written in the generator's shape — NOT NULL without a default required on Row
+ * and Insert, a default or a null optional on Insert, everything optional on
+ * Update, relationships by constraint name. **The run after `apply` regenerated
+ * the file against the project and the block came back identical**, line for
+ * line and relationship for relationship, as T2.4 confirmed T1.2's; so did the
+ * `refinement_outcome` entries under `Enums` and `Constants`, and
+ * `PostgrestVersion` is still `14.5`. Nothing else in the file moved.
+ *
  * T2.5 added `accept_gap` and `reopen_gap` (drizzle/0012) to the `Functions`
  * block. `app.may_settle_must` is absent by design: PostgREST exposes only
  * `public`, and a predicate no client can call needs no client type.
@@ -612,6 +623,96 @@ export type Database = {
           },
         ];
       };
+      refinement_round: {
+        Row: {
+          artifact_id: string;
+          artifact_version_id: string;
+          author_position: string;
+          check_id: string;
+          created_at: string;
+          evidence: string;
+          id: string;
+          item_id: string;
+          outcome: Database["public"]["Enums"]["refinement_outcome"];
+          outside_sections: string[] | null;
+          reason: string;
+          revised_version_id: string | null;
+          round_no: number;
+          section_id: string;
+          workspace_id: string;
+        };
+        Insert: {
+          artifact_id: string;
+          artifact_version_id: string;
+          author_position: string;
+          check_id: string;
+          created_at?: string;
+          evidence: string;
+          id?: string;
+          item_id: string;
+          outcome: Database["public"]["Enums"]["refinement_outcome"];
+          outside_sections?: string[] | null;
+          reason: string;
+          revised_version_id?: string | null;
+          round_no: number;
+          section_id: string;
+          workspace_id: string;
+        };
+        Update: {
+          artifact_id?: string;
+          artifact_version_id?: string;
+          author_position?: string;
+          check_id?: string;
+          created_at?: string;
+          evidence?: string;
+          id?: string;
+          item_id?: string;
+          outcome?: Database["public"]["Enums"]["refinement_outcome"];
+          outside_sections?: string[] | null;
+          reason?: string;
+          revised_version_id?: string | null;
+          round_no?: number;
+          section_id?: string;
+          workspace_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "refinement_round_artifact_fk";
+            columns: ["workspace_id", "artifact_id"];
+            isOneToOne: false;
+            referencedRelation: "artifact";
+            referencedColumns: ["workspace_id", "id"];
+          },
+          {
+            foreignKeyName: "refinement_round_item_fk";
+            columns: ["workspace_id", "item_id"];
+            isOneToOne: false;
+            referencedRelation: "item";
+            referencedColumns: ["workspace_id", "id"];
+          },
+          {
+            foreignKeyName: "refinement_round_revised_version_fk";
+            columns: ["workspace_id", "revised_version_id"];
+            isOneToOne: false;
+            referencedRelation: "artifact_version";
+            referencedColumns: ["workspace_id", "id"];
+          },
+          {
+            foreignKeyName: "refinement_round_version_fk";
+            columns: ["workspace_id", "artifact_version_id"];
+            isOneToOne: false;
+            referencedRelation: "artifact_version";
+            referencedColumns: ["workspace_id", "id"];
+          },
+          {
+            foreignKeyName: "refinement_round_workspace_fk";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspace";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       scoring_check_not_asked: {
         Row: {
           check_id: string;
@@ -889,6 +990,7 @@ export type Database = {
       item_type:
         "feature" | "enhancement" | "technical" | "content" | "experiment" | "fix" | "spike";
       member_role: "owner" | "product" | "developer" | "viewer";
+      refinement_outcome: "revised" | "held" | "refused" | "surfaced";
     };
     CompositeTypes: {
       [_ in never]: never;
@@ -1021,6 +1123,7 @@ export const Constants = {
       gap_tag: ["must", "should"],
       item_type: ["feature", "enhancement", "technical", "content", "experiment", "fix", "spike"],
       member_role: ["owner", "product", "developer", "viewer"],
+      refinement_outcome: ["revised", "held", "refused", "surfaced"],
     },
   },
 } as const;

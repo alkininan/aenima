@@ -1,4 +1,8 @@
-<!-- guidelines.md · v1.16 · in the repo · a granted word can always be acted on: §4 a refusal
+<!-- guidelines.md · v1.17 · in the repo · §5 step 0 regenerates the route types whenever they
+     are stale, not only when .next/types is missing: route-types.mjs stamps the route files,
+     the Next config and the Next version the types were generated from, and a worktree whose
+     types were generated for another tree gets them regenerated (T3.1's addendum, AA4).
+     v1.16 · in the repo · a granted word can always be acted on: §4 a refusal
      reports and consumes nothing, so `merge` and `apply` outlive a conflict or a Postgres error,
      and the same refusal is not repeated word for word; §5 step 0 and step 6 an apply is made
      from whichever checkout the run is in, and the capability boundary says how —
@@ -398,9 +402,10 @@ below is a script under `scripts/run/` with a test; the skill holds the judgment
 
 ```
 0  Preflight    stamp this worktree as a run's and remove the ones earlier runs left (prune.mjs) ·
-                install when node_modules is absent, typegen when .next/types is · a task In
-                progress whose marker is fresh is a live run: exit, before anything is read or
-                claimed · read every task's thread over the API in one command (threads.mjs)
+                install when node_modules is absent, typegen when the route types are missing
+                or stale (route-types.mjs: a stamp of the route files they were generated
+                from) · a task In progress whose marker is fresh is a live run: exit, before
+                anything is read or claimed · read every task's thread over the API in one command (threads.mjs)
                 and give each reply newer than the pipeline's last comment one assessment
                 (§4): a change at Review → addendum, Ready · merge at Review → claim, gh pr
                 merge --merge, one comment, release · apply on a migration question → claim,
