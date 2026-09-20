@@ -1,9 +1,10 @@
 <!-- guidelines.md · v1.16 · in the repo · a granted word can always be acted on: §4 a refusal
-     reports and consumes nothing, so `merge` and `apply` outlive a conflict or a Postgres error;
-     §5 step 0 and step 6 an apply is made from whichever checkout the run is in, and the
-     capability boundary says how — `scripts/run/apply.mjs` as one child in the primary
-     checkout, handed the worktree's drizzle/, with the credential read there and printed
-     nowhere; the hard boundaries name every shape rule (b) reads.
+     reports and consumes nothing, so `merge` and `apply` outlive a conflict or a Postgres error,
+     and the same refusal is not repeated word for word; §5 step 0 and step 6 an apply is made
+     from whichever checkout the run is in, and the capability boundary says how —
+     `scripts/run/apply.mjs` as one child in the primary checkout, handed the ticket branch's
+     drizzle/ read out of git rather than checked out, with the credential read there and
+     printed nowhere; the hard boundaries name every shape rule (b) reads.
      v1.15 · in the repo · a run tells the truth when something partial happens:
      §3 the In progress → Decision row names the review that could not run; §5 step 5 a pass
      stopped at its turn limit is resumed once and marked resumed, a second stop a stop; step 8
@@ -321,6 +322,9 @@ the reply was read. What the assessment can be depends on where the task sits:
   an attempt that failed, it answers nothing you asked, so the word that granted the attempt is
   still granted and the next run makes it again once the thing in the way is settled. You say
   `merge` or `apply` once; a conflict or a Postgres error is not you taking it back (T0.24).
+  What does not repeat is the sentence: a `refused` the thread already carries word for word
+  waits, whatever claim it is from — the attempt is made again each run, and saying so again
+  each hour tells you nothing.
 - Uncapped is not unlimited: **one comment of a kind per claim**. A run that takes two defaults
   says both in its one default comment, posted once the claim's defaults are all in — when it
   stops or closes.
@@ -400,7 +404,8 @@ below is a script under `scripts/run/` with a test; the skill holds the judgment
                 and give each reply newer than the pipeline's last comment one assessment
                 (§4): a change at Review → addendum, Ready · merge at Review → claim, gh pr
                 merge --merge, one comment, release · apply on a migration question → claim,
-                branch, apply.mjs, carry on — from any checkout · ready at Backlog → Ready,
+                apply.mjs --ref origin/t<id> before the branch is checked out — from
+                any checkout — then branch, carry on · ready at Backlog → Ready,
                 one comment · new work → one
                 Backlog task, one note · an answer → Ready · else one clarifying comment ·
                 fetch, mark merged Review tasks Done (merge-base --is-ancestor) and write
@@ -469,9 +474,9 @@ below is a script under `scripts/run/` with a test; the skill holds the judgment
 6  Migration    if the diff adds a migration file: commit, push, stop → Decision (§4). You
                 answer `apply` on the thread and the next run applies it, wherever it is
                 standing (apply.mjs, §5 step 0): the admin URL stays in the primary
-                checkout and the apply is a child process there, handed this checkout's
-                drizzle/ — the guard having read your word from the board — and the ticket
-                carries on in that same run
+                checkout and the apply is a child process there, handed the ticket branch's
+                drizzle/ read out of git — the guard having read your word from the board —
+                and the ticket carries on in that same run
 7  Gate         Stop hook runs pnpm lint && pnpm typecheck && pnpm test in the cwd it is
                 handed, not the project dir; red cannot close
 8  Report       write docs/reports/<id>.md — refused without the red-first record: per test,
@@ -610,15 +615,19 @@ schedule runs every ticket in a worktree; a worktree has no `.env.migrate`; so e
 read a granted `apply` handed it on to "a run in the primary checkout", and the schedule starts
 none. The work moved rather than the credential: `scripts/run/apply.mjs` makes the apply as one
 child process whose working directory is the primary checkout and whose `--env-file` is that
-checkout's `.env.migrate`, handed the *worktree's* `drizzle/` — the credential read where it
-lives, into that child and nowhere else, the migrations read where the ticket is. Nothing is
+checkout's `.env.migrate`, handed the ticket branch's `drizzle/` — read out of git with
+`git archive`, never by checking the branch out, because the branch was cut before the script
+that applies it and entering it would take the script away with it. The credential is read
+where it lives, into that child and nowhere else; the migrations are read where the ticket is;
+the machinery is the checkout's the run stands in; and no two of the three need be the same
+tree. Nothing is
 copied into the worktree, nothing is put on the run's own environment — `DATABASE_URL` is
 deleted from what the child inherits, so the file is its only source — and nothing is printed:
 the child scrubs any connection string out of the error it reports, and the parent scrubs
 whatever the child did not write itself. A worktree run holds the word and the result; it never
 holds the URL. The guard's rule (b) reads every shape of the apply — `db:migrate`,
-`drizzle-kit migrate`, that script, and anything handed `.env.migrate` — so the script is not a
-way round the rule it was written to obey. Deploys: there is no Vercel CLI on the machine
+`drizzle-kit migrate`, `db:baseline`, that script, and anything handed `.env.migrate` — so the
+script is not a way round the rule it was written to obey. Deploys: there is no Vercel CLI on the machine
 and no login to it, which is also why the production variable is the human's to set; production
 deploys come from `main` through the Vercel Git integration, and the guard's rule (c) stays as
 the second layer there too. The role is created once per project, in the Supabase SQL editor:
@@ -648,12 +657,12 @@ schema push, no writes to `.env` or `.env.*` (`.env.example` is tracked and exce
 production deploy, no force-push, no push to main in any refspec shape but one — the revert of
 the merge at the tip, `HEAD:main`, HEAD one commit past `origin/main` with the tree the merge's
 first parent had — no merge with main checked out, no migration apply in any of its shapes — `db:migrate`,
-`drizzle-kit migrate`, `scripts/run/apply.mjs`, anything handed `.env.migrate` — until the
-guard has itself read your `apply` on the claimed task's thread over the API (§4), and at the board's connector no
+`drizzle-kit migrate`, `db:baseline`, `scripts/run/apply.mjs`, anything handed `.env.migrate` —
+until the guard has itself read your `apply` on the claimed task's thread over the API (§4), and at the board's connector no
 Backlog task set Ready until it has read your `ready` on that task's thread, no Backlog task
 moved anywhere but Ready, no task created at any status but Backlog, no comment from a run
-without the prefix, and no third clarifying round on one question or second comment of a kind
-in one claim — the connector's writes, not the token's, which a script could send over
+without the prefix, and no third clarifying round on one question, no second comment of a kind
+in one claim and no refusal the thread already carries word for word — the connector's writes, not the token's, which a script could send over
 the API without passing the guard (a Backlog Fix, *Guard the token and duplicate routes*), and no `gh pr merge` until it
 has read your `merge` there or, on a diff that adds no migration and weakens no restraint, the reviewer's `PASS` on file
 and the gate's green for the very commit the pull request carries; a merge must be that task's own pull request and

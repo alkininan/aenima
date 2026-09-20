@@ -7,10 +7,13 @@ import {
   ADMIN_ENV,
   appliedBetween,
   apply,
+  exportMigrations,
   journalEntries,
   MIGRATIONS,
   pendingAfter,
+  readAnswer,
   scrub,
+  work,
 } from "./apply.mjs";
 import { readThread, shapeOf } from "./comments.mjs";
 
@@ -104,6 +107,109 @@ describe("apply — TC1 · AC1 a granted apply reaches the database from a workt
     });
     expect(result.ok).toBe(false);
     expect(result.why).toMatch(/journal/i);
+  });
+});
+
+// TC1 → AC1. The branch that carries the migration was cut before the script that applies
+// it — origin/t3-1 has no apply.mjs — so the apply never checks that branch out to read it
+// (review pass 1, Must 1). Machinery from the checkout the run stands in, migrations from
+// the ref, credential from the primary checkout; no two of the three need be the same tree.
+describe("apply — TC1 · AC1 the migrations come from the ref, not from a checkout", () => {
+  beforeEach(() => {
+    fx = fixture();
+  });
+
+  it("hands the worker the ref's exported folder rather than this checkout's", () => {
+    let spec = null;
+    const result = apply({
+      cwd: fx.worktree,
+      ref: "origin/t3-1",
+      deps: {
+        primary: () => fx.primary,
+        archive: () => ({ ok: true, folder: "/tmp/export/drizzle", dir: "/tmp/export", why: null }),
+        exists: () => true,
+        run: (s) => {
+          spec = s;
+          return worker({ ok: true, applied: [{ idx: 15, tag: "0015_refinement_round" }] });
+        },
+      },
+    });
+
+    expect(spec.args).toContain("/tmp/export/drizzle");
+    expect(spec.args).not.toContain(join(fx.worktree, MIGRATIONS));
+    expect(result).toMatchObject({ ok: true, folder: "/tmp/export/drizzle" });
+  });
+
+  it("removes what it exported, whether the apply worked or not", () => {
+    const removed = [];
+    for (const answer of [
+      { ok: true, applied: [] },
+      { ok: false, why: "no", applied: [] },
+    ]) {
+      apply({
+        cwd: fx.worktree,
+        ref: "origin/t3-1",
+        deps: {
+          primary: () => fx.primary,
+          archive: () => ({ ok: true, folder: "/tmp/e/drizzle", dir: "/tmp/e", why: null }),
+          exists: () => true,
+          cleanup: (dir) => removed.push(dir),
+          run: () => worker(answer),
+        },
+      });
+    }
+    expect(removed).toEqual(["/tmp/e", "/tmp/e"]);
+  });
+
+  it("says so when the ref has no migrations to export", () => {
+    const result = apply({
+      cwd: fx.worktree,
+      ref: "origin/nope",
+      deps: {
+        primary: () => fx.primary,
+        archive: () => ({ ok: false, folder: null, dir: "/tmp/e", why: "git archive failed" }),
+        run: () => {
+          throw new Error("the worker must not run");
+        },
+      },
+    });
+    expect(result).toMatchObject({ ok: false, applied: [] });
+    expect(result.why).toContain("git archive failed");
+  });
+});
+
+describe("exportMigrations", () => {
+  it("asks git for the ref's migrations and unpacks them", () => {
+    const seen = [];
+    const result = exportMigrations("origin/t3-1", {
+      cwd: "/repo",
+      dir: "/tmp/e",
+      git: (argv) => {
+        seen.push(argv);
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    });
+    expect(seen[0]).toEqual([
+      "git",
+      "archive",
+      "--format=tar",
+      "-o",
+      join("/tmp/e", "migrations.tar"),
+      "origin/t3-1",
+      MIGRATIONS,
+    ]);
+    expect(seen[1]).toEqual(["tar", "-xf", join("/tmp/e", "migrations.tar"), "-C", "/tmp/e"]);
+    expect(result).toMatchObject({ ok: true, folder: join("/tmp/e", MIGRATIONS), dir: "/tmp/e" });
+  });
+
+  it("fails rather than applying an empty folder when the ref carries none", () => {
+    const result = exportMigrations("origin/nope", {
+      cwd: "/repo",
+      dir: "/tmp/e",
+      git: () => ({ status: 128, stdout: "", stderr: "fatal: not a valid object name\n" }),
+    });
+    expect(result.ok).toBe(false);
+    expect(result.why).toContain("not a valid object name");
   });
 });
 
@@ -259,12 +365,129 @@ describe("apply — TC5 · AC5 a failed apply quotes the database and keeps the 
       },
       { text: "apply", created_time: "2026-09-20T11:59:00.000Z" },
       {
-        text: '⟡ The apply was refused: syntax error at or near "CRATE". Fix the migration on the branch and say apply again.',
+        text: '⟡ Applying drizzle/0015_refinement_round.sql was refused: syntax error at or near "CRATE". Fixing the migration on the branch would settle it; your apply still stands.',
         created_time: "2026-09-20T12:05:00.000Z",
       },
     ];
     const after = readThread(comments, "⟡ ");
     expect(after.unanswered.map((c) => c.text)).toEqual(["apply"]);
     expect(shapeOf("Decision", after)).toBe("apply");
+  });
+});
+
+// TC4 → AC4 and TC5 → AC5 at the half that holds the URL. Review pass 1, Must 2: the
+// bracket that yields the tag and index, and the catch that yields the database's own
+// sentence, were both reachable only through a real Postgres until these.
+describe("work — the half that holds the credential", () => {
+  /** postgres.js as this code uses it: a tagged template, answering each query in turn. */
+  const fakePostgres = (answers) => {
+    const sql = () => answers.shift();
+    sql.end = async () => {};
+    return () => sql;
+  };
+
+  const folder = () => {
+    fx = fixture();
+    return join(fx.worktree, MIGRATIONS);
+  };
+
+  it("names the tag and journal index of every migration the ledger moved over", async () => {
+    const result = await work({
+      folder: folder(),
+      url: "postgresql://u:pw@h/db",
+      deps: {
+        postgres: fakePostgres([
+          [{ present: true }],
+          [{ last: "1400" }],
+          [{ present: true }],
+          [{ last: "1500" }],
+        ]),
+        drizzle: (sql) => sql,
+        migrate: async () => {},
+      },
+    });
+    expect(result).toEqual({
+      ok: true,
+      applied: [{ idx: 15, tag: "0015_refinement_round" }],
+      pending: [{ idx: 15, tag: "0015_refinement_round" }],
+      why: null,
+    });
+  });
+
+  it("reads a ledger that is not there yet as nothing applied", async () => {
+    const result = await work({
+      folder: folder(),
+      url: "postgresql://u:pw@h/db",
+      deps: {
+        postgres: fakePostgres([[{ present: false }], [{ present: true }], [{ last: "1500" }]]),
+        drizzle: (sql) => sql,
+        migrate: async () => {},
+      },
+    });
+    expect(result.applied.map((e) => e.idx)).toEqual([13, 14, 15]);
+  });
+
+  it("quotes the database's own first line, with the connection string taken out", async () => {
+    const result = await work({
+      folder: folder(),
+      url: "postgresql://u:pw@h/db",
+      deps: {
+        postgres: fakePostgres([[{ present: true }], [{ last: "1400" }]]),
+        drizzle: (sql) => sql,
+        migrate: async () => {
+          throw new Error(
+            'syntax error at or near "CRATE"\nwhile connected to postgresql://u:pw@h/db',
+          );
+        },
+      },
+    });
+    expect(result).toMatchObject({ ok: false, applied: [] });
+    expect(result.why).toBe('syntax error at or near "CRATE"');
+  });
+
+  it("scrubs a connection string the database put on the first line itself", async () => {
+    const result = await work({
+      folder: folder(),
+      url: "postgresql://u:pw@h/db",
+      deps: {
+        postgres: fakePostgres([[{ present: true }], [{ last: "1400" }]]),
+        drizzle: (sql) => sql,
+        migrate: async () => {
+          throw new Error("connect ECONNREFUSED postgresql://u:pw@h/db");
+        },
+      },
+    });
+    expect(result.why).toBe("connect ECONNREFUSED [a connection string]");
+  });
+
+  it("refuses without a URL rather than connecting to nothing", async () => {
+    const result = await work({ folder: folder(), url: "" });
+    expect(result).toMatchObject({ ok: false, applied: [] });
+    expect(result.why).toContain(ADMIN_ENV);
+  });
+
+  it("says so when the folder has no journal", async () => {
+    fx = fixture();
+    const result = await work({
+      folder: join(fx.worktree, "no-such-folder"),
+      url: "postgresql://u:pw@h/db",
+      deps: { postgres: fakePostgres([]), drizzle: (sql) => sql, migrate: async () => {} },
+    });
+    expect(result).toMatchObject({ ok: false, applied: [] });
+  });
+});
+
+describe("readAnswer", () => {
+  it("takes the object from the last line-initial brace, not the last brace", () => {
+    const pretty = JSON.stringify({ ok: true, applied: [{ idx: 15, tag: "t" }] }, null, 2);
+    expect(readAnswer(`installing…\n${pretty}\n`)).toEqual({
+      ok: true,
+      applied: [{ idx: 15, tag: "t" }],
+    });
+  });
+
+  it("is null for output carrying no object at all", () => {
+    expect(readAnswer("")).toBeNull();
+    expect(readAnswer("no json here")).toBeNull();
   });
 });

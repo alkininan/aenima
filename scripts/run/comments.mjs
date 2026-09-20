@@ -108,12 +108,26 @@ const minuteOf = (time) => {
  *   - A clarifying round past the cap waits: two on one question, and the run stops asking.
  *   - The same kind twice in one claim waits: uncapped is not unlimited. A comment's time
  *     comes from the API to the minute, so the claim's first minute counts as the claim's.
+ *   - A refusal the thread already carries word for word waits, whatever claim it is from
+ *     (T0.24). A word outlives a refusal now, so the run makes the attempt again every hour
+ *     until the thing in the way is settled, and saying the same sentence every hour tells
+ *     the human nothing: §5 step 1's rule that words already on the thread are not said
+ *     again, one door along. A refusal that says something new posts as before.
  *
  * Every other comment posts, whatever the thread holds. A stop, a default taken, a merge, a
  * gated diff, a notice, a refusal: each tells the human something new, and the cap is never the
  * reason a human is not told.
  */
-export function mayPost(thread, kind, { since = null } = {}) {
+export function mayPost(thread, kind, { since = null, text = null } = {}) {
+  if (kind === "refused" && text !== null) {
+    const standing = (thread?.pipeline ?? []).findLast((comment) => comment.kind === "refused");
+    if (standing !== undefined && sameWords(standing.text, text)) {
+      return {
+        ok: false,
+        why: "this refusal is already the newest one on the thread, word for word — the attempt is made again each run until what stands in the way is settled, and saying so again says nothing new",
+      };
+    }
+  }
   if (kind === "clarifying" && (thread?.clarifyingRounds ?? 0) >= CLARIFYING_CAP) {
     return {
       ok: false,
@@ -134,6 +148,19 @@ export function mayPost(thread, kind, { since = null } = {}) {
   }
   return { ok: true, why: null };
 }
+
+/**
+ * Two comments saying the same thing: whitespace and the markdown the API strips aside. The
+ * text a thread hands back has been through Notion and back, so an exact string match on what
+ * the composer wrote would never hold.
+ */
+const sameWords = (a, b) => words(a) === words(b);
+
+const words = (text) =>
+  String(text ?? "")
+    .replace(/[*_`]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 
 /**
  * True when a reply *begins* with the word — `merge`, `Merge it`, `apply, then carry on` —

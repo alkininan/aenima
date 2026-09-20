@@ -30,7 +30,9 @@ url) · `merged` (commit) · `applied` (file) · `noted` · `setup` (step, where
 `cycle` (members) · `urgent` (count) · `refused` (what, why, files, settle).
 A comment carries its kind in its own words, and the guard reads it against the thread before
 the comment posts: a third clarifying round on one question waits, and so does a second comment
-of one kind in one claim — say every default a claim takes in its one `default` comment. Every
+of one kind in one claim — say every default a claim takes in its one `default` comment — and so
+does a `refused` the thread already carries word for word, since an attempt the board still
+grants is made again every run until what stands in the way is settled. Every
 other comment posts, cap or no cap. A step the guard let through that fails anyway always
 reports, as one `refused` comment: what was refused, why, the files in the way, what would
 settle it.
@@ -102,21 +104,22 @@ the cap — keep reading, post nothing. Every other assessment posts its comment
   `node scripts/run/release.mjs`. Step c fetches, sets Done and writes the Release row; the
   remote branch is left for GitHub's own deletion and the worktree for `prune.mjs`.
 - `shape: apply` (Decision waiting on a migration, the newest reply begins with *apply*). From
-  whichever checkout this run is in — the admin URL stays in the primary checkout's
-  `.env.migrate` and `apply.mjs` reaches it there, in a child whose working directory is that
-  checkout; nothing of it enters this one. Claim it the same way, then check the ticket's
-  branch out — `node scripts/run/branch.mjs <id>` reuses origin's copy, which is where the
-  migration file is, and this checkout's `drizzle/` is what the apply is handed — and only then
+  whichever checkout this run is in. Claim it the same way — `node scripts/run/claim.mjs
+  --task <id> --page <page id> --branch t<id>` — and then, **before** the branch is checked
+  out:
 
-      node scripts/run/apply.mjs
+      node scripts/run/apply.mjs --ref origin/t<id>
 
-  the guard reading the thread first. If the guard refuses, release the marker and post
-  nothing. `ok: false` is the apply itself failing: post one `refused` comment with its `why`,
-  which is the database's own sentence, and what would settle it, release the marker, and
-  leave the task at Decision — the word stands, so the next run makes the apply again once the
-  thing in the way is settled, and you are not asked for it twice. `ok: true` → post one
-  `applied` comment naming the file, set the task `In progress`, and continue from step 1's
-  marker with this task: skip the pick, step 3 is already done, and the ticket carries on from
+  the guard reading the thread first. Before, because the ticket's branch was cut before this
+  script existed and checking it out would take the script away with it; `--ref` reads that
+  branch's `drizzle/` out of git instead. The credential is the primary checkout's and stays
+  there. If the guard refuses, release the marker and post nothing. `ok: false` is the apply
+  itself failing: post one `refused` comment with its `why`, which is the database's own
+  sentence, and what would settle it, release the marker, and leave the task at Decision — the
+  word stands, so the next run makes the apply again once the thing in the way is settled, and
+  you are not asked for it twice. `ok: true` → post one `applied` comment naming the file, set
+  the task `In progress`, then `node scripts/run/branch.mjs <id>` and continue from step 1's
+  marker with this task: skip the pick, step 3 is done there, and the ticket carries on from
   where it stopped. Step 8's report names every entry of `applied`, its `tag` and its `idx`.
 - `shape: ready` (Backlog, the newest reply begins with *ready*). Set the task `Ready` through
   the connector first — the guard reads the thread itself before it lets that write through, and

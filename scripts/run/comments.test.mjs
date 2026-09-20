@@ -315,6 +315,39 @@ describe("mayPost", () => {
     expect(mayPost(capped, "refused")).toEqual({ ok: true, why: null });
   });
 
+  // T0.24 TC5 → AC5, the other half of a word that outlives a refusal: the run tries again
+  // every hour until the thing in the way is settled, and saying the same sentence every hour
+  // is not telling the human anything. §5 step 1's rule, one door along: words already on the
+  // thread are not said again (review pass 1, Should 4).
+  it("holds back a refusal the thread already carries, word for word", () => {
+    const standing = said("refused", {
+      what: "Applying drizzle/0013_activity_trigger.sql",
+      why: "Postgres answered: relation activity already exists",
+      settle: "Say apply once the table is settled",
+    });
+    const thread = readThread(timeline(said("migration"), "apply", standing), P);
+
+    expect(mayPost(thread, "refused", { text: standing }).ok).toBe(false);
+    expect(mayPost(thread, "refused", { text: standing }).why).toContain("already");
+  });
+
+  it("posts a refusal that says something the thread does not", () => {
+    const standing = said("refused", {
+      what: "Applying drizzle/0013_activity_trigger.sql",
+      why: "Postgres answered: relation activity already exists",
+      settle: "Say apply once the table is settled",
+    });
+    const different = said("refused", {
+      what: "Applying drizzle/0013_activity_trigger.sql",
+      why: "Postgres answered: could not connect to server",
+      settle: "Say apply once the database is up",
+    });
+    const thread = readThread(timeline(said("migration"), "apply", standing), P);
+
+    expect(mayPost(thread, "refused", { text: different })).toEqual({ ok: true, why: null });
+    expect(mayPost(thread, "refused")).toEqual({ ok: true, why: null });
+  });
+
   // T0.20 TC4 → AC4
   it("holds one claim to one comment of a kind, and only from the claim's start", () => {
     const thread = readThread(

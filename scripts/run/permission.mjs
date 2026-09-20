@@ -142,9 +142,11 @@ export function unreadPost(kind, why) {
 
 /**
  * `{ ok, why, kind }` for a comment of `text` on `page` (T0.20): the kind its words carry, read
- * against the page's thread by `mayPost` — the cap on clarifying rounds, and one comment of a
- * kind per claim, the claim being the marker's when it names this page. Never throws: a board
- * it cannot read is `unreadPost`. Effects injected: `marker`, `token`, `board`, `comments`.
+ * against the page's thread by `mayPost` — the cap on clarifying rounds, one comment of a
+ * kind per claim, the claim being the marker's when it names this page, and since T0.24 a
+ * refusal the thread already carries word for word, which is why the text goes through too.
+ * Never throws: a board it cannot read is `unreadPost`. Effects injected: `marker`, `token`,
+ * `board`, `comments`.
  */
 export async function postable(text, { dir = process.cwd(), page = null, deps = {} } = {}) {
   let board;
@@ -174,7 +176,7 @@ export async function postable(text, { dir = process.cwd(), page = null, deps = 
   const marker = deps.marker ? deps.marker() : readMarker(dir);
   const since =
     marker !== null && pageKey(marker.page) === pageKey(page) ? (marker.started ?? null) : null;
-  return { ...mayPost(readThread(comments, prefix), kind, { since }), kind };
+  return { ...mayPost(readThread(comments, prefix), kind, { since, text }), kind };
 }
 
 /** Where the reviewer writes its verdict, one file per ticket (T0.16). */

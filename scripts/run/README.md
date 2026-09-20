@@ -39,14 +39,18 @@ reverted, readied, waiting, cycle, urgent, refused — in plain sentences with t
 sentences the skill supplies; a merge the guard let through and GitHub refused posts its
 `refused` comment with the files `conflicts.mjs` names, from `git merge-tree` against
 `origin/main` — and, since T0.24, a refusal answers nothing, so the word that granted the
-attempt outlives it and the next run acts on it rather than asking for it again. An `apply`
-the thread grants is made by `apply.mjs` wherever the run is standing: the schedule runs
-every ticket in a worktree and the admin URL is in the primary checkout's `.env.migrate`
-alone, so the apply is one child process whose working directory is that checkout and whose
-`--env-file` is that file, handed the *worktree's* `drizzle/` — credential from where it
-lives, migrations from where the ticket is — and it reports the tag and journal index of
-every migration the ledger moved over, with any connection string scrubbed out of what it
-says. `merge-detect.mjs` takes the Review tasks with their commits and asks `git
+attempt outlives it and the next run acts on it rather than asking for it again, while
+`mayPost` holds back a refusal the thread already carries word for word so the retry is not
+also an hourly repetition. An `apply` the thread grants is made by `apply.mjs` wherever the
+run is standing: the schedule runs every ticket in a worktree and the admin URL is in the
+primary checkout's `.env.migrate` alone, so the apply is one child process whose working
+directory is that checkout and whose `--env-file` is that file, handed the ticket branch's
+`drizzle/` read out of git with `--ref` rather than checked out — the branch was cut before
+this script and entering it would take the script away with it — so the credential comes from
+where it lives, the migrations from where the ticket is and the machinery from the checkout
+the run stands in, no two of the three needing to be the same tree; it reports the tag and
+journal index of every migration the ledger moved over, with any connection string scrubbed
+out of what it says. `merge-detect.mjs` takes the Review tasks with their commits and asks `git
 merge-base --is-ancestor` against `origin/main` after a fetch, which is the only honest test of
 "merged" — whether the human merged by hand or a run merged on the human's word a moment
 earlier; every task it returns
@@ -169,7 +173,7 @@ sets Decision and posts one migration comment naming the file. The human answers
 word, `apply`, on the thread, and the next run applies it through `apply.mjs` (step 0),
 whichever checkout it is in: the guard lets a migration apply — `db:migrate`, `drizzle-kit
 migrate`, that script, or anything handed `.env.migrate` —
-through only when `permission.mjs` has itself found that word on the claimed task's thread
+— `db:baseline` too — through only when `permission.mjs` has itself found that word on the claimed task's thread
 over the API — the marker names the task, the token opens the board, the reply must be the
 human's newest since the pipeline's question, and the task must be at the state the word is
 for, the same `shapeOf` the preflight reads — and the same check gates `gh pr merge` on the

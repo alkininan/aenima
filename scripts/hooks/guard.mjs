@@ -573,7 +573,7 @@ function nodeScript(argv) {
 /**
  * True when `--env-file` points at the admin URL's file, in either spelling. This is the
  * general form of the rule: whatever a command runs, being handed that file is being handed
- * the credential that changes schema, and `pnpm db:baseline` is in it for the same reason.
+ * the credential that changes schema.
  */
 function readsAdminEnv(argv) {
   const { rest } = target(argv);
@@ -588,12 +588,15 @@ function readsAdminEnv(argv) {
 
 /**
  * A migration apply in every shape it comes in: the package script, the binary's verb, the
- * run's own `apply.mjs`, and anything handed `.env.migrate`. One predicate, so the rule and
- * the word-count below can never drift apart.
+ * run's own `apply.mjs`, and anything handed `.env.migrate` — `db:baseline` by name as well,
+ * because it hides its `--env-file` inside package.json where the guard reads no further, and
+ * writing drizzle's ledger with the admin role is the human's word either way. One predicate,
+ * so the rule and the word-count below can never drift apart.
  */
 function appliesMigration(argv) {
   return (
     invocation(argv, "db:migrate") !== null ||
+    invocation(argv, "db:baseline") !== null ||
     drizzleKit(argv, "migrate") ||
     nodeScript(argv) === APPLY_SCRIPT ||
     readsAdminEnv(argv)

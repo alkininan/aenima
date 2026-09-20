@@ -28,7 +28,8 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -94,6 +95,41 @@ export function workerSpec({
   };
 }
 
+/**
+ * The migrations of `ref`, unpacked into a directory of their own.
+ *
+ * The branch that carries a migration was cut before the script that applies it: `origin/t3-1`
+ * has no `apply.mjs`, and checking it out to reach its `drizzle/` would take the machinery away
+ * with it — the deadlock this ticket ends, one step later (review pass 1, Must 1). So the ref is
+ * read rather than entered, the way the hooks read `scripts/` from `origin/main`. Machinery from
+ * the checkout the run stands in, migrations from the ref, credential from the primary checkout;
+ * no two of the three have to be the same tree.
+ *
+ * Returns `{ ok, folder, dir, why }`. `dir` is the caller's to remove, whatever `ok` says.
+ */
+export function exportMigrations(ref, { cwd = process.cwd(), git, dir } = {}) {
+  const out = dir ?? mkdtempSync(join(tmpdir(), "aenima-apply-"));
+  const run =
+    git ?? ((argv) => spawnSync(argv[0], argv.slice(1), { cwd, encoding: "utf8", stdio: "pipe" }));
+  const tar = join(out, "migrations.tar");
+
+  const archived = run(["git", "archive", "--format=tar", "-o", tar, ref, MIGRATIONS]);
+  if (archived?.status !== 0) {
+    return { ok: false, folder: null, dir: out, why: said(`git archive ${ref}`, archived) };
+  }
+
+  const extracted = run(["tar", "-xf", tar, "-C", out]);
+  if (extracted?.status !== 0) {
+    return { ok: false, folder: null, dir: out, why: said("tar -xf", extracted) };
+  }
+
+  return { ok: true, folder: join(out, MIGRATIONS), dir: out, why: null };
+}
+
+/** What a failed command said, for a sentence the run can put on the board. */
+const said = (what, result) =>
+  `${what} failed: ${scrub(`${result?.stderr ?? ""}${result?.stdout ?? ""}`.trim()) || "no output"}`;
+
 /** The journal's entries, oldest first: `{ idx, tag, when }` and nothing else. */
 export function journalEntries(text) {
   const journal = JSON.parse(String(text ?? "{}"));
@@ -143,17 +179,20 @@ export function readAnswer(stdout) {
 }
 
 /**
- * Apply the migrations of the checkout at `cwd`, through a child in the primary checkout.
- * Returns `{ ok, applied, folder, primary, why }`; `applied` is `{ idx, tag }` per migration.
- * Effects injected: `primary`, `exists`, `env` and `run`, so a test stays off the database.
+ * Apply migrations through a child in the primary checkout: `ref`'s, read out of git without
+ * checking it out, or the checkout at `cwd`'s when there is no ref. Returns
+ * `{ ok, applied, pending, folder, primary, why }`; `applied` and `pending` are `{ idx, tag }`
+ * per migration, which is what the report names. Effects injected: `primary`, `exists`, `env`,
+ * `archive`, `cleanup` and `run`, so a test stays off git and off the database.
  */
-export function apply({ cwd = process.cwd(), deps = {} } = {}) {
+export function apply({ cwd = process.cwd(), ref = null, deps = {} } = {}) {
   const exists = deps.exists ?? existsSync;
   const primary = deps.primary ? deps.primary() : primaryCheckout(cwd);
   if (primary === null) {
     return {
       ok: false,
       applied: [],
+      pending: [],
       folder: null,
       primary: null,
       why: `${cwd} is in no repository with a working tree, so there is no primary checkout to apply from`,
@@ -165,54 +204,77 @@ export function apply({ cwd = process.cwd(), deps = {} } = {}) {
     return {
       ok: false,
       applied: [],
+      pending: [],
       folder: null,
       primary,
       why: `the primary checkout ${primary} has no ${ADMIN_ENV}, which is the only place the admin URL lives — nothing else is looked at`,
     };
   }
 
-  const folder = resolve(cwd, MIGRATIONS);
-  if (!exists(join(folder, "meta", "_journal.json"))) {
-    return {
-      ok: false,
-      applied: [],
-      folder,
-      primary,
-      why: `${folder} has no meta/_journal.json, so this checkout has no migrations journal to apply`,
-    };
+  let folder = resolve(cwd, MIGRATIONS);
+  let exported = null;
+  if (ref !== null) {
+    exported = deps.archive ? deps.archive(ref, cwd) : exportMigrations(ref, { cwd });
+    if (!exported.ok) {
+      if (exported.dir) (deps.cleanup ?? remove)(exported.dir);
+      return { ok: false, applied: [], pending: [], folder: null, primary, why: exported.why };
+    }
+    folder = exported.folder;
   }
 
-  const spec = workerSpec({ primary, folder, env: deps.env ?? process.env });
-  const run =
-    deps.run ??
-    ((child) =>
-      spawnSync(child.command, child.args, {
-        cwd: child.cwd,
-        env: child.env,
-        encoding: "utf8",
-      }));
+  try {
+    if (!exists(join(folder, "meta", "_journal.json"))) {
+      return {
+        ok: false,
+        applied: [],
+        pending: [],
+        folder,
+        primary,
+        why: `${folder} has no meta/_journal.json, so there is no migrations journal to apply`,
+      };
+    }
 
-  const result = run(spec);
-  const answer = readAnswer(result?.stdout);
-  if (answer === null) {
-    const noise = scrub(`${result?.stderr ?? ""}`.trim());
+    const spec = workerSpec({ primary, folder, env: deps.env ?? process.env });
+    const run =
+      deps.run ??
+      ((child) =>
+        spawnSync(child.command, child.args, {
+          cwd: child.cwd,
+          env: child.env,
+          encoding: "utf8",
+        }));
+
+    const result = run(spec);
+    const answer = readAnswer(result?.stdout);
+    if (answer === null) {
+      const noise = scrub(`${result?.stderr ?? ""}`.trim());
+      return {
+        ok: false,
+        applied: [],
+        pending: [],
+        folder,
+        primary,
+        why: `the apply produced no answer${noise === "" ? "" : `: ${noise}`}`,
+      };
+    }
+
     return {
-      ok: false,
-      applied: [],
+      ok: Boolean(answer.ok),
+      applied: answer.applied ?? [],
+      pending: answer.pending ?? [],
       folder,
       primary,
-      why: `the apply produced no answer${noise === "" ? "" : `: ${noise}`}`,
+      why: answer.ok ? null : scrub(answer.why ?? "the apply failed and said nothing"),
     };
+  } finally {
+    // The export is this call's, however it ends: an unapplied migration left in /tmp is a
+    // copy of the schema nobody is watching.
+    if (exported !== null && exported.dir) (deps.cleanup ?? remove)(exported.dir);
   }
-
-  return {
-    ok: Boolean(answer.ok),
-    applied: answer.applied ?? [],
-    folder,
-    primary,
-    why: answer.ok ? null : scrub(answer.why ?? "the apply failed and said nothing"),
-  };
 }
+
+/** Remove a directory this call made, never one it was handed. */
+const remove = (dir) => rmSync(dir, { recursive: true, force: true });
 
 /** The first line of an error, which is the database's own sentence about what went wrong. */
 const firstLine = (text) =>
@@ -278,11 +340,16 @@ async function lastApplied(sql) {
   return last === null || last === undefined ? null : Number(last);
 }
 
-/** CLI: `node apply.mjs` from the run's checkout, or `--worker --folder <path>` as its child. */
+/**
+ * CLI: `node apply.mjs [--ref <ref>]` from the run's checkout — the ref being the ticket's
+ * branch, whose migrations are read without checking it out — or `--worker --folder <path>`
+ * as the child it spawns in the primary checkout.
+ */
 async function main() {
   const args = process.argv.slice(2);
   if (!args.includes("--worker")) {
-    emit(apply());
+    const r = args.indexOf("--ref");
+    emit(apply({ ref: r === -1 ? null : (args[r + 1] ?? null) }));
     return;
   }
   const i = args.indexOf("--folder");

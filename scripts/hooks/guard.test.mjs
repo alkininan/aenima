@@ -47,7 +47,7 @@ describe("rule (b) — db:migrate", () => {
     expect(decide(...bash("pnpm db:migrate"))).toContain('reply beginning with "apply"');
   });
 
-  // T0.24 — the apply moved into a script so a worktree run could make it. A script the
+  // T0.24, AC2 — the apply moved into a script so a worktree run could make it. A script the
   // guard did not know would have walked round the rule it was written to obey.
   it("refuses the run's own apply script, which is a migrate by another name", () => {
     expect(decide(...bash("node scripts/run/apply.mjs"))).toContain('reply beginning with "apply"');
@@ -55,6 +55,14 @@ describe("rule (b) — db:migrate", () => {
 
   it("refuses it past node's own options", () => {
     expect(decide(...bash("node --no-warnings scripts/run/apply.mjs"))).toContain('"apply"');
+  });
+
+  // AC2 — the credential's file is the boundary, so the rule follows the file rather than
+  // the command: db:baseline hides its `--env-file` inside package.json, where the guard
+  // reads no further (review pass 1, Should 3).
+  it("refuses db:baseline, which reads the same file from inside its own script", () => {
+    expect(decide(...bash("pnpm db:baseline"))).toContain('"apply"');
+    expect(wanted("pnpm db:baseline")).toEqual(["apply"]);
   });
 
   it("refuses anything handed the admin env file, whatever it runs", () => {
