@@ -47,7 +47,7 @@ import type { SkillPack } from "@/packs";
  * anybody remembers this number. The release is here so a human can read a
  * stamp and know which generation of the protocol produced it.
  */
-export const PROTOCOL_RELEASE = "1.2.0";
+export const PROTOCOL_RELEASE = "1.3.0";
 
 /**
  * The scoring protocol. No rubric content, no artifact content, no example
@@ -95,6 +95,11 @@ is satisfied only when the artifact answers every one of them; the first probe
 it leaves unanswered is the gap, and the failing verdict's note names it. A
 probe is not a check: it carries no points and never gets a verdict of its own.
 
+Some conditions carry probes too: questions to answer from the artifact alone
+before deciding the condition. A condition with probes holds when the artifact
+answers yes to at least one of them, and does not hold when it answers yes to
+none. Decide such a condition by its probes and by nothing else.
+
 Write every note in English.`;
 
 /**
@@ -131,10 +136,19 @@ function renderCheck(check: {
  * A layer's checks are rendered under the layer so that a model deciding a
  * layer's condition can see what turning it on brings in — §4's layers "float
  * above all types" and enter the denominator rather than leaving it.
+ *
+ * A condition's probes are rendered under the condition, as a check's are
+ * under the check (§4, v1.8): the protocol says once how a probed condition is
+ * decided, and the pack says what each probe asks, where it asks it.
  */
 export function renderPack(pack: SkillPack): string {
   const conditions = packConditions(pack)
-    .map((condition) => `${condition.id}: ${condition.when}`)
+    .map((condition) =>
+      [
+        `${condition.id}: ${condition.when}`,
+        ...(condition.probes ?? []).map((probe) => `  probe: ${probe}`),
+      ].join("\n"),
+    )
     .join("\n");
 
   const checks = pack.checks.map(renderCheck).join("\n");
@@ -211,7 +225,8 @@ function sortKeys(value: unknown): unknown {
  *
  * **Not a rubric, and never registered.** Its job is to hold one of everything
  * `renderPack` and `renderCheck` know how to draw — a check carrying a probe,
- * a check carrying a condition, a layer with a condition and a check inside it — so
+ * a check carrying a condition, a condition carrying a probe, a layer with a
+ * condition and a check inside it — so
  * that the fingerprint below moves when the *rendering* moves. Drop the
  * `[only when: …]` suffix from `renderCheck`, stop printing points, reorder the
  * headings: every one of those changes what a model reads, and every one of
@@ -239,7 +254,11 @@ const FINGERPRINT_PACK: SkillPack = {
       prose: "A check that can leave the denominator",
       tag: "should",
       points: 1,
-      appliesWhen: { id: "f-condition", when: "the condition the pack states" },
+      appliesWhen: {
+        id: "f-condition",
+        when: "the condition the pack states",
+        probes: ["A probe the condition carries"],
+      },
     },
   ],
   layers: [

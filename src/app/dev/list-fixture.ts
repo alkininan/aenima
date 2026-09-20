@@ -22,7 +22,9 @@ export const LIST_T = getDictionary();
 
 /**
  * One row per case the §8 geometry has to survive: both accents, no accent, an
- * idle row, and more gap chips than the two that fit.
+ * idle row, and more gap chips than the two that fit — and §10's two clocks: a
+ * scored row with a retry queued, a scored row without, and rows nothing has
+ * scored yet, which keep last activity.
  */
 export const LIST_FIXTURE: ItemRowData[] = [
   {
@@ -37,6 +39,9 @@ export const LIST_FIXTURE: ItemRowData[] = [
       { id: "g3", checkId: "MN-9", tag: "should" },
     ],
     lastActivityAt: LIST_NOW - 2 * DAY,
+    // §10's own example: "scored 6 h ago — retrying".
+    scoredAt: LIST_NOW - 6 * 60 * 60 * 1000,
+    retrying: true,
     idle: false,
   },
   {
@@ -47,6 +52,8 @@ export const LIST_FIXTURE: ItemRowData[] = [
     bucket: "at_risk",
     gaps: [{ id: "g4", checkId: "CN-1", tag: "must" }],
     lastActivityAt: LIST_NOW - 9 * DAY,
+    scoredAt: LIST_NOW - 2 * DAY,
+    retrying: false,
     idle: false,
   },
   {
@@ -57,6 +64,8 @@ export const LIST_FIXTURE: ItemRowData[] = [
     bucket: "flowing",
     gaps: [],
     lastActivityAt: LIST_NOW - 3 * 60 * 60 * 1000,
+    scoredAt: null,
+    retrying: false,
     idle: false,
   },
   {
@@ -67,6 +76,8 @@ export const LIST_FIXTURE: ItemRowData[] = [
     bucket: "flowing",
     gaps: [],
     lastActivityAt: LIST_NOW - 40 * DAY,
+    scoredAt: null,
+    retrying: false,
     idle: true,
   },
 ];

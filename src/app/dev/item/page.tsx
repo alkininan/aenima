@@ -17,6 +17,7 @@ import {
   ITEM_DECISIONS,
   ITEM_GAPS,
   ITEM_HEADER,
+  ITEM_NO_LONGER_APPLICABLE,
   ITEM_NOW,
   ITEM_RUN,
   ITEM_RUN_RETRYING,
@@ -121,6 +122,7 @@ export default async function DevItemPage({ searchParams }: PageProps<"/dev/item
               now={ITEM_NOW}
               itemKey={ITEM_HEADER.key}
               gapsByCheck={gapsByCheck}
+              noLongerApplicable={ITEM_NO_LONGER_APPLICABLE}
               outcome={outcome}
             />
           </div>

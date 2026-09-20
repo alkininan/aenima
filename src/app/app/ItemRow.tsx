@@ -9,6 +9,7 @@ import { itemHref } from "@/lib/routes";
 import type { Stage } from "@/lib/stage";
 
 import { ItemRowMenu } from "./ItemRowMenu";
+import { ROW_LINK_ATTRIBUTE } from "./row-link";
 
 /**
  * Everything a row paints, and nothing else.
@@ -28,6 +29,14 @@ export type ItemRowData = {
   gaps: { id: string; checkId: string; tag: "must" | "should" }[];
   /** Epoch ms. */
   lastActivityAt: number;
+  /**
+   * §10's clock — when the newest run scored this item, epoch ms. Null while
+   * nothing has, and the row then keeps last activity: the same instant Flowing
+   * is sorted by, and an honest one for work nobody has measured yet.
+   */
+  scoredAt: number | null;
+  /** §10: §5's queue holds a retry for the artifact that run scored. */
+  retrying: boolean;
   /**
    * §8: "Idle: opacity .60 + trailing Soft chip 'Park?'".
    *
@@ -73,11 +82,23 @@ export function ItemRow({
 }) {
   const shown = item.gaps.slice(0, VISIBLE_GAPS);
   const overflow = item.gaps.length - shown.length;
-  const relative = relativeTime(item.lastActivityAt, now);
-  const freshness =
+  // §10: "freshness shows `--warning` dot + mono-readout 'scored 6 h ago —
+  // retrying'; no banners" — the same two states the item page renders, read
+  // from the same run. A queued retry is the system working, not an error, and
+  // it never reddens (§1's first law). Before anything has scored the item
+  // there is no run to read, and the readout is last activity, as it was.
+  const relative = relativeTime(item.scoredAt ?? item.lastActivityAt, now);
+  const elapsed =
     relative.unit === "justNow"
       ? t.relativeTime.justNow
       : t.relativeTime[relative.unit](relative.value);
+  const freshness =
+    item.scoredAt === null
+      ? t.list.freshness(elapsed)
+      : item.retrying
+        ? t.item.scoredRetrying(elapsed)
+        : t.item.scoredAt(elapsed);
+  const retrying = item.scoredAt !== null && item.retrying;
 
   return (
     <div
@@ -106,6 +127,8 @@ export function ItemRow({
           their own right rather than being swallowed by an outer anchor. */}
       <Link
         href={itemHref(item.key)}
+        // §11: the link is the row's stop for the arrow keys — see `RowWalker`.
+        {...{ [ROW_LINK_ATTRIBUTE]: "" }}
         className="min-w-0 flex-1 after:absolute after:inset-0 after:content-['']"
       >
         <span className="flex min-w-0 items-center gap-[8px]">
@@ -154,10 +177,12 @@ export function ItemRow({
 
       {/* §8: freshness dot + mono-readout timestamp. Every system dot is 8. */}
       <span className="flex shrink-0 items-center gap-[6px]">
-        <span aria-hidden="true" className="size-[8px] shrink-0 rounded-pill bg-prime" />
-        <span className="type-mono-readout hidden text-n-secondary sm:inline">
-          {t.list.freshness(freshness)}
-        </span>
+        <span
+          aria-hidden="true"
+          data-testid="freshness-dot"
+          className={cx("size-[8px] shrink-0 rounded-pill", retrying ? "bg-warning" : "bg-prime")}
+        />
+        <span className="type-mono-readout hidden text-n-secondary sm:inline">{freshness}</span>
       </span>
 
       {/* The label is formatted here and passed as a string: the menu is a

@@ -602,6 +602,38 @@ test.describe("at 1440", () => {
   });
 
   /**
+   * T2.10: what the renormalization closed, on the line that explains it.
+   *
+   * `prd-15` left the denominator and took an open gap with it — §4's engine
+   * making a judgment about the artifact, which is the one closure a person
+   * might disagree with (build log open question 14). The gap has no card and
+   * never will; this line is where it is answerable for.
+   *
+   * **`prd-19` is the control.** It is closed too, and it closed because its
+   * check came to pass — the check passing is the record, so it surfaces
+   * nowhere, in this list or the gap list. If the page ever showed closures
+   * rather than *this* kind of closure, this assertion is what would notice.
+   */
+  test("shows the gap a not-asked check closed, and not the one a pass closed", async ({
+    page,
+  }) => {
+    await page.getByTestId("readiness").locator("summary").first().click();
+
+    const checks = page.getByTestId("check-list");
+    const fifteen = checks.getByRole("listitem").filter({ hasText: "prd-15" });
+
+    await expect(fifteen).toContainText("No empty state is described for the digest list.");
+    await expect(fifteen).toContainText("This gap closed when the check stopped applying");
+
+    // The passed closure's evidence is on no line, and no other check is asked
+    // the question.
+    await expect(
+      page.getByText("MN-2: 'nearby' — same venue, or within 100 m? Two readings possible."),
+    ).toHaveCount(0);
+    await expect(page.getByText("This gap closed when the check stopped applying")).toHaveCount(1);
+  });
+
+  /**
    * AC4: §5 stamps provenance on every run because a number nobody can trace is
    * a number nobody can argue with. §8 puts it in mono-readout.
    */

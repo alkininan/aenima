@@ -26,7 +26,7 @@ the gap lives, in words — and the script supplies the shape:
 Kinds: `decision` (stopped, gap, fallback) · `clarifying` (readings, fallback) · `migration`
 (file) · `stale` (date, branch or null) · `default` (gap, choice) · `change` · `newWork` (name,
 url) · `merged` (commit) · `applied` (file) · `noted` · `setup` (step, where) · `resolved` ·
-`gated` (paths) · `reverted` (failed, merge, commit, name, url) · `readied` · `waiting` (blockers) ·
+`gated` (reasons) · `reverted` (failed, merge, commit, name, url) · `readied` · `waiting` (blockers) ·
 `cycle` (members) · `urgent` (count) · `refused` (what, why, files, settle).
 A comment carries its kind in its own words, and the guard reads it against the thread before
 the comment posts: a third clarifying round on one question waits, and so does a second comment
@@ -54,6 +54,19 @@ A fresh worktree has no `node_modules`; the gate and the suite need them. It has
 
     test -d node_modules || pnpm install --frozen-lockfile
     test -d .next/types || pnpm next typegen
+
+**The connector's query.** Steps a, c and e ask the board through the connector's query, which
+draws on the workspace's shared usage limit. When the connector answers that the workspace has
+*reached the usage limit for Query Data Source*, ask the same question over the token instead,
+and say so in your report line:
+
+    node scripts/run/rows.mjs --status "In progress"
+    node scripts/run/rows.mjs --status "Review"
+    node scripts/run/rows.mjs --releases
+    node scripts/run/rows.mjs --id <id>
+
+The first for step a, the next two for step c (`--releases` newest first), the last for step e.
+Each row carries the `Name`, `Status`, `Commit` and `url` the steps below read.
 
 **a. A live run?** Query Tasks for `Status = 'In progress'`. With none, go on. Otherwise:
 
@@ -187,9 +200,20 @@ revert it pushed is what they mirror:
 in the list — and you rewrite it, in the order given, through the connector with
 `allow_async: false` on **every** write: `replace_content` with the page's `sentinel` alone;
 then `insert_content` at the end with each chunk file's text, in order (`cat` the file, pass the
-text verbatim); then `update_content` replacing the sentinel with the page's `heading`. The
+text verbatim), and after each one read the page back with the chunk files written so far:
+
+    node scripts/run/mirror.mjs --verify <page> <chunk file 0> … <this chunk's file>
+
+`next: continue` → the next chunk. `next: rewrite` → the page does not read as what was sent — a
+write cut off partway, which the heading would otherwise cover, or a chunk written twice: start
+that page again, `replace_content` with the `sentinel` alone and the chunks from the first, adding
+`--rewritten 1` to every read-back from there on, and say so in your report line. `next: leave` →
+it read wrong again: leave the sentinel standing, write no heading, say so in your report line and
+go on to the next page; the next preflight refreshes it first. A read-back that itself fails —
+it comes back with no `next`, an API error or a timeout — is `next: leave` too. Once the last
+chunk reads back whole, `update_content` replacing the sentinel with the page's `heading`. The
 heading goes last so a page is either whole and headed with its commit, or visibly *refresh in
-progress* — never in between. A page marked `missing` is one the Documents page does not list;
+progress* — never in between, and never quietly cut short. A page marked `missing` is one the Documents page does not list;
 say so in the report and write nothing for it.
 
 ## 1 Claim
@@ -293,6 +317,39 @@ and are recorded in the report — and `FINDINGS` when one does: that file, not 
 transcript, is what the guard reads at close. Never write or edit it yourself — a verdict
 the run wrote is the model's claim, and the guard's door would be open on nothing.
 
+**The reviewer's model** comes from one chain: the model `.claude/agents/reviewer.md` pins, then
+`.claude/settings.json`'s `fallbackModel` — never a model you pick. Invoke a pass without
+`model`, so each pass starts again at the pinned model. When the call comes back an error rather
+than a review, ask the script, with every model this pass has been called on, in order, and the
+error verbatim — JSON-escaped, in a quoted heredoc, since the refusal itself carries an
+apostrophe:
+
+    node scripts/run/review-model.mjs <<'EOF'
+    {"tried":["<the pinned model>"],"error":"<the error>"}
+    EOF
+
+`stop: false` → the call was refused for credits or availability: invoke the reviewer again with
+`model` set to the `model` it printed and the same message — the ticket file path and nothing
+else, a fresh session with no briefing; only the model changes. `stop: true` → the review did
+not run, and a ticket never closes unreviewed: commit and push the branch, post the claim's
+`default` comment if it holds one and one `refused` comment — `what` the review of this ticket,
+`why` its `why` and then its `detail` in quotes, `settle` what would settle it — release the
+marker, set `Decision`, and exit. Whichever model a pass ran on, the report names it (step 8).
+
+**A pass that stops at its turn limit** comes back as a result, not an error: Claude Code's note
+that the agent *stopped at its 30-turn limit before finishing*, over no report or a partial one.
+What it holds is never a verdict, whatever it says. Ask the same script, `error` the note verbatim
+and `resumed` the times this pass has already been resumed:
+
+    node scripts/run/review-model.mjs <<'EOF'
+    {"tried":["<the models this pass was called on>"],"error":"<the note>","resumed":0}
+    EOF
+
+`resume: true` → continue that same session once, `SendMessage` to the agent with one line and no
+briefing — *Continue from where you stopped, and write the verdict file.* — and the report marks
+the pass resumed. If it stops at the limit again, ask again with `"resumed":1`: `stop: true` → the
+review did not run, and the stop is the one above.
+
 Each finding is tagged **Must** or **Should**. Fix every Must, then re-invoke. **Three passes
 maximum.** After the third, any remaining Must becomes an open question with owner `T-next`, and
 Shoulds are recorded in the report. A finding outside this ticket's scope becomes a Backlog task:
@@ -319,7 +376,11 @@ before a self-merge, so the green for the pushed tree is on record where the gua
 
 Write `docs/reports/<id>.md`: ACs implemented each with its test · **tests written, each
 observed red first** — one table, columns `test · reddened by · red → green`, the record from
-step 4 · reviewer passes and findings · changed since this ticket was cut · open questions. Then:
+step 4 · **reviewer passes and findings** — one table,
+columns `pass · commit · model · resumed · verdict`, a row for every pass with
+the model it ran on, `yes` under resumed when it stopped at its turn limit and was continued and
+`no` otherwise, and `PASS` or `FINDINGS` under verdict — a pass that reached neither is not a row
+— then the findings · changed since this ticket was cut · open questions. Then:
 
     node scripts/run/report-check.mjs docs/reports/<id>.md
 
@@ -347,10 +408,12 @@ Status to `Review`. Then ask whether this diff is the run's own to merge:
 
     node scripts/run/gated.mjs
 
-`ok: false` → the diff touches a path only the human's word merges — a migration, the product
-spec, the pipeline's own boundary. Post one `gated` comment naming the `gated` paths, joined
-with "and". The task stays at `Review`; the human's *merge* there is the merge, made by the
-next run's step 0. `ok: true`, and the reviewer's last verdict file ends in `PASS` — which is the reviewer's word
+`ok: false` → this diff is one only the human's word merges: it adds a migration, or it weakens
+one of the pipeline's own restraints — a guard rule, the gated list, a hook, the Stop gate, a
+test — which `loosening.mjs` measured by running both sides rather than by reading the diff.
+Post one `gated` comment, `reasons` its `reasons` exactly as printed: each carries the rule the
+diff trips and what would ungate it, and neither is yours to word. The task stays at `Review`;
+the human's *merge* there is the merge, made by the next run's step 0. `ok: true`, and the reviewer's last verdict file ends in `PASS` — which is the reviewer's word
 that no Must stands — → the run merges its own work. First the gate, main's copy as the hooks
 run it, on the pushed tree, so its green is on record:
 
@@ -385,8 +448,8 @@ Either way, release the marker: `node scripts/run/release.mjs`. If step 3 said `
 `git checkout main`. Exit.
 
 **Never merge on your own word.** The two doors are the guard's, read in code: the human's
-*merge* on the task at Review, or the reviewer's `PASS` on file over a diff with nothing
-gated. Nothing you say in this transcript opens either. The Runs row is not yours to write
+*merge* on the task at Review, or the reviewer's `PASS` on file over a diff that adds no
+migration and weakens no restraint. Nothing you say in this transcript opens either. The Runs row is not yours to write
 either: the SessionEnd hook runs `scripts/run/runs.mjs` over this session's transcript once you
 have exited, and posts it with the token — task, outcome, model, tokens, findings, all read from
 what happened, none of it from what you say.

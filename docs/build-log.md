@@ -85,6 +85,14 @@ One file per ticket under `docs/log/`, oldest first. This list is written by `no
 - [T0.17 — Linear ordering](log/T0.17.md) · 2026-09-15
 - [T0.20 — Cap counts clarifying rounds](log/T0.20.md) · 2026-09-15
 - [T1.4 — the opportunity page, and the key that makes its URL sayable](log/T1.4.md) · 2026-09-16
+- [T2.10 — Surface no-longer-applicable closures](log/T2.10.md) · 2026-09-16
+- [T0.13 — Restrict Vercel's database role: the boundary reaches production](log/T0.13.md) · 2026-09-16
+- [T0.19 — Spec: the comment path](log/T0.19.md) · 2026-09-16
+- [T0.21 — Merge by default](log/T0.21.md) · 2026-09-16
+- [T2.9 — Applicability stability](log/T2.9.md) · 2026-09-16
+- [T0.22 — Reviewer model fallback](log/T0.22.md) · 2026-09-16
+- [T0.23 — Partial reviews and mirror verification](log/T0.23.md) · 2026-09-16
+- [T1.5 — Row roving and freshness](log/T1.5.md) · 2026-09-16
 
 ## Decisions made during the build
 
@@ -653,7 +661,14 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
    for the retry — and renders both states. The *row* still shows last activity, because §13's list
    is a workspace-wide ranking and giving every row its newest run is a second read across the whole
    workspace, not a column on the one it already makes. Decide it with the list's pagination question
-   (open question 7), which is the same read.
+   (open question 7), which is the same read. **Answered for the walker and the row by T1.5; park is
+   T1.6's.** Arrow keys walk the rows across the three buckets (`src/app/app/RowWalker.tsx`, the
+   list's one client island). The row reads the item page's clock after all, and without a second
+   read: `scoring_run(scored_at, artifact(next_scoring_attempt_at))` is an embed on the request the
+   list already makes, ordered newest-first and capped at one *on the embed*, so open question 7's
+   rule holds and nothing caps the list. A row nothing has scored keeps last activity. Park — the
+   mutation, the activity rows, the undo toast, and where a parked item is stored — split out to
+   T1.6 Park move, which owns the migration; the chip still renders and does nothing until then.
 7. **The list read is unpaginated, deliberately — revisit when a workspace gets large.** The buckets
    are a ranking over the whole workspace, so there is no page of rows that could be bucketed
    correctly: you cannot tell that an item belongs at the top of Your move from a slice of the
@@ -728,13 +743,22 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
     long-context cached rate of exactly 2× the short one — consistent across all three models, and
     consistent with the stated "2x input" multiplier, so the table was taken as authoritative.
 
-14. **A gap closed as "no longer applicable" is a case T2.5's surface should show.** The machine
-    closing a gap because §4's condition stopped holding is correct and it is also the one closure
-    a person might disagree with — the safety layer turning off is a judgment about the artifact,
-    not an observation that a check now passes. The ledger records it (`gap.closed`, reason "no
-    longer applicable") and nothing surfaces it. **T2.5 owns the human-facing view**, where §5's
-    first negotiation move already lives: the place to say "the safety layer turned off on this
-    version — is that right?" is beside the move that argues applicability.
+14. **~~A gap closed as "no longer applicable" is a case T2.5's surface should show.~~ Answered by
+    T2.10, on the check line rather than the gap card.** The machine closing a gap because §4's
+    condition stopped holding is correct and it is also the one closure a person might disagree
+    with — the safety layer turning off is a judgment about the artifact, not an observation that a
+    check now passes. The ledger records it (`gap.closed`, reason "no longer applicable") and
+    nothing surfaced it.
+
+    It surfaces on the `not-asked` line in the meter's expansion, not as a card in the gap list.
+    The list is what §13 says an item *owes* a person, and a closed gap owes nothing — putting one
+    there would have fought T2.4's narrowing and needed a card with no move on it. The check line
+    already speaks about applicability: it carries the condition that stopped holding, negated. The
+    quoted gap and the question go directly beneath it, so the whole of §4's renormalization is one
+    reading. **The notice is gated on the run's own `not-asked` state**, which keeps it a claim
+    about the denominator now: a check whose condition came back is asked again, and the closure it
+    would point at is history a new gap has already replaced. §5's first negotiation move, when it
+    ships, lands on the same line.
 
 15. **The re-baseline pass has no trigger yet.** §5: "Switching AI provider or editing a rubric
     triggers a quiet re-baseline pass so numbers never wobble without explanation." Every run stamps
@@ -878,7 +902,18 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
     — the cache was not hiding a rare event, it was preventing the observation. Any surface that
     re-scores (a re-baseline, open question 15) hits this immediately.
 
-    Candidates, none chosen:
+    **Answered by T2.9 (product-spec v1.8).** None of the three candidates below was taken; the
+    ticket's own Rules named a fourth — the condition oscillating is the scorer having no settled
+    answer, which a probe addresses and a vote cannot — and §4 now says a condition may carry
+    probes the way a check does, decided by its probes and by nothing else. Measured on
+    `sample-juno-feature.md`, eleven runs before and after on identical bytes:
+    `list-rendering-surface` held in 3 of 11 under pack 1.1.0 and in 11 of 11 under 1.2.0, the denominator went
+    from 99-in-8 / 105-in-3 to 105 in 11, and the score's spread from 0.3 to 0.0
+    (`docs/reports/T2.9.md`). The safety layer's own wobble above was on `soc-10`/`soc-11`, which
+    `sample*.md` gitignoring left unreachable for a re-score; its probes are measured only in that
+    they unsettled nothing — T2.9's open question 4.
+
+    Candidates as they stood before T2.9, none of which was taken:
     - **Pin the sampling temperature.** It is not pinned today — `anthropicBody` sets `model`,
       `max_tokens`, `system`, `messages` and `output_config` and no `temperature`, so every scoring
       call runs at the provider's default. Cheapest to try, and it narrows the variance rather than

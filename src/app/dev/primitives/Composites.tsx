@@ -41,6 +41,7 @@ import { inputHelperClasses } from "@/components/ui/variants";
 import { getDictionary } from "@/i18n";
 
 import { BucketSection } from "@/app/app/BucketSection";
+import { RowWalker } from "@/app/app/RowWalker";
 import { PipelineStrip } from "@/app/app/PipelineStrip";
 import { LIST_COUNTS, LIST_FIXTURE, LIST_NOW, LIST_T } from "@/app/dev/list-fixture";
 
@@ -442,15 +443,19 @@ function Composites() {
             total={6}
             t={LIST_T}
           />
-          {(["your_move", "at_risk", "flowing"] as const).map((bucket) => (
-            <BucketSection
-              key={bucket}
-              bucket={bucket}
-              items={LIST_FIXTURE.filter((row) => row.bucket === bucket)}
-              t={LIST_T}
-              now={LIST_NOW}
-            />
-          ))}
+          {/* §11's walker wraps the buckets here as it does on /app, so the
+              arrow keys can be driven in a browser. */}
+          <RowWalker className="flex flex-col gap-[16px]">
+            {(["your_move", "at_risk", "flowing"] as const).map((bucket) => (
+              <BucketSection
+                key={bucket}
+                bucket={bucket}
+                items={LIST_FIXTURE.filter((row) => row.bucket === bucket)}
+                t={LIST_T}
+                now={LIST_NOW}
+              />
+            ))}
+          </RowWalker>
         </div>
       </Section>
 

@@ -1,6 +1,8 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { checkReport, tableRows, testsWrittenSection } from "./report-check.mjs";
+import { checkReport, reviewerSection, tableRows, testsWrittenSection } from "./report-check.mjs";
 
 const good = `# T0.9 — report
 
@@ -21,7 +23,12 @@ const good = `# T0.9 — report
 
 ## Reviewer passes and findings
 
-None.
+| pass | commit | model | resumed | verdict |
+|---|---|---|---|---|
+| 1 | \`a1b2c3d\` | Opus | no | FINDINGS |
+| 2 | \`d4e5f6a\` | \`fable\` | yes | **PASS** |
+
+1. Must — rule (f) ignored the marker. Fixed.
 `;
 
 describe("report-check", () => {
@@ -89,5 +96,96 @@ describe("report-check", () => {
     expect(result.problems).toEqual([
       "scripts/run/stale.test.mjs is in the diff and not in the record",
     ]);
+  });
+
+  // T0.22 TC2 → AC2
+  describe("the model of every reviewer pass", () => {
+    const chain = ["fable", "opus"];
+
+    it("finds the Reviewer passes section and accepts a pass on every model of the chain", () => {
+      expect(reviewerSection(good)).toContain("| pass | commit | model | resumed | verdict |");
+      expect(reviewerSection("# report\n\n## Tests written\n")).toBeNull();
+      expect(checkReport(good, { chain })).toEqual({ ok: true, problems: [], rows: 2 });
+    });
+
+    it("refuses a report with no Reviewer passes section, no table there, or no model column", () => {
+      const cut = good.slice(0, good.indexOf("## Reviewer passes"));
+      expect(checkReport(cut, { chain }).problems).toEqual(["no `## Reviewer passes…` section"]);
+
+      const prose = good.replace(
+        /\| pass \| commit[\s\S]*\| \*\*PASS\*\* \|\n/,
+        "Two passes, on Opus.\n",
+      );
+      expect(checkReport(prose, { chain }).problems).toEqual(["no table under Reviewer passes"]);
+
+      const noModel = good.replace(
+        "| pass | commit | model | resumed | verdict |",
+        "| pass | commit | note | resumed | verdict |",
+      );
+      expect(checkReport(noModel, { chain }).problems).toEqual([
+        "no `model` column under Reviewer passes",
+      ]);
+    });
+
+    it("refuses a pass that names no model", () => {
+      const report = good.replace("| 1 | `a1b2c3d` | Opus |", "| 1 | `a1b2c3d` |  |");
+      expect(checkReport(report).problems).toEqual(["reviewer pass 1 names no model"]);
+    });
+
+    it("refuses a pass on a model outside the configured chain — never one the run picked", () => {
+      const report = good.replace("| `fable` |", "| Sonnet |");
+      expect(checkReport(report, { chain }).problems).toEqual([
+        "reviewer pass 2 ran on Sonnet, which is not in the configured chain — fable, opus",
+      ]);
+      expect(checkReport(report).ok).toBe(true);
+    });
+
+    it("is the table the skill's step 8 tells a run to write", () => {
+      const skill = readFileSync(
+        join(import.meta.dirname, "..", "..", ".claude/skills/ticket/SKILL.md"),
+        "utf8",
+      );
+      const step8 = skill.match(/^## 8 Report\n[\s\S]*?(?=^## 9 )/m)?.[0] ?? "";
+      expect(step8).toContain("columns `pass · commit · model · resumed · verdict`");
+      expect(step8).toContain("the model it ran on");
+    });
+  });
+
+  // T0.23 TC1 → AC1 — a pass resumed at its turn limit is marked so, and a partial review is never
+  // reported as a verdict.
+  describe("a pass resumed at its turn limit", () => {
+    it("refuses a reviewer table with no resumed column", () => {
+      const report = good
+        .replace(
+          "| pass | commit | model | resumed | verdict |",
+          "| pass | commit | model | verdict |",
+        )
+        .replace("|---|---|---|---|---|", "|---|---|---|---|")
+        .replace("| Opus | no |", "| Opus |")
+        .replace("| `fable` | yes |", "| `fable` |");
+      expect(checkReport(report).problems).toEqual(["no `resumed` column under Reviewer passes"]);
+    });
+
+    it("refuses a pass that says neither yes nor no under resumed", () => {
+      const report = good.replace("| `fable` | yes |", "| `fable` | once |");
+      expect(checkReport(report).problems).toEqual([
+        "reviewer pass 2 says once under resumed, not yes or no",
+      ]);
+      const empty = good.replace("| Opus | no |", "| Opus |  |");
+      expect(checkReport(empty).problems).toEqual([
+        "reviewer pass 1 says nothing under resumed, not yes or no",
+      ]);
+    });
+
+    it("refuses a pass whose verdict is not PASS or FINDINGS — a partial review is never one", () => {
+      const report = good.replace("| yes | **PASS** |", "| yes | stopped at its turn limit |");
+      expect(checkReport(report).problems).toEqual([
+        "reviewer pass 2 carries stopped at its turn limit where a verdict stands — PASS or FINDINGS",
+      ]);
+      const noVerdict = good.replace("| resumed | verdict |", "| resumed | outcome |");
+      expect(checkReport(noVerdict).problems).toEqual([
+        "no `verdict` column under Reviewer passes",
+      ]);
+    });
   });
 });

@@ -61,7 +61,17 @@ is mirrored — and plans the refresh: which pages, in what order (a *refresh in
 sentinel left by a write that died comes first), the sentinel and heading texts, and the file
 split into chunks at blank lines outside fenced code, for the skill to write through the
 connector, header-last, so a page is whole and headed with its commit or visibly in progress
-and never in between.
+and never in between; a page whose header commit equals its file's is skipped. Since T0.23
+`mirror.mjs --verify` reads the page back over the API after every chunk, every block and its
+children, and compares the letters and digits it holds with those of the chunks sent — a fence's
+language, a list's number, a link's target and an HTML comment aside — by length, within a slack
+of a handful that Notion renders its own way, and by whether it ends where the last chunk ends;
+a page that reads short, or long, is rewritten once from its sentinel and left under it the
+second time, so a write cut off partway, or a chunk written twice, is never headed as whole. The same ticket gave the preflight's
+connector queries a fallback: the connector's query draws on the workspace's shared usage limit,
+and when it answers that the limit is reached `rows.mjs` asks the same questions over the token —
+the Tasks rows at a status or the one an ID names, each with its `Commit`, or the Releases rows
+newest first — and the report line says the board was read that way.
 
 ## 1 Claim
 
@@ -131,7 +141,17 @@ reviewer re-invoked, three passes at most. A Must still standing after the third
 open question, Shoulds are recorded in the report, and a finding outside the ticket's scope
 becomes a Backlog task of Type Fix under the same Epic. The reviewer writes its verdict to
 `docs/reviews/<id>.md`, last line `PASS` or `FINDINGS`; that file is what the guard reads at
-close, and the run never writes it (T0.16).
+close, and the run never writes it (T0.16). The reviewer's model comes from one chain, the
+model its definition pins and then `.claude/settings.json`'s `fallbackModel`, and
+`review-model.mjs` reads it (T0.22): a call refused for credits or availability — an API
+error with a 429, a 5xx, an overloaded model or a lost connection — names the next model, and the
+run calls the reviewer again on it with the same message, each pass starting again at the pinned
+model; any other failure, a chain with no model left, or
+models tried out of the chain's order is a stop, because a review that did not run is not a
+pass. A pass that stops at its turn limit comes back as Claude Code's note rather than an error,
+and `review-model.mjs` reads that too (T0.23): what it holds is never a verdict, so the pass is
+resumed once in its own session on the model it ran on, marked resumed in the report, and a
+second stop at the limit is a stop.
 
 ## 6 Migration
 
@@ -154,10 +174,12 @@ not run them again for its benefit.
 ## 8 Report
 
 The run writes `docs/reports/<id>.md` — ACs implemented each with its test, tests written
-each observed red first as a table of test, mutation and count, reviewer passes and findings,
-what changed since the ticket was cut, open questions — and `report-check.mjs` refuses it
-while any test lacks its mutation or its count, or a test file in the diff is missing from
-the record. Once it passes, the run mirrors it into the task body's Report section, writes
+each observed red first as a table of test, mutation and count, reviewer passes and findings
+with a table row for every pass, what changed since the ticket was cut, open questions — and
+`report-check.mjs` refuses it while any test lacks its mutation or its count, a test file in
+the diff is missing from the record, or a reviewer pass does not name a model of the
+configured chain, say `yes` or `no` under resumed, or carry `PASS` or `FINDINGS` as its verdict.
+Once it passes, the run mirrors it into the task body's Report section, writes
 the ticket's build-log entry as its own file under `docs/log/`, and runs `log-index.mjs`,
 which rewrites the build log's Tickets done list from that directory so two open pull
 requests never edit the same lines.
@@ -166,15 +188,21 @@ requests never edit the same lines.
 
 The run commits on the branch, pushes it, opens the PR against `main` unless the branch already
 has one, sets the task's Commit to the short hash and its Status to Review, and then asks
-`gated.mjs` whether the diff is its own to merge: the gated paths — `drizzle/`, `.claude/`,
-`scripts/hooks/`, `scripts/run/`, `docs/product-spec.md`, `.worktreeinclude`, `.gitignore`, and
-`package.json` when its scripts change — are listed there once and read by the guard and the
-skill both. A diff touching none of them, with the reviewer's `PASS` on file, is merged by the
-run itself with `gh pr merge --merge --delete-branch` from the pushed commit — the gate run once
+`gated.mjs` whether the diff is its own to merge: since T0.21 that is a diff adding a migration
+under `drizzle/`, or one that **weakens a restraint**, which `loosening.mjs` measures rather than
+reads off the paths — it runs the guard's `decide` and `gated.mjs`'s own `isGatedPath` from both
+`origin/main` and this checkout against one fixed corpus, in a child process a side (`--probe`),
+and anything refused before and allowed after is a rule deleted or a matcher narrowed; a guard
+rule with no corpus entry, a hook gone from `.claude/settings.json` or no longer carrying main's
+command, a gate step dropped or its release count raised, a deleted test whose criteria nothing
+added names, and any diff touching `loosening.mjs` itself are gated the same way. Each reason
+carries what would ungate it, and the answer is read by the guard and the skill both. A diff
+that trips none of them, with the reviewer's `PASS` on file, is merged by the run itself with `gh pr merge --merge --delete-branch` from the pushed commit — the gate run once
 more first, so its green for that tree is on record — and the task is Done with its Release row
 in the same run; the guard's second door (`permission.mjs` `reviewed`) reads the verdict file,
 the gate's record, the diff and the pull request's head before it opens. A
-gated diff stays at Review with one comment naming the path, and merging is the human's move,
+gated diff stays at Review with one comment naming the rule it trips and what would ungate it,
+and merging is the human's move,
 made with the word `merge` there, which the guard refuses `gh pr merge` until `permission.mjs`
 has read from the board. Either way `release.mjs` removes the marker and a primary checkout
 returns to `main`; `release.mjs` also runs from the SessionEnd hook, so a run that dies leaves

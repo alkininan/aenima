@@ -6,8 +6,8 @@
  * ones where reading past is expensive: `drizzle-kit push` drops the RLS policies that are
  * the product isolation boundary, a migration applied without a human is a schema change
  * nobody approved, a write to `.env*` puts a secret somewhere it does not belong, and a
- * merge on a gated path — the harness, a migration, the product spec — is the one move
- * guidelines §3 keeps for the human.
+ * merge of a diff only the human's word merges — a migration, or a restraint the diff
+ * weakens — is the one move guidelines §3 keeps for the human.
  *
  * Reads the hook JSON on stdin. Exit 2 with a one-line reason on stderr refuses the call;
  * exit 0 lets it through. Refusal text names what was refused and where the rule lives —
@@ -25,9 +25,10 @@
  * human's word: before `decide()` runs, `judge()` asks `scripts/run/permission.mjs` to read
  * the claimed task's thread over the Notion API with the integration token, and hands the
  * answer in as `deps.permission`. Since T0.16 rule (f) has a second door, `deps.verdict`:
- * the claimed task's reviewer verdict on file ends in PASS and the diff touches no gated
- * path (`scripts/run/gated.mjs`), and the pull request's head is this checkout's HEAD — the
- * diff the guard read is the diff that merges. Rule (d) lets one push to main through: the
+ * the claimed task's reviewer verdict on file ends in PASS and the diff is not one only the
+ * word merges (`scripts/run/gated.mjs`, which since T0.21 measures the restraints on both
+ * sides of it rather than reading paths), and the pull request's head is this checkout's
+ * HEAD — the diff the guard read is the diff that merges. Rule (d) lets one push to main through: the
  * revert of the merge at origin/main's tip, `HEAD:main`, one commit that restores the tree
  * before the merge. The guard verifies; the model never asserts (docs/guidelines.md §4).
  *
@@ -945,7 +946,7 @@ export function decide(input, deps = {}) {
     // human's word, since T0.11: one reply on the task at Review, read from the board, and the
     // pull request must be that task's branch — derived from the task's name on the board,
     // never from the marker the run wrote. The reviewer's PASS, since T0.16: the claimed
-    // task's verdict on file, a diff touching no gated path, and the pull request's head
+    // task's verdict on file, a diff that weakens no restraint, and the pull request's head
     // equal to this checkout's HEAD, so the diff the guard judged is the one that merges.
     // Either way a merge commit, said as --merge: a squash rewrites the hash and
     // `merge-detect.mjs` would never see the task land.

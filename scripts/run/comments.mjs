@@ -233,7 +233,10 @@ const SIGNATURES = [
   ["applied", /^Applied .+ to the shared database\. The ticket picks up /],
   ["noted", /^Read that, thanks\. Nothing for me to do here, /],
   ["resolved", /^Read that as the answer, thanks\. /],
-  ["gated", /^This ticket is built, reviewed and green, but the diff touches /],
+  [
+    "gated",
+    /^This ticket is built, reviewed and green, but the diff is one only your word merges: /,
+  ],
   ["reverted", /^The deploy check after this merge failed: /],
   ["readied", /^Read that as your go, so the task is Ready\. /],
   ["waiting", /^This task is waiting on .+, so runs pass it by for now\. /],
@@ -293,7 +296,9 @@ const listed = (items) => {
  *   noted       {}                          — a reply that asks for nothing
  *   setup       { step, where }             — a step only a human can do, said exactly
  *   resolved    {}                          — a Decision answer read as resolving: Ready
- *   gated       { paths }                   — a diff on a gated path, waiting for the word
+ *   gated       { reasons: [{ rule, ungate }] } — a diff only the word merges: a migration,
+ *               or a restraint this diff weakens. Each reason names the rule it trips and
+ *               what would ungate it (T0.21); `gated.mjs` measures them
  *   reverted    { failed, merge, commit, name, url } — a merge whose deploy check failed
  *   readied     {}                          — the human's "ready" on a Backlog task, done
  *   waiting     { blockers }                — a Ready task skipped for a blocker not Ready
@@ -332,8 +337,12 @@ export function compose(kind, fields = {}, prefix = "⟡ ") {
       return `${prefix}Read that, thanks. Nothing for me to do here, so I've left the ticket as it is.`;
     case "resolved":
       return `${prefix}Read that as the answer, thanks. The task is back at Ready and the next run picks it up from there.`;
-    case "gated":
-      return `${prefix}This ticket is built, reviewed and green, but the diff touches ${clause(fields.paths)}, which is a path only your word merges — the pipeline's own boundary, a migration or the product spec. It stays at Review; say "merge" here and the next run lands it with a merge commit.`;
+    case "gated": {
+      const reasons = (fields.reasons ?? []).map(
+        (each) => `${clause(each.rule)} — ${clause(each.ungate)}`,
+      );
+      return `${prefix}This ticket is built, reviewed and green, but the diff is one only your word merges: ${reasons.join("; ")}. It stays at Review; say "merge" here and the next run lands it with a merge commit.`;
+    }
     case "reverted":
       return `${prefix}The deploy check after this merge failed: ${sentence(fields.failed)} I've reverted the merge commit ${clause(fields.merge)} on main as ${clause(fields.commit)} and put this task back at Backlog. The fix is filed as its own task: ${clause(fields.name)} (${clause(fields.url)}).`;
     case "readied":

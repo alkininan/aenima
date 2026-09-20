@@ -206,6 +206,63 @@ test.describe("at 1440", () => {
     expect(opacities.every((opacity) => opacity === "1")).toBe(true);
   });
 
+  /**
+   * design-spec §11: "arrow keys walk … list rows". Driven in a real browser
+   * because focus is the browser's: the DOM test proves the wiring, this proves
+   * a key press on the page moves the ring. The walk crosses buckets — §13's
+   * three groups are one prioritised list — and wraps at both ends, as the
+   * menus do over the same `nextRovingIndex`.
+   */
+  test("walks the rows with the arrow keys, across buckets, wrapping at the ends", async ({
+    page,
+  }) => {
+    const links = listSection(page).getByTestId("item-row").locator("a[href^='/i/']");
+    await expect(links).toHaveCount(4);
+
+    await links.first().focus();
+    await page.keyboard.press("ArrowDown");
+    await expect(links.nth(1)).toBeFocused();
+
+    // Up twice from the second row: past the first, round to the last.
+    await page.keyboard.press("ArrowUp");
+    await page.keyboard.press("ArrowUp");
+    await expect(links.last()).toBeFocused();
+
+    await page.keyboard.press("ArrowDown");
+    await expect(links.first()).toBeFocused();
+
+    await page.keyboard.press("End");
+    await expect(links.last()).toBeFocused();
+    await page.keyboard.press("Home");
+    await expect(links.first()).toBeFocused();
+  });
+
+  /**
+   * design-spec §10: "freshness shows `--warning` dot + mono-readout 'scored 6 h
+   * ago — retrying'". The row reads the same clock the item page does; the
+   * fixture holds §10's own example, a scored row without a retry, and a row
+   * nothing has scored, which keeps last activity. The dot is read as a
+   * computed colour: the whole point is what a person sees, and it is never
+   * red.
+   */
+  test("shows the newest run's clock, warning-dotted while a retry is queued", async ({ page }) => {
+    const rows = listSection(page).getByTestId("item-row");
+    const dotColour = (key: string) =>
+      rows
+        .filter({ hasText: key })
+        .getByTestId("freshness-dot")
+        .evaluate((node) => getComputedStyle(node).backgroundColor);
+
+    await expect(rows.filter({ hasText: "soc-12" })).toContainText("scored 6h ago — retrying");
+    expect(await dotColour("soc-12")).toBe(WARNING);
+
+    await expect(rows.filter({ hasText: "soc-4" })).toContainText("scored 2d ago");
+    expect(await dotColour("soc-4")).toBe(PRIME);
+
+    await expect(rows.filter({ hasText: "aur-1" })).toContainText("updated 3h ago");
+    expect(await dotColour("aur-1")).toBe(PRIME);
+  });
+
   // §13: "Always on top." The order of the sections is the priority.
   test("puts Your move above At risk above Flowing", async ({ page }) => {
     const headers = await listSection(page)

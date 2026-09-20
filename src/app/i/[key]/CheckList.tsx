@@ -10,6 +10,76 @@ import { gapHasCard } from "./GapList";
 import { GapMoves, type MoveableGap } from "./GapMoves";
 
 /**
+ * The gaps §4's engine closed because their checks left the denominator, keyed
+ * by the check id each was raised against — `reconcileGaps`'s
+ * `no-longer-applicable`, read back out of the ledger by
+ * `listGapsClosedAsNoLongerApplicable`.
+ *
+ * The value is the gap's evidence: §5's exact quoted gap as it stood when the
+ * closure happened, which is the whole of what the notice shows. The gap's own
+ * id is not here because nothing on the page can act on it — a closed gap has
+ * no card to anchor and no move to make until §5's first negotiation move
+ * ships. The map is keyed by check because that is what a line knows about
+ * itself.
+ *
+ * **Passed closures are not in it.** A gap closed because its check came to
+ * pass still renders nowhere: the check passing is the record (T2.4). The read
+ * filters on the reason, so this map can only hold the other kind.
+ */
+export type NoLongerApplicable = ReadonlyMap<string, string>;
+
+/**
+ * Builds that map from an item's gaps and the ids the ledger named.
+ *
+ * **A check can lose the same argument twice.** It leaves the denominator and
+ * its open gap closes; a later version brings the condition back, the check is
+ * asked, it fails, and `reconcileGaps` raises a fresh gap; a version after that
+ * takes the condition away again and closes that one too. The item then holds
+ * two gaps closed as no longer applicable on one check id, and a map keyed by
+ * check can show one of them.
+ *
+ * **The newest wins**, because the notice sits on a line that is about the
+ * denominator *now*: the closure that explains the check's current absence is
+ * the last one, and the earlier gap is a debt a later run already restated and
+ * settled again. Taking whichever the read happened to return last would be the
+ * same answer most of the time and silently the wrong one the rest.
+ *
+ * A closed gap always carries `resolved_at` (`gap_resolution_shape`), so the
+ * comparison has something to run on; a null — or a stamp that will not
+ * parse — sorts as oldest rather than throwing, which keeps a row the schema
+ * should not permit from deciding the page.
+ *
+ * **Parsed rather than compared as text.** Both stamps come from one column in
+ * one format, so string order would agree with time order today; it would stop
+ * agreeing the moment anything handed this a stamp written another way, and it
+ * would stop quietly. `Date.parse` makes the format not matter, which is also
+ * what lets the tests state times without having to spell PostgREST's `+00:00`.
+ */
+export function noLongerApplicableByCheck(
+  gaps: readonly {
+    id: string;
+    checkId: string;
+    evidence: string;
+    resolvedAt: string | null;
+  }[],
+  closedGapIds: ReadonlySet<string>,
+): NoLongerApplicable {
+  const newest = new Map<string, { evidence: string; resolvedAt: number }>();
+
+  for (const gap of gaps) {
+    if (!closedGapIds.has(gap.id)) continue;
+    const parsed = gap.resolvedAt === null ? Number.NaN : Date.parse(gap.resolvedAt);
+    const at = Number.isNaN(parsed) ? Number.NEGATIVE_INFINITY : parsed;
+    const held = newest.get(gap.checkId);
+    if (held === undefined || held.resolvedAt <= at) {
+      newest.set(gap.checkId, { evidence: gap.evidence, resolvedAt: at });
+    }
+  }
+
+  return new Map([...newest].map(([checkId, held]) => [checkId, held.evidence]));
+}
+
+/**
  * One run, every check — product-spec.md §1 law 3 rendered literally.
  *
  * "Every score, flag, and suggestion expands into the exact quoted gap. A
@@ -40,12 +110,18 @@ import { GapMoves, type MoveableGap } from "./GapMoves";
  * the only route to accepting one — which is why the anchor a move redirects to
  * is carried here for exactly those gaps, and why `ReadinessPanel` opens itself
  * when a move names one. See `gapHasCard`. Moves 1 and 2 are Phase 3.
+ *
+ * **And a not-asked check says what its closure cost.** §4's engine closing a
+ * gap because a condition stopped holding is the one closure a person might
+ * disagree with (build log open question 14), so the line that already explains
+ * the renormalization carries the gap it took with it, quoted, and asks.
  */
 export function CheckList({
   checks,
   t,
   itemKey,
   gapsByCheck,
+  noLongerApplicable,
   outcome,
 }: {
   checks: readonly CheckLine[];
@@ -64,6 +140,16 @@ export function CheckList({
    * accepted gap alone — so this is keyed by check rather than filtered to open.
    */
   gapsByCheck: ReadonlyMap<string, MoveableGap>;
+  /**
+   * What a check took with it when it left the denominator — see
+   * `NoLongerApplicable`.
+   *
+   * A second map rather than a field on `gapsByCheck`, because the two answer
+   * opposite questions: that one is what a check currently *owes* and every gap
+   * in it can be moved, and a closed gap can be neither. Folding them together
+   * would widen `MoveableGap` to a disposition with no move.
+   */
+  noLongerApplicable: NoLongerApplicable;
   outcome: GapMoveClaim | null;
 }) {
   return (
@@ -117,6 +203,25 @@ export function CheckList({
               </p>
             ) : null}
 
+            {/* What the renormalization closed, and the question it raises —
+              build log open question 14.
+
+              **Only on a not-asked check.** The map is keyed by check id and a
+              check whose condition came back is asked again, which raises a new
+              gap or passes; pointing at the old closed one there would be a
+              sentence about a state that has already passed. Reading it off the
+              line's own state is what keeps the notice in the present tense.
+
+              §5's exact quoted gap, in the same card an unclear check puts its
+              evidence in, dimmed the way §0 law 7 dims work that is no longer
+              live — the gap is resolved, not disabled, which is the treatment
+              the gap list gives a settled one. The question follows it so that
+              "this gap" has already been read. §0 law 1: no Warning and no
+              Danger; nothing here went wrong. */}
+            {check.state === "not-asked" ? (
+              <ClosedGapNotice evidence={noLongerApplicable.get(check.checkId)} t={t} />
+            ) : null}
+
             {/* §5's move, on the gap this check raised. The same component the
               gap card renders — §13's narrowing keeps open Shoulds off that
               card, so for those this is the only place the move exists, and a
@@ -131,6 +236,24 @@ export function CheckList({
         );
       })}
     </ul>
+  );
+}
+
+/**
+ * The gap a not-asked check closed, when it closed one.
+ *
+ * Nothing renders otherwise, which is the ordinary case: a check whose
+ * condition stopped holding usually had nothing open at the time, and a line
+ * speaking about a closure there would be the page inventing one.
+ */
+function ClosedGapNotice({ evidence, t }: { evidence: string | undefined; t: Dictionary }) {
+  if (evidence === undefined) return null;
+
+  return (
+    <>
+      <Card className="type-ui-body text-n-primary opacity-60">{evidence}</Card>
+      <p className="type-ui-footnote text-n-secondary">{t.item.checkNotAskedClosedGap}</p>
+    </>
   );
 }
 

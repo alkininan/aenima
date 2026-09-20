@@ -55,3 +55,6 @@ sample*.md
 
 # Worktrees Claude Code creates for isolated sessions and subagents.
 .claude/worktrees/
+
+.agents/
+.codex/
