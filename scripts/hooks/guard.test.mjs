@@ -46,6 +46,47 @@ describe("rule (b) — db:migrate", () => {
   it("refuses it without the human's word, and says which word and where", () => {
     expect(decide(...bash("pnpm db:migrate"))).toContain('reply beginning with "apply"');
   });
+
+  // T0.24, AC2 — the apply moved into a script so a worktree run could make it. A script the
+  // guard did not know would have walked round the rule it was written to obey.
+  it("refuses the run's own apply script, which is a migrate by another name", () => {
+    expect(decide(...bash("node scripts/run/apply.mjs"))).toContain('reply beginning with "apply"');
+  });
+
+  it("refuses it past node's own options", () => {
+    expect(decide(...bash("node --no-warnings scripts/run/apply.mjs"))).toContain('"apply"');
+  });
+
+  // AC2 — the credential's file is the boundary, so the rule follows the file rather than
+  // the command: db:baseline hides its `--env-file` inside package.json, where the guard
+  // reads no further (review pass 1, Should 3).
+  it("refuses db:baseline, which reads the same file from inside its own script", () => {
+    expect(decide(...bash("pnpm db:baseline"))).toContain('"apply"');
+    expect(wanted("pnpm db:baseline")).toEqual(["apply"]);
+  });
+
+  it("refuses anything handed the admin env file, whatever it runs", () => {
+    expect(decide(...bash("node --env-file=../../.env.migrate scripts/x.mjs"))).toContain(
+      '"apply"',
+    );
+    expect(
+      decide(...bash("pnpm exec tsx --env-file .env.migrate scripts/db-baseline.ts")),
+    ).toContain('"apply"');
+  });
+
+  it("allows the neighbours: the tests, the other run scripts, and reading the file", () => {
+    expect(decide(...bash("pnpm vitest run scripts/run/apply.test.mjs"))).toBeNull();
+    expect(decide(...bash("node scripts/run/prune.mjs"))).toBeNull();
+    expect(decide(...bash("cat scripts/run/apply.mjs"))).toBeNull();
+    expect(decide(...bash("node --env-file=.env.local scripts/x.mjs"))).toBeNull();
+    expect(decide(...bash('grep -n "apply.mjs" docs/guidelines.md'))).toBeNull();
+  });
+
+  it("counts the word it would need, so wantedBy names it", () => {
+    expect(wanted("node scripts/run/apply.mjs")).toEqual(["apply"]);
+    expect(wanted("node --env-file=/x/.env.migrate scripts/db-baseline.ts")).toEqual(["apply"]);
+    expect(wanted("pnpm vitest run scripts/run/apply.test.mjs")).toEqual([]);
+  });
 });
 
 describe("rule (c) — production deploys", () => {
