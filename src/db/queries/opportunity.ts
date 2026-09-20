@@ -55,7 +55,13 @@ export type OpportunityPageDetail = {
   title: string;
   summary: string | null;
   productName: string;
-  /** In creation order, which is the order they were bet on. */
+  /**
+   * Oldest first, and stably: `created_at` then `key`. Within one `created_at`
+   * the tie-break is the key's *text* order, so a batch written by a single
+   * statement would read `soc-10` before `soc-2`. That is an arbitrary order
+   * and a fixed one, which is what the page needs; it is not the order they
+   * were bet on.
+   */
   items: OpportunityItem[];
 };
 
@@ -104,8 +110,11 @@ export async function getOpportunityByKey(
     // Two columns because one is not a total order: rows written by a single
     // statement share `now()`, which is exactly why `drizzle/0016`'s own
     // backfill tie-breaks on `(created_at, id)`. Today's seed writes items one
-    // at a time, so the tie is not reachable yet — the second key is what keeps
-    // "creation order" true the day something inserts a batch.
+    // at a time, so the tie is not reachable yet — the second column is what
+    // keeps the order *stable* the day something inserts a batch. Stable, not
+    // chronological: `key` sorts as text, so tied rows come back `soc-10`
+    // before `soc-2`. Nothing finer is available on the embed, and a list that
+    // cannot reshuffle is what the page was asking for.
     .order("created_at", { ascending: true, referencedTable: "item" })
     .order("key", { ascending: true, referencedTable: "item" })
     .maybeSingle();
