@@ -528,6 +528,78 @@ function drizzleKit(argv, verb) {
   return rest !== null && operands(rest).find((token) => DRIZZLE_VERBS.has(token)) === verb;
 }
 
+/** The run's own apply, which is a migrate the skill reaches through a script (T0.24). */
+const APPLY_SCRIPT = "apply.mjs";
+
+/** The one file the admin URL lives in. A command handed it is applying a migration. */
+const ADMIN_ENV_FILE = ".env.migrate";
+
+/** Interpreters whose first operand is the script they run. */
+const NODE_RUNNERS = new Set(["node", "tsx", "ts-node"]);
+
+/** Their options that take a separate value, so a value is never read as the script. */
+const NODE_VALUE_FLAGS = new Set([
+  "--env-file",
+  "--env-file-if-exists",
+  "-r",
+  "--require",
+  "--import",
+  "--loader",
+  "--experimental-loader",
+  "--conditions",
+  "-C",
+  "-e",
+  "--eval",
+  "-p",
+  "--print",
+]);
+
+/**
+ * The script a node-like interpreter is pointed at: its first operand, past its options and
+ * past the value of every option that takes one. At a position, never anywhere in the
+ * arguments — `grep -n "apply.mjs" f` and `pnpm vitest run apply.test.mjs` name it and run
+ * something else, and the guard reads commands, not text (T0.9's lesson, one rule down).
+ */
+function nodeScript(argv) {
+  const { name, rest } = target(argv);
+  if (!NODE_RUNNERS.has(name)) return null;
+  let i = 0;
+  while (i < rest.length && rest[i].startsWith("-")) {
+    i += NODE_VALUE_FLAGS.has(rest[i]) ? 2 : 1;
+  }
+  return i < rest.length ? basename(rest[i]) : null;
+}
+
+/**
+ * True when `--env-file` points at the admin URL's file, in either spelling. This is the
+ * general form of the rule: whatever a command runs, being handed that file is being handed
+ * the credential that changes schema, and `pnpm db:baseline` is in it for the same reason.
+ */
+function readsAdminEnv(argv) {
+  const { rest } = target(argv);
+  return rest.some((token, i) => {
+    const eq = token.indexOf("=");
+    const flag = eq === -1 ? token : token.slice(0, eq);
+    if (!flag.startsWith("--env-file") || !NODE_VALUE_FLAGS.has(flag)) return false;
+    const value = eq === -1 ? rest[i + 1] : token.slice(eq + 1);
+    return typeof value === "string" && basename(value) === ADMIN_ENV_FILE;
+  });
+}
+
+/**
+ * A migration apply in every shape it comes in: the package script, the binary's verb, the
+ * run's own `apply.mjs`, and anything handed `.env.migrate`. One predicate, so the rule and
+ * the word-count below can never drift apart.
+ */
+function appliesMigration(argv) {
+  return (
+    invocation(argv, "db:migrate") !== null ||
+    drizzleKit(argv, "migrate") ||
+    nodeScript(argv) === APPLY_SCRIPT ||
+    readsAdminEnv(argv)
+  );
+}
+
 /**
  * The words of a `gh` call with its options and their values stepped over, so the
  * subcommand and verb are `words[0]` and `words[1]` wherever `-R owner/repo` sits.
@@ -792,7 +864,7 @@ export function wanted(command) {
   const words = [];
   for (const cmd of parse(command)) {
     const { name, rest } = target(cmd.argv);
-    if (invocation(cmd.argv, "db:migrate") !== null || drizzleKit(cmd.argv, "migrate")) {
+    if (appliesMigration(cmd.argv)) {
       words.push("apply");
     }
     const gh = ghWords(rest);
@@ -908,10 +980,12 @@ export function decide(input, deps = {}) {
     }
 
     // (b) a migration is a schema change a human approves — with the word "apply" on the
-    // task's thread, which the guard reads from the board itself (permission.mjs). The
-    // credential a run is handed cannot apply one anyway (docs/guidelines.md §5, the
-    // capability boundary); this rule is the second layer, and it stays.
-    if (invocation(cmd.argv, "db:migrate") !== null || drizzleKit(cmd.argv, "migrate")) {
+    // task's thread, which the guard reads from the board itself (permission.mjs). Since
+    // T0.24 a run in a worktree can make the apply itself, through `scripts/run/apply.mjs`
+    // and a child in the primary checkout, so this rule is no longer the second layer behind
+    // a credential the run could not reach: it is the layer. It reads every shape — the
+    // package script, the binary's verb, that script, and anything handed `.env.migrate`.
+    if (appliesMigration(cmd.argv)) {
       const granted = permission("apply");
       if (!granted.ok) {
         return `Applying a migration needs your word on the board — a reply beginning with "apply" on the task's thread, newer than the run's question — and the guard could not find it: ${granted.why}. Leave the migration in the diff and say it is waiting. docs/guidelines.md §4.`;

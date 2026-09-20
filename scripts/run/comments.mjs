@@ -52,7 +52,9 @@ const NOTICES = new Set(["waiting", "cycle", "urgent", null]);
  *
  * Returns `{ pipeline, human, unanswered, clarifyingRounds }`:
  *   pipeline          prefixed comments, oldest first, each with the `kind` its words carry
- *   unanswered        human comments newer than the last prefixed one, oldest first
+ *   unanswered        human comments newer than the last prefixed one that answered something,
+ *                     oldest first. A `refused` comment is not one: it reports an attempt that
+ *                     failed, and the word that granted the attempt outlives it (T0.24).
  *   clarifyingRounds  clarifying comments since the pipeline last asked or answered anything
  *                     else on the thread. Human replies between them do not end the run of
  *                     rounds — every round answers one — and nor does a notice about the
@@ -69,7 +71,12 @@ export function readThread(comments = [], prefix = "⟡ ") {
     .filter(isPipeline)
     .map((comment) => ({ ...comment, kind: kindOf(comment.text, prefix) }));
   const human = ordered.filter((comment) => !isPipeline(comment));
-  const lastPipelineAt = pipeline.length === 0 ? "" : at(pipeline.at(-1));
+  // A refusal reports an attempt that failed; it does not answer the reply that asked for it,
+  // so the word the reply carries is still granted and the next run acts on it rather than
+  // asking for it again (T0.24, AC5). `awaitingMigration` has read past a refusal since T0.20
+  // for the same reason: the question it reported on is still the question standing.
+  const answered = pipeline.findLast((comment) => comment.kind !== "refused");
+  const lastPipelineAt = answered === undefined ? "" : at(answered);
 
   let clarifyingRounds = 0;
   for (const comment of [...pipeline].reverse()) {

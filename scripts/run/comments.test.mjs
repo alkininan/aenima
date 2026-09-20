@@ -693,6 +693,42 @@ describe("shapeOf and awaitingMigration", () => {
     expect(shapeOf("Decision", refusedAlone)).toBe("assess");
   });
 
+  // T0.24 TC5 → AC5: and the human does not have to say it twice. A refusal reports an
+  // attempt that failed; it answers nothing, so the word that granted the attempt outlives
+  // it and the next run acts on it rather than waiting to be told again.
+  it("leaves the word standing: a refusal reports, it does not answer", () => {
+    const after = thread(
+      timeline(
+        said("migration"),
+        "apply",
+        said("refused", {
+          what: "Applying drizzle/0013_activity_trigger.sql",
+          why: "Postgres answered: relation activity already exists",
+          settle: "Say apply once the table is settled",
+        }),
+      ),
+    );
+    expect(after.unanswered.map((x) => x.text)).toEqual(["apply"]);
+    expect(shapeOf("Decision", after)).toBe("apply");
+  });
+
+  // The same rule at the other word: a merge the guard let through and GitHub refused leaves
+  // the merge standing, so settling the conflict is all the human has to do.
+  it("leaves a merge standing after the merge itself was refused", () => {
+    const after = thread(timeline("merge", said("refused")));
+    expect(shapeOf("Review", after)).toBe("merge");
+  });
+
+  // But a comment that *does* answer still consumes it, which is what keeps a word from
+  // granting twice: the run said it applied, so there is nothing outstanding.
+  it("consumes the word once the run has said it applied", () => {
+    const after = thread(
+      timeline(said("migration"), "apply", said("applied", { file: "drizzle/0013_x.sql" })),
+    );
+    expect(after.unanswered).toEqual([]);
+    expect(shapeOf("Decision", after)).toBe("assess");
+  });
+
   it("is assess with nothing unanswered, and assess when the newest reply takes the word back", () => {
     expect(shapeOf("Review", thread([]))).toBe("assess");
     expect(

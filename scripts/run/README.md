@@ -38,7 +38,15 @@ migration, stale, default, change, newWork, merged, applied, noted, setup, resol
 reverted, readied, waiting, cycle, urgent, refused — in plain sentences with the prefix, from the
 sentences the skill supplies; a merge the guard let through and GitHub refused posts its
 `refused` comment with the files `conflicts.mjs` names, from `git merge-tree` against
-`origin/main`. `merge-detect.mjs` takes the Review tasks with their commits and asks `git
+`origin/main` — and, since T0.24, a refusal answers nothing, so the word that granted the
+attempt outlives it and the next run acts on it rather than asking for it again. An `apply`
+the thread grants is made by `apply.mjs` wherever the run is standing: the schedule runs
+every ticket in a worktree and the admin URL is in the primary checkout's `.env.migrate`
+alone, so the apply is one child process whose working directory is that checkout and whose
+`--env-file` is that file, handed the *worktree's* `drizzle/` — credential from where it
+lives, migrations from where the ticket is — and it reports the tag and journal index of
+every migration the ledger moved over, with any connection string scrubbed out of what it
+says. `merge-detect.mjs` takes the Review tasks with their commits and asks `git
 merge-base --is-ancestor` against `origin/main` after a fetch, which is the only honest test of
 "merged" — whether the human merged by hand or a run merged on the human's word a moment
 earlier; every task it returns
@@ -158,7 +166,9 @@ second stop at the limit is a stop.
 `migration-check.mjs` lists the `.sql` files the diff adds under `drizzle/`. If there are
 any the run commits and pushes the branch, writes the report so far, releases the marker,
 sets Decision and posts one migration comment naming the file. The human answers with one
-word, `apply`, on the thread, and the next run applies it: the guard lets `db:migrate`
+word, `apply`, on the thread, and the next run applies it through `apply.mjs` (step 0),
+whichever checkout it is in: the guard lets a migration apply — `db:migrate`, `drizzle-kit
+migrate`, that script, or anything handed `.env.migrate` —
 through only when `permission.mjs` has itself found that word on the claimed task's thread
 over the API — the marker names the task, the token opens the board, the reply must be the
 human's newest since the pipeline's question, and the task must be at the state the word is
