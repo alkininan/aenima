@@ -396,6 +396,27 @@ into, and `surfaced` is round 3. `RESTRICT` on every parent, no INSERT policy (a
 client that could write a round could spend or skip the cap), and SELECT through
 the item's product like `scoring_run`.
 
+`drizzle/0016_opportunity_keys.sql` — T1.4, `0005_item_keys.sql` one table over.
+`opportunity.key` is the product's `key_prefix` plus a per-opportunity counter
+within that product, so `/o/<key>` is a URL a person can say out loud and a
+product can be renamed without breaking it (build log, open question 9). Added
+nullable, backfilled per product in creation order with `row_number()` over
+`(created_at, id)` — `created_at` alone ties inside one transaction — then set
+NOT NULL, with `UNIQUE (workspace_id, key)` as the backstop on the MAX+1 race,
+`item_key_shape`'s regex as a CHECK, and `app.assign_opportunity_key()` on
+BEFORE INSERT overwriting `NEW.key` unconditionally: a client that can choose an
+identifier can collide with one. The two counters are independent and sit on
+different tables, so `soc-3` can name an item *and* an opportunity in the same
+product — built that way deliberately, and held by a test.
+
+**It is numbered 0016 rather than 0015, and the number is the point.** T1.4 and
+T3.1 both stopped for an `apply` and both generated an `0015`. Renumbering the
+second is not a rename: `scripts/run/apply.mjs` refuses a migration stamped no
+later than the newest row in drizzle's ledger, because `migrate()` passes such a
+file over in silence and returns cleanly — so the journal entry is restamped as
+well as re-indexed. `src/db/migrations.test.ts` holds all of it: one entry per
+file, `idx` matching the tag, and stamps that increase with the index.
+
 ```
 pnpm db:generate   # diff the schema files into a new migration
 pnpm db:migrate    # apply pending migrations to DATABASE_URL
