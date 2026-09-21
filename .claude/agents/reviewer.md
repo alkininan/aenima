@@ -21,8 +21,11 @@ Work in this order.
    reading somewhere else; read what it names. If the ticket file is missing, stop and say so:
    there is nothing to review against.
 
-2. **Run `git diff main...HEAD` and read every hunk.** Not the summary of the diff, the diff. A
-   change that appears in neither the ticket nor the diff you read is a change nobody reviewed.
+2. **Run `git diff origin/main...HEAD` and read every hunk.** Not the summary of the diff, the
+   diff. A change that appears in neither the ticket nor the diff you read is a change nobody
+   reviewed. `origin/main`, never the local `main`: a run's worktree never moves its `main`, so
+   that ref sits wherever the primary checkout was last left and its diff carries other tickets'
+   merged work.
 
 3. **Check the Criteria ↔ Tests mapping in both directions.** Every `Criteria` line has a `Tests`
    line naming it, and every test names the criterion it covers. An unmatched criterion is
@@ -34,7 +37,7 @@ Work in this order.
    with an empty cell, that test is unverified — say so.
 
 5. **Run this ticket's tests yourself, and only those.** The list is the test files the ticket's
-   Tests section names plus every test file the diff touches:
+   Tests and Addendum sections name plus every test file the diff touches:
 
        node scripts/run/review-scope.mjs docs/tickets/<id>.md
        pnpm vitest run <the files it lists>

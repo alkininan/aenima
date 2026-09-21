@@ -153,8 +153,9 @@ building.
 The run invokes the `reviewer` subagent (`.claude/agents/reviewer.md`) with the ticket file
 path and nothing else, so it reads the ticket and the diff cold rather than the author's
 summary. `review-scope.mjs` gives the reviewer its list — the test files the ticket's Tests
-section names plus every test file the diff touches — and the reviewer runs only those; the
-Stop gate owns the full suite. Findings are Must or Should; every Must is fixed and the
+section and any Addendum section name, by repo-relative path, plus every test file the diff
+against `origin/main` touches — and the reviewer runs only those; the Stop gate owns the full
+suite. Findings are Must or Should; every Must is fixed and the
 reviewer re-invoked, three passes at most. A Must still standing after the third becomes an
 open question, Shoulds are recorded in the report, and a finding outside the ticket's scope
 becomes a Backlog task of Type Fix under the same Epic. The reviewer writes its verdict to
@@ -197,7 +198,7 @@ The run writes `docs/reports/<id>.md` — ACs implemented each with its test, te
 each observed red first as a table of test, mutation and count, reviewer passes and findings
 with a table row for every pass, what changed since the ticket was cut, open questions — and
 `report-check.mjs` refuses it while any test lacks its mutation or its count, a test file in
-the diff is missing from the record, or a reviewer pass does not name a model of the
+the diff against `origin/main` is missing from the record, or a reviewer pass does not name a model of the
 configured chain, say `yes` or `no` under resumed, or carry `PASS` or `FINDINGS` as its verdict.
 Once it passes, the run mirrors it into the task body's Report section, writes
 the ticket's build-log entry as its own file under `docs/log/`, and runs `log-index.mjs`,

@@ -26,7 +26,7 @@ import { readFileSync } from "node:fs";
 
 import { emit, isMain } from "./cli.mjs";
 import { readChain } from "./review-model.mjs";
-import { touchedTests } from "./review-scope.mjs";
+import { BASE, touchedTests } from "./review-scope.mjs";
 
 /** The section of a report whose `## ` heading starts with `title`, up to the next heading. */
 function sectionOf(text, title) {
@@ -159,7 +159,10 @@ export function checkReport(text, { testFiles = [], chain = null } = {}) {
   return { ok: problems.length === 0, problems, rows: table?.body.length ?? 0 };
 }
 
-/** CLI: `node report-check.mjs docs/reports/<id>.md [base]`. Exit 1 on a refused report. */
+/**
+ * CLI: `node report-check.mjs docs/reports/<id>.md [base]`, the base `origin/main` unless given
+ * (review-scope.mjs's `BASE` says why). Exit 1 on a refused report.
+ */
 function main() {
   const [report, base] = process.argv.slice(2);
   if (!report) {
@@ -168,7 +171,7 @@ function main() {
   }
   const run = (args) => spawnSync("git", args, { encoding: "utf8" });
   const result = checkReport(readFileSync(report, "utf8"), {
-    testFiles: touchedTests(run, base ?? "main"),
+    testFiles: touchedTests(run, base ?? BASE),
     chain: readChain(),
   });
   emit(result);
