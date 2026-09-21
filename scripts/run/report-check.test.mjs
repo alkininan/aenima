@@ -1,6 +1,9 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { checkReport, reviewerSection, tableRows, testsWrittenSection } from "./report-check.mjs";
 
@@ -187,5 +190,58 @@ describe("report-check", () => {
         "no `verdict` column under Reviewer passes",
       ]);
     });
+  });
+});
+
+// T0.25 TC1 → AC1. T1.4's addendum round: local `main` at `c310b30`, `origin/main` at `ed0c5b8`,
+// and the check refused a correct report over ten test files that were T0.24's and T3.1's. A real
+// repository, because the defect is which ref git is asked about, not how the answer is read.
+describe("report-check with no base, in a worktree whose local main is behind origin/main", () => {
+  let dir;
+
+  const git = (...args) => {
+    const result = spawnSync("git", args, { cwd: dir, encoding: "utf8" });
+    if (result.status !== 0) throw new Error(`git ${args.join(" ")}: ${result.stderr}`);
+    return result.stdout.trim();
+  };
+  const commit = (name, text = "export {};\n") => {
+    mkdirSync(dirname(join(dir, name)), { recursive: true });
+    writeFileSync(join(dir, name), text);
+    git("add", name);
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "--quiet", "-m", name);
+    return git("rev-parse", "HEAD");
+  };
+  const repo = join(import.meta.dirname, "..", "..");
+
+  beforeAll(() => {
+    dir = mkdtempSync(join(tmpdir(), "aenima-report-"));
+    git("init", "--quiet", "--initial-branch=main");
+    // The chain the check reads is the checkout's own, so the fixture carries the real one.
+    for (const file of [".claude/agents/reviewer.md", ".claude/settings.json"]) {
+      commit(file, readFileSync(join(repo, file), "utf8"));
+    }
+    const stale = git("rev-parse", "HEAD");
+    // Another ticket's test, merged since the primary checkout last moved `main`.
+    git("update-ref", "refs/remotes/origin/main", commit("other.test.mjs"));
+    git("checkout", "--quiet", "-b", "t9-9");
+    commit("mine.test.mjs");
+    git("branch", "--force", "main", stale);
+  });
+
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+  it("accepts a report that records the branch's own tests and nobody else's", () => {
+    writeFileSync(
+      join(dir, "report.md"),
+      good
+        .replace("`scripts/hooks/guard.test.mjs` — 43 tests.", "`mine.test.mjs` — 43 tests.")
+        .replace("| Opus |", "| opus |"),
+    );
+    const cli = spawnSync("node", [join(import.meta.dirname, "report-check.mjs"), "report.md"], {
+      cwd: dir,
+      encoding: "utf8",
+    });
+    expect(JSON.parse(cli.stdout)).toEqual({ ok: true, problems: [], rows: 2 });
+    expect(cli.status).toBe(0);
   });
 });
