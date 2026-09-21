@@ -160,12 +160,12 @@ describe("getOpportunityByKey", () => {
   /**
    * PostgREST orders an embed only when asked. Unordered, the item list can
    * come back in a different order on two reads of the same page — which is
-   * what `OpportunityPageDetail.items` promising "creation order" would be
-   * lying about, and what a person watching a list reshuffle under them would
-   * see. The order is on the *embedded* table, so `referencedTable` is the
-   * half of this assertion that matters.
+   * what `OpportunityPageDetail.items` promising "oldest first, and stably"
+   * would be lying about, and what a person watching a list reshuffle under
+   * them would see. The order is on the *embedded* table, so `referencedTable`
+   * is the half of this assertion that matters.
    */
-  it("asks for the items in creation order, on the embed", async () => {
+  it("asks for the items oldest first and stably, on the embed", async () => {
     calls.single = pageRow("soc-3", [{ key: "soc-1", artifacts: [] }]);
 
     await getOpportunityByKey(WORKSPACE, "soc-3");
