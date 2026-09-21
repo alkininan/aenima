@@ -47,7 +47,10 @@ export const ITEM_HEADER: ItemHeaderData = {
   type: "feature",
   stage: "design",
   productName: "Sociera",
-  opportunityTitle: "People miss what changed while they were away",
+  // The header links this to `/o/soc-2`. `/dev` is public and `/o` is not, so
+  // an anonymous visitor following it lands at sign-in — the fixture surface
+  // exists to measure geometry, and the link is part of the geometry.
+  opportunity: { key: "soc-2", title: "People miss what changed while they were away" },
 };
 
 export const ITEM_ARTIFACTS: ArtifactView[] = [

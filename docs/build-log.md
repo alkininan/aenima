@@ -84,6 +84,7 @@ One file per ticket under `docs/log/`, oldest first. This list is written by `no
 - [T0.16 — Self-merge: a finished ticket merges itself](log/T0.16.md) · 2026-09-14
 - [T0.17 — Linear ordering](log/T0.17.md) · 2026-09-15
 - [T0.20 — Cap counts clarifying rounds](log/T0.20.md) · 2026-09-15
+- [T1.4 — the opportunity page, and the key that makes its URL sayable](log/T1.4.md) · 2026-09-16
 - [T2.10 — Surface no-longer-applicable closures](log/T2.10.md) · 2026-09-16
 - [T0.13 — Restrict Vercel's database role: the boundary reaches production](log/T0.13.md) · 2026-09-16
 - [T0.19 — Spec: the comment path](log/T0.19.md) · 2026-09-16
@@ -691,7 +692,18 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
    arbitrariness, felt first by developers because signing in before seeding leaves your own empty
    workspace older than the seed's.
 
-9. **Opportunities have no key column, so `/o/<key>` cannot be built.** `opportunity` carries `id`,
+9. **~~Opportunities have no key column, so `/o/<key>` cannot be built.~~ Closed by T1.4.**
+   `opportunity.key` is `item.key` one table over — a `key_prefix` counter assigned by
+   `app.assign_opportunity_key()` on insert (`drizzle/0016`), unique per workspace, and ignored when
+   a client supplies one. `/o/<key>` renders the problem and the items bet on it, and the item
+   header's opportunity line is a link. **One property of the mirror is worth knowing:** the two
+   counters are independent and the two unique constraints are on different tables, so `soc-3` can
+   name an item *and* an opportunity in the same product. `/i/` and `/o/` tell them apart; a person
+   saying "soc-3" does not. That is what mirroring asked for and it is what shipped — held by a test
+   in `opportunity-key.db.test.ts` so the day it is judged not worth it, something says what
+   changed. The original note follows.
+
+   **Opportunities have no key column, so `/o/<key>` cannot be built.** `opportunity` carries `id`,
    `workspace_id`, `product_id`, `title` and `summary` — nothing to put in a URL a person can say.
    **When the opportunity page ships, mirror `item.key`:** a `key_prefix` counter assigned by
    trigger, the same discipline as `artifact_version.version_no`. **Not a uuid route.**
@@ -1139,6 +1151,36 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
 
 39. **T0.7 — `git push origin +main` forces by refspec**, with neither `--force` nor `-f`. The
     ticket named the two flags. Settled by T0.8: `namesMain` strips the leading `+`.
+
+40. **A migration's own db test cannot be green in the run that writes it — T1.4 made that a skip,
+    and the pattern needs deciding once.** §5 step 6 splits a migration ticket in two: the run
+    writes the SQL and stops at Decision, and a later run in a checkout holding `.env.migrate`
+    applies it. Between those two runs the column exists in no database, so a db test written
+    against it fails — and the Stop gate runs the whole suite at every stop, in every worktree, so
+    one such test reddens *every* run in the repo until someone applies the migration. A suite that
+    says "you have not applied a migration" by breaking is one nobody can read.
+    `src/db/opportunity-key.db.test.ts` reads `information_schema` for the column and skips with a
+    loud stderr banner naming the file to apply — the discipline `rls.db.test.ts` already uses for
+    an absent `DATABASE_URL`, one cause over. It starts checking for real the moment the column
+    lands, and nothing in it is conditional on what the trigger *does*: the assertions are the real
+    ones or the file is silent.
+
+    **What is undecided is whether this is the house pattern or this ticket's exception.** The cost
+    is real: a test that skips itself cannot fail for the reason it exists, so a dropped column
+    reads as a skip rather than as a break. The alternatives are a suite project that is excluded
+    from the Stop gate, or a preflight step that fails the *run* rather than the *test* when a
+    migration in the tree is unapplied — the second says the true thing in the right place. **Decide
+    it at the next migration**, which is the first point where copying this or not is a choice
+    somebody makes.
+
+    T3.1 was that next migration, and copied the skip into `src/db/refinement.db.test.ts` without
+    deciding it; both skips stayed in place after their applies. So the pattern holds twice by
+    precedent and never by decision. The question stays open.
+
+    ~~Also from T1.4: `src/db/database.types.ts` carries one hand-written block, `opportunity.key`.~~
+    **Closed 2026-09-21** by the run that applied `drizzle/0016`: it regenerated the file against
+    the project and diffed it whole, and it came back identical. That is open question 5's rule,
+    which T2.4 vindicated for `item.key`, holding a third time.
 
 ## On the horizon
 

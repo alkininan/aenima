@@ -225,7 +225,7 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/i/[
                 type: item.type,
                 stage: item.stage,
                 productName: item.productName,
-                opportunityTitle: item.opportunityTitle,
+                opportunity: item.opportunity,
               }}
               t={t}
             />

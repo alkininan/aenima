@@ -555,7 +555,7 @@ describe("getItemByKey", () => {
     created_at: "2026-01-01T00:00:00+00:00",
     updated_at: "2026-01-02T00:00:00+00:00",
     product: { name: "Sociera", slug: "sociera" },
-    opportunity: { title: "People miss what changed while they were away" },
+    opportunity: { key: "soc-2", title: "People miss what changed while they were away" },
     artifact: artifacts.map((a) => ({
       kind: a.kind,
       artifact_version: a.versions.map((v) => ({
@@ -665,16 +665,21 @@ describe("getItemByKey", () => {
   });
 
   /**
-   * §2 lineage. The title is embedded rather than looked up separately — it is
-   * a to-one from the same row, so it costs no request.
+   * §2 lineage. Key and title are embedded rather than looked up separately —
+   * it is a to-one from the same row, so it costs no request. The key is what
+   * `ItemHeader` links to `/o/<key>` with (T1.4); before it the header could
+   * only render the title as plain text.
    */
-  it("carries the opportunity the item came out of", async () => {
+  it("carries the opportunity the item came out of, by key and title", async () => {
     calls.single = pageRow("soc-12");
 
     const item = await getItemByKey(WORKSPACE, "soc-12");
 
-    expect(calls.select[0]).toContain("opportunity(title)");
-    expect(item?.opportunityTitle).toBe("People miss what changed while they were away");
+    expect(calls.select[0]).toContain("opportunity(key, title)");
+    expect(item?.opportunity).toEqual({
+      key: "soc-2",
+      title: "People miss what changed while they were away",
+    });
   });
 
   /**
@@ -687,7 +692,7 @@ describe("getItemByKey", () => {
 
     const item = await getItemByKey(WORKSPACE, "soc-7");
 
-    expect(item?.opportunityTitle).toBeNull();
+    expect(item?.opportunity).toBeNull();
   });
 
   // The layer returns a stage; it never asks the database for one.

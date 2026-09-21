@@ -1,6 +1,9 @@
 import "server-only";
 
+import type { Database } from "@/db/database.types";
+import { toArtifacts } from "@/db/queries/item";
 import { createClient } from "@/lib/supabase/server";
+import { deriveStage, type Stage } from "@/lib/stage";
 
 /**
  * Opportunities in a product — §2's "problem or outcome … holds an evidence
@@ -11,6 +14,8 @@ import { createClient } from "@/lib/supabase/server";
  * asks every query to state the tenant it is reading, and a query that says so
  * is one a reviewer can check without tracing the schema.
  */
+
+type ItemType = Database["public"]["Enums"]["item_type"];
 
 export type OpportunitySummary = {
   id: string;
@@ -33,4 +38,102 @@ export async function listOpportunities(
 
   if (error) throw new Error(`Could not read opportunities: ${error.message}`);
   return data ?? [];
+}
+
+/** One item as the opportunity page lists it — enough to name it and place it. */
+export type OpportunityItem = {
+  key: string;
+  title: string;
+  type: ItemType;
+  /** Derived, never stored. See src/lib/stage.ts. */
+  stage: Stage;
+};
+
+export type OpportunityPageDetail = {
+  id: string;
+  key: string;
+  title: string;
+  summary: string | null;
+  productName: string;
+  /**
+   * Oldest first, and stably: `created_at` then `key`. Within one `created_at`
+   * the tie-break is the key's *text* order, so a batch written by a single
+   * statement would read `soc-10` before `soc-2`. That is an arbitrary order
+   * and a fixed one, which is what the page needs; it is not the order they
+   * were bet on.
+   */
+  items: OpportunityItem[];
+};
+
+/**
+ * The embedded tree the page reads.
+ *
+ * `artifact(kind, artifact_version(count))` is `ITEM_TREE`'s bargain, one table
+ * over: stage is derived in TypeScript, so listing items means knowing every
+ * item's artifacts, and asking for the *count* rather than the versions keeps a
+ * page of item names from carrying a page of artifact bodies. PostgREST
+ * resource embedding makes the whole thing one request with RLS applied to each
+ * embedded relation independently.
+ */
+const OPPORTUNITY_PAGE_TREE = `id, key, title, summary,
+   product(name),
+   item(key, title, type, artifact(kind, artifact_version(count)))`;
+
+/**
+ * One opportunity by the key people say out loud — `soc-3` — and the items that
+ * belong to it.
+ *
+ * **Returns null for a key that does not exist and for a key in a workspace the
+ * caller cannot see, and those are deliberately the same answer** — the
+ * reasoning is `getItemByKey`'s, verbatim: the filter names `workspace_id` and
+ * RLS narrows the same read again as the user, so a stranger's key produces no
+ * row exactly as nobody's key does. The caller renders a 404 for both, because
+ * telling them apart would answer "does this key exist somewhere?", which is
+ * not a question a stranger gets to ask.
+ *
+ * One request, however many items and artifacts come back.
+ */
+export async function getOpportunityByKey(
+  workspaceId: string,
+  key: string,
+): Promise<OpportunityPageDetail | null> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("opportunity")
+    .select(OPPORTUNITY_PAGE_TREE)
+    .eq("workspace_id", workspaceId)
+    .eq("key", key)
+    // PostgREST orders an embed only when asked, and an unordered embed is a
+    // list that can reshuffle itself between two reads of the same page.
+    //
+    // Two columns because one is not a total order: rows written by a single
+    // statement share `now()`, which is exactly why `drizzle/0016`'s own
+    // backfill tie-breaks on `(created_at, id)`. Today's seed writes items one
+    // at a time, so the tie is not reachable yet — the second column is what
+    // keeps the order *stable* the day something inserts a batch. Stable, not
+    // chronological: `key` sorts as text, so tied rows come back `soc-10`
+    // before `soc-2`. Nothing finer is available on the embed, and a list that
+    // cannot reshuffle is what the page was asking for.
+    .order("created_at", { ascending: true, referencedTable: "item" })
+    .order("key", { ascending: true, referencedTable: "item" })
+    .maybeSingle();
+
+  if (error) throw new Error(`Could not read opportunity: ${error.message}`);
+  if (!data) return null;
+
+  return {
+    id: data.id,
+    key: data.key,
+    title: data.title,
+    summary: data.summary,
+    productName: data.product?.name ?? "",
+    items: (data.item ?? []).map((item) => ({
+      key: item.key,
+      title: item.title,
+      type: item.type,
+      // `deriveStage` reads presence, which this satisfies structurally.
+      stage: deriveStage({ artifacts: toArtifacts(item.artifact) }),
+    })),
+  };
 }
