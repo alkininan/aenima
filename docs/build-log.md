@@ -1173,10 +1173,14 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
     it at the next migration**, which is the first point where copying this or not is a choice
     somebody makes.
 
-    Also from T1.4, and closed by the same apply: `src/db/database.types.ts` carries one hand-written
-    block, `opportunity.key`. The generator reads the live database and there was none to read.
-    **Regenerate and diff it in the run that applies `drizzle/0016`** — open question 5's rule, which
-    T2.4 vindicated for `item.key`.
+    T3.1 was that next migration, and copied the skip into `src/db/refinement.db.test.ts` without
+    deciding it; both skips stayed in place after their applies. So the pattern holds twice by
+    precedent and never by decision. The question stays open.
+
+    ~~Also from T1.4: `src/db/database.types.ts` carries one hand-written block, `opportunity.key`.~~
+    **Closed 2026-09-21** by the run that applied `drizzle/0016`: it regenerated the file against
+    the project and diffed it whole, and it came back identical. That is open question 5's rule,
+    which T2.4 vindicated for `item.key`, holding a third time.
 
 ## On the horizon
 

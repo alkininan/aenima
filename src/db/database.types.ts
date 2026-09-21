@@ -6,15 +6,12 @@
  * route is the Supabase MCP server's `generate_typescript_types` against the
  * project the migration was just applied to.
  *
- * T1.4 added `opportunity.key` (drizzle/0016) **by hand**, and this is the one
- * block below that the generator has not seen. It could not: the generator
- * reads the live database, and 0016 is applied by a human after the run that
- * writes it (docs/guidelines.md §5 step 6), so there was no applied schema to
- * read. The shape is `item.key`'s exactly — required on Row and Insert,
- * optional on Update, which is what a NOT NULL column with no default gets, and
- * which T2.4's regeneration confirmed for `item.key` itself. **Regenerate this
- * file in the run that applies 0016 and diff it**: a clean diff retires this
- * note, and a dirty one means the typed client has been lying about a column.
+ * T1.4 added `opportunity.key` (drizzle/0016) **by hand, before the migration
+ * was applied**, in `item.key`'s shape — required on Row and Insert, optional on
+ * Update, what a NOT NULL column with no default gets. **The run that applied
+ * 0016 regenerated the file against the project and diffed it whole: it came
+ * back identical**, the three `key` lines included, and `PostgrestVersion` is
+ * still `14.5`. Nothing else in the file moved.
  *
  * T3.1 added `refinement_round` and `refinement_outcome` (drizzle/0015) **by
  * hand, before the migration was applied**: the generator reads a live
