@@ -59,24 +59,32 @@ export async function readRounds(workspaceId: string, artifactId: string): Promi
 }
 
 /**
- * The newest scoring run's §4 conditions for an artifact, or null when it has
- * never been scored.
+ * One artifact version's §4 conditions, or null when nothing has scored that
+ * version.
  *
  * The checks in play for a section are the checks the applicability engine left
- * in the denominator, and the engine answers in the pass that scores. Newest
- * rather than "the run for this version": a section being refined is a version
- * nobody has scored yet, and the last answer is the best one there is.
+ * in the denominator, and the engine answers in the pass that scores. **The
+ * version's own run, never the artifact's newest** (T3.1's addendum, AA2):
+ * §5 caches results per artifact version, so applicability belongs to the
+ * version too, and a run against an older version is an answer about text that
+ * is no longer the one under refinement. A version nobody has scored has no
+ * answer at all rather than a neighbour's, and the caller falls back to the
+ * checks no condition governs.
+ *
+ * Newest still breaks the tie *within* the version: §5's cache key carries the
+ * pack, its version and the protocol version beside the artifact version, so
+ * one version can hold several runs, and the last one is the current reading.
  */
-export async function readLatestConditions(
+export async function readVersionConditions(
   workspaceId: string,
-  artifactId: string,
+  artifactVersionId: string,
 ): Promise<string[] | null> {
   const { sql } = sharedDbClient();
 
   const rows = await sql<{ conditions_met: string[] }[]>`
     select conditions_met
       from scoring_run
-     where workspace_id = ${workspaceId} and artifact_id = ${artifactId}
+     where workspace_id = ${workspaceId} and artifact_version_id = ${artifactVersionId}
      order by scored_at desc
      limit 1
   `;

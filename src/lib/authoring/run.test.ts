@@ -12,7 +12,10 @@ import { applicableChecks, featurePrdPack } from "@/packs";
 
 const db = vi.hoisted(() => ({
   artifact: null as Record<string, unknown> | null,
-  conditions: null as string[] | null,
+  /** Conditions per artifact version, as `scoring_run` holds them (AA2). */
+  conditions: {} as Record<string, string[]>,
+  /** Every version id a conditions read was asked for, in order. */
+  conditionsAsked: [] as string[],
   rounds: [] as unknown[],
   writes: [] as Record<string, unknown>[],
   writeError: null as Error | null,
@@ -29,7 +32,10 @@ vi.mock("@/db/queries/scoring", () => ({
 }));
 
 vi.mock("@/db/queries/refinement", () => ({
-  readLatestConditions: async () => db.conditions,
+  readVersionConditions: async (_workspaceId: string, versionId: string) => {
+    db.conditionsAsked.push(versionId);
+    return db.conditions[versionId] ?? null;
+  },
   readRounds: async () => {
     if (db.readError) throw db.readError;
     return db.rounds;
@@ -77,7 +83,8 @@ beforeEach(() => {
     versionNo: 1,
     content: { body: BODY },
   };
-  db.conditions = null;
+  db.conditions = {};
+  db.conditionsAsked = [];
   db.rounds = [];
   db.writes = [];
   db.writeError = null;
@@ -87,8 +94,8 @@ beforeEach(() => {
 });
 
 describe("refineArtifactSection", () => {
-  it("shows the critic the checks the newest scoring run left in play, and meters it as critique", async () => {
-    db.conditions = ["network-dependent-surface"];
+  it("shows the critic the checks the version's own scoring run left in play, and meters it as critique", async () => {
+    db.conditions = { v1: ["network-dependent-surface"] };
     ai.replies = [{ objections: [] }];
 
     const result = await refineArtifactSection(INPUT);
@@ -108,6 +115,22 @@ describe("refineArtifactSection", () => {
 
     await refineArtifactSection(INPUT);
 
+    expect(ai.calls[0]!.context).not.toContain("prd-16 (");
+    expect(ai.calls[0]!.context).toContain("prd-1 (");
+  });
+
+  // TA2. The addendum's ruling: §5 caches results per artifact version, so
+  // applicability belongs to the version too. A run against an older version is
+  // an answer about text that is no longer under refinement.
+  it("asks for the conditions of the version under refinement, and not for the artifact's newest run", async () => {
+    db.conditions = { v0: ["network-dependent-surface"] };
+    ai.replies = [{ objections: [] }];
+
+    await refineArtifactSection(INPUT);
+
+    expect(db.conditionsAsked).toEqual(["v1"]);
+    // v0's run said the conditioned check was in play; v1 has no run of its own,
+    // so the set is the unconditioned one and prd-16 stays out.
     expect(ai.calls[0]!.context).not.toContain("prd-16 (");
     expect(ai.calls[0]!.context).toContain("prd-1 (");
   });

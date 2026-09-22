@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { UsageActor } from "@/db/queries/ai-usage";
-import { readLatestConditions, readRounds, writeRound } from "@/db/queries/refinement";
+import { readRounds, readVersionConditions, writeRound } from "@/db/queries/refinement";
 import { readScorableArtifact } from "@/db/queries/scoring";
 import { runGeneration } from "@/lib/ai";
 import type { CallContext } from "@/lib/ai";
@@ -73,8 +73,9 @@ export type RefineArtifactResult =
  * surfaces.
  *
  * The checks in play are the ones §4's engine left in the denominator on the
- * artifact's newest scoring run; an artifact never scored has only the checks
- * no condition governs, since no condition is known to hold.
+ * scoring run for **the version under refinement** (AA2); a version nothing has
+ * scored has only the checks no condition governs, since no condition is known
+ * to hold of it.
  */
 export async function refineArtifactSection(
   input: RefineArtifactInput,
@@ -101,7 +102,7 @@ export async function refineArtifactSection(
     return { ok: false, reason: "not-refinable", detail: "artifact content has no markdown body" };
   }
 
-  const conditions = (await readLatestConditions(input.workspaceId, input.artifactId)) ?? [];
+  const conditions = (await readVersionConditions(input.workspaceId, artifact.versionId)) ?? [];
   const checkIds = applicableChecks(pack, conditions).map((check) => check.id);
 
   const ledger: Ledger = {
