@@ -743,9 +743,8 @@ Criteria means the same thing on a task and on a phase: what must be true to be 
 gives the phase and nothing else; the number is the lowest in that phase nobody holds, and holding
 it is a task on the board whatever its epic and whatever its status, or a branch or a file under
 `docs/` that still carries it. So a number outlives the task it was given to — `docs/log/T0.97.md`
-keeps T0.97 taken with no task of that name anywhere — and an epic owns no block of numbers:
-T0.40 and T0.96 are stepped over like any other. Counting within the epic is what answered T0.1,
-the scaffold ticket's, to E0.4's first task and T0.7, E0.2's Setup, to E0.1's next (T0.28).
+keeps T0.97 taken with no task of that name anywhere — and an epic owns no block of numbers
+(T0.28).
 
 ---
 

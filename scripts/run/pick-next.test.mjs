@@ -366,8 +366,33 @@ describe("readPick", () => {
 
   it("says so, and picks nothing, when the token is not in .env.local", async () => {
     const result = await readPick({ deps: { token: () => null, board } });
-    expect(result).toMatchObject({ token: false, pick: null, notices: [] });
+    expect(result).toMatchObject({ token: false, pick: null, notices: [], names: [] });
     expect(result.why).toContain("NOTION_TOKEN");
+  });
+
+  // T0.28 — next-id.mjs numbers across the phase, so it reads every task's Name whatever its
+  // epic and whatever its status. This read already holds them; a second one would cost a pass
+  // over the board to learn what is in hand.
+  it("prints every task's name, blocked and Done ones included", async () => {
+    const rows = [
+      row("T3.4 A", { id: "a", Blockers: ["b"] }),
+      row("T3.1 B", { id: "b", Status: "Backlog" }),
+      row("T0.2 C", { Status: "Done" }),
+      row("Unnumbered", { Status: "Backlog" }),
+    ];
+    const api = { tasks: async (ds) => (ds === "epics" ? EPICS : rows), comments: async () => [] };
+    const result = await readPick({ deps: { token: () => "t", board, client: api } });
+    expect(result.names).toEqual(["T3.4 A", "T3.1 B", "T0.2 C", "Unnumbered"]);
+  });
+
+  it("prints them when asked among a few, which reads the same board", async () => {
+    const rows = [row("T0.12 a", { Status: "In progress" }), row("T0.14 b")];
+    const api = { tasks: async (ds) => (ds === "epics" ? EPICS : rows), comments: async () => [] };
+    const result = await readPick({
+      among: ["T0.12"],
+      deps: { token: () => "t", board, client: api },
+    });
+    expect(result.names).toEqual(["T0.12 a", "T0.14 b"]);
   });
 
   // Review pass 2, Should 2: a preflight that recovers several stale runs re-claims one and

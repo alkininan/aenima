@@ -73,9 +73,12 @@ export function docsIds(paths) {
 /**
  * Every ID this repository still carries — its branches and its `docs/` tree.
  *
- * Injected `run` and `cwd` keep a test off this checkout. A git that cannot answer costs the
- * branches and not the documents: fewer taken numbers is a narrower answer, never a wrong
- * one, and a missing `docs/` tree is a checkout without one rather than a failure.
+ * Returns `{ ids, unread }`. `unread` names each of the two it could not read, and it is
+ * never silent: a narrowed set answers a number something still carries, which is the repeat
+ * this script exists to stop. A checkout that has no `docs/` tree at all is not an unread
+ * one — there is nothing there to miss.
+ *
+ * Injected `run` and `cwd` keep a test off this checkout.
  */
 export function repoTaken({ cwd = process.cwd(), run } = {}) {
   const g =
@@ -83,17 +86,21 @@ export function repoTaken({ cwd = process.cwd(), run } = {}) {
     ((args) =>
       spawnSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }));
 
+  const unread = [];
+
   const branches = g(["branch", "-a", "--format=%(refname:short)"]);
-  const fromBranches = branches.status === 0 ? branchIds(branches.stdout) : [];
+  const ok = branches.status === 0;
+  if (!ok) unread.push("branches");
+  const fromBranches = ok ? branchIds(branches.stdout) : [];
 
   let entries = [];
   try {
     entries = readdirSync(join(cwd, DOCS_DIR), { recursive: true });
-  } catch {
-    entries = [];
+  } catch (error) {
+    if (error?.code !== "ENOENT") unread.push("docs");
   }
 
-  return [...new Set([...fromBranches, ...docsIds(entries)])];
+  return { ids: [...new Set([...fromBranches, ...docsIds(entries)])], unread };
 }
 
 /**
@@ -122,13 +129,19 @@ export function nextId(epicName, taskNames = [], takenIds = []) {
   return { id: `T${phase}.${n}`, phase, n };
 }
 
-/** CLI: `{ "epic": "E3.1 …", "tasks": ["T3.1 …", …] }` on stdin, or a --file path. */
+/**
+ * CLI: `{ "epic": "E3.1 …", "tasks": ["T3.1 …", …] }` on stdin, or a --file path. `tasks` is
+ * every task name on the board — `pick-next.mjs` prints them as `names`.
+ *
+ * Prints the answer with `unread`, so a run can see when the repository was read short.
+ */
 async function main() {
   const fileFlag = process.argv.indexOf("--file");
   const raw =
     fileFlag === -1 ? await readStdin() : readFileSync(process.argv[fileFlag + 1], "utf8");
   const input = JSON.parse(raw);
-  emit(nextId(input.epic, input.tasks ?? [], repoTaken()));
+  const { ids, unread } = repoTaken();
+  emit({ ...nextId(input.epic, input.tasks ?? [], ids), unread });
 }
 
 if (isMain(import.meta.url)) await main();

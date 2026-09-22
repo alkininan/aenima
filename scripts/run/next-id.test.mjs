@@ -1,4 +1,5 @@
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -54,16 +55,16 @@ describe("nextId", () => {
     expect(nextId("E3.1 X", ["T4.1 other phase", "T4.2 other phase"]).id).toBe("T3.1");
   });
 
-  // TC1 → AC1
+  // The Build's "the epic still gives the phase": no phase, no number to invent.
   it("refuses to invent a phase when the epic name carries none", () => {
     expect(nextId("Authoring loop", ["T3.1 a"]).error).toContain("no phase number");
     expect(nextId(null, []).error).toContain("no phase number");
   });
 
-  // TC1 → AC1
+  // The parsers under it. Reading T0.98 as 9 or as 8 would take a number that is free.
   it("reads a two-digit number as one number, not as its first digit", () => {
-    expect(nextId("E0.1 Foundation", ["T0.98 Smoke A"]).id).toBe("T0.1");
-    expect(nextId("E0.1 Foundation", ["T0.1 a", "T0.98 Smoke A"]).id).toBe("T0.2");
+    const upToEight = Array.from({ length: 8 }, (_, i) => `T0.${i + 1} taken`);
+    expect(nextId("E0.1 Foundation", [...upToEight, "T0.98 Smoke A"]).id).toBe("T0.9");
   });
 });
 
@@ -127,22 +128,77 @@ describe("repoTaken", () => {
     writeFileSync(join(cwd, "docs", "log", "deploy.md"), "# deploy\n");
 
     const run = () => ({ status: 0, stdout: "origin/t1-4\nmain\n" });
-    expect(repoTaken({ cwd, run }).sort()).toEqual(["T0.28", "T1.4"]);
+    const taken = repoTaken({ cwd, run });
+    expect(taken.ids.sort()).toEqual(["T0.28", "T1.4"]);
+    expect(taken.unread).toEqual([]);
   });
 
-  it("takes only the docs tree when git cannot answer", () => {
+  it("says so when git could not answer, rather than answering short in silence", () => {
     const cwd = mkdtempSync(join(tmpdir(), "aenima-next-id-"));
     mkdirSync(join(cwd, "docs", "reports"), { recursive: true });
     writeFileSync(join(cwd, "docs", "reports", "T2.9.md"), "# T2.9\n");
 
     const run = () => ({ status: 128, stdout: "" });
-    expect(repoTaken({ cwd, run })).toEqual(["T2.9"]);
+    expect(repoTaken({ cwd, run })).toEqual({ ids: ["T2.9"], unread: ["branches"] });
   });
 
-  it("takes nothing where there is no docs tree at all", () => {
+  it("takes nothing, and reports nothing unread, where there is no docs tree at all", () => {
     const cwd = mkdtempSync(join(tmpdir(), "aenima-next-id-"));
     const run = () => ({ status: 0, stdout: "main\n" });
-    expect(repoTaken({ cwd, run })).toEqual([]);
+    expect(repoTaken({ cwd, run })).toEqual({ ids: [], unread: [] });
+  });
+
+  it("says so when the docs tree is there and cannot be read", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "aenima-next-id-"));
+    // A file where the tree should be: readdir refuses with ENOTDIR, not ENOENT.
+    writeFileSync(join(cwd, "docs"), "not a directory\n");
+    const run = () => ({ status: 0, stdout: "origin/t1-4\n" });
+    expect(repoTaken({ cwd, run })).toEqual({ ids: ["T1.4"], unread: ["docs"] });
+  });
+});
+
+// TC1 → AC1 · TC3 → AC3. The CLI is the composition: a run gets the board's names and the
+// repository's own numbers in one answer, or neither rule is applied where it is used.
+describe("next-id.mjs as the command", () => {
+  const script = join(import.meta.dirname, "next-id.mjs");
+  const cli = (input, cwd) =>
+    JSON.parse(
+      spawnSync("node", [script], { cwd, input: JSON.stringify(input), encoding: "utf8" }).stdout,
+    );
+
+  /** A checkout with one commit, so its branch is born and `git branch` lists it. */
+  const checkout = (branch) => {
+    const cwd = mkdtempSync(join(tmpdir(), "aenima-next-id-"));
+    const git = (...args) =>
+      spawnSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", ...args], {
+        cwd,
+        encoding: "utf8",
+      });
+    git("init", "-q", "-b", branch);
+    writeFileSync(join(cwd, "a.txt"), "a\n");
+    git("add", "-A");
+    git("commit", "-q", "-m", "a");
+    return cwd;
+  };
+
+  it("counts what the checkout carries, not only the names it is handed", () => {
+    const cwd = checkout("t0-2");
+    mkdirSync(join(cwd, "docs", "log"), { recursive: true });
+    writeFileSync(join(cwd, "docs", "log", "T0.3.md"), "# T0.3\n");
+
+    // Handed T0.1 alone: the branch holds 2 and the docs file holds 3, so the answer is 4.
+    expect(cli({ epic: "E0.2 Pipeline", tasks: ["T0.1 Scaffold"] }, cwd)).toEqual({
+      id: "T0.4",
+      phase: 0,
+      n: 4,
+      unread: [],
+    });
+  });
+
+  it("carries the epic's refusal through, with nothing unread", () => {
+    const out = cli({ epic: "Pipeline", tasks: [] }, checkout("main"));
+    expect(out.error).toContain("no phase number");
+    expect(out.unread).toEqual([]);
   });
 });
 
