@@ -53,6 +53,7 @@
 
 import { execFileSync } from "node:child_process";
 import { readFileSync, statSync } from "node:fs";
+import { homedir } from "node:os";
 import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -388,8 +389,10 @@ function lex(text) {
     }
     if ("|&;()".includes(char)) {
       flush();
+      // A lone `|` hands the command before it to the one after as stdin (T0.18).
+      const pipe = char === "|" && text[i + 1] !== "|";
       if ((char === "|" || char === "&") && text[i + 1] === char) i += 1;
-      tokens.push({ kind: "sep" });
+      tokens.push({ kind: "sep", pipe });
       continue;
     }
     word += char;
@@ -399,6 +402,12 @@ function lex(text) {
   if (pending.length > 0) readHeredocs(text.length); // Announced, never opened: no body.
   return tokens;
 }
+
+/**
+ * The command a pipe feeds each command from, kept beside the parse rather than in it so the
+ * shape `parse()` returns stays `{ argv, redirects, heredocs }` (T0.18).
+ */
+const UPSTREAM = new WeakMap();
 
 /**
  * The simple commands a Bash string runs, each as `{ argv, redirects, heredocs }`.
@@ -412,10 +421,14 @@ export function parse(command) {
   const fresh = () => ({ argv: [], redirects: [], heredocs: [] });
   let current = fresh();
   let redirect = null;
+  let closed = null;
 
   const close = () => {
     if (current.argv.length || current.redirects.length || current.heredocs.length) {
       commands.push(current);
+      closed = current;
+    } else {
+      closed = null;
     }
     current = fresh();
     redirect = null;
@@ -424,6 +437,7 @@ export function parse(command) {
   for (const token of lex(String(command ?? ""))) {
     if (token.kind === "sep") {
       close();
+      if (token.pipe && closed !== null) UPSTREAM.set(current, closed);
     } else if (token.kind === "redir") {
       redirect = { op: token.op, target: null };
       current.redirects.push(redirect);
@@ -718,28 +732,67 @@ function interpreter(name) {
   return null;
 }
 
-/** Code that names the board's API or its token… */
-const NAMES_NOTION = /api\.notion\.com|NOTION_TOKEN|\breadToken\b|notion\.mjs/;
+/** Code that names the board's API or its token, in any case… */
+const NAMES_NOTION = /api\.notion\.com|NOTION_TOKEN|\breadToken\b|notion\.mjs/i;
 
 /**
- * …and a write: an HTTP method that is not a read, a client library's write call, or the
- * board client's own writer. Reading the board from a script stays allowed — a run looks at
- * the board that way — and so does every script under scripts/run, none of which writes it
- * from a command line (`runs.mjs` posts its row from the SessionEnd hook, not through Bash).
+ * …and a write: an HTTP method that is not a read — bare and upper-case, or quoted in any case
+ * as `fetch` takes it — a client library's write call, or the board client's own writer.
+ * Reading the board from a script stays allowed, and so does every script under scripts/run as
+ * main carries it (`runs.mjs` posts its row from the SessionEnd hook, not through Bash).
  */
-const NAMES_WRITE = /\b(?:POST|PATCH|PUT|DELETE)\b|\.(?:post|patch|put)\s*\(|\bcreatePage\b/;
+const NAMES_WRITE = [
+  /\b(?:POST|PATCH|PUT|DELETE)\b/,
+  /(["'`])(?:post|patch|put|delete)\1/i,
+  /\.(?:post|patch|put)\s*\(/,
+  /\bcreatePage\b/,
+];
 
 /** True when a piece of code would write the board over the API. */
-const writesNotion = (code) => NAMES_NOTION.test(code) && NAMES_WRITE.test(code);
+const writesNotion = (code) =>
+  NAMES_NOTION.test(code) && NAMES_WRITE.some((pattern) => pattern.test(code));
+
+/**
+ * A Notion API URL a POST only reads: a search, or a data source's or database's query
+ * (review pass 1, Should 3). Any other POST to the API writes.
+ */
+const NOTION_READ_POST =
+  /api\.notion\.com\/v1\/(?:search|(?:data_sources|databases)\/[^/?#\s]+\/query)\/?(?:[?#]|$)/i;
 
 /** What here-strings put on a command's stdin. */
 const hereStrings = (cmd) =>
   cmd.redirects.filter((r) => r.op === "<<<" && typeof r.target === "string").map((r) => r.target);
 
 /**
+ * Everything a simple command reads on stdin that the guard can see: a heredoc, a here-string,
+ * the file a `<` names, and what the command before a pipe prints when that is `cat` of files
+ * or an `echo` or `printf` of words (review pass 1, Must 2).
+ */
+function stdinOf(cmd, readScript) {
+  const texts = [...cmd.heredocs, ...hereStrings(cmd)];
+  const read = (path) => {
+    const text = readScript(path);
+    if (typeof text === "string") texts.push(text);
+  };
+  for (const { op, target: file } of cmd.redirects) {
+    if (op === "<" && typeof file === "string") read(file);
+  }
+  const from = UPSTREAM.get(cmd);
+  if (from !== undefined) {
+    const { exe, args } = program(from.argv);
+    if (exe === "cat")
+      operands(args)
+        .filter((file) => file !== "-")
+        .forEach(read);
+    else if (exe === "echo" || exe === "printf") texts.push(args.join(" "));
+  }
+  return texts;
+}
+
+/**
  * The code a simple command hands an interpreter: the inline string, or the script file it
- * names, or — with neither — what a heredoc or a here-string puts on its stdin. Empty when
- * it runs no interpreter. `python -m` runs a module, which is nobody's file to read here.
+ * names, or — with neither, or with `-` — what it reads on stdin. Empty when it runs no
+ * interpreter. `python -m` runs a module, which is nobody's file to read here.
  */
 function codeRun(cmd, readScript) {
   const { name, rest } = target(cmd.argv);
@@ -772,24 +825,50 @@ function codeRun(cmd, readScript) {
     const text = readScript(script);
     return typeof text === "string" ? [text] : [];
   }
-  return [...cmd.heredocs, ...hereStrings(cmd)];
+  return stdinOf(cmd, readScript);
 }
 
 /**
+ * The word a simple command runs, as typed — `./ready.sh`, not `ready.sh` — past the
+ * assignments and wrappers `program()` steps over.
+ */
+function commandWord(cmd) {
+  const { args } = program(cmd.argv);
+  return cmd.argv[cmd.argv.length - args.length - 1] ?? null;
+}
+
+/** A file's text that is a script and not a binary: no NUL byte in it. */
+const isText = (text) => typeof text === "string" && !text.includes(String.fromCharCode(0));
+
+/**
  * The command lines a simple command runs as a shell script: the file `bash x.sh`, `source
- * x.sh` or `. x.sh` names, or what a heredoc or here-string feeds a shell. `sh -c "…"` is
- * already read by `parse()`, so it is not read twice here.
+ * x.sh` or `. x.sh` names, or what a shell reads on stdin. `sh -c "…"` is already read by
+ * `parse()`, so it is not read twice here.
  */
 function shellRun(cmd, readScript) {
   const { name, rest } = target(cmd.argv);
   const read = (path) => {
     const text = typeof path === "string" ? readScript(path) : null;
-    return typeof text === "string" ? [text] : [];
+    return isText(text) ? [text] : [];
   };
   if (name === "source" || name === ".") return read(rest[0]);
   if (!SHELLS.has(name) || rest.includes("-c")) return [];
   const script = rest.find((token) => !token.startsWith("-"));
-  return script === undefined ? [...cmd.heredocs, ...hereStrings(cmd)] : read(script);
+  return script === undefined ? stdinOf(cmd, readScript) : read(script);
+}
+
+/**
+ * The file a command runs by its own path — `./ready.sh`, `/tmp/post.mjs` — which is whatever
+ * its first line says it is: judged as code and as a command line both (review pass 1, Must 2).
+ * A path to an interpreter, a shell or an HTTP client is that program, read by the rules above.
+ */
+function pathRun(cmd, readScript) {
+  const word = commandWord(cmd);
+  if (typeof word !== "string" || !word.includes("/")) return [];
+  const name = basename(word);
+  if (interpreter(name) !== null || SHELLS.has(name) || HTTP_CLIENTS.has(name)) return [];
+  const text = readScript(word);
+  return isText(text) ? [text] : [];
 }
 
 /** How deep a script that runs a script is followed. */
@@ -798,23 +877,40 @@ const MAX_SCRIPT_DEPTH = 3;
 /**
  * True when a simple command writes to the Notion API: an HTTP client aimed at its host with
  * a method that is not a read, an interpreter handed code that names the API or the token and
- * a write, or a shell script whose own commands do either. A read of the board goes through.
+ * a write, a file run by its own path that does either, or a shell script whose own commands
+ * do. A read of the board goes through.
  */
 function writesTheBoardApi(cmd, readScript, depth = 0) {
   const { name, rest } = target(cmd.argv);
   const method = HTTP_CLIENTS.get(name);
-  if (
-    method &&
-    rest.some((token) => token.includes(NOTION_API)) &&
-    !READ_METHODS.has(method(rest))
-  ) {
-    return true;
+  const urls = rest.filter((token) => token.toLowerCase().includes(NOTION_API));
+  if (method && urls.length > 0) {
+    const sent = method(rest);
+    const reads =
+      READ_METHODS.has(sent) ||
+      (sent === "POST" && urls.every((url) => NOTION_READ_POST.test(url)));
+    if (!reads) return true;
   }
   if (codeRun(cmd, readScript).some(writesNotion)) return true;
+  const byPath = pathRun(cmd, readScript);
+  if (byPath.some(writesNotion)) return true;
   if (depth >= MAX_SCRIPT_DEPTH) return false;
-  return shellRun(cmd, readScript).some((text) =>
+  return [...shellRun(cmd, readScript), ...byPath].some((text) =>
     parse(text).some((inner) => writesTheBoardApi(inner, readScript, depth + 1)),
   );
+}
+
+/**
+ * The directory a `cd` moves to from `dir`: its operand resolved against `dir`, the home
+ * directory for none or `~`. A `cd -` or an operand with an expansion in it leaves the guard
+ * where it was — it cannot know.
+ */
+function cdFrom(dir, args) {
+  const to = operands(args)[0];
+  if (to === undefined || to === "~") return homedir();
+  if (to === "-" || to.includes("$")) return dir;
+  if (to.startsWith("~/")) return resolve(homedir(), to.slice(2));
+  return resolve(dir, to);
 }
 
 /** The most of a script file the guard reads; a larger file is not read. */
@@ -1259,8 +1355,13 @@ export function decide(input, deps = {}) {
   const command = input?.tool_input?.command;
   if (typeof command !== "string" || command.trim() === "") return null;
 
+  // Where a script named on the line is read from: the hook's cwd, moved by each `cd` the line
+  // makes before it (review pass 1, Must 2).
+  let here = input?.cwd ?? process.cwd();
+
   for (const cmd of parse(command)) {
     const { name, rest } = target(cmd.argv);
+    if (name === "cd") here = cdFrom(here, rest);
 
     // (a) push rewrites the RLS policies out of existence.
     if (invocation(cmd.argv, "db:push") !== null || drizzleKit(cmd.argv, "push")) {
@@ -1358,7 +1459,7 @@ export function decide(input, deps = {}) {
     // a write, and a shell script whose own commands do either. Reads go through. The guard
     // reads the file a command runs, not the files that file imports; guidelines §5 says what
     // stands behind that.
-    if (writesTheBoardApi(cmd, unjudged)) {
+    if (writesTheBoardApi(cmd, (path) => unjudged(resolve(here, path)))) {
       return "Writing to the Notion API from the command line is refused — the board's token writes as you, so a comment it posts reads on the thread as your merge, apply or ready, and a status it sets never passes the guard at the connector. Write the board through the connector, which the guard reads. docs/guidelines.md §4, §5.";
     }
   }

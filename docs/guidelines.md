@@ -357,8 +357,9 @@ prefix — an unprefixed comment would read on the thread as your voice. Nor ove
 integration's bot is owned by your user, so a comment it posts comes back authored by you, with
 your name, and nothing on the comment tells it from yours; the guard refuses a write to the
 Notion API from a command line — curl or wget aimed at it, code handed to node or python that
-names the API or the token and a write, a shell script whose commands do either — and the
-scripts under `scripts/run` only read over it (T0.18). Past the prefix, every
+names the API or the token and a write, a file run by its own path, a shell script whose commands
+do either — and the scripts under `scripts/run` write nothing over it from one: the one that
+writes, `runs.mjs`, posts its Runs row from the SessionEnd hook (T0.18). Past the prefix, every
 comment the pipeline posts carries its kind in its own words, and before it posts the guard reads
 the page's thread for the two limits above — a third clarifying round on one question, a second
 comment of a kind in the claim on that task — with the same `mayPost` in
@@ -540,7 +541,8 @@ in T0.10's report. `AENIMA_RUN_BASE` in `.claude/settings.local.json` must be un
 schedule: it is a fixture's override, and a scheduled run reads that file too.
 
 **Hooks run the main copy.** The guard stands at Bash, at Edit and Write, and since T0.17 at the
-board connector's three writes — a page update, a page created, a comment — matched by tool name
+board connector's three writes — a page update, a page created, a comment — and since T0.18 at its
+other three that reach the board — a page duplicated, pages moved, a data source changed — matched by tool name
 whatever the connector's server is called. The guard and gate commands in `.claude/settings.json`
 do not run the checkout's `scripts/hooks/*.mjs`: each extracts `scripts/` from `origin/main` into a
 temporary directory (`git archive`) and runs the hook from there, so a run that edits its own
@@ -615,11 +617,15 @@ nothing on a task until the run has answered it: a resolved `merge` is a merge n
 The comments the pipeline posts still go through the connector, which posts as you; the prefix
 is what tells the two voices apart on a thread, as §4 says. The token posts as you too — its bot's
 owner is your user — and so it writes nothing from a command line: the guard's rule (i) refuses a
-write to the API from curl, wget, node, python or a shell script, and reads a script's own file
-but not what that file imports; a script `origin/main` carries, byte for byte, is the pipeline's
-and is not read. `runs.mjs` posts its row from the SessionEnd hook, where no guard stands. What
-would make the token unable to write at all is the integration's capabilities in Notion, which are
-yours to set.
+write to the API from curl or wget — a POST that only queries or searches reads, and goes through —
+and from code handed to node or python on the line, on stdin through a heredoc, a `<` or a pipe
+from `cat` or `echo`, or in the file it runs, resolved past any `cd` before it; from a file run by
+its own path; and from a shell script. It reads the file a command runs, and a script
+`origin/main` carries, byte for byte, is the pipeline's and is not read. It does not read a
+package.json script, a test file, what a script imports, or a URL held in a shell variable — filed
+at Backlog as *Guard the token's remaining routes*. `runs.mjs` posts its row from the SessionEnd
+hook, where no guard stands. What would make the token unable to write at all is the
+integration's capabilities in Notion, which are yours to set.
 
 **The capability boundary.** Two database credentials in two files, and a run is handed only one.
 `.env.local`'s `DATABASE_URL` is `aenima_pipeline`, a member of `service_role` that starts every

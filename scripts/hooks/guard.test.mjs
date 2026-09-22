@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -398,9 +398,10 @@ describe("T0.17 — rule (h) the board's connector", () => {
 describe("T0.18 — rule (i) the board's token, and rule (h) the connector's other writes", () => {
   const SERVER = "mcp__a6bc5cd2-b1e4-484a-b22d-e3708b2a94f4__";
   const call = (tool, tool_input) => ({ tool_name: `${SERVER}${tool}`, tool_input, cwd: "/repo" });
+  // Every script is judged on its text: none is main's own unless a test says so (pass 1, Should 5).
   const run = (command, readScript = () => null) => [
     { tool_name: "Bash", tool_input: { command }, cwd: "/repo" },
-    { currentBranch: () => "t0-18", readScript },
+    { currentBranch: () => "t0-18", readScript, mainScript: () => null },
   ];
   const TOKEN = "the board's token writes as you";
 
@@ -487,6 +488,97 @@ await client(readToken()).createPage("193b7d6b", { Status: { select: { name: "Re
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  // Review pass 1, Must 2: the shapes a run types without trying, each allowed at 6edffe2.
+  const POST = `await fetch("https://api.notion.com/v1/comments", { method: "POST" });\n`;
+  const byName = (files) => (path) =>
+    Object.entries(files).find(([name]) => String(path).endsWith(name))?.[1] ?? null;
+
+  it("reads a script run by its own path as whatever its first line says it is", () => {
+    const shell = "#!/bin/sh\ncurl -X PATCH https://api.notion.com/v1/pages/p -d @s.json\n";
+    expect(decide(...run("./ready.sh", byName({ "ready.sh": shell })))).toContain(TOKEN);
+    const node = `#!/usr/bin/env node\n${POST}`;
+    expect(decide(...run("/tmp/scratch/post.mjs --now", byName({ "post.mjs": node })))).toContain(
+      TOKEN,
+    );
+    expect(
+      decide(...run("./check.sh", byName({ "check.sh": "#!/bin/sh\npnpm lint\n" }))),
+    ).toBeNull();
+  });
+
+  it("resolves a script against the directory a cd before it moved to", () => {
+    const dir = mkdtempSync(join(tmpdir(), "aenima-guard-cd-"));
+    try {
+      mkdirSync(join(dir, "sub"));
+      writeFileSync(join(dir, "sub", "post.mjs"), POST);
+      writeFileSync(
+        join(dir, "sub", "read.mjs"),
+        'await fetch("https://api.notion.com/v1/users/me");\n',
+      );
+      const at = (command) => [
+        { tool_name: "Bash", tool_input: { command }, cwd: dir },
+        { currentBranch: () => "t0-18", mainScript: () => null },
+      ];
+      expect(decide(...at("cd sub && node post.mjs"))).toContain(TOKEN);
+      expect(decide(...at("cd sub; node ./post.mjs"))).toContain(TOKEN);
+      expect(decide(...at(`cd ${join(dir, "sub")} && node post.mjs`))).toContain(TOKEN);
+      expect(decide(...at("cd sub && node read.mjs"))).toBeNull();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("reads the code an interpreter takes on stdin, from a file or down a pipe", () => {
+    const files = byName({ "post.mjs": POST, "comments.mjs": "console.log(process.argv);\n" });
+    for (const command of [
+      "node - < post.mjs",
+      "node < post.mjs",
+      "cat post.mjs | node",
+      "cat post.mjs | node --input-type=module",
+      "cat post.mjs | node -",
+      `echo 'await fetch("https://api.notion.com/v1/comments", { method: "POST" })' | node --input-type=module`,
+      "python3 - < post.mjs",
+    ]) {
+      expect(decide(...run(command, files)), command).toContain(TOKEN);
+    }
+    // A script named on the line takes stdin as data, and nothing that is no interpreter runs it.
+    expect(decide(...run("cat post.mjs | node comments.mjs", files))).toBeNull();
+    expect(decide(...run("grep fetch < post.mjs", files))).toBeNull();
+    expect(decide(...run("cat post.mjs | wc -l", files))).toBeNull();
+  });
+
+  it("reads the host and the method whatever their case", () => {
+    expect(decide(...run("curl -X post https://API.NOTION.COM/v1/comments -d @c.json"))).toContain(
+      TOKEN,
+    );
+    expect(
+      decide(...run(`node -e "fetch('https://Api.Notion.com/v1/comments', { method: 'post' })"`)),
+    ).toContain(TOKEN);
+    expect(
+      decide(
+        ...run("node post.mjs", () => `await fetch(API, { method: "patch" }); // notion.mjs\n`),
+      ),
+    ).toContain(TOKEN);
+  });
+
+  // Review pass 1, Should 3: a query and a search are POSTs that read.
+  it("lets a POST that only reads through — a data source's query, a search", () => {
+    for (const command of [
+      `curl -X POST https://api.notion.com/v1/data_sources/193b7d6b/query -d '{}'`,
+      `curl https://api.notion.com/v1/search -d '{"query":"T0.18"}'`,
+      `curl --json '{}' "https://api.notion.com/v1/databases/4b70787d/query?filter_properties=a"`,
+    ]) {
+      expect(decide(...run(command)), command).toBeNull();
+    }
+    expect(
+      decide(...run("curl -X PATCH https://api.notion.com/v1/data_sources/193b7d6b/query")),
+    ).toContain(TOKEN);
+    expect(
+      decide(
+        ...run("curl -X POST https://api.notion.com/v1/search https://api.notion.com/v1/comments"),
+      ),
+    ).toContain(TOKEN);
   });
 
   it("allows the neighbours: reads of the API, the run's own scripts, other hosts, and text that mentions it", () => {
