@@ -80,6 +80,10 @@ export const PROBE_DEPS = {
   revertOfTip: () => false,
   prefix: () => "⟡ ",
   posting: () => ({ ok: false, kind: "clarifying", why: "the corpus grants nothing" }),
+  // No corpus entry reads the disk: an entry that runs a script hands the guard its text,
+  // and no script is main's own.
+  readScript: () => null,
+  mainScript: () => null,
 };
 
 const bash = (command) => ({ tool_name: "Bash", tool_input: { command } });
@@ -144,6 +148,53 @@ export const GUARD_CORPUS = [
     name: "post a comment the thread holds back",
     rule: "h",
     input: connector("create-comment", { page_id: "p", markdown: "⟡ Thanks, I read that" }),
+  },
+  { name: "duplicate a page", rule: "h", input: connector("duplicate-page", { page_id: "p" }) },
+  {
+    name: "move pages into a database",
+    rule: "h",
+    input: connector("move-pages", {
+      page_or_database_ids: ["p"],
+      new_parent: { type: "data_source_id", data_source_id: "ds" },
+    }),
+  },
+  {
+    name: "change a data source",
+    rule: "h",
+    input: connector("update-data-source", {
+      data_source_id: "ds",
+      statements: `ALTER COLUMN "Status" SET SELECT('Ready':green)`,
+    }),
+  },
+  {
+    name: "curl a comment to the Notion API",
+    rule: "i",
+    input: bash("curl -X POST https://api.notion.com/v1/comments -d @c.json"),
+  },
+  {
+    name: "curl a status write to the Notion API",
+    rule: "i",
+    input: bash("curl -X PATCH https://api.notion.com/v1/pages/p -d @s.json"),
+  },
+  {
+    name: "node -e a comment to the Notion API",
+    rule: "i",
+    input: bash(`node -e "fetch('https://api.notion.com/v1/comments', { method: 'POST' })"`),
+  },
+  {
+    name: "run a script that writes the Notion API",
+    rule: "i",
+    input: bash("node post.mjs"),
+    deps: {
+      readScript: () =>
+        'import { readToken } from "./scripts/run/notion.mjs";\nawait fetch("https://api.notion.com/v1/pages/p", { method: "PATCH" });\n',
+    },
+  },
+  {
+    name: "run a shell script that writes the Notion API",
+    rule: "i",
+    input: bash("bash ready.sh"),
+    deps: { readScript: () => "curl -X PATCH https://api.notion.com/v1/pages/p -d @s.json\n" },
   },
 ];
 

@@ -41,11 +41,18 @@
  * read against its page's thread as well (`postable`): a clarifying round past the cap, or a
  * second comment of a kind in one claim, waits; every other comment posts.
  *
+ * Since T0.18 two more routes to the board are closed. Rule (h) refuses the connector's three
+ * other writes that reach it — a page duplicated, pages moved under a database, a data
+ * source's schema changed — on their shape alone. Rule (i) refuses a write to the Notion API
+ * from a command line: the board's token belongs to a bot the human's own user owns, so what
+ * it posts is authored as the human and what it sets passes no connector.
+ *
  * `decide()` is pure and exported so scripts/hooks/guard.test.mjs can cover every rule and,
  * more importantly, every neighbouring call that must stay allowed.
  */
 
 import { execFileSync } from "node:child_process";
+import { readFileSync, statSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -603,6 +610,244 @@ function appliesMigration(argv) {
   );
 }
 
+/** The Notion API's host. A write sent there with the board's token passes no guard (T0.18). */
+const NOTION_API = "api.notion.com";
+
+/** Methods that only read. */
+const READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+/** curl's long options that send a body — a POST unless `-X` or `-G` says otherwise. */
+const CURL_BODY = new Set([
+  "--data",
+  "--data-raw",
+  "--data-binary",
+  "--data-urlencode",
+  "--data-ascii",
+  "--json",
+  "--form",
+  "--form-string",
+]);
+
+/** curl's short options that take a value: a bundle like `-sXPOST` ends at the first of them. */
+const CURL_SHORT_VALUES = new Set([..."AbcCdDeEFHKmoPQrtTuUwxXyYz"]);
+
+/**
+ * The method a curl call sends: `-X` when it says one; otherwise GET under `-G`, POST with a
+ * body, PUT with an upload, and GET with none of them — curl's own defaults.
+ */
+function curlMethod(args) {
+  let method = null;
+  let body = false;
+  let upload = false;
+  let get = false;
+  for (let i = 0; i < args.length; i += 1) {
+    const token = args[i];
+    if (token.startsWith("--")) {
+      if (token === "--request") {
+        method = args[i + 1] ?? null;
+        i += 1;
+      } else if (token === "--get") get = true;
+      else if (token === "--upload-file") upload = true;
+      else if (CURL_BODY.has(token)) body = true;
+      continue;
+    }
+    if (!/^-[A-Za-z]/.test(token)) continue;
+    const letters = token.slice(1);
+    for (let j = 0; j < letters.length; j += 1) {
+      const letter = letters[j];
+      if (letter === "G") get = true;
+      if (!CURL_SHORT_VALUES.has(letter)) continue;
+      // Its value is the rest of the bundle, or the next word when the bundle ends here.
+      let value = letters.slice(j + 1);
+      if (value === "") {
+        value = args[i + 1] ?? "";
+        i += 1;
+      }
+      if (letter === "X") method = value;
+      if (letter === "d" || letter === "F") body = true;
+      if (letter === "T") upload = true;
+      break;
+    }
+  }
+  if (method) return method.toUpperCase();
+  if (get) return "GET";
+  if (body) return "POST";
+  return upload ? "PUT" : "GET";
+}
+
+/** The method a wget call sends: `--method` when it says one, POST with a body, else GET. */
+function wgetMethod(args) {
+  let method = null;
+  let body = false;
+  for (let i = 0; i < args.length; i += 1) {
+    const eq = args[i].indexOf("=");
+    const flag = eq === -1 ? args[i] : args[i].slice(0, eq);
+    if (flag === "--method") {
+      method = eq === -1 ? (args[i + 1] ?? null) : args[i].slice(eq + 1);
+      if (eq === -1) i += 1;
+    } else if (/^--(?:post|body)-(?:data|file)$/.test(flag)) {
+      body = true;
+    }
+  }
+  if (method) return method.toUpperCase();
+  return body ? "POST" : "GET";
+}
+
+/** The HTTP clients a command line can send a request with, and how each says its method. */
+const HTTP_CLIENTS = new Map([
+  ["curl", curlMethod],
+  ["wget", wgetMethod],
+]);
+
+/** The options that hand an interpreter its code inline. */
+const INLINE_CODE = {
+  node: new Set(["-e", "--eval", "-p", "--print"]),
+  python: new Set(["-c"]),
+};
+
+/** Their options that take a separate value, so a value is never read as the script. */
+const INTERPRETER_VALUE_FLAGS = {
+  node: NODE_VALUE_FLAGS,
+  python: new Set(["-W", "-X", "-c"]),
+};
+
+/** Which interpreter a command's name is, for the code it may run — or null. */
+function interpreter(name) {
+  if (NODE_RUNNERS.has(name)) return "node";
+  if (/^python[\d.]*$/.test(String(name ?? ""))) return "python";
+  return null;
+}
+
+/** Code that names the board's API or its token… */
+const NAMES_NOTION = /api\.notion\.com|NOTION_TOKEN|\breadToken\b|notion\.mjs/;
+
+/**
+ * …and a write: an HTTP method that is not a read, a client library's write call, or the
+ * board client's own writer. Reading the board from a script stays allowed — a run looks at
+ * the board that way — and so does every script under scripts/run, none of which writes it
+ * from a command line (`runs.mjs` posts its row from the SessionEnd hook, not through Bash).
+ */
+const NAMES_WRITE = /\b(?:POST|PATCH|PUT|DELETE)\b|\.(?:post|patch|put)\s*\(|\bcreatePage\b/;
+
+/** True when a piece of code would write the board over the API. */
+const writesNotion = (code) => NAMES_NOTION.test(code) && NAMES_WRITE.test(code);
+
+/** What here-strings put on a command's stdin. */
+const hereStrings = (cmd) =>
+  cmd.redirects.filter((r) => r.op === "<<<" && typeof r.target === "string").map((r) => r.target);
+
+/**
+ * The code a simple command hands an interpreter: the inline string, or the script file it
+ * names, or — with neither — what a heredoc or a here-string puts on its stdin. Empty when
+ * it runs no interpreter. `python -m` runs a module, which is nobody's file to read here.
+ */
+function codeRun(cmd, readScript) {
+  const { name, rest } = target(cmd.argv);
+  const kind = interpreter(name);
+  if (kind === null) return [];
+  const inline = INLINE_CODE[kind];
+  const values = INTERPRETER_VALUE_FLAGS[kind];
+  const code = [];
+  let script = null;
+  for (let i = 0; i < rest.length; i += 1) {
+    const token = rest[i];
+    const eq = token.indexOf("=");
+    const flag = token.startsWith("--") && eq !== -1 ? token.slice(0, eq) : token;
+    if (inline.has(flag)) {
+      const value = flag === token ? rest[i + 1] : token.slice(eq + 1);
+      if (typeof value === "string") code.push(value);
+      if (flag === token) i += 1;
+    } else if (kind === "python" && token === "-m") {
+      return code;
+    } else if (token.startsWith("-") && token !== "-") {
+      if (values.has(token)) i += 1;
+    } else {
+      script = token;
+      break;
+    }
+  }
+  // With code inline, what follows it is its arguments, not a script.
+  if (code.length > 0) return code;
+  if (script !== null && script !== "-") {
+    const text = readScript(script);
+    return typeof text === "string" ? [text] : [];
+  }
+  return [...cmd.heredocs, ...hereStrings(cmd)];
+}
+
+/**
+ * The command lines a simple command runs as a shell script: the file `bash x.sh`, `source
+ * x.sh` or `. x.sh` names, or what a heredoc or here-string feeds a shell. `sh -c "…"` is
+ * already read by `parse()`, so it is not read twice here.
+ */
+function shellRun(cmd, readScript) {
+  const { name, rest } = target(cmd.argv);
+  const read = (path) => {
+    const text = typeof path === "string" ? readScript(path) : null;
+    return typeof text === "string" ? [text] : [];
+  };
+  if (name === "source" || name === ".") return read(rest[0]);
+  if (!SHELLS.has(name) || rest.includes("-c")) return [];
+  const script = rest.find((token) => !token.startsWith("-"));
+  return script === undefined ? [...cmd.heredocs, ...hereStrings(cmd)] : read(script);
+}
+
+/** How deep a script that runs a script is followed. */
+const MAX_SCRIPT_DEPTH = 3;
+
+/**
+ * True when a simple command writes to the Notion API: an HTTP client aimed at its host with
+ * a method that is not a read, an interpreter handed code that names the API or the token and
+ * a write, or a shell script whose own commands do either. A read of the board goes through.
+ */
+function writesTheBoardApi(cmd, readScript, depth = 0) {
+  const { name, rest } = target(cmd.argv);
+  const method = HTTP_CLIENTS.get(name);
+  if (
+    method &&
+    rest.some((token) => token.includes(NOTION_API)) &&
+    !READ_METHODS.has(method(rest))
+  ) {
+    return true;
+  }
+  if (codeRun(cmd, readScript).some(writesNotion)) return true;
+  if (depth >= MAX_SCRIPT_DEPTH) return false;
+  return shellRun(cmd, readScript).some((text) =>
+    parse(text).some((inner) => writesTheBoardApi(inner, readScript, depth + 1)),
+  );
+}
+
+/** The most of a script file the guard reads; a larger file is not read. */
+const MAX_SCRIPT_BYTES = 1_000_000;
+
+/** A script's text, resolved against the directory the command runs in; null when unreadable. */
+function readScriptAt(path, cwd) {
+  try {
+    const full = resolve(cwd, path);
+    if (statSync(full).size > MAX_SCRIPT_BYTES) return null;
+    return readFileSync(full, "utf8");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The `scripts/` this guard runs from — `origin/main`'s, which the hook extracted it from
+ * (docs/guidelines.md §5), or the checkout's when a test or a person runs it in place.
+ */
+const OWN_SCRIPTS = resolve(fileURLToPath(new URL("..", import.meta.url)));
+
+/**
+ * Main's copy of a script under `scripts/`, found by its path from the last `scripts/` down:
+ * `scripts/run/runs.mjs` in any checkout is `run/runs.mjs` in the guard's own tree. Null
+ * when the path is under no `scripts/` or main carries no such file.
+ */
+function mainScriptAt(path, cwd) {
+  const full = resolve(cwd, path).replaceAll("\\", "/");
+  const at = full.lastIndexOf("/scripts/");
+  return at === -1 ? null : readScriptAt(full.slice(at + "/scripts/".length), OWN_SCRIPTS);
+}
+
 /**
  * The words of a `gh` call with its options and their values stepped over, so the
  * subcommand and verb are `words[0]` and `words[1]` wherever `-R owner/repo` sits.
@@ -815,8 +1060,15 @@ const mergeCommit = (rest) =>
   rest.some((token) => token === "--merge" || token === "-m") &&
   !rest.some((token) => ["--squash", "-s", "--rebase", "-r"].includes(token));
 
-/** The board's connector tools rule (h) reads, by the tool's own name after the server's. */
-const CONNECTOR = /^mcp__.+__notion-(update-page|create-pages|create-comment)$/;
+/**
+ * The board's connector tools rule (h) reads, by the tool's own name after the server's. The
+ * first three carry a status or a comment and are read against the board (T0.17); the last
+ * three are refused on their shape alone (T0.18): a duplicate keeps its source's Status, a
+ * page moved into a database arrives with the Status it carries, and a data source's schema
+ * holds the Status options every task stands on.
+ */
+const CONNECTOR =
+  /^mcp__.+__notion-(update-page|create-pages|create-comment|duplicate-page|move-pages|update-data-source)$/;
 
 /** Which of the connector's writes a hook call is — `update-page` and so on — or null. */
 const connectorTool = (input) => String(input?.tool_name ?? "").match(CONNECTOR)?.[1] ?? null;
@@ -886,10 +1138,11 @@ const UNREVIEWED = { ok: false, why: "no reviewer verdict was read" };
  * The whole decision. Returns the refusal reason, or null to let the call through.
  *
  * `deps.currentBranch`, `deps.permission`, `deps.verdict`, `deps.posting`, `deps.prBranch`,
- * `deps.prHead`, `deps.localHead`, `deps.revertOfTip` and `deps.prefix` are injected so the rules
- * that depend on where HEAD points, on what the board's thread says, on what the reviewer wrote,
- * and on which branch and commit a pull request carries can be tested without a repository or a
- * board standing in a particular state. Without `deps.permission` nothing is granted, without
+ * `deps.prHead`, `deps.localHead`, `deps.revertOfTip`, `deps.prefix`, `deps.readScript` and
+ * `deps.mainScript` are injected so the rules that depend on where HEAD points, on what the
+ * board's thread says, on what the reviewer wrote, on which branch and commit a pull request
+ * carries, and on what a script a command runs holds — and main's copy of it — can be tested
+ * without a repository, a board or a file standing in a particular state. Without `deps.permission` nothing is granted, without
  * `deps.verdict` the second door is shut, and without `deps.posting` the thread was not read, so
  * a clarifying round waits and every other comment posts: the hook's `judge()` reads all three.
  */
@@ -903,6 +1156,14 @@ export function decide(input, deps = {}) {
   const localHead = deps.localHead ?? (() => revAt("HEAD", dir));
   const revertOfTip = deps.revertOfTip ?? (() => revertOfTipAt(dir));
   const prefix = deps.prefix ?? (() => boardPrefix(dir));
+  const readScript = deps.readScript ?? ((path) => readScriptAt(path, input?.cwd ?? process.cwd()));
+  const mainScript = deps.mainScript ?? ((path) => mainScriptAt(path, input?.cwd ?? process.cwd()));
+  // A script main carries, byte for byte as main carries it, is the pipeline's own and was
+  // judged when it merged: rule (i) reads every other script a command runs.
+  const unjudged = (path) => {
+    const text = readScript(path);
+    return typeof text === "string" && text === mainScript(path) ? null : text;
+  };
   const posting =
     deps.posting ?? ((text) => unreadPost(kindOf(text, prefix()), "the thread was not read"));
   const tool = input?.tool_name;
@@ -967,6 +1228,30 @@ export function decide(input, deps = {}) {
       return `Posting this ${allowed.kind ?? "unshaped"} comment is refused — ${allowed.why}. docs/guidelines.md §4.`;
     }
     return null;
+  }
+  // (h, T0.18) the connector's three writes that reach the board without a status write the
+  // guard could read. Nothing in the pipeline makes any of them, so each is refused on its
+  // shape and no word opens it. A duplicate of a task is a task born at its source's Status. A
+  // page moved under a database takes up its rows with the Status it carries; a move under a
+  // page or to the workspace lands on no board and goes through. A data source's schema is
+  // refused whichever one it names, because the connector takes a database's id as readily as
+  // the data source's and `.claude/board.json` knows only the latter.
+  if (connector === "duplicate-page") {
+    return "Duplicating a page through the connector is refused — a duplicate of a task keeps its source's Status, so it would be a task that never started at Backlog. Create a new task at Backlog instead. docs/guidelines.md §3.";
+  }
+  if (connector === "move-pages") {
+    const parent = input?.tool_input?.new_parent ?? {};
+    const intoDatabase =
+      ["database_id", "data_source_id"].includes(parent.type) ||
+      Object.hasOwn(parent, "database_id") ||
+      Object.hasOwn(parent, "data_source_id");
+    if (intoDatabase) {
+      return "Moving pages into a database through the connector is refused — a page moved onto the board arrives with whatever Status it carries, and every task starts at Backlog, created there. Create the task at Backlog instead. docs/guidelines.md §3.";
+    }
+    return null;
+  }
+  if (connector === "update-data-source") {
+    return "Changing a data source through the connector is refused — renaming the board's Status options would move every task at once, past the one move out of Backlog and past your word on the thread. The board's schema is yours to change, in Notion. docs/guidelines.md §3, §4.";
   }
 
   if (tool !== "Bash") return null;
@@ -1064,6 +1349,18 @@ export function decide(input, deps = {}) {
         }
       }
     }
+
+    // (i) the board's token is the scripts', never a command's (T0.18). Its bot is owned by
+    // the human's user, so a comment it posts comes back authored by the human — read on the
+    // thread as their merge, apply or ready — and a status it sets over the API never passes
+    // the connector rule (h) stands at. A write to the API from a command line is refused:
+    // curl or wget aimed at it, code handed to node or python that names it or the token and
+    // a write, and a shell script whose own commands do either. Reads go through. The guard
+    // reads the file a command runs, not the files that file imports; guidelines §5 says what
+    // stands behind that.
+    if (writesTheBoardApi(cmd, unjudged)) {
+      return "Writing to the Notion API from the command line is refused — the board's token writes as you, so a comment it posts reads on the thread as your merge, apply or ready, and a status it sets never passes the guard at the connector. Write the board through the connector, which the guard reads. docs/guidelines.md §4, §5.";
+    }
   }
 
   // (e) anything that writes to a .env file.
@@ -1114,6 +1411,8 @@ export async function judge(input, { dir = resolveDir(input), deps = {} } = {}) 
     ...(deps.prHead ? { prHead: deps.prHead } : {}),
     ...(deps.localHead ? { localHead: deps.localHead } : {}),
     ...(deps.prefix ? { prefix: deps.prefix } : {}),
+    ...(deps.readScript ? { readScript: deps.readScript } : {}),
+    ...(deps.mainScript ? { mainScript: deps.mainScript } : {}),
   });
 }
 
