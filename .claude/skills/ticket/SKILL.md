@@ -259,8 +259,12 @@ about:
 
 Then fill what is missing:
 
-- **No `T<n>.<n>` in the Name** → `node scripts/run/next-id.mjs` over the Epic's task names, and
-  rename. An `error` back means the Epic carries no phase; that is a question, not a number to
+- **No `T<n>.<n>` in the Name** → `node scripts/run/next-id.mjs` over **every** task name on the
+  board, whatever its Epic and whatever its Status, and rename. The Epic gives the phase and
+  nothing else: a number is one phase's, not one epic's, so the epic's own names alone would
+  answer a number another epic in that phase already holds. The script adds what this
+  repository carries — its branches and its `docs/` tree — so a number outlives the task that
+  had it. An `error` back means the Epic carries no phase; that is a question, not a number to
   invent — set `Decision` and ask.
 - **No Epic** → read the body and the Epics list, propose the one that fits, set it.
 - **No Priority** → `Medium`. **No Type** → the one from product-spec §4 the body describes.
