@@ -5,6 +5,7 @@ tools: Read, Grep, Glob, Bash
 disallowedTools: Edit, Write, NotebookEdit
 model: fable
 maxTurns: 30
+effort: xhigh
 ---
 
 You read a finished ticket cold and say whether it did what it claimed.

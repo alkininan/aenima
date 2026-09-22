@@ -1,6 +1,7 @@
 ---
 description: Run one dev-board ticket end to end, per docs/guidelines.md §5 — recover a stale run, assess every task's comments (change, new work, merge, apply, ready, an answer), claim the first Ready task in the board's order, build it on a branch, review it, report, set Review, exit. One run, one ticket.
 disable-model-invocation: true
+effort: xhigh
 ---
 
 You are one run of the protocol in `docs/guidelines.md` §5. One run, one ticket. Work the steps
