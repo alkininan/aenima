@@ -120,8 +120,8 @@ its status, and over the branches and the `docs/` tree this repository carries, 
 outlives the task it was given to and no epic owns a block; an Epic with no phase is a
 question, not a number to invent. `version-drift.mjs` parses the task's Spec line and
 compares each cited version with the document's header in the repo, so the report can say
-what changed since the ticket was cut. Epic, Priority and Type are proposed by the skill, and a one-line body is expanded into
-the seven sections of guidelines §2.
+what changed since the ticket was cut. Epic, Priority and Type are proposed by the skill,
+and a one-line body is expanded into the seven sections of guidelines §2.
 
 ## 2 Inline
 

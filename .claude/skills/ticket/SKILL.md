@@ -240,7 +240,8 @@ epics' names, and the threads it would comment on:
 `token: false` → say so in the report line and exit: without the token nothing reads Blockers.
 Otherwise `pick` is the task to claim and `as` the priority it is claimed at — a Ready blocker
 carries the highest priority of the tasks waiting on it. `blocked` and `cycles` are for the
-report line, and `names` — every task's Name — is what `next-id.mjs` reads below. Post each of `notices` as one page-level comment on its task, its `text` exactly
+report line, and `names` — every task's Name — is what `next-id.mjs` reads below.
+Post each of `notices` as one page-level comment on its task, its `text` exactly
 as printed: a Ready task waiting on a blocker at Backlog (never move the blocker), a loop of
 tasks blocking each other, three or more Ready tasks at Urgent. The script has already dropped
 any notice the thread holds, so what it prints is what is new.
@@ -259,15 +260,18 @@ about:
 
 Then fill what is missing:
 
-- **No `T<n>.<n>` in the Name** → `node scripts/run/next-id.mjs` with the Epic's name and
-  `names` from the pick above — **every** task on the board, whatever its Epic and whatever its
-  Status — and rename. The Epic gives the phase and nothing else: a number is one phase's, not
+- **No `T<n>.<n>` in the Name** → the lowest number free in the Epic's phase, and rename:
+
+      echo '{"epic":"E0.2 Pipeline","tasks":["T0.7 Setup","T0.8 Run", …]}' | node scripts/run/next-id.mjs
+
+  `tasks` is `names` from the pick above — **every** task on the board, whatever its Epic and
+  whatever its Status. The Epic gives the phase and nothing else: a number is one phase's, not
   one epic's, so the epic's own names alone answer a number another epic in that phase already
-  holds. The script adds what this repository carries — its branches and its `docs/` tree — so a
-  number outlives the task that had it. Anything in `unread` is a half of that it could not
-  read: say so in the report line, since the answer is then narrower than the rule. An `error`
-  back means the Epic carries no phase; that is a question, not a number to invent — set
-  `Decision` and ask.
+  holds, and a `tasks` left out answers one the board holds. The script adds what this
+  repository carries — its branches and its `docs/` tree — so a number outlives the task that
+  had it. Anything in `unread` is a half of that it could not read: say so in the report line,
+  since the answer is then narrower than the rule. An `error` back means the Epic carries no
+  phase; that is a question, not a number to invent — set `Decision` and ask.
 - **No Epic** → read the body and the Epics list, propose the one that fits, set it.
 - **No Priority** → `Medium`. **No Type** → the one from product-spec §4 the body describes.
 - **Spec** → `node scripts/run/version-drift.mjs "<Spec>"`. Anything `drifted` goes in the report
