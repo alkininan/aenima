@@ -438,8 +438,12 @@ and `evidence_truncated` record it. A cut quote is no longer the verbatim eviden
 human instead — at whatever round its cycle is on, with no position, because the
 author was never asked. So `author_position` loses NOT NULL and the rewritten
 `refinement_round_shape` requires it of `revised`, `held` and `refused` — the three
-outcomes the author answered — while `surfaced` runs **rounds 1 to 3** and may
-carry none.
+outcomes the author answered. A `surfaced` row is **round 3**, the third objection
+after two revisions, **or an early one**, and an early one is only the objection
+whose quote would not fit: round 1 or 2, `evidence_truncated`, and no position.
+Tying those together is what keeps the cap the database's as well as the code's —
+an unconditional "rounds 1 to 3" would take a round-1 surfacing on any objection,
+which is a loop skipping §6's cap with nothing noticing.
 
 ```
 pnpm db:generate   # diff the schema files into a new migration

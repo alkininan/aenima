@@ -1069,11 +1069,12 @@ export const refinementRound = pgTable(
     // human. `cardinality` rather than `array_length`, which is NULL on an empty
     // array — and a CHECK whose expression is NULL passes (0009).
     //
-    // A surfacing runs 1 to 3 since AA3: round 3 is the third objection, with
-    // the author's latest position, and rounds 1 and 2 are an objection the
-    // author was never shown because its quote would not fit — so those carry
-    // no position, and the author position is required of every outcome the
-    // author actually answered.
+    // A surfacing is round 3 — the third objection, after two revisions — or an
+    // early one, and an early one is only the objection whose quote would not
+    // fit (AA3): `evidenceTruncated`, and no author position, because the author
+    // was never shown it. Tying the two together is what keeps §6's cap the
+    // database's: without it the table takes a round-1 surfacing on any
+    // objection, which is a loop skipping the cap with nothing noticing.
     check(
       "refinement_round_shape",
       sql`(${t.outcome} = 'revised' and ${t.roundNo} between 1 and 2
@@ -1086,8 +1087,11 @@ export const refinementRound = pgTable(
              and ${t.revisedVersionId} is null and ${t.outsideSections} is not null
              and cardinality(${t.outsideSections}) > 0
              and ${t.authorPosition} is not null)
-       or (${t.outcome} = 'surfaced' and ${t.roundNo} between 1 and 3
-             and ${t.revisedVersionId} is null and ${t.outsideSections} is null)`,
+       or (${t.outcome} = 'surfaced'
+             and ${t.revisedVersionId} is null and ${t.outsideSections} is null
+             and (${t.roundNo} = 3
+                  or (${t.roundNo} between 1 and 2
+                      and ${t.evidenceTruncated} and ${t.authorPosition} is null)))`,
     ),
   ],
 );

@@ -114,11 +114,11 @@ export async function readVersionConditions(
 export async function readHumanBaseline(
   workspaceId: string,
   artifactId: string,
-): Promise<{ versionId: string; content: unknown } | null> {
+): Promise<{ content: unknown } | null> {
   const { sql } = sharedDbClient();
 
-  const rows = await sql<{ id: string; content: unknown }[]>`
-    select id, content
+  const rows = await sql<{ content: unknown }[]>`
+    select content
       from artifact_version
      where workspace_id = ${workspaceId} and artifact_id = ${artifactId}
        and authored_by_kind = 'human'
@@ -127,7 +127,7 @@ export async function readHumanBaseline(
   `;
 
   const row = rows.at(0);
-  return row ? { versionId: row.id, content: row.content } : null;
+  return row ? { content: row.content } : null;
 }
 
 export type RoundToWrite = {

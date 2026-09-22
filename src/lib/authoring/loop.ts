@@ -103,9 +103,12 @@ export type RefineResult =
  * Text as a round can hold it: the whole of it, or its first `ROUND_TEXT_MAX`
  * characters and the word that it was cut (AA3).
  *
- * Cut by characters, because the column's limit is characters. Nothing is
- * appended to mark the cut — the record is the flag on the row, not an ellipsis
- * inside the text a surface would then have to read back out.
+ * Cut by UTF-16 code units, which is the conservative side of the column's
+ * character limit: Postgres `length()` counts characters, so a cut that fits
+ * 2000 code units always fits 2000 characters, and a quote of astral characters
+ * is cut earlier than it strictly need be. Nothing is appended to mark the cut —
+ * the record is the flag on the row, not an ellipsis inside the text a surface
+ * would then have to read back out.
  */
 export function fit(text: string): { text: string; truncated: boolean } {
   if (text.length <= ROUND_TEXT_MAX) return { text, truncated: false };

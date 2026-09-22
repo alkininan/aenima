@@ -98,6 +98,16 @@ ALTER TABLE "refinement_round" ADD CONSTRAINT "refinement_round_shape" CHECK (
      and "revised_version_id" is null and "outside_sections" is not null
      and cardinality("outside_sections") > 0
      and "author_position" is not null)
-  or ("outcome" = 'surfaced' and "round_no" between 1 and 3
-     and "revised_version_id" is null and "outside_sections" is null)
+  -- A surfacing is round 3 — the third objection, after two revisions — or an
+  -- early one, and an early one is *only* the objection whose quote would not
+  -- fit: `evidence_truncated`, and no author position, because the author was
+  -- never shown it. Without that clause the table would take a round-1
+  -- surfacing on any objection at all, which is a loop skipping §6's cap with
+  -- the database not noticing. The cap is the database's here, not only the
+  -- code's.
+  or ("outcome" = 'surfaced'
+     and "revised_version_id" is null and "outside_sections" is null
+     and ("round_no" = 3
+          or ("round_no" between 1 and 2
+              and "evidence_truncated" and "author_position" is null)))
 );
