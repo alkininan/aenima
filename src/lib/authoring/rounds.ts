@@ -121,9 +121,18 @@ export function currentCycle(
   const newest = mine.reduce((highest, round) => Math.max(highest, round.cycleNo), FIRST_CYCLE);
   if (baseSectionHash === null) return newest;
 
-  const stored = mine.find((round) => round.cycleNo === newest)?.baseSectionHash ?? null;
-  if (stored === null || stored === baseSectionHash) return newest;
-  return newest + 1;
+  // Every row of the newest cycle, never whichever one came back first: the
+  // ledger's read is unordered, and one cycle's rows can carry different
+  // baselines — a round written while the human version had no such section
+  // carries null, and a later round of the same cycle carries a hash. Reading
+  // one row made two reads of identical rows disagree about the cycle.
+  const moved = mine.some(
+    (round) =>
+      round.cycleNo === newest &&
+      round.baseSectionHash !== null &&
+      round.baseSectionHash !== baseSectionHash,
+  );
+  return moved ? newest + 1 : newest;
 }
 
 /**

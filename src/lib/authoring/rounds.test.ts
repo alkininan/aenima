@@ -178,6 +178,27 @@ describe("the cycle — T3.2's TA1 → AA1", () => {
     expect(nextMove(rows, "meet", "prd-4", BASE)).toEqual({ kind: "closed" });
   });
 
+  // The reviewer's first Must: `readRounds` is unordered and one cycle's rows can
+  // hold different baselines — a round written for a section the human version
+  // did not hold carries null, and a later round of the same cycle carries a
+  // hash. Reading the cycle from whichever row came back first made two reads of
+  // identical rows disagree.
+  it("reads one cycle's baseline from every row of it, in any order the ledger returns", () => {
+    const mixed = [
+      round(1, { baseSectionHash: null }),
+      round(2, { baseSectionHash: BASE }),
+      round(3, { outcome: "surfaced", baseSectionHash: BASE }),
+    ];
+    const reversed = [...mixed].reverse();
+
+    for (const rows of [mixed, reversed]) {
+      expect(currentCycle(rows, "scheduling", "prd-4", BASE)).toBe(1);
+      expect(currentCycle(rows, "scheduling", "prd-4", REWRITTEN)).toBe(2);
+      expect(nextMove(rows, "scheduling", "prd-4", BASE)).toEqual({ kind: "closed" });
+      expect(nextMove(rows, "scheduling", "prd-4", REWRITTEN)).toMatchObject({ cycleNo: 2 });
+    }
+  });
+
   it("holds the closure of a round written before cycles existed, whose baseline is unknown", () => {
     const old = [round(3, { outcome: "surfaced", baseSectionHash: null })];
     expect(currentCycle(old, "scheduling", "prd-4", REWRITTEN)).toBe(1);
