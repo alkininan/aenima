@@ -177,8 +177,8 @@
  *
  * The two vendored faces are named as the spec names them: they declare their
  * own family in their @font-face, so `'DM Sans'` here is that family. Space
- * Grotesk comes from Google Fonts, whose family name is generated at build time,
- * so it is reached through the variable next/font writes for it — C-05 reads a
+ * Grotesk is reached through the variable next/font writes for it, which carries
+ * the family plus the metric-matched fallback generated for it — C-05 reads a
  * family and the variable named after it as the same value. See src/app/fonts.ts,
  * which loads all three and explains why two of them are vendored.
  * ------------------------------------------------------------------------- */

@@ -34,11 +34,18 @@ function section(number: string): string {
   return end === -1 ? spec.slice(at) : spec.slice(at, at + 1 + end);
 }
 
-/** The first fenced css block in a section — the one C-05 reads. */
+/**
+ * Every fenced css block in a section, joined. C-05 reads "the CSS blocks" of each
+ * section, and §5 has two — the radii and the glass recipe. The recipe declares no
+ * custom property today, so reading only the first would miss nothing and say so
+ * silently the day it does.
+ */
 function cssBlock(number: string): string {
-  const match = /```css\n([\s\S]*?)```/.exec(section(number));
-  if (!match?.[1]) throw new Error(`§${number} carries no css block`);
-  return match[1];
+  const blocks = [...section(number).matchAll(/```css\n([\s\S]*?)```/g)].map(
+    (match) => match[1] ?? "",
+  );
+  if (blocks.length === 0) throw new Error(`§${number} carries no css block`);
+  return blocks.join("\n");
 }
 
 const stripComments = (css: string) => css.replace(/\/\*[\s\S]*?\*\//g, "");

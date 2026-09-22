@@ -122,8 +122,11 @@ const jetBrainsMonoLatinExt = localFont({
 /**
  * The classes for the root element.
  *
- * Space Grotesk's carries `--font-display`'s family, which is what `globals.css` reads —
- * a Google face's family name is generated, so the variable is the only way to name it.
+ * Space Grotesk's carries `--font-display`'s family, which is what `globals.css` reads.
+ * Its `@font-face` family is the real one — the loader keeps the name Google's CSS gives
+ * it and hashes only the class and variable idents — so the variable is not the only way
+ * to name it; it is the better way, because it carries the face *and* the metric-matched
+ * fallback `next/font` generates for it, which a bare family name would drop.
  * The vendored faces declare their family outright, so `globals.css` names `'DM Sans'`
  * and `'JetBrains Mono'` as §3 writes them, and the variables these four calls generate
  * are read by nothing: each is named for the subset it loads, not for the face, so that
