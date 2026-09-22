@@ -79,15 +79,31 @@ function block(css: string, opener: string): string {
  * A face can be named two ways and mean one thing. §3 writes families —
  * `'DM Sans', system-ui, sans-serif` — and the stylesheet writes the family itself where
  * the face declares one (the two vendored faces do) and the variable `next/font` writes
- * where it does not (Space Grotesk's family name is generated at build time). So both
+ * for it where reaching the face through the variable is better, because that variable
+ * carries the metric-matched fallback with the family (Space Grotesk's does). So both
  * sides are read down to the family, and `'DM Sans'` and `var(--font-dm-sans)` are the
  * same value spelled the two ways it can be spelled.
+ *
+ * Reading a variable down to a family would accept a variable nothing declares, which is
+ * the one way this token can be wrong and still read right — the stylesheet would resolve
+ * to no family at all. So `FONT_VARIABLES` is the set `fonts.ts` really declares, and a
+ * spelling outside it is not a spelling of anything.
  */
+const FONT_VARIABLES = new Set(
+  [
+    ...readFileSync(join(root, "src/app/fonts.ts"), "utf8").matchAll(
+      /variable:\s*"--font-([\w-]+)"/g,
+    ),
+  ].map((match) => match[1] ?? ""),
+);
+
 const familySpelling = (value: string) =>
   value
     // Either quote: the document writes `\'DM Sans\'` and Prettier writes `"DM Sans"`.
     .replace(/["']([^"']+)["']/g, (_, family: string) => family.toLowerCase().replace(/\s+/g, "-"))
-    .replace(/var\(--font-([\w-]+)\)/g, (_, slug: string) => slug);
+    .replace(/var\(--font-([\w-]+)\)/g, (_, slug: string) =>
+      FONT_VARIABLES.has(slug) ? slug : `undeclared:${slug}`,
+    );
 
 /** The z-ladder is §4's, stated in prose, and is no colour, radius, duration or easing. */
 const Z_LADDER = [

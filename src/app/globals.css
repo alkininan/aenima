@@ -491,7 +491,7 @@
     --control-edge: 0 0 #0000;
   }
 
-  /* §8 spinner — 2px stroke, 800ms linear rotation, colour from currentColor. */
+  /* §8 spinner — 2px stroke, one turn on --t-spin, colour from currentColor. */
   .spinner-ring {
     border-radius: var(--r-pill);
     border: 2px solid currentColor;
@@ -499,8 +499,8 @@
     animation: aenima-spin var(--t-spin) linear infinite;
   }
 
-  /* §6 skeleton shimmer — surface-2 base, rgba(255,255,255,.04) highlight,
-   * 1.2s linear loop. The sweep travels the full width of the element. */
+  /* §6 skeleton shimmer — --surface-2 base, --hover-overlay highlight, one pass
+   * per --t-skeleton, linear. The sweep travels the full width of the element. */
   .shimmer {
     background-color: var(--surface-2);
     background-image: linear-gradient(90deg, transparent, var(--hover-overlay), transparent);
