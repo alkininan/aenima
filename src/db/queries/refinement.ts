@@ -34,14 +34,17 @@ export async function readRounds(workspaceId: string, artifactId: string): Promi
     {
       section_id: string;
       check_id: string;
+      cycle_no: number;
+      base_section_hash: string | null;
       round_no: number;
       outcome: RoundOutcome;
       reason: string;
       evidence: string;
-      author_position: string;
+      author_position: string | null;
     }[]
   >`
-    select section_id, check_id, round_no, outcome::text as outcome,
+    select section_id, check_id, cycle_no, base_section_hash,
+           round_no, outcome::text as outcome,
            reason, evidence, author_position
       from refinement_round
      where workspace_id = ${workspaceId} and artifact_id = ${artifactId}
@@ -50,6 +53,8 @@ export async function readRounds(workspaceId: string, artifactId: string): Promi
   return rows.map((row) => ({
     sectionId: row.section_id,
     checkId: row.check_id,
+    cycleNo: row.cycle_no,
+    baseSectionHash: row.base_section_hash,
     roundNo: row.round_no,
     outcome: row.outcome,
     reason: row.reason,
@@ -90,6 +95,35 @@ export async function readVersionConditions(
   `;
 
   return rows.at(0)?.conditions_met ?? null;
+}
+
+/**
+ * The newest **human-authored** version of an artifact — the baseline §6's cap
+ * is counted against (AA1), and null for an artifact no human has written a
+ * version of.
+ *
+ * Human-authored, because what reopens a surfaced check is the human rewriting
+ * the section. The author's own revisions are `artifact_version` rows too, and
+ * a baseline that moved with them would reopen every check the loop had just
+ * closed; `rounds.ts` says why that does not terminate.
+ */
+export async function readHumanBaseline(
+  workspaceId: string,
+  artifactId: string,
+): Promise<{ versionId: string; content: unknown } | null> {
+  const { sql } = sharedDbClient();
+
+  const rows = await sql<{ id: string; content: unknown }[]>`
+    select id, content
+      from artifact_version
+     where workspace_id = ${workspaceId} and artifact_id = ${artifactId}
+       and authored_by_kind = 'human'
+     order by version_no desc
+     limit 1
+  `;
+
+  const row = rows.at(0);
+  return row ? { versionId: row.id, content: row.content } : null;
 }
 
 export type RoundToWrite = {
@@ -179,14 +213,16 @@ export async function writeRound(write: RoundToWrite): Promise<{ versionId: stri
     const rounds = await tx<{ id: string }[]>`
       insert into refinement_round (
         workspace_id, item_id, artifact_id, artifact_version_id,
-        section_id, check_id, round_no, outcome,
-        reason, evidence, author_position, revised_version_id, outside_sections
+        section_id, check_id, cycle_no, base_section_hash, round_no, outcome,
+        reason, reason_truncated, evidence, evidence_truncated,
+        author_position, revised_version_id, outside_sections
       ) values (
         ${write.workspaceId}, ${write.itemId}, ${write.artifactId}, ${round.versionId},
-        ${round.sectionId}, ${round.checkId}, ${round.roundNo},
-        ${round.outcome}::refinement_outcome,
-        ${round.reason}, ${round.evidence}, ${round.authorPosition},
-        ${revisedVersionId}, ${round.outsideSections}
+        ${round.sectionId}, ${round.checkId}, ${round.cycleNo}, ${round.baseSectionHash},
+        ${round.roundNo}, ${round.outcome}::refinement_outcome,
+        ${round.reason}, ${round.reasonTruncated},
+        ${round.evidence}, ${round.evidenceTruncated},
+        ${round.authorPosition}, ${revisedVersionId}, ${round.outsideSections}
       )
       returning id
     `;
@@ -195,7 +231,12 @@ export async function writeRound(write: RoundToWrite): Promise<{ versionId: stri
       artifactId: write.artifactId,
       sectionId: round.sectionId,
       checkId: round.checkId,
+      cycleNo: round.cycleNo,
       roundNo: round.roundNo,
+      // AA3: a cut objection is a recorded fact on the ledger too, not only on
+      // the row — "nothing about this path may be silent".
+      reasonTruncated: round.reasonTruncated ? 1 : 0,
+      evidenceTruncated: round.evidenceTruncated ? 1 : 0,
     });
 
     return { versionId: revisedVersionId };

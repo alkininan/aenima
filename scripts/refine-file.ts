@@ -123,7 +123,17 @@ async function main(): Promise<void> {
         },
       };
       result = await refineSection(
-        { pack, checkIds, body: draft.text, versionId: "memory-v1", sectionId, conversation: [] },
+        {
+          pack,
+          checkIds,
+          body: draft.text,
+          versionId: "memory-v1",
+          sectionId,
+          // In memory there is no human version, so there is no baseline: every
+          // cycle is the first, which is what one run over one draft is (AA1).
+          baseSectionHash: null,
+          conversation: [],
+        },
         agents,
         ledger,
       );

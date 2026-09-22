@@ -7,6 +7,7 @@ import { applicableChecks, featurePrdPack } from "@/packs";
 import { draftSection, refineSection } from "./loop";
 import type { Agents, Ledger, RefineInput, RoundWrite } from "./loop";
 import type { AssembledRequest, Turn } from "./prompt";
+import { ROUND_TEXT_MAX } from "./rounds";
 import type { StoredRound } from "./rounds";
 import type { AuthorAnswer, CriticAnswer } from "./schema";
 
@@ -78,6 +79,8 @@ function memoryLedger(seed: StoredRound[] = []) {
       rows.push({
         sectionId: round.sectionId,
         checkId: round.checkId,
+        cycleNo: round.cycleNo,
+        baseSectionHash: round.baseSectionHash,
         roundNo: round.roundNo,
         outcome: round.outcome,
         reason: round.reason,
@@ -114,12 +117,16 @@ function revision(n: number, position = `position ${n}`): AuthorAnswer {
   };
 }
 
+/** The baseline every fixture round is written under — the human's text, unchanged. */
+const BASE = "base-hash";
+
 const input = (overrides: Partial<RefineInput> = {}): RefineInput => ({
   pack,
   checkIds,
   body: BODY,
   versionId: "v1",
   sectionId: "scheduling",
+  baseSectionHash: BASE,
   conversation: CONVERSATION,
   ...overrides,
 });
@@ -339,22 +346,64 @@ describe("refineSection — the doors before the author", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("discards an objection whose reason or evidence is longer than a round can hold", async () => {
+  // AA3 replaces T3.1's door here: a size is not a reason to discard an
+  // objection, because a discarded one is a gap nobody hears about.
+  it("cuts an over-long reason to what a round holds, records the cut, and still asks the author", async () => {
     const long = "x".repeat(2001);
-    const { agents, sent } = scripted(
-      [objects(objection({ reason: long }), objection({ evidence: long })), none],
+    const { agents, sent } = scripted([objects(objection({ reason: long })), none], [revision(1)]);
+    const { ledger, recorded } = memoryLedger();
+
+    const result = await refineSection(input(), agents, ledger);
+
+    expect(sent.author).toHaveLength(1);
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0]!.reason).toHaveLength(ROUND_TEXT_MAX);
+    expect(recorded[0]!.reasonTruncated).toBe(true);
+    expect(recorded[0]!.evidenceTruncated).toBe(false);
+    expect(recorded[0]!.outcome).toBe("revised");
+    // What the author argued from is what the ledger holds, cut and all.
+    expect(sent.author[0]!.input).toContain(`reason: ${"x".repeat(ROUND_TEXT_MAX)}`);
+    expect(sent.author[0]!.input).not.toContain("x".repeat(ROUND_TEXT_MAX + 1));
+    expect(result.ok).toBe(true);
+  });
+
+  it("surfaces an objection whose quote will not fit rather than dropping it, and never shows the author a cut quote", async () => {
+    const long = "y".repeat(2001);
+    const body = `# Juno\n\n## Scheduling\n${long}\n\n${MEET}`;
+    const { agents, sent } = scripted([objects(objection({ evidence: long })), none], []);
+    const { ledger, recorded } = memoryLedger();
+
+    const result = await refineSection(input({ body }), agents, ledger);
+
+    expect(sent.author).toHaveLength(0);
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0]).toMatchObject({
+      outcome: "surfaced",
+      roundNo: 1,
+      cycleNo: 1,
+      evidenceTruncated: true,
+      // The author was never asked, so there is no position to record.
+      authorPosition: null,
+    });
+    expect(recorded[0]!.evidence).toHaveLength(ROUND_TEXT_MAX);
+    expect(result.ok).toBe(true);
+  });
+
+  it("discards no objection for its size on any path — every admitted one is recorded", async () => {
+    const long = "z".repeat(2001);
+    const body = `# Juno\n\n## Scheduling\n${long}\n\n${MEET}`;
+    const { agents } = scripted(
+      [objects(objection({ reason: long, evidence: long, checkId: "prd-4" })), none],
       [],
     );
     const { ledger, recorded } = memoryLedger();
 
-    const result = await refineSection(
-      input({ body: `# Juno\n\n## Scheduling\n${long}\n\n${MEET}` }),
-      agents,
-      ledger,
-    );
+    const result = await refineSection(input({ body }), agents, ledger);
 
-    expect(sent.author).toHaveLength(0);
-    expect(recorded).toHaveLength(0);
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0]!.checkId).toBe("prd-4");
+    expect(recorded[0]!.reasonTruncated).toBe(true);
+    expect(recorded[0]!.evidenceTruncated).toBe(true);
     expect(result.ok).toBe(true);
   });
 
@@ -518,6 +567,8 @@ function stored(roundNo: number, outcome: StoredRound["outcome"], authorPosition
   return {
     sectionId: "scheduling",
     checkId: "prd-4",
+    cycleNo: 1,
+    baseSectionHash: BASE,
     roundNo,
     outcome,
     reason: `stored ${roundNo}`,
