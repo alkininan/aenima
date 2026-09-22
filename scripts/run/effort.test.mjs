@@ -33,6 +33,13 @@ describe("run effort", () => {
     expect(frontmatter(SKILL_FILE).effort).toBe("xhigh");
   });
 
+  // T0.27 TC1 → AC1 — the Build's "nothing in settings": the frontmatter is the only setting.
+  it("sets no effort in the repository's settings", () => {
+    const settings = JSON.parse(readFileSync(join(root, SETTINGS_FILE), "utf8"));
+    expect(settings.effortLevel).toBeUndefined();
+    expect(settings.env?.CLAUDE_CODE_EFFORT_LEVEL).toBeUndefined();
+  });
+
   // T0.27 TC2 → AC2
   it("sets xhigh in the reviewer's frontmatter", () => {
     expect(frontmatter(AGENT_FILE).effort).toBe("xhigh");
