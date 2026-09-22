@@ -96,6 +96,7 @@ One file per ticket under `docs/log/`, oldest first. This list is written by `no
 - [T0.24 — Apply from a worktree run](log/T0.24.md) · 2026-09-20
 - [T3.1 — Author-critic loop](log/T3.1.md) · 2026-09-20
 - [T0.25 — Review scope against origin/main](log/T0.25.md) · 2026-09-21
+- [T0.18 — Guard the token](log/T0.18.md) · 2026-09-22
 
 ## Decisions made during the build
 

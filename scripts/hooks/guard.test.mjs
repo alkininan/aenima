@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -389,6 +389,302 @@ describe("T0.17 — rule (h) the board's connector", () => {
     expect(
       decide({ tool_name: "notion-create-comment", tool_input: { markdown: "ready" } }),
     ).toBeNull();
+  });
+});
+
+// T0.18 TC1 → AC1. The board's token writes as the human — its bot is owned by the human's
+// user, so a comment it posts comes back with the human's user id and display name — and it
+// never passes the connector the guard stands at. Each route the ticket names has a test.
+describe("T0.18 — rule (i) the board's token, and rule (h) the connector's other writes", () => {
+  const SERVER = "mcp__a6bc5cd2-b1e4-484a-b22d-e3708b2a94f4__";
+  const call = (tool, tool_input) => ({ tool_name: `${SERVER}${tool}`, tool_input, cwd: "/repo" });
+  // Every script is judged on its text: none is main's own unless a test says so (pass 1, Should 5).
+  const run = (command, readScript = () => null) => [
+    { tool_name: "Bash", tool_input: { command }, cwd: "/repo" },
+    { currentBranch: () => "t0-18", readScript, mainScript: () => null },
+  ];
+  const TOKEN = "the board's token writes as you";
+
+  it("route 1: refuses a comment sent to the Notion API with curl, in every shape curl says POST", () => {
+    for (const command of [
+      "curl -X POST https://api.notion.com/v1/comments -H 'Authorization: Bearer x' -d @c.json",
+      "curl -sS -XPOST https://api.notion.com/v1/comments --data-binary @c.json",
+      `curl https://api.notion.com/v1/comments -H "Notion-Version: 2025-09-03" -d '{"rich_text":[]}'`,
+      "curl --json @c.json https://api.notion.com/v1/comments",
+      "curl -sd @c.json api.notion.com/v1/comments",
+      "curl --request POST --url https://api.notion.com/v1/comments -F x=y",
+      'curl -H "Authorization: Bearer $NOTION_TOKEN" --data "$(cat c.json)" https://api.notion.com/v1/comments',
+      "wget --post-data '{}' https://api.notion.com/v1/comments",
+    ]) {
+      expect(decide(...run(command)), command).toContain(TOKEN);
+    }
+  });
+
+  it("route 1: refuses a comment posted by node or python, inline, from a heredoc, or from the script it runs", () => {
+    const post = `import { readToken } from "./scripts/run/notion.mjs";
+await fetch("https://api.notion.com/v1/comments", {
+  method: "POST",
+  headers: { Authorization: \`Bearer \${readToken()}\` },
+});`;
+    expect(
+      decide(
+        ...run(
+          `node -e "fetch('https://api.notion.com/v1/comments', { method: 'POST', body: '{}' })"`,
+        ),
+      ),
+    ).toContain(TOKEN);
+    expect(decide(...run(`node --input-type=module <<'EOF'\n${post}\nEOF`))).toContain(TOKEN);
+    expect(decide(...run(`node --input-type=module -e '${post.replaceAll("'", "")}'`))).toContain(
+      TOKEN,
+    );
+    expect(decide(...run("node /tmp/scratch/post.mjs", () => post))).toContain(TOKEN);
+    expect(decide(...run("pnpm exec tsx post.ts", () => post))).toContain(TOKEN);
+    expect(
+      decide(
+        ...run(
+          `python3 -c "import requests; requests.post('https://api.notion.com/v1/comments', json={})"`,
+        ),
+      ),
+    ).toContain(TOKEN);
+  });
+
+  it("route 2: refuses a status write sent over the API — PATCH /pages from curl and from node", () => {
+    expect(
+      decide(
+        ...run(
+          `curl -X PATCH https://api.notion.com/v1/pages/3dc79daf -d '{"properties":{"Status":{"select":{"name":"Ready"}}}}'`,
+        ),
+      ),
+    ).toContain(TOKEN);
+    const patch = `import { client, readToken } from "./scripts/run/notion.mjs";
+const t = readToken();
+await fetch("https://api.notion.com/v1/pages/3dc79daf", { method: "PATCH", body: "{}" });`;
+    expect(decide(...run("node patch.mjs", () => patch))).toContain(TOKEN);
+    // A task created at Ready over the API skips Backlog the same way.
+    const create = `import { client, readToken } from "./scripts/run/notion.mjs";
+await client(readToken()).createPage("193b7d6b", { Status: { select: { name: "Ready" } } });`;
+    expect(decide(...run("node create.mjs", () => create))).toContain(TOKEN);
+  });
+
+  it("routes 1 and 2 through a shell script, which is a command line of its own", () => {
+    const script = "curl -X PATCH https://api.notion.com/v1/pages/p -d @s.json\n";
+    expect(decide(...run("bash /tmp/scratch/ready.sh", () => script))).toContain(TOKEN);
+    expect(decide(...run("source ./ready.sh", () => script))).toContain(TOKEN);
+    expect(decide(...run(`sh <<'EOF'\n${script}EOF`))).toContain(TOKEN);
+  });
+
+  it("reads the script it runs from the command's own directory when nothing is injected", () => {
+    const dir = mkdtempSync(join(tmpdir(), "aenima-guard-token-"));
+    try {
+      writeFileSync(
+        join(dir, "post.mjs"),
+        'await fetch("https://api.notion.com/v1/comments", { method: "POST" });\n',
+      );
+      writeFileSync(join(dir, "read.mjs"), 'await fetch("https://api.notion.com/v1/users/me");\n');
+      const at = (command) => ({ tool_name: "Bash", tool_input: { command }, cwd: dir });
+      expect(decide(at("node post.mjs"), { currentBranch: () => "t0-18" })).toContain(TOKEN);
+      expect(decide(at("node read.mjs"), { currentBranch: () => "t0-18" })).toBeNull();
+      expect(decide(at("node missing.mjs"), { currentBranch: () => "t0-18" })).toBeNull();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // Review pass 1, Must 2: the shapes a run types without trying, each allowed at 6edffe2.
+  const POST = `await fetch("https://api.notion.com/v1/comments", { method: "POST" });\n`;
+  const byName = (files) => (path) =>
+    Object.entries(files).find(([name]) => String(path).endsWith(name))?.[1] ?? null;
+
+  it("reads a script run by its own path as whatever its first line says it is", () => {
+    const shell = "#!/bin/sh\ncurl -X PATCH https://api.notion.com/v1/pages/p -d @s.json\n";
+    expect(decide(...run("./ready.sh", byName({ "ready.sh": shell })))).toContain(TOKEN);
+    const node = `#!/usr/bin/env node\n${POST}`;
+    expect(decide(...run("/tmp/scratch/post.mjs --now", byName({ "post.mjs": node })))).toContain(
+      TOKEN,
+    );
+    expect(
+      decide(...run("./check.sh", byName({ "check.sh": "#!/bin/sh\npnpm lint\n" }))),
+    ).toBeNull();
+  });
+
+  it("resolves a script against the directory a cd before it moved to", () => {
+    const dir = mkdtempSync(join(tmpdir(), "aenima-guard-cd-"));
+    try {
+      mkdirSync(join(dir, "sub"));
+      writeFileSync(join(dir, "sub", "post.mjs"), POST);
+      writeFileSync(
+        join(dir, "sub", "read.mjs"),
+        'await fetch("https://api.notion.com/v1/users/me");\n',
+      );
+      const at = (command) => [
+        { tool_name: "Bash", tool_input: { command }, cwd: dir },
+        { currentBranch: () => "t0-18", mainScript: () => null },
+      ];
+      expect(decide(...at("cd sub && node post.mjs"))).toContain(TOKEN);
+      expect(decide(...at("cd sub; node ./post.mjs"))).toContain(TOKEN);
+      expect(decide(...at(`cd ${join(dir, "sub")} && node post.mjs`))).toContain(TOKEN);
+      expect(decide(...at("cd sub && node read.mjs"))).toBeNull();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("reads the code an interpreter takes on stdin, from a file or down a pipe", () => {
+    const files = byName({ "post.mjs": POST, "comments.mjs": "console.log(process.argv);\n" });
+    for (const command of [
+      "node - < post.mjs",
+      "node < post.mjs",
+      "cat post.mjs | node",
+      "cat post.mjs | node --input-type=module",
+      "cat post.mjs | node -",
+      `echo 'await fetch("https://api.notion.com/v1/comments", { method: "POST" })' | node --input-type=module`,
+      "python3 - < post.mjs",
+    ]) {
+      expect(decide(...run(command, files)), command).toContain(TOKEN);
+    }
+    // A script named on the line takes stdin as data, and nothing that is no interpreter runs it.
+    expect(decide(...run("cat post.mjs | node comments.mjs", files))).toBeNull();
+    expect(decide(...run("grep fetch < post.mjs", files))).toBeNull();
+    expect(decide(...run("cat post.mjs | wc -l", files))).toBeNull();
+  });
+
+  it("reads the host and the method whatever their case", () => {
+    expect(decide(...run("curl -X post https://API.NOTION.COM/v1/comments -d @c.json"))).toContain(
+      TOKEN,
+    );
+    expect(
+      decide(...run(`node -e "fetch('https://Api.Notion.com/v1/comments', { method: 'post' })"`)),
+    ).toContain(TOKEN);
+    expect(
+      decide(
+        ...run("node post.mjs", () => `await fetch(API, { method: "patch" }); // notion.mjs\n`),
+      ),
+    ).toContain(TOKEN);
+  });
+
+  // Review pass 1, Should 3: a query and a search are POSTs that read.
+  it("lets a POST that only reads through — a data source's query, a search", () => {
+    for (const command of [
+      `curl -X POST https://api.notion.com/v1/data_sources/193b7d6b/query -d '{}'`,
+      `curl https://api.notion.com/v1/search -d '{"query":"T0.18"}'`,
+      `curl --json '{}' "https://api.notion.com/v1/databases/4b70787d/query?filter_properties=a"`,
+    ]) {
+      expect(decide(...run(command)), command).toBeNull();
+    }
+    expect(
+      decide(...run("curl -X PATCH https://api.notion.com/v1/data_sources/193b7d6b/query")),
+    ).toContain(TOKEN);
+    expect(
+      decide(
+        ...run("curl -X POST https://api.notion.com/v1/search https://api.notion.com/v1/comments"),
+      ),
+    ).toContain(TOKEN);
+  });
+
+  it("allows the neighbours: reads of the API, the run's own scripts, other hosts, and text that mentions it", () => {
+    const script = (path) => () =>
+      readFileSync(join(import.meta.dirname, "..", "run", path), "utf8");
+    for (const [command, readScript] of [
+      ["curl -sS https://api.notion.com/v1/users/me -H 'Notion-Version: 2025-09-03'", undefined],
+      ["curl -G https://api.notion.com/v1/comments -d block_id=abc", undefined],
+      ["curl -X POST https://example.com/v1/comments -d @c.json", undefined],
+      ["node scripts/run/threads.mjs", script("threads.mjs")],
+      ["node scripts/run/pick-next.mjs", script("pick-next.mjs")],
+      ["node scripts/run/mirror.mjs --verify p a.md", script("mirror.mjs")],
+      ["node scripts/run/rows.mjs --status Review", script("rows.mjs")],
+      [
+        "node peek.mjs",
+        () =>
+          'import { client, readToken } from "./scripts/run/notion.mjs";\nconsole.log(await client(readToken()).comments("p"));\n',
+      ],
+      ['grep -rn "api.notion.com" scripts/', undefined],
+      ['echo "curl -X POST https://api.notion.com/v1/comments"', undefined],
+      [
+        "cat > post.mjs <<'EOF'\nawait fetch('https://api.notion.com/v1/comments', { method: 'POST' });\nEOF",
+        undefined,
+      ],
+      ["pnpm vitest run scripts/hooks/guard.test.mjs", undefined],
+    ]) {
+      expect(decide(...run(command, readScript)), command).toBeNull();
+    }
+  });
+
+  // guard.mjs, loosening.mjs, notion.mjs and runs.mjs all name the API and a write — as the
+  // rule itself, as the corpus that measures it, as the client, and as the Runs row's writer.
+  it("leaves main's own scripts alone — a script main carries, as main carries it, was judged when it merged", () => {
+    const runs = readFileSync(join(import.meta.dirname, "..", "run", "runs.mjs"), "utf8");
+    const at = (mainScript) => [
+      { tool_name: "Bash", tool_input: { command: "node scripts/run/runs.mjs" }, cwd: "/repo" },
+      { currentBranch: () => "t0-18", readScript: () => runs, mainScript },
+    ];
+    expect(decide(...at(() => runs))).toBeNull();
+    expect(decide(...at(() => `${runs}\n// edited\n`))).toContain(TOKEN);
+    expect(decide(...at(() => null))).toContain(TOKEN);
+    // Uninjected, the guard compares with the scripts/ it runs from — here, this checkout's.
+    const root = join(import.meta.dirname, "..", "..");
+    for (const command of [
+      "node scripts/hooks/guard.mjs",
+      "node scripts/run/loosening.mjs --probe scripts",
+      "bash -c 'node scripts/run/runs.mjs --hook'",
+    ]) {
+      expect(
+        decide(
+          { tool_name: "Bash", tool_input: { command }, cwd: root },
+          { currentBranch: () => "t0-18" },
+        ),
+        command,
+      ).toBeNull();
+    }
+  });
+
+  it("route 3: refuses duplicating a page through the connector — a duplicate keeps its source's Status", () => {
+    const reason = decide(call("notion-duplicate-page", { page_id: "3dc79daf" }));
+    expect(reason).toContain("Duplicating a page through the connector is refused");
+    expect(reason).toContain("Backlog");
+  });
+
+  it("route 3: refuses moving pages into a database or a data source, and allows a move under a page", () => {
+    const move = (new_parent) =>
+      call("notion-move-pages", { page_or_database_ids: ["3dc79daf"], new_parent });
+    for (const parent of [
+      { type: "data_source_id", data_source_id: "193b7d6b-2ea8-4d08-8233-7634b4367f9f" },
+      { type: "database_id", database_id: "4b70787d353b4587b076bef7f52a6113" },
+      { data_source_id: "collection://193b7d6b-2ea8-4d08-8233-7634b4367f9f" },
+    ]) {
+      expect(decide(move(parent)), JSON.stringify(parent)).toContain(
+        "Moving pages into a database through the connector is refused",
+      );
+    }
+    expect(decide(move({ type: "page_id", page_id: "3cf79daf" }))).toBeNull();
+    expect(decide(move({ type: "workspace" }))).toBeNull();
+  });
+
+  it("route 4: refuses changing a data source — renaming the Status options, or anything else", () => {
+    const reason = decide(
+      call("notion-update-data-source", {
+        data_source_id: "collection://193b7d6b-2ea8-4d08-8233-7634b4367f9f",
+        statements: `ALTER COLUMN "Status" SET SELECT('Ready':green, 'Backlog':gray)`,
+      }),
+    );
+    expect(reason).toContain("Changing a data source through the connector is refused");
+    expect(reason).toContain("Status");
+    expect(
+      decide(call("notion-update-data-source", { data_source_id: "ds", title: "Tasks 2" })),
+    ).toContain("Changing a data source through the connector is refused");
+  });
+
+  it("asks the board nothing for any of them — no word opens these", () => {
+    for (const input of [
+      call("notion-duplicate-page", { page_id: "p" }),
+      call("notion-move-pages", { page_or_database_ids: ["p"], new_parent: { type: "page_id" } }),
+      call("notion-update-data-source", { data_source_id: "ds" }),
+      {
+        tool_name: "Bash",
+        tool_input: { command: "curl -X POST https://api.notion.com/v1/comments" },
+      },
+    ]) {
+      expect(wantedBy(input)).toEqual([]);
+    }
   });
 });
 

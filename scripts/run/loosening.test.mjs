@@ -112,7 +112,7 @@ describe("the corpus", () => {
   // TC3 → AC3: a rule with no corpus entry could be deleted unseen.
   it("has an entry for every rule letter the guard marks", () => {
     const letters = ruleLetters(readFileSync(join(root, "scripts/hooks/guard.mjs"), "utf8"));
-    expect(letters).toEqual(["a", "b", "c", "d", "e", "f", "g", "h"]);
+    expect(letters).toEqual(["a", "b", "c", "d", "e", "f", "g", "h", "i"]);
     expect(uncovered(letters)).toEqual([]);
   });
 

@@ -91,6 +91,54 @@ describe("the hook commands in .claude/settings.json", () => {
     expect(result.stderr).toContain("your voice");
   });
 
+  // T0.18 TC1 → AC1, routes 3 and 4: the connector's duplicate, move and data-source writes
+  // reach the board too, so they are guarded by the same command — in a group of their own,
+  // leaving main's group for the first three as it stands.
+  it("guards the connector's duplicate, move and data-source writes with the same command", () => {
+    const groups = settings.hooks.PreToolUse.filter((e) => e.matcher.includes("notion"));
+    const matches = (tool) =>
+      groups.some((e) =>
+        new RegExp(`^(?:${e.matcher})$`).test(`mcp__a6bc5cd2-b1e4-484a-b22d-e3708b2a94f4__${tool}`),
+      );
+    for (const tool of [
+      "notion-duplicate-page",
+      "notion-move-pages",
+      "notion-update-data-source",
+    ]) {
+      expect(matches(tool), tool).toBe(true);
+    }
+    expect(matches("notion-fetch")).toBe(false);
+    expect(matches("notion-query-data-sources")).toBe(false);
+    for (const entry of groups) {
+      expect(entry.hooks[0].command).toBe(commandOf("PreToolUse", "Bash"));
+    }
+    const result = hook(commandOf("PreToolUse", "Bash"), {
+      tool_name: "mcp__notion__notion-update-data-source",
+      tool_input: { data_source_id: "ds", statements: `RENAME COLUMN "Status" TO "Stage"` },
+      cwd: work,
+    });
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("Changing a data source through the connector is refused");
+  });
+
+  // T0.18 TC1 → AC1, routes 1 and 2: the guard runs from a temporary copy of main's scripts/,
+  // and a script this checkout runs is main's own only while it matches that copy byte for
+  // byte. runs.mjs writes the board by design (from the SessionEnd hook); an edited one is
+  // any other script.
+  it("reads a script against main's copy of it from the directory the hook extracted", () => {
+    const runs = join(work, "scripts", "run", "runs.mjs");
+    expect(hook(commandOf("PreToolUse", "Bash"), bash("node scripts/run/runs.mjs")).status).toBe(0);
+    const original = readFileSync(runs, "utf8");
+    try {
+      writeFileSync(runs, `${original}\n// edited in the checkout\n`);
+      const result = hook(commandOf("PreToolUse", "Bash"), bash("node scripts/run/runs.mjs"));
+      expect(result.status).toBe(2);
+      expect(result.stderr).toContain("Writing to the Notion API from the command line");
+    } finally {
+      writeFileSync(runs, original);
+    }
+  });
+
   it("refuses everything rather than run nothing when origin/main cannot be read", () => {
     sh(work, "update-ref", "-d", "refs/remotes/origin/main");
     const result = hook(commandOf("PreToolUse", "Bash"), bash("git status"));
