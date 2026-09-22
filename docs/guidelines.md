@@ -467,8 +467,9 @@ has no effort control, and a repository setting would reach every session opened
                 shared .git directory (task, page, branch, started, session) · assign ID and
                 Epic if missing, Priority Medium — the ID the lowest number free in the Epic's
                 phase, next-id.mjs read over every task on the board and over the branches and
-                docs files this repository carries (§7) · compare Spec versions against repo headers,
-                note drift · with nothing to claim, an idle run posts those comments, and one
+                docs files this repository carries, saying which of the two it could not read
+                (§7) · compare Spec versions against repo headers, note
+                drift · with nothing to claim, an idle run posts those comments, and one
                 that met a red in step 0 files one Fix task at Backlog (draft.mjs) and exits;
                 one that met nothing writes nothing else
 2  Inline       read every cited section · write docs/tickets/<id>.md — the pack the reviewer
@@ -739,12 +740,10 @@ One word per property, one term per concept. IDs: `T3.1` task · `E3.2` epic · 
 `R-0042` run · `2026-09-03 a1b2c3d` release. Branch = lowercase ID with a hyphen: `t3-1`.
 Criteria means the same thing on a task and on a phase: what must be true to be done.
 
-**A task's number belongs to its phase, not to its epic, and it is never used twice.** The Epic
-gives the phase and nothing else; the number is the lowest in that phase nobody holds, and holding
-it is a task on the board whatever its epic and whatever its status, or a branch or a file under
-`docs/` that still carries it. So a number outlives the task it was given to — `docs/log/T0.97.md`
-keeps T0.97 taken with no task of that name anywhere — and an epic owns no block of numbers
-(T0.28).
+**A task's number belongs to its phase, not to its epic, and it is never used twice:** the Epic
+gives the phase alone, the number is the lowest in that phase nobody holds, and holding it is a
+task on the board whatever its epic and whatever its status, or a branch or a file under `docs/`
+that still carries it after the task is gone (T0.28).
 
 ---
 

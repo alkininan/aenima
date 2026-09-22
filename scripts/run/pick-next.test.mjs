@@ -370,9 +370,9 @@ describe("readPick", () => {
     expect(result.why).toContain("NOTION_TOKEN");
   });
 
-  // T0.28 — next-id.mjs numbers across the phase, so it reads every task's Name whatever its
-  // epic and whatever its status. This read already holds them; a second one would cost a pass
-  // over the board to learn what is in hand.
+  // T0.28 TC2 → AC2. next-id.mjs numbers across the phase, so it reads every task's Name
+  // whatever its epic and whatever its status. This read already holds them; a second one would
+  // cost a pass over the board to learn what is in hand.
   it("prints every task's name, blocked and Done ones included", async () => {
     const rows = [
       row("T3.4 A", { id: "a", Blockers: ["b"] }),
@@ -385,6 +385,7 @@ describe("readPick", () => {
     expect(result.names).toEqual(["T3.4 A", "T3.1 B", "T0.2 C", "Unnumbered"]);
   });
 
+  // T0.28 TC2 → AC2
   it("prints them when asked among a few, which reads the same board", async () => {
     const rows = [row("T0.12 a", { Status: "In progress" }), row("T0.14 b")];
     const api = { tasks: async (ds) => (ds === "epics" ? EPICS : rows), comments: async () => [] };

@@ -50,7 +50,7 @@ describe("nextId", () => {
     expect(nextId("E5.2 Handover", ["Smoke A", "Another"]).id).toBe("T5.1");
   });
 
-  // TC2 → AC2
+  // The Build's "the epic still gives the phase": a number is one phase's and no other's.
   it("counts only the phase's own numbers", () => {
     expect(nextId("E3.1 X", ["T4.1 other phase", "T4.2 other phase"]).id).toBe("T3.1");
   });
@@ -121,16 +121,38 @@ describe("docsIds", () => {
 
 // TC3 → AC3
 describe("repoTaken", () => {
+  /** A git that answers each subcommand in turn; `top` null is a root it cannot name. */
+  const git =
+    ({ top, branches = { status: 0, stdout: "" } }) =>
+    (args) =>
+      args[0] === "rev-parse"
+        ? top === null
+          ? { status: 128, stdout: "" }
+          : { status: 0, stdout: `${top}\n` }
+        : branches;
+
   it("takes the numbers the branches and the docs tree carry", () => {
     const cwd = mkdtempSync(join(tmpdir(), "aenima-next-id-"));
     mkdirSync(join(cwd, "docs", "log"), { recursive: true });
     writeFileSync(join(cwd, "docs", "log", "T0.28.md"), "# T0.28\n");
     writeFileSync(join(cwd, "docs", "log", "deploy.md"), "# deploy\n");
 
-    const run = () => ({ status: 0, stdout: "origin/t1-4\nmain\n" });
+    const run = git({ top: cwd, branches: { status: 0, stdout: "origin/t1-4\nmain\n" } });
     const taken = repoTaken({ cwd, run });
     expect(taken.ids.sort()).toEqual(["T0.28", "T1.4"]);
     expect(taken.unread).toEqual([]);
+  });
+
+  // The docs tree is the repository's, not the working directory's: `scripts/` holds none, and
+  // reading it there answered T0.1 with nothing unread.
+  it("reads the docs tree at the root git names, not under the working directory", () => {
+    const root = mkdtempSync(join(tmpdir(), "aenima-next-id-"));
+    mkdirSync(join(root, "docs", "log"), { recursive: true });
+    writeFileSync(join(root, "docs", "log", "T0.1.md"), "# T0.1\n");
+    const cwd = join(root, "scripts");
+    mkdirSync(cwd);
+
+    expect(repoTaken({ cwd, run: git({ top: root }) })).toEqual({ ids: ["T0.1"], unread: [] });
   });
 
   it("says so when git could not answer, rather than answering short in silence", () => {
@@ -138,21 +160,28 @@ describe("repoTaken", () => {
     mkdirSync(join(cwd, "docs", "reports"), { recursive: true });
     writeFileSync(join(cwd, "docs", "reports", "T2.9.md"), "# T2.9\n");
 
-    const run = () => ({ status: 128, stdout: "" });
+    const run = git({ top: cwd, branches: { status: 128, stdout: "" } });
     expect(repoTaken({ cwd, run })).toEqual({ ids: ["T2.9"], unread: ["branches"] });
   });
 
-  it("takes nothing, and reports nothing unread, where there is no docs tree at all", () => {
+  it("takes nothing, and reports nothing unread, where the root holds no docs tree", () => {
     const cwd = mkdtempSync(join(tmpdir(), "aenima-next-id-"));
-    const run = () => ({ status: 0, stdout: "main\n" });
+    const run = git({ top: cwd, branches: { status: 0, stdout: "main\n" } });
     expect(repoTaken({ cwd, run })).toEqual({ ids: [], unread: [] });
+  });
+
+  // No root, so no way to know a missing tree from one somewhere else: the set is narrow.
+  it("says the docs tree is unread when git cannot name the root at all", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "aenima-next-id-"));
+    const run = git({ top: null, branches: { status: 128, stdout: "" } });
+    expect(repoTaken({ cwd, run })).toEqual({ ids: [], unread: ["branches", "docs"] });
   });
 
   it("says so when the docs tree is there and cannot be read", () => {
     const cwd = mkdtempSync(join(tmpdir(), "aenima-next-id-"));
     // A file where the tree should be: readdir refuses with ENOTDIR, not ENOENT.
     writeFileSync(join(cwd, "docs"), "not a directory\n");
-    const run = () => ({ status: 0, stdout: "origin/t1-4\n" });
+    const run = git({ top: cwd, branches: { status: 0, stdout: "origin/t1-4\n" } });
     expect(repoTaken({ cwd, run })).toEqual({ ids: ["T1.4"], unread: ["docs"] });
   });
 });
@@ -191,6 +220,23 @@ describe("next-id.mjs as the command", () => {
       id: "T0.4",
       phase: 0,
       n: 4,
+      unread: [],
+    });
+  });
+
+  // Must 2 of review pass 2: from `scripts/`, git still answers and `docs/` is not there, so the
+  // answer was T0.1 — the scaffold ticket's — with `unread` empty.
+  it("reads the checkout's docs tree from a directory inside it", () => {
+    const cwd = checkout("main");
+    mkdirSync(join(cwd, "docs", "log"), { recursive: true });
+    writeFileSync(join(cwd, "docs", "log", "T0.1.md"), "# T0.1\n");
+    const inner = join(cwd, "scripts");
+    mkdirSync(inner);
+
+    expect(cli({ epic: "E0.9 New", tasks: [] }, inner)).toEqual({
+      id: "T0.2",
+      phase: 0,
+      n: 2,
       unread: [],
     });
   });

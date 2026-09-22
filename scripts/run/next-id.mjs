@@ -29,7 +29,7 @@ import { basename, join } from "node:path";
 import { emit, isMain, readStdin } from "./cli.mjs";
 
 /** Where a ticket's own documents live, under the repository root. */
-export const DOCS_DIR = "docs";
+const DOCS_DIR = "docs";
 
 /** The phase number in an epic name, or null when the name carries none. */
 export function phaseOf(epicName) {
@@ -75,8 +75,13 @@ export function docsIds(paths) {
  *
  * Returns `{ ids, unread }`. `unread` names each of the two it could not read, and it is
  * never silent: a narrowed set answers a number something still carries, which is the repeat
- * this script exists to stop. A checkout that has no `docs/` tree at all is not an unread
- * one — there is nothing there to miss.
+ * this script exists to stop.
+ *
+ * `docs/` is read at the repository's root, which git names — `cwd` is wherever the command
+ * was typed, and `scripts/` holds no `docs/` tree. Reading it relative to `cwd` answered T0.1
+ * from one directory down, with `unread` empty: a duplicate handed out in silence, which is
+ * worse than the narrow answer this field exists to confess. A root that really holds no
+ * `docs/` tree has nothing to miss; a root git could not name is unread whatever is there.
  *
  * Injected `run` and `cwd` keep a test off this checkout.
  */
@@ -88,6 +93,9 @@ export function repoTaken({ cwd = process.cwd(), run } = {}) {
 
   const unread = [];
 
+  const top = g(["rev-parse", "--show-toplevel"]);
+  const root = top.status === 0 && top.stdout.trim() !== "" ? top.stdout.trim() : null;
+
   const branches = g(["branch", "-a", "--format=%(refname:short)"]);
   const ok = branches.status === 0;
   if (!ok) unread.push("branches");
@@ -95,9 +103,9 @@ export function repoTaken({ cwd = process.cwd(), run } = {}) {
 
   let entries = [];
   try {
-    entries = readdirSync(join(cwd, DOCS_DIR), { recursive: true });
+    entries = readdirSync(join(root ?? cwd, DOCS_DIR), { recursive: true });
   } catch (error) {
-    if (error?.code !== "ENOENT") unread.push("docs");
+    if (root === null || error?.code !== "ENOENT") unread.push("docs");
   }
 
   return { ids: [...new Set([...fromBranches, ...docsIds(entries)])], unread };
