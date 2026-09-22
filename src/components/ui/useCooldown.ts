@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-/** §8 (v2.10): a resend disables itself for this long after each use. */
-export const RESEND_COOLDOWN_MS = 60_000;
+import { RESEND_COOLDOWN_MS } from "@/lib/motion";
 
 /** The label counts in seconds, so the clock is read once a second. */
 const TICK_MS = 1000;

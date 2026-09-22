@@ -58,3 +58,7 @@ sample*.md
 
 .agents/
 .codex/
+
+# The upstream font files scripts/fonts/vendor.py cuts the subsets from. The subsets
+# are committed; the sources they came from are re-fetched by the script when it runs.
+.fonts-upstream/

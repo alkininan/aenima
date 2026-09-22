@@ -12,12 +12,11 @@ import {
   RADIO_DOT_CLASSES,
   SKELETON_SHAPES,
   TAB_UNDERLINE_CLASSES,
-  TOAST_DISMISS_MS,
   TOAST_TONES,
-  TOAST_UNDO_DISMISS_MS,
   TOOLTIP_SHOW_DELAY_MS,
   TOGGLE_THUMB_CLASSES,
   avatarClasses,
+  cardClasses,
   avatarInitialsClasses,
   avatarStatusClasses,
   checkBoxClasses,
@@ -34,6 +33,7 @@ import {
   toggleTrackClasses,
   tooltipClasses,
 } from "@/components/ui/variants";
+import { TOAST_DISMISS_MS, TOAST_UNDO_DISMISS_MS } from "@/lib/motion";
 
 /** Class lists are order-insensitive; compare as sets. */
 const has = (classes: string, ...expected: string[]) => {
@@ -258,8 +258,8 @@ describe("toastClasses", () => {
   // §8: glass recipe, radius 12, ui-body, z 500 (§4), auto-dismiss 5s.
   it("builds the glass toast", () => {
     const classes = toastClasses();
-    expect(has(classes, "glass", "rounded-[12px]", "type-ui-body", "p-[20px]")).toBe(true);
-    expect(classes).toContain("[--glass-elevation:var(--shadow-dropdown)]");
+    expect(has(classes, "glass", "rounded-panel", "type-ui-body", "p-[20px]")).toBe(true);
+    expect(classes).toContain("[--glass-elevation:var(--shadow-float)]");
   });
 
   // §8 is the default clock; §12 gives the undo case longer. Both are law.
@@ -352,5 +352,13 @@ describe("skeletonClasses", () => {
     expect(has(skeletonClasses("block"), "rounded-sm")).toBe(true);
     expect(has(skeletonClasses("text"), "rounded-pill")).toBe(true);
     expect(has(skeletonClasses("circle"), "rounded-pill", "aspect-square")).toBe(true);
+  });
+});
+
+describe("cardClasses", () => {
+  // §5: a card carries the inset specular line in --edge-highlight-card, which is a
+  // token of its own since v2.21 — it used to be written into this class as a literal.
+  it("carries the card edge highlight as the token, not as a value", () => {
+    expect(cardClasses()).toContain("shadow-[inset_0_1px_0_var(--edge-highlight-card)]");
   });
 });

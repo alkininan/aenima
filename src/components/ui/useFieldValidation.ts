@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { VALIDATION_PAUSE_MS } from "@/lib/motion";
+
 /** §8: a field never errors under this many characters — blur included. */
 export const VALIDATION_MIN_LENGTH = 3;
-/** §8: while typing, a flag waits for this much quiet. */
-export const VALIDATION_PAUSE_MS = 1500;
 
 export type UseFieldValidationOptions = {
   /** The field's current value. The hook reacts to it; it never owns it. */

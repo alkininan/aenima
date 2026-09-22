@@ -11,11 +11,11 @@ import {
   type ReactNode,
 } from "react";
 
+import { TOAST_DISMISS_MS, TOAST_UNDO_DISMISS_MS } from "@/lib/motion";
+
 import { Button } from "./Button";
 import {
   TOAST_ACTION_CLASSES,
-  TOAST_DISMISS_MS,
-  TOAST_UNDO_DISMISS_MS,
   TOAST_VIEWPORT_CLASSES,
   toastClasses,
   toastDotClasses,
