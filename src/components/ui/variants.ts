@@ -620,28 +620,19 @@ export type ToastTone = "success" | "warning";
 
 export const TOAST_TONES: readonly ToastTone[] = ["success", "warning"];
 
-/**
- * §8: auto-dismiss 5s, hover pauses. §12: an undo toast keeps its undo
- * "available 8s". Both are law — 5s is the default, 8s is the undo case, since
- * an action the user has to notice and reach for needs longer than a notice
- * they only have to read.
- */
-export const TOAST_DISMISS_MS = 5000;
-export const TOAST_UNDO_DISMISS_MS = 8000;
-
 // §8: bottom-center, z 500 (§4). The 24px stand-off from the viewport edge is
 // §4's page gutter.
 export const TOAST_VIEWPORT_CLASSES =
   "pointer-events-none fixed inset-x-0 bottom-[24px] z-[var(--z-toast)] flex flex-col " +
   "items-center gap-[8px] px-[24px]";
 
-// §8: glass recipe, radius 12, ui-body. §5 puts a toast on the dropdown shadow.
+// §8: glass recipe, --r-panel, ui-body. §5 puts a toast on the float shadow.
 // The 400 max width is §8's confirm-modal measure — the spec's only figure for
 // a narrow overlay — and 20px padding is the ticket-confirmed overlay padding.
 const TOAST_BASE =
   "glass pointer-events-auto flex w-full max-w-[400px] items-center gap-[8px] " +
-  "rounded-[12px] p-[20px] type-ui-body text-n-primary " +
-  "[--glass-elevation:var(--shadow-dropdown)]";
+  "rounded-panel p-[20px] type-ui-body text-n-primary " +
+  "[--glass-elevation:var(--shadow-float)]";
 
 export function toastClasses(className?: string): string {
   return cx(TOAST_BASE, className);
@@ -937,13 +928,13 @@ export function meterFillClasses(className?: string): string {
 
 /**
  * §5: "`--surface-1`, `--r-sm`, padding 16–20, optional `--glass-border`; cards
- * also carry the inset edge highlight at 10% (`rgba(255,255,255,.10)`) — quieter
- * than glass."
+ * also carry the inset edge highlight in `--edge-highlight-card` — quieter than
+ * glass." The quieter line is a token of its own since v2.21; it used to be
+ * written here as the one value in the recipe that appeared nowhere else.
  *
- * The 10% edge is the whole reason this is a class rather than three utilities
- * at each call site: it is the one value in the recipe that appears nowhere else
- * in the system, and §0 law 5 makes the specular line the signature. Glass
- * carries `--edge-highlight` at 16%; a card is the same gesture, quieter.
+ * The edge is the whole reason this is a class rather than three utilities at
+ * each call site: §0 law 5 makes the specular line the signature. Glass carries
+ * `--edge-highlight`; a card is the same gesture, quieter.
  *
  * §5 gives padding as a range, so the two ends are both offered: 16 for a dense
  * card in a list of them, 20 for one carrying a paragraph. 20 also matches §4's
@@ -953,7 +944,7 @@ export type CardPadding = 16 | 20;
 
 export const CARD_PADDINGS: readonly CardPadding[] = [16, 20];
 
-const CARD_BASE = "rounded-sm bg-surface-1 shadow-[inset_0_1px_0_rgba(255,255,255,.10)]";
+const CARD_BASE = "rounded-sm bg-surface-1 shadow-[inset_0_1px_0_var(--edge-highlight-card)]";
 
 const CARD_PADDING_CLASSES: Record<CardPadding, string> = {
   16: "p-[16px]",

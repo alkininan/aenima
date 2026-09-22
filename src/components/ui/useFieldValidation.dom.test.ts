@@ -1,11 +1,8 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  VALIDATION_MIN_LENGTH,
-  VALIDATION_PAUSE_MS,
-  useFieldValidation,
-} from "@/components/ui/useFieldValidation";
+import { VALIDATION_MIN_LENGTH, useFieldValidation } from "@/components/ui/useFieldValidation";
+import { VALIDATION_PAUSE_MS } from "@/lib/motion";
 
 const TOO_SHORT = "That doesn't look like an email address yet.";
 

@@ -1,7 +1,8 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { RESEND_COOLDOWN_MS, formatCountdown, useCooldown } from "@/components/ui/useCooldown";
+import { formatCountdown, useCooldown } from "@/components/ui/useCooldown";
+import { RESEND_COOLDOWN_MS } from "@/lib/motion";
 
 /** Drives the hook the way the resend control does: press, then let time pass. */
 function cooling(durationMs?: number) {

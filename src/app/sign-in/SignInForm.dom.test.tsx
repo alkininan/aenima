@@ -2,7 +2,7 @@ import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { RESEND_COOLDOWN_MS } from "@/components/ui/useCooldown";
+import { RESEND_COOLDOWN_MS } from "@/lib/motion";
 import { OTP_EXPIRY_SECONDS } from "@/lib/auth/otp";
 
 const requestCode = vi.fn();

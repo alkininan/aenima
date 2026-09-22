@@ -6,6 +6,8 @@
  * Every composite from the ticket, in its states, on --bg-base. Labels are
  * variant and state names, not product copy: real strings arrive with i18n.
  */
+import { VALIDATION_PAUSE_MS } from "@/lib/motion";
+
 import { useState, type ReactNode } from "react";
 
 import { Avatar } from "@/components/ui/Avatar";
@@ -31,11 +33,7 @@ import { Toggle } from "@/components/ui/Toggle";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { MailIcon, SearchIcon } from "@/components/ui/icons";
 import { AVATAR_SIZES, SKELETON_SHAPES, TOAST_TONES } from "@/components/ui/variants";
-import {
-  VALIDATION_MIN_LENGTH,
-  VALIDATION_PAUSE_MS,
-  useFieldValidation,
-} from "@/components/ui/useFieldValidation";
+import { VALIDATION_MIN_LENGTH, useFieldValidation } from "@/components/ui/useFieldValidation";
 import { formatCountdown, useCooldown } from "@/components/ui/useCooldown";
 import { inputHelperClasses } from "@/components/ui/variants";
 import { getDictionary } from "@/i18n";
