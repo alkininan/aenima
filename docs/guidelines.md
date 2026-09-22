@@ -1,4 +1,7 @@
-<!-- guidelines.md · v1.18 · in the repo · the token and the connector's other writes are guarded
+<!-- guidelines.md · v1.19 · in the repo · runs and reviews at xhigh effort (T0.27): §5 names the
+     effort and where it is set — the /ticket skill's frontmatter and the reviewer's, never the
+     repository's settings, which would reach every session opened here.
+     v1.18 · in the repo · the token and the connector's other writes are guarded
      (T0.18): §4 the word cannot be written over the token either — its bot is owned by your
      user, so what it posts comes back authored as you — and a page duplicated, pages moved
      under a database and a data source's schema are refused at the connector; §5 the token
@@ -414,6 +417,9 @@ Answers given inside an interactive Code tab session follow the same rule, appli
 One run is `/ticket`: fresh session, Fable, hooks as the boundary. A Desktop scheduled task types
 it once an hour; a person can still type it from any checkout. Everything countable in the steps
 below is a script under `scripts/run/` with a test; the skill holds the judgment and nothing else.
+A run and every review pass run at `xhigh` effort, set by `effort: xhigh` in the frontmatter of
+`.claude/skills/ticket/SKILL.md` and of `.claude/agents/reviewer.md` — the scheduled task's form
+has no effort control, and a repository setting would reach every session opened here (T0.27).
 
 ```
 0  Preflight    stamp this worktree as a run's and remove the ones earlier runs left (prune.mjs) ·
