@@ -4,7 +4,7 @@ import { NO_USAGE } from "@/lib/ai/types";
 import type { AiResult } from "@/lib/ai/types";
 import { applicableChecks, featurePrdPack } from "@/packs";
 
-import { draftSection, refineSection } from "./loop";
+import { draftSection, fit, refineSection } from "./loop";
 import type { Agents, Ledger, RefineInput, RoundWrite } from "./loop";
 import type { AssembledRequest, Turn } from "./prompt";
 import { ROUND_TEXT_MAX } from "./rounds";
@@ -84,7 +84,9 @@ function memoryLedger(seed: StoredRound[] = []) {
         roundNo: round.roundNo,
         outcome: round.outcome,
         reason: round.reason,
+        reasonTruncated: round.reasonTruncated,
         evidence: round.evidence,
+        evidenceTruncated: round.evidenceTruncated,
         authorPosition: round.authorPosition,
       });
       if (round.outcome !== "revised") return { versionId: null };
@@ -572,7 +574,35 @@ function stored(roundNo: number, outcome: StoredRound["outcome"], authorPosition
     roundNo,
     outcome,
     reason: `stored ${roundNo}`,
+    reasonTruncated: false,
     evidence: EVIDENCE,
+    evidenceTruncated: false,
     authorPosition,
   } satisfies StoredRound;
 }
+
+describe("fit — T3.2's TA3 → AA3", () => {
+  it("keeps text a round can hold, whole and unmarked", () => {
+    expect(fit("short")).toEqual({ text: "short", truncated: false });
+    const exact = "x".repeat(ROUND_TEXT_MAX);
+    expect(fit(exact)).toEqual({ text: exact, truncated: false });
+  });
+
+  it("cuts to what the column holds, and says it cut", () => {
+    const long = "x".repeat(ROUND_TEXT_MAX + 50);
+    expect(fit(long)).toEqual({ text: "x".repeat(ROUND_TEXT_MAX), truncated: true });
+  });
+
+  it("never cuts a character in half", () => {
+    // An emoji is a surrogate pair, so the 2000th code unit falls inside one.
+    const text = `${"x".repeat(ROUND_TEXT_MAX - 1)}😀tail`;
+    const cut = fit(text);
+
+    expect(cut.truncated).toBe(true);
+    expect(cut.text).toHaveLength(ROUND_TEXT_MAX - 1);
+    // A lone surrogate is replaced on its way to the driver, and the stored
+    // quote would then no longer occur in the section it came from.
+    expect([...cut.text].every((ch) => ch.codePointAt(0)! < 0xd800)).toBe(true);
+    expect(cut.text).toBe("x".repeat(ROUND_TEXT_MAX - 1));
+  });
+});

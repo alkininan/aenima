@@ -78,8 +78,17 @@ export type StoredRound = {
   outcome: RoundOutcome;
   /** The critic's position: what it found unclear. */
   reason: string;
+  /** AA3: the reason was longer than a round holds and was cut to fit. */
+  reasonTruncated: boolean;
   /** Quoted from the section the critic read, and verified to be there. */
   evidence: string;
+  /**
+   * AA3: the quote was longer than a round holds and was cut to fit — so it is
+   * no longer verbatim, and no longer occurs in the section it came from. Read
+   * back with the round, because "nothing about this path may be silent" is a
+   * claim about what a reader sees, not only about what the row stores.
+   */
+  evidenceTruncated: boolean;
   /**
    * The author's position: how its revision answered, or why it held. Null on a
    * surfacing the author was never shown (AA3) — there is no position, and one
@@ -143,8 +152,9 @@ export function currentCycle(
  * ledger is whole, and where they would not — a row the caller's read missed —
  * the highest number is the one the unique key will hold the next write to.
  *
- * With no cycle named it counts every cycle, which is what a reader asking "how
- * many times has this been argued over" wants; the cap asks for one.
+ * With no cycle named it gives the highest round number on any cycle — not the
+ * number of rounds a check has had across all of them, which is a sum and is
+ * nothing this asks for.
  */
 export function roundCount(
   rounds: readonly StoredRound[],

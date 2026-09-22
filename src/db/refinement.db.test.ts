@@ -230,7 +230,7 @@ describe.skipIf(SKIP)("the round ledger's key — TA3 → AA3", () => {
   // T3.2's TA1 → AA1. The cycle sits above the round number in the key, so a
   // check the human reopened starts again at round one without colliding with
   // the cycle it already spent — and the spent cycle's rows are still there.
-  it("lets a reopened check start again at round one on the next cycle", async () => {
+  it("T3.2's TA1 → AA1: lets a reopened check start again at round one on the next cycle", async () => {
     await rolledBack(async (tx) => {
       const a = await seed(tx, USER_A, "refine-a@example.test", "Refine A");
       await write(a, { roundNo: 1 });
@@ -248,7 +248,7 @@ describe.skipIf(SKIP)("the round ledger's key — TA3 → AA3", () => {
     });
   });
 
-  it("refuses a round with no cycle at all", async () => {
+  it("T3.2's TA1 → AA1: refuses a round with no cycle at all", async () => {
     await rolledBack(async (tx) => {
       const a = await seed(tx, USER_A, "refine-a@example.test", "Refine A");
       await expect(tx.savepoint(() => write(a, { cycleNo: 0 }))).rejects.toThrow(

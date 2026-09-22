@@ -39,13 +39,15 @@ export async function readRounds(workspaceId: string, artifactId: string): Promi
       round_no: number;
       outcome: RoundOutcome;
       reason: string;
+      reason_truncated: boolean;
       evidence: string;
+      evidence_truncated: boolean;
       author_position: string | null;
     }[]
   >`
     select section_id, check_id, cycle_no, base_section_hash,
            round_no, outcome::text as outcome,
-           reason, evidence, author_position
+           reason, reason_truncated, evidence, evidence_truncated, author_position
       from refinement_round
      where workspace_id = ${workspaceId} and artifact_id = ${artifactId}
   `;
@@ -58,7 +60,9 @@ export async function readRounds(workspaceId: string, artifactId: string): Promi
     roundNo: row.round_no,
     outcome: row.outcome,
     reason: row.reason,
+    reasonTruncated: row.reason_truncated,
     evidence: row.evidence,
+    evidenceTruncated: row.evidence_truncated,
     authorPosition: row.author_position,
   }));
 }
@@ -167,7 +171,7 @@ export async function writeRound(write: RoundToWrite): Promise<{ versionId: stri
       action: string,
       subjectTable: string,
       subjectId: string,
-      metadata: Record<string, string | number | null>,
+      metadata: Record<string, string | number | boolean | null>,
     ): Promise<void> => {
       await tx`
         insert into activity (
@@ -235,8 +239,8 @@ export async function writeRound(write: RoundToWrite): Promise<{ versionId: stri
       roundNo: round.roundNo,
       // AA3: a cut objection is a recorded fact on the ledger too, not only on
       // the row — "nothing about this path may be silent".
-      reasonTruncated: round.reasonTruncated ? 1 : 0,
-      evidenceTruncated: round.evidenceTruncated ? 1 : 0,
+      reasonTruncated: round.reasonTruncated,
+      evidenceTruncated: round.evidenceTruncated,
     });
 
     return { versionId: revisedVersionId };

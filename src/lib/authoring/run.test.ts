@@ -128,7 +128,7 @@ describe("refineArtifactSection", () => {
   // TA2. The addendum's ruling: §5 caches results per artifact version, so
   // applicability belongs to the version too. A run against an older version is
   // an answer about text that is no longer under refinement.
-  it("asks for the conditions of the version under refinement, and not for the artifact's newest run", async () => {
+  it("T3.2's TA2 → AA2: asks for the conditions of the version under refinement, and not for the artifact's newest run", async () => {
     db.conditions = { v0: ["network-dependent-surface"] };
     ai.replies = [{ objections: [] }];
 
@@ -243,7 +243,7 @@ describe("markdownBody", () => {
  * text in the newest human-authored version, so a surfaced check stays closed
  * while the human's text stands and is asked again once it does not.
  */
-describe("the cycle's baseline — TA1 → AA1", () => {
+describe("the cycle's baseline — T3.2's TA1 → AA1", () => {
   const surfaced = (baseSectionHash: string | null) => ({
     sectionId: "scheduling",
     checkId: "prd-4",
@@ -252,7 +252,9 @@ describe("the cycle's baseline — TA1 → AA1", () => {
     roundNo: 3,
     outcome: "surfaced" as const,
     reason: "It never says what happens when neither time works.",
+    reasonTruncated: false,
     evidence: "Propose 2 time options",
+    evidenceTruncated: false,
     authorPosition: "The section says what it can.",
   });
 

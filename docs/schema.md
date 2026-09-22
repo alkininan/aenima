@@ -165,7 +165,7 @@ assertion, never a null `user_id`.
 | `scoring_run` | One run: artifact version, rubric version, protocol version, provider, model, earned out of denominator. Append-only. |
 | `scoring_check_result` | One check's verdict inside a run, with the quote behind a failure. Append-only. |
 | `scoring_check_not_asked` | Its sibling: one check §4 took out of the run's denominator, and the condition that did it. Append-only. |
-| `refinement_round` | One round of §6's author-critic loop: a section, a check, the critic's objection, the author's position, how it ended. Round 3 marked `surfaced` is the open question. Append-only. |
+| `refinement_round` | One round of §6's author-critic loop: a section, a check, the cycle, the critic's objection, the author's position, how it ended. A row marked `surfaced` is the open question — round 3 after two revisions, or round 1 or 2 for an objection the author was never shown (0017). Append-only. |
 
 ### Enums
 
@@ -381,20 +381,20 @@ direct writes bounded to the settle — and the one that proves the policy chang
 is load-bearing rather than decorative.
 
 `drizzle/0015_refinement_round.sql` — T3.1, §6's two-round cap stored rather
-than inferred. One append-only row per round of the author-critic loop, unique on
-(artifact, section, check, round number) — T3.1's addendum: a row per artifact
-version could not stay append-only, because a refused revision cuts no version and
-the next round tests the same one. **The count is the highest round number for the
-key.** A section is a `##` heading block of the body and `section_id` its slug; the
-body itself is unchanged, since sectioning is a parse. **The open question is the
-round-3 row marked `surfaced`** — the check, the critic's evidence and reason, the
-author's latest position — and no open-question table exists; T3.2 and T3.4 read
-these rows. `refinement_round_shape` says which outcome carries which part and holds
-the cap in the database: `revised`, `held` and `refused` are rounds 1 and 2, only
-`revised` names the version it cut, only `refused` names the sections it strayed
-into, and `surfaced` is round 3. `RESTRICT` on every parent, no INSERT policy (a
-client that could write a round could spend or skip the cap), and SELECT through
-the item's product like `scoring_run`.
+than inferred. One append-only row per round of the author-critic loop — T3.1's
+addendum: a row per artifact version could not stay append-only, because a refused
+revision cuts no version and the next round tests the same one. **The count is the
+highest round number for the key.** A section is a `##` heading block of the body
+and `section_id` its slug; the body itself is unchanged, since sectioning is a
+parse. **The open question is the row marked `surfaced`** — the check, the critic's
+evidence and reason, the author's latest position — and no open-question table
+exists; T3.2 and T3.4 read these rows. `refinement_round_shape` says which outcome
+carries which part and holds the cap in the database: `revised`, `held` and
+`refused` are rounds 1 and 2, only `revised` names the version it cut, and only
+`refused` names the sections it strayed into. `RESTRICT` on every parent, no INSERT
+policy (a client that could write a round could spend or skip the cap), and SELECT
+through the item's product like `scoring_run`. **0017 changes the key, the shape
+and the author position**; read that paragraph with this one.
 
 `drizzle/0016_opportunity_keys.sql` — T1.4, `0005_item_keys.sql` one table over.
 `opportunity.key` is the product's `key_prefix` plus a per-opportunity counter
@@ -416,6 +416,30 @@ later than the newest row in drizzle's ledger, because `migrate()` passes such a
 file over in silence and returns cleanly — so the journal entry is restamped as
 well as re-indexed. `src/db/migrations.test.ts` holds all of it: one entry per
 file, `idx` matching the tag, and stamps that increase with the index.
+
+`drizzle/0017_refinement_cycles.sql` — T3.2's addendum, AA1 and AA3. **A surfaced
+check closes for the text it judged, not for ever.** `cycle_no` is which pass of
+§6's cap a section and a check are on, and `base_section_hash` is the section's
+text in the newest **human-authored** version, hashed — the cycle's baseline. A
+human rewrite of that section moves the hash and opens the next cycle at round
+zero; the author's own revisions are agent-authored and never move it, which is
+what keeps the cap a cap. Keyed literally to the artifact version, the loop would
+not terminate: round 1 cuts a version, so round 2 would find no rounds on it and
+start again at one. The unique key is therefore **(artifact, section, check,
+cycle, round number)**, the cycle above the round number, and `refinement_round_cycle`
+holds `cycle_no >= 1`. `base_section_hash` is nullable: the rows 0015 wrote carry
+none, and a section no human version holds has none — unknown is read as
+"unchanged", so those closures stand rather than re-spending two paid rounds on a
+guess.
+
+**And an objection too long for a round is cut, not dropped.** `reason_truncated`
+and `evidence_truncated` record it. A cut quote is no longer the verbatim evidence
+§1 law 3 asks for, so that objection never reaches the author and surfaces to the
+human instead — at whatever round its cycle is on, with no position, because the
+author was never asked. So `author_position` loses NOT NULL and the rewritten
+`refinement_round_shape` requires it of `revised`, `held` and `refused` — the three
+outcomes the author answered — while `surfaced` runs **rounds 1 to 3** and may
+carry none.
 
 ```
 pnpm db:generate   # diff the schema files into a new migration

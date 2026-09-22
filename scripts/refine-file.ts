@@ -178,12 +178,21 @@ async function main(): Promise<void> {
 
     console.log("── rounds ──────────────────────────────────────────────────────");
     for (const round of [...rounds].sort(
-      (a, b) => a.checkId.localeCompare(b.checkId) || a.roundNo - b.roundNo,
+      (a, b) =>
+        a.checkId.localeCompare(b.checkId) || a.cycleNo - b.cycleNo || a.roundNo - b.roundNo,
     )) {
-      console.log(`${round.checkId} · round ${round.roundNo} · ${round.outcome}`);
-      console.log(`  critic:   ${round.reason}`);
-      console.log(`  evidence: ${round.evidence}`);
-      console.log(`  author:   ${round.authorPosition}`);
+      // The cycle, because a cycle-1 round 1 and a cycle-2 round 1 are different
+      // rounds about different text; and the cuts, because AA3's "nothing about
+      // this path may be silent" is a claim about what a reader sees.
+      const cut = (truncated: boolean) => (truncated ? " (cut to fit)" : "");
+      console.log(
+        `${round.checkId} · cycle ${round.cycleNo} · round ${round.roundNo} · ${round.outcome}`,
+      );
+      console.log(`  critic:   ${round.reason}${cut(round.reasonTruncated)}`);
+      console.log(`  evidence: ${round.evidence}${cut(round.evidenceTruncated)}`);
+      // A surfacing the author was never shown has no position, and a printed
+      // `null` reads as one it gave.
+      if (round.authorPosition !== null) console.log(`  author:   ${round.authorPosition}`);
       if (round.outsideSections) {
         console.log(`  outside:  ${round.outsideSections.join(", ")}`);
       }

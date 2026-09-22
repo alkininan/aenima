@@ -21,7 +21,9 @@ function round(roundNo: number, overrides: Partial<StoredRound> = {}): StoredRou
     roundNo,
     outcome: "revised",
     reason: `reason ${roundNo}`,
+    reasonTruncated: false,
     evidence: "Propose 2 time options",
+    evidenceTruncated: false,
     authorPosition: `position ${roundNo}`,
     ...overrides,
   };

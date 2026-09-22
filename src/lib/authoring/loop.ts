@@ -41,10 +41,6 @@ import { PREAMBLE_ID, parseSections, slugOf, spliceSection } from "./sections";
 export type RoundWrite = StoredRound & {
   /** The version the critic read when it raised this objection. */
   versionId: string;
-  /** AA3: the critic's reason was longer than a round holds and was cut to fit. */
-  reasonTruncated: boolean;
-  /** AA3: the quoted evidence was longer than a round holds and was cut to fit. */
-  evidenceTruncated: boolean;
   /** A refused round: every section the revision touched outside its scope. Null otherwise. */
   outsideSections: string[] | null;
   /** A revised round: the document with the revision in it, to store as the next version. Null otherwise. */
@@ -112,9 +108,15 @@ export type RefineResult =
  * inside the text a surface would then have to read back out.
  */
 export function fit(text: string): { text: string; truncated: boolean } {
-  return text.length <= ROUND_TEXT_MAX
-    ? { text, truncated: false }
-    : { text: text.slice(0, ROUND_TEXT_MAX), truncated: true };
+  if (text.length <= ROUND_TEXT_MAX) return { text, truncated: false };
+  // Back off a code unit when the cut falls between a surrogate pair. A lone
+  // surrogate is replaced on its way to the driver, and an evidence quote that
+  // came back with a replacement character no longer occurs in the section it
+  // was quoted from — the guard would reject a quote the critic really made.
+  const cut = ROUND_TEXT_MAX;
+  const code = text.charCodeAt(cut - 1);
+  const whole = code >= 0xd800 && code <= 0xdbff ? cut - 1 : cut;
+  return { text: text.slice(0, whole), truncated: true };
 }
 
 export async function refineSection(
