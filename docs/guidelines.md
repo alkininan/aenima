@@ -1,4 +1,7 @@
-<!-- guidelines.md · v1.19 · in the repo · runs and reviews at xhigh effort (T0.27): §5 names the
+<!-- guidelines.md · v1.20 · in the repo · an ID names one task (T0.28): §7 says a number
+     belongs to its phase and not to its epic, and stays taken while a branch or a docs file
+     carries it; §5 step 1 reads next-id.mjs over the whole board.
+     v1.19 · in the repo · runs and reviews at xhigh effort (T0.27): §5 names the
      effort and where it is set — the /ticket skill's frontmatter and the reviewer's, never the
      repository's settings, which would reach every session opened here.
      v1.18 · in the repo · the token and the connector's other writes are guarded
@@ -462,8 +465,11 @@ has no effort control, and a repository setting would reach every session opened
                 named); the newest of three or more Ready tasks at Urgent, the count aside ·
                 set In progress · write the marker aenima-run-active in the repository's
                 shared .git directory (task, page, branch, started, session) · assign ID and
-                Epic if missing, Priority Medium · compare Spec versions against repo headers,
-                note drift · with nothing to claim, an idle run posts those comments, and one
+                Epic if missing, Priority Medium — the ID the lowest number free in the Epic's
+                phase, next-id.mjs read over every task on the board and over the branches and
+                docs files this repository carries, saying which of the two it could not read
+                (§7) · compare Spec versions against repo headers, note
+                drift · with nothing to claim, an idle run posts those comments, and one
                 that met a red in step 0 files one Fix task at Backlog (draft.mjs) and exits;
                 one that met nothing writes nothing else
 2  Inline       read every cited section · write docs/tickets/<id>.md — the pack the reviewer
@@ -733,6 +739,11 @@ matches no rule.
 One word per property, one term per concept. IDs: `T3.1` task · `E3.2` epic · `Phase 3` ·
 `R-0042` run · `2026-09-03 a1b2c3d` release. Branch = lowercase ID with a hyphen: `t3-1`.
 Criteria means the same thing on a task and on a phase: what must be true to be done.
+
+**A task's number belongs to its phase, not to its epic, and it is never used twice:** the Epic
+gives the phase alone, the number is the lowest in that phase nobody holds, and holding it is a
+task on the board whatever its epic and whatever its status, or a branch or a file under `docs/`
+that still carries it after the task is gone (T0.28).
 
 ---
 

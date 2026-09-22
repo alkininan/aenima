@@ -115,11 +115,13 @@ work, from a reviewer finding outside the ticket, or from an idle run's own red 
 the `Drafted by pipeline` callout with a link back to the task it came from, and it lands at
 Backlog, never Ready. Then the run fills what is missing. `next-id.mjs` assigns a
 `T<phase>.<n>` when the Name has none, taking the phase from the Epic and the number from the
-highest already used within that epic; an Epic with no phase is a question, not a number to
-invent. `version-drift.mjs` parses the task's Spec line and compares each cited version with
-the document's header in the repo, so the report can say what changed since the ticket was
-cut. Epic, Priority and Type are proposed by the skill, and a one-line body is expanded into
-the seven sections of guidelines §2.
+phase: the lowest nobody holds, over every task on the board whatever its epic and whatever
+its status, and over the branches and the `docs/` tree this repository carries, so a number
+outlives the task it was given to and no epic owns a block; an Epic with no phase is a
+question, not a number to invent. `version-drift.mjs` parses the task's Spec line and
+compares each cited version with the document's header in the repo, so the report can say
+what changed since the ticket was cut. Epic, Priority and Type are proposed by the skill,
+and a one-line body is expanded into the seven sections of guidelines §2.
 
 ## 2 Inline
 

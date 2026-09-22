@@ -267,6 +267,7 @@ export async function readPick({ dir = process.cwd(), among = null, deps = {} } 
       queue: [],
       blocked: [],
       cycles: [],
+      names: [],
       notices: [],
     };
   }
@@ -276,6 +277,10 @@ export async function readPick({ dir = process.cwd(), among = null, deps = {} } 
   const rows = await api.tasks(board.tasks_ds);
   // An Epics row reads through the same shape: its id and its Name are all the order needs.
   const epics = await api.tasks(board.epics_ds);
+  // Every task's Name, whatever its epic and whatever its status: what `next-id.mjs` reads to
+  // answer a number nobody holds (§7). This read already has them; a second one would cost a
+  // pass over the board to learn what is already in hand.
+  const names = rows.map((row) => row.Name);
   if (among !== null) {
     const named = new Set(among);
     const asked = rows.map((row) =>
@@ -283,11 +288,11 @@ export async function readPick({ dir = process.cwd(), among = null, deps = {} } 
     );
     const result = pickNext(asked, { epics, prefix });
     const queue = result.queue.filter((task) => named.has(idOf(task.Name)));
-    return { token: true, ...result, pick: queue[0] ?? null, queue, notices: [] };
+    return { token: true, ...result, pick: queue[0] ?? null, queue, names, notices: [] };
   }
   const result = pickNext(rows, { epics, prefix });
   const notices = await unposted(result.notices, (id) => api.comments(id), prefix);
-  return { token: true, ...result, notices };
+  return { token: true, ...result, names, notices };
 }
 
 /** CLI: `node pick-next.mjs`, or `node pick-next.mjs --among T0.12,T0.13`, run from the checkout. */
