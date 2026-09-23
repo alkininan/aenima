@@ -63,8 +63,37 @@ describe("ownSections", () => {
     expect(own).toContain("docs/guidelines.md");
   });
 
-  // A cited section that quotes a `## ` line must not end the quote in the middle of itself.
-  it("does not end the Cited section on a heading inside a fenced block", () => {
+  // Most cited sections on main are pasted unfenced, so the next `## ` below `## Cited` is a
+  // heading of the quotation — T0.12's is `## 2. Databases`, seven lines down. Ending the
+  // exclusion there kept 400 lines of quoted spec as the ticket's own claims on 21 of the 34
+  // ticket files that carry one, and only `## Addendum` resumes it.
+  it("does not end the Cited section on a heading of the quotation itself", () => {
+    const text = [
+      "## Build",
+      "",
+      "`docs/kept.md`",
+      "",
+      "## Cited",
+      "",
+      "### guidelines §2",
+      "",
+      "## 2. Databases",
+      "",
+      "`docs/quoted.md`",
+      "",
+      "## Addendum",
+      "",
+      "`docs/addendum.md`",
+    ].join("\n");
+    const own = ownSections(text);
+    expect(own).toContain("docs/kept.md");
+    expect(own).toContain("docs/addendum.md");
+    expect(own).not.toContain("docs/quoted.md");
+  });
+
+  // The same file with the quotation fenced: the answer must not depend on how the run that
+  // wrote the ticket happened to paste it.
+  it("reads a fenced quotation the same way", () => {
     const text = [
       "## Build",
       "",
@@ -146,6 +175,7 @@ describe("classify", () => {
       "pnpm test",
       "--force",
       "docs/tickets/<id>.md",
+      "drizzle/0013_….sql",
       "z.toJSONSchema()",
       "src/db/queries/*",
       "0.3",

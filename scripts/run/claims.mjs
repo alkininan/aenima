@@ -55,31 +55,22 @@ const EXTENSIONS = new Set([
  * quoted text. Reading only the head would drop the freshest names in the file, in the round
  * §5 step 2 names in the same breath as this check.
  *
- * A heading inside a fenced block is quoted text and closes nothing — a cited section that
- * quotes a `## ` line would otherwise end the quote in the middle of itself.
+ * **Only `## Addendum` resumes it**, and not the next `## ` of any kind. Most cited sections
+ * on main are pasted unfenced, so the next `## ` is a heading *of the quotation* — T0.12's
+ * `## Cited` is followed seven lines later by `## 2. Databases` — and resuming there kept the
+ * 400 lines the exclusion exists to drop, on 21 of the 34 ticket files that carry one. The
+ * addendum is the only thing written below the quotation that the ticket wrote itself, so it
+ * is the only thing named.
  */
+export const ADDENDUM_HEADING = /^##\s+Addendum\b/;
+
 export function ownSections(text) {
   const lines = String(text ?? "").split("\n");
   const cited = lines.findIndex((line) => CITED_HEADING.test(line));
   if (cited === -1) return lines.join("\n");
 
-  let fence = null;
-  let after = lines.length;
-  for (let i = cited + 1; i < lines.length; i += 1) {
-    const mark = /^\s*(`{3,}|~{3,})/.exec(lines[i]);
-    if (fence) {
-      if (mark && mark[1][0] === fence.char && mark[1].length >= fence.length) fence = null;
-      continue;
-    }
-    if (mark) {
-      fence = { char: mark[1][0], length: mark[1].length };
-      continue;
-    }
-    if (/^##\s/.test(lines[i])) {
-      after = i;
-      break;
-    }
-  }
+  const found = lines.findIndex((line, i) => i > cited && ADDENDUM_HEADING.test(line));
+  const after = found === -1 ? lines.length : found;
   return [...lines.slice(0, cited), ...lines.slice(after)].join("\n");
 }
 
@@ -126,7 +117,7 @@ export function classify(token, { tops = [] } = {}) {
   if (name === "") return skip("empty");
   if (/\s/.test(name)) return skip("a command or a phrase");
   if (name.startsWith("-")) return skip("a flag");
-  if (/[<>]/.test(name)) return skip("a placeholder");
+  if (/[<>…]/.test(name)) return skip("a placeholder");
   if (/^(?:https?|file|mailto):/i.test(name)) return skip("a url");
   if (/[*?]/.test(name)) return skip("a glob");
   if (/[(){}[\]=;"'`|&!,@#§~^\\+]/.test(name)) return skip("a code fragment");
