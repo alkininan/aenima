@@ -38,7 +38,12 @@ skill: a change to the ticket, new work, an answer that resolves a question, a n
 clarifying round. The same script composes every comment the run posts — decision, clarifying,
 migration, stale, default, change, newWork, merged, applied, noted, setup, resolved, gated,
 reverted, readied, waiting, cycle, urgent, refused — in plain sentences with the prefix, from the
-sentences the skill supplies; a merge the guard let through and GitHub refused posts its
+sentences the skill supplies; a `merge` the thread grants first brings the branch into this
+checkout (`branch.mjs`) and gives it main (`premerge.mjs`, T0.36), because a branch pushed
+before anything else landed conflicts on the build log's generated sections alone — main's
+copy and `log-index.mjs` settle that, the gate runs on the result and the branch is pushed,
+and a conflict anywhere else is refused untouched; a merge the guard let through and GitHub
+refused anyway posts its
 `refused` comment with the files `conflicts.mjs` names, from `git merge-tree` against
 `origin/main` — and, since T0.24, a refusal answers nothing, so the word that granted the
 attempt outlives it and the next run acts on it rather than asking for it again, while
@@ -206,12 +211,18 @@ the diff against `origin/main` is missing from the record, or a reviewer pass do
 configured chain, say `yes` or `no` under resumed, or carry `PASS` or `FINDINGS` as its verdict.
 Once it passes, the run mirrors it into the task body's Report section, writes
 the ticket's build-log entry as its own file under `docs/log/`, and runs `log-index.mjs`,
-which rewrites the build log's Tickets done list from that directory so two open pull
-requests never edit the same lines.
+which rewrites the build log's two generated sections. Tickets done comes from that
+directory, so two open pull requests never edit the same lines. Current state comes from the
+repo as well since T0.32 — each document's own header version, read through the parser
+`version-drift.mjs` uses, and the newest entry in the directory — and carries no phase and no
+next ticket, because the board owns the queue and the roadmap owns the phases and a stamp a
+human maintains is a stamp that is eventually wrong.
 
 ## 9 Close
 
-The run commits on the branch, pushes it, opens the PR against `main` unless the branch already
+The run commits on the branch, gives it main before anything is judged (`premerge.mjs`, T0.36 —
+main may have moved while the ticket was built, and everything below is about the tree that
+results), pushes it, opens the PR against `main` unless the branch already
 has one, sets the task's Commit to the short hash and its Status to Review, and then asks
 `gated.mjs` whether the diff is its own to merge: since T0.21 that is a diff adding a migration
 under `drizzle/`, or one that **weakens a restraint**, which `loosening.mjs` measures rather than

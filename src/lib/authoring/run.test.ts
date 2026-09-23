@@ -4,6 +4,8 @@ vi.mock("server-only", () => ({}));
 
 import { applicableChecks, featurePrdPack } from "@/packs";
 
+import { parseSections, sectionHash } from "./sections";
+
 /**
  * The loop wired to the product — what `refineArtifactSection` reads, what it
  * sends through the seam, and what it does when the ledger refuses a write.
@@ -12,7 +14,12 @@ import { applicableChecks, featurePrdPack } from "@/packs";
 
 const db = vi.hoisted(() => ({
   artifact: null as Record<string, unknown> | null,
-  conditions: null as string[] | null,
+  /** Conditions per artifact version, as `scoring_run` holds them (AA2). */
+  conditions: {} as Record<string, string[]>,
+  /** Every version id a conditions read was asked for, in order. */
+  conditionsAsked: [] as string[],
+  /** The newest human-authored version's content, or null where no human wrote one. */
+  humanBaseline: null as { versionId: string; content: unknown } | null,
   rounds: [] as unknown[],
   writes: [] as Record<string, unknown>[],
   writeError: null as Error | null,
@@ -29,7 +36,11 @@ vi.mock("@/db/queries/scoring", () => ({
 }));
 
 vi.mock("@/db/queries/refinement", () => ({
-  readLatestConditions: async () => db.conditions,
+  readVersionConditions: async (_workspaceId: string, versionId: string) => {
+    db.conditionsAsked.push(versionId);
+    return db.conditions[versionId] ?? null;
+  },
+  readHumanBaseline: async () => db.humanBaseline,
   readRounds: async () => {
     if (db.readError) throw db.readError;
     return db.rounds;
@@ -77,7 +88,9 @@ beforeEach(() => {
     versionNo: 1,
     content: { body: BODY },
   };
-  db.conditions = null;
+  db.conditions = {};
+  db.conditionsAsked = [];
+  db.humanBaseline = { versionId: "v0", content: { body: BODY } };
   db.rounds = [];
   db.writes = [];
   db.writeError = null;
@@ -87,8 +100,8 @@ beforeEach(() => {
 });
 
 describe("refineArtifactSection", () => {
-  it("shows the critic the checks the newest scoring run left in play, and meters it as critique", async () => {
-    db.conditions = ["network-dependent-surface"];
+  it("shows the critic the checks the version's own scoring run left in play, and meters it as critique", async () => {
+    db.conditions = { v1: ["network-dependent-surface"] };
     ai.replies = [{ objections: [] }];
 
     const result = await refineArtifactSection(INPUT);
@@ -108,6 +121,22 @@ describe("refineArtifactSection", () => {
 
     await refineArtifactSection(INPUT);
 
+    expect(ai.calls[0]!.context).not.toContain("prd-16 (");
+    expect(ai.calls[0]!.context).toContain("prd-1 (");
+  });
+
+  // TA2. The addendum's ruling: §5 caches results per artifact version, so
+  // applicability belongs to the version too. A run against an older version is
+  // an answer about text that is no longer under refinement.
+  it("T3.2's TA2 → AA2: asks for the conditions of the version under refinement, and not for the artifact's newest run", async () => {
+    db.conditions = { v0: ["network-dependent-surface"] };
+    ai.replies = [{ objections: [] }];
+
+    await refineArtifactSection(INPUT);
+
+    expect(db.conditionsAsked).toEqual(["v1"]);
+    // v0's run said the conditioned check was in play; v1 has no run of its own,
+    // so the set is the unconditioned one and prd-16 stays out.
     expect(ai.calls[0]!.context).not.toContain("prd-16 (");
     expect(ai.calls[0]!.context).toContain("prd-1 (");
   });
@@ -206,5 +235,84 @@ describe("markdownBody", () => {
     expect(markdownBody({ body: 3 })).toBeNull();
     expect(markdownBody(null)).toBeNull();
     expect(markdownBody("## A")).toBeNull();
+  });
+});
+
+/**
+ * T3.2's TA1 → AA1, through the wiring: the cycle's baseline is the section's
+ * text in the newest human-authored version, so a surfaced check stays closed
+ * while the human's text stands and is asked again once it does not.
+ */
+describe("the cycle's baseline — T3.2's TA1 → AA1", () => {
+  const surfaced = (baseSectionHash: string | null) => ({
+    sectionId: "scheduling",
+    checkId: "prd-4",
+    cycleNo: 1,
+    baseSectionHash,
+    roundNo: 3,
+    outcome: "surfaced" as const,
+    reason: "It never says what happens when neither time works.",
+    reasonTruncated: false,
+    evidence: "Propose 2 time options",
+    evidenceTruncated: false,
+    authorPosition: "The section says what it can.",
+  });
+
+  const objecting = () => [
+    {
+      objections: [
+        {
+          checkId: "prd-4",
+          reason: "It never says what happens when neither time works.",
+          evidence: "Propose 2 time options",
+          scope: "scheduling",
+        },
+      ],
+    },
+    { objections: [] },
+  ];
+
+  it("keeps the question closed while the human's text for that section stands", async () => {
+    db.rounds = [surfaced(sectionHash(parseSections(BODY), "scheduling"))];
+    ai.replies = objecting();
+
+    const result = await refineArtifactSection(INPUT);
+
+    expect(result.ok).toBe(true);
+    expect(db.writes).toHaveLength(0);
+    // Only the critic was asked; the author was never brought back to a
+    // question the human already owns.
+    expect(ai.calls.map((call) => call.purpose)).toEqual(["critique"]);
+  });
+
+  it("opens the next cycle once the human has rewritten that section", async () => {
+    db.rounds = [surfaced(sectionHash(parseSections(BODY), "scheduling"))];
+    db.humanBaseline = {
+      versionId: "v0",
+      content: { body: "## Scheduling\nPropose 3 time options, and a fallback.\n" },
+    };
+    ai.replies = [
+      objecting()[0],
+      // The author holds the section, so the round is spent with no version cut
+      // — enough to show that the check was asked again, which is AA1's claim.
+      { section: BODY, position: "The section already says it." },
+      { objections: [] },
+    ];
+
+    await refineArtifactSection(INPUT);
+
+    expect(ai.calls.map((call) => call.purpose)).toEqual(["critique", "draft", "critique"]);
+    expect(db.writes).toHaveLength(1);
+    expect(db.writes[0]!.round).toMatchObject({ cycleNo: 2, roundNo: 1, outcome: "held" });
+  });
+
+  it("has no baseline for an artifact no human has written a version of, and the closure holds", async () => {
+    db.rounds = [surfaced(sectionHash(parseSections(BODY), "scheduling"))];
+    db.humanBaseline = null;
+    ai.replies = objecting();
+
+    await refineArtifactSection(INPUT);
+
+    expect(db.writes).toHaveLength(0);
   });
 });

@@ -34,15 +34,20 @@ export async function readRounds(workspaceId: string, artifactId: string): Promi
     {
       section_id: string;
       check_id: string;
+      cycle_no: number;
+      base_section_hash: string | null;
       round_no: number;
       outcome: RoundOutcome;
       reason: string;
+      reason_truncated: boolean;
       evidence: string;
-      author_position: string;
+      evidence_truncated: boolean;
+      author_position: string | null;
     }[]
   >`
-    select section_id, check_id, round_no, outcome::text as outcome,
-           reason, evidence, author_position
+    select section_id, check_id, cycle_no, base_section_hash,
+           round_no, outcome::text as outcome,
+           reason, reason_truncated, evidence, evidence_truncated, author_position
       from refinement_round
      where workspace_id = ${workspaceId} and artifact_id = ${artifactId}
   `;
@@ -50,38 +55,79 @@ export async function readRounds(workspaceId: string, artifactId: string): Promi
   return rows.map((row) => ({
     sectionId: row.section_id,
     checkId: row.check_id,
+    cycleNo: row.cycle_no,
+    baseSectionHash: row.base_section_hash,
     roundNo: row.round_no,
     outcome: row.outcome,
     reason: row.reason,
+    reasonTruncated: row.reason_truncated,
     evidence: row.evidence,
+    evidenceTruncated: row.evidence_truncated,
     authorPosition: row.author_position,
   }));
 }
 
 /**
- * The newest scoring run's §4 conditions for an artifact, or null when it has
- * never been scored.
+ * One artifact version's §4 conditions, or null when nothing has scored that
+ * version.
  *
  * The checks in play for a section are the checks the applicability engine left
- * in the denominator, and the engine answers in the pass that scores. Newest
- * rather than "the run for this version": a section being refined is a version
- * nobody has scored yet, and the last answer is the best one there is.
+ * in the denominator, and the engine answers in the pass that scores. **The
+ * version's own run, never the artifact's newest** (T3.1's addendum, AA2):
+ * §5 caches results per artifact version, so applicability belongs to the
+ * version too, and a run against an older version is an answer about text that
+ * is no longer the one under refinement. A version nobody has scored has no
+ * answer at all rather than a neighbour's, and the caller falls back to the
+ * checks no condition governs.
+ *
+ * Newest still breaks the tie *within* the version: §5's cache key carries the
+ * pack, its version and the protocol version beside the artifact version, so
+ * one version can hold several runs, and the last one is the current reading.
  */
-export async function readLatestConditions(
+export async function readVersionConditions(
   workspaceId: string,
-  artifactId: string,
+  artifactVersionId: string,
 ): Promise<string[] | null> {
   const { sql } = sharedDbClient();
 
   const rows = await sql<{ conditions_met: string[] }[]>`
     select conditions_met
       from scoring_run
-     where workspace_id = ${workspaceId} and artifact_id = ${artifactId}
+     where workspace_id = ${workspaceId} and artifact_version_id = ${artifactVersionId}
      order by scored_at desc
      limit 1
   `;
 
   return rows.at(0)?.conditions_met ?? null;
+}
+
+/**
+ * The newest **human-authored** version of an artifact — the baseline §6's cap
+ * is counted against (AA1), and null for an artifact no human has written a
+ * version of.
+ *
+ * Human-authored, because what reopens a surfaced check is the human rewriting
+ * the section. The author's own revisions are `artifact_version` rows too, and
+ * a baseline that moved with them would reopen every check the loop had just
+ * closed; `rounds.ts` says why that does not terminate.
+ */
+export async function readHumanBaseline(
+  workspaceId: string,
+  artifactId: string,
+): Promise<{ content: unknown } | null> {
+  const { sql } = sharedDbClient();
+
+  const rows = await sql<{ content: unknown }[]>`
+    select content
+      from artifact_version
+     where workspace_id = ${workspaceId} and artifact_id = ${artifactId}
+       and authored_by_kind = 'human'
+     order by version_no desc
+     limit 1
+  `;
+
+  const row = rows.at(0);
+  return row ? { content: row.content } : null;
 }
 
 export type RoundToWrite = {
@@ -125,7 +171,7 @@ export async function writeRound(write: RoundToWrite): Promise<{ versionId: stri
       action: string,
       subjectTable: string,
       subjectId: string,
-      metadata: Record<string, string | number | null>,
+      metadata: Record<string, string | number | boolean | null>,
     ): Promise<void> => {
       await tx`
         insert into activity (
@@ -171,14 +217,16 @@ export async function writeRound(write: RoundToWrite): Promise<{ versionId: stri
     const rounds = await tx<{ id: string }[]>`
       insert into refinement_round (
         workspace_id, item_id, artifact_id, artifact_version_id,
-        section_id, check_id, round_no, outcome,
-        reason, evidence, author_position, revised_version_id, outside_sections
+        section_id, check_id, cycle_no, base_section_hash, round_no, outcome,
+        reason, reason_truncated, evidence, evidence_truncated,
+        author_position, revised_version_id, outside_sections
       ) values (
         ${write.workspaceId}, ${write.itemId}, ${write.artifactId}, ${round.versionId},
-        ${round.sectionId}, ${round.checkId}, ${round.roundNo},
-        ${round.outcome}::refinement_outcome,
-        ${round.reason}, ${round.evidence}, ${round.authorPosition},
-        ${revisedVersionId}, ${round.outsideSections}
+        ${round.sectionId}, ${round.checkId}, ${round.cycleNo}, ${round.baseSectionHash},
+        ${round.roundNo}, ${round.outcome}::refinement_outcome,
+        ${round.reason}, ${round.reasonTruncated},
+        ${round.evidence}, ${round.evidenceTruncated},
+        ${round.authorPosition}, ${revisedVersionId}, ${round.outsideSections}
       )
       returning id
     `;
@@ -187,7 +235,12 @@ export async function writeRound(write: RoundToWrite): Promise<{ versionId: stri
       artifactId: write.artifactId,
       sectionId: round.sectionId,
       checkId: round.checkId,
+      cycleNo: round.cycleNo,
       roundNo: round.roundNo,
+      // AA3: a cut objection is a recorded fact on the ledger too, not only on
+      // the row — "nothing about this path may be silent".
+      reasonTruncated: round.reasonTruncated,
+      evidenceTruncated: round.evidenceTruncated,
     });
 
     return { versionId: revisedVersionId };

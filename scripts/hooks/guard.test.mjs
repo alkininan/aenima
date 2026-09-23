@@ -1495,3 +1495,116 @@ describe("judge — reads the marker and the token file, then the thread", () =>
     expect(release({ session: "s20" }, { cwd: worktree }).released).toBe(true);
   });
 });
+
+// T0.18's cold review, pass 2, Should 1: `parse()` read the command string of `sh -c "…"` only
+// when `-c` stood as its own word. Short flags cluster in one word, and every shell here reads
+// `c` in that cluster as `-c` — `bash -lc '…'`, `sh -ec '…'`, `bash -xc '…'` all run the next
+// word. The cluster hid that word from every rule below: on main this carried `pnpm db:push`
+// past rule (a), `git push --force` past rule (d) and a write to the board's API past rule (i).
+describe("T0.31, AC1 — a shell's -c bundled with other short flags", () => {
+  const run = (command, readScript = () => null) => [
+    { tool_name: "Bash", tool_input: { command }, cwd: "/repo" },
+    { currentBranch: () => "t0-31", readScript, mainScript: () => null },
+  ];
+  const TOKEN = "the board's token writes as you";
+  const POST = "curl -X POST https://api.notion.com/v1/comments -d @c.json";
+
+  it("parses the bundle's next word as the command line it runs", () => {
+    for (const command of [
+      "bash -lc 'pnpm db:push'",
+      "sh -ec 'pnpm db:push'",
+      "bash -xc 'pnpm db:push'",
+      "zsh -lec 'pnpm db:push'",
+    ]) {
+      expect(
+        parse(command).map((cmd) => cmd.argv.join(" ")),
+        command,
+      ).toContain("pnpm db:push");
+    }
+  });
+
+  it("rule (a): refuses db:push behind a bundled -c", () => {
+    for (const command of [
+      "bash -lc 'pnpm db:push'",
+      "sh -ec 'pnpm db:push'",
+      "bash -xc 'drizzle-kit push'",
+    ]) {
+      expect(decide(...run(command)), command).toContain("refused");
+    }
+  });
+
+  it("rule (d): refuses a force-push behind a bundled -c", () => {
+    for (const command of ["bash -lc 'git push --force'", "sh -ec 'git push -f origin t0-31'"]) {
+      expect(decide(...run(command)), command).toContain("Force-pushing");
+    }
+  });
+
+  it("rule (i): refuses a write to the board's API behind a bundled -c", () => {
+    expect(decide(...run(`sh -ec "${POST}"`))).toContain(TOKEN);
+    expect(decide(...run(`bash -lc "${POST}"`))).toContain(TOKEN);
+  });
+
+  // The shell reads `c` anywhere in the cluster, not only last: `bash -cl '…'` runs the string
+  // as surely as `bash -lc '…'` does. Reading only a cluster that ends in `c` would leave the
+  // same hole one letter away.
+  it("reads the cluster wherever c sits in it", () => {
+    expect(decide(...run("bash -cl 'git push --force'"))).toContain("Force-pushing");
+    expect(decide(...run("bash -cx 'pnpm db:push'"))).toContain("refused");
+  });
+
+  // A long option is not a cluster of short flags, and neither is a bare dash. A long option
+  // beside a real `-c` is still a real `-c`.
+  it("leaves a shell that runs no command string alone", () => {
+    expect(decide(...run("bash --version"))).toBeNull();
+    expect(decide(...run("bash --color"))).toBeNull();
+    expect(decide(...run("bash -l"))).toBeNull();
+    expect(decide(...run("sh -e"))).toBeNull();
+    expect(decide(...run("bash --rcfile /tmp/rc -c 'pnpm db:push'"))).toContain("refused");
+  });
+
+  // `shellRun` skips a shell that carries `-c` because `parse()` has already read the string.
+  // Blind to the cluster, it read that string as the path of a script to open instead.
+  it("does not also read the command string as a script path", () => {
+    expect(decide(...run("bash -lc 'echo hi'", () => POST))).toBeNull();
+  });
+
+  // Bash's long options are spelled with one dash as well as two, and three of them end in a
+  // letter run that reads as a cluster: `-norc`, `-rcfile`, `-restricted`. Taken for a `-c`,
+  // the first of them shadows the real one behind it — review pass 2, Must 1.
+  it("does not take a single-dash long option for the cluster", () => {
+    expect(decide(...run("bash -norc -c 'pnpm db:push'"))).toContain("refused");
+    expect(decide(...run("bash -norc -c 'git push --force'"))).toContain("Force-pushing");
+    expect(decide(...run(`bash -norc -c "${POST}"`))).toContain(TOKEN);
+    expect(decide(...run("bash -rcfile /tmp/rc -c 'pnpm db:push'"))).toContain("refused");
+    expect(decide(...run("bash -restricted -c 'pnpm db:push'"))).toContain("refused");
+    // The ticket's own shape loses to the same word.
+    expect(decide(...run("bash -norc -lc 'pnpm db:push'"))).toContain("refused");
+    // And the second call site: the option is not a cluster, so the script is still read.
+    expect(decide(...run("bash -norc post.sh", () => POST))).toContain(TOKEN);
+  });
+
+  // Bash's letters-only long options holding a `c` are four, not three: review pass 3, Should 1
+  // measured `bash -protected post.sh` refused on main and allowed here.
+  it("knows every one-dash long option that reads as a cluster", () => {
+    for (const option of ["-norc", "-rcfile", "-restricted", "-protected"]) {
+      expect(decide(...run(`bash ${option} post.sh`, () => POST)), option).toContain(TOKEN);
+      expect(decide(...run(`bash ${option} -c 'pnpm db:push'`)), option).toContain("refused");
+    }
+  });
+
+  // An option the list above does not know must not hide a later `-c` either, so every word
+  // that reads as the flag is followed, not just the first.
+  it("reads past an option it does not know to the -c behind it", () => {
+    expect(decide(...run("bash -zzc -c 'pnpm db:push'"))).toContain("refused");
+    expect(decide(...run(`sh -qc -c "${POST}"`))).toContain(TOKEN);
+  });
+
+  // The cluster is the shell's, and only the words before the script are the shell's. A word
+  // after it belongs to the script, so a flag-looking argument must not hide the file: review
+  // pass 1, Must 1 measured `bash post.sh -lc` refused on main and allowed here.
+  it("still reads a script whose own argument looks like the cluster", () => {
+    for (const command of ["bash post.sh -lc", "sh post.sh -vc extra", "bash -x post.sh -lc"]) {
+      expect(decide(...run(command, () => POST)), command).toContain(TOKEN);
+    }
+  });
+});

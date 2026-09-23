@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import type { Section } from "./scope";
 
 /**
@@ -174,4 +176,31 @@ export function spliceSection(sections: readonly Section[], id: string, text: st
   return joinSections(
     sections.map((section, i) => (i === index ? { id: section.id, text: kept } : section)),
   );
+}
+
+/**
+ * One section's text, hashed — the cycle's baseline (T3.2's addendum, AA1), and
+ * null where the body holds no section with that id.
+ *
+ * The section's own text and nothing around it, so a heading that moved, a
+ * neighbour that was rewritten and a section that was added elsewhere all leave
+ * this one's baseline where it was: AA1 reopens the check on *that* section, not
+ * every check in the document. Null rather than a hash of nothing, because "no
+ * such section" and "a section that is empty" are different facts and only the
+ * first one means there is no baseline to compare against.
+ *
+ * sha-256, hex, 64 characters — inside `refinement_round_base_hash_len`.
+ */
+export function sectionHash(sections: readonly Section[], id: string): string | null {
+  const section = sections.find((candidate) => candidate.id === id);
+  if (!section) return null;
+  // The trailing break run is dropped first, for `spliceSection`'s reason: the
+  // parse is lossless, so a section carries the blank lines that separate it
+  // from the next one, and a section moved to the end of the document loses one
+  // without a word of it changing. That is formatting at the seam, and a
+  // baseline that moved on it would reopen every check on a section somebody
+  // reordered — a re-spend of two paid rounds for an edit nobody made.
+  return createHash("sha256")
+    .update(section.text.replace(/(?:\r?\n)*$/, ""))
+    .digest("hex");
 }

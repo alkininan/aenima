@@ -983,14 +983,35 @@ export const refinementRound = pgTable(
     sectionId: text("section_id").notNull(),
     /** A rubric check id (`prd-4`), never a requirement id. */
     checkId: text("check_id").notNull(),
+    /**
+     * Which pass of §6's cap over this section and check (T3.2's addendum, AA1).
+     * A surfacing closes a check for the text it judged; a human rewrite of that
+     * section opens the next cycle and the count starts again at round zero.
+     */
+    cycleNo: integer("cycle_no").notNull(),
+    /**
+     * The section's text in the newest human-authored version when the round was
+     * written, hashed — the cycle's baseline. Null on a round written before
+     * cycles existed, and on a section no human version holds.
+     */
+    baseSectionHash: text("base_section_hash"),
     roundNo: integer("round_no").notNull(),
     outcome: refinementOutcome("outcome").notNull(),
     /** The critic's position: what it found unclear. */
     reason: text("reason").notNull(),
+    /** AA3: the reason was longer than this column holds and was cut to fit. */
+    reasonTruncated: boolean("reason_truncated").notNull(),
     /** Quoted from the section the critic read, and verified to occur in it before the row is written. */
     evidence: text("evidence").notNull(),
-    /** The author's position — its account of its revision, or, surfaced, the latest one it gave. */
-    authorPosition: text("author_position").notNull(),
+    /** AA3: the quote was longer than this column holds and was cut to fit. */
+    evidenceTruncated: boolean("evidence_truncated").notNull(),
+    /**
+     * The author's position — its account of its revision, or, surfaced, the
+     * latest one it gave. Null on a surfacing the author was never shown (AA3):
+     * there is no position, and one written in would be the ledger saying
+     * something that did not happen.
+     */
+    authorPosition: text("author_position"),
     /** `revised` only: the version the revision cut. */
     revisedVersionId: uuid("revised_version_id"),
     /** `refused` only: the sections the revision touched outside its scope. */
@@ -999,8 +1020,10 @@ export const refinementRound = pgTable(
   },
   (t) => [
     unique("refinement_round_workspace_id").on(t.workspaceId, t.id),
-    // T3.1's addendum, answer 3, word for word: the round number is the key.
-    unique("refinement_round_key").on(t.artifactId, t.sectionId, t.checkId, t.roundNo),
+    // T3.1's addendum, answer 3: the round number is the key — and T3.2's AA1
+    // puts the cycle above it, so a check reopened by a human rewrite starts at
+    // round zero without colliding with the cycle it already spent.
+    unique("refinement_round_key").on(t.artifactId, t.sectionId, t.checkId, t.cycleNo, t.roundNo),
     foreignKey({
       columns: [t.workspaceId],
       foreignColumns: [workspace.id],
@@ -1030,24 +1053,45 @@ export const refinementRound = pgTable(
     check("refinement_round_check_len", sql`length(btrim(${t.checkId})) between 1 and 120`),
     check("refinement_round_reason_len", sql`length(btrim(${t.reason})) between 1 and 2000`),
     check("refinement_round_evidence_len", sql`length(btrim(${t.evidence})) between 1 and 2000`),
+    // A null author position is the shape below's business, not a length's: a
+    // CHECK passes on NULL (0009), which is exactly what a surfacing the author
+    // never saw needs, and every other outcome is held to non-blank there.
     check(
       "refinement_round_position_len",
       sql`length(btrim(${t.authorPosition})) between 1 and 2000`,
     ),
+    check("refinement_round_cycle", sql`${t.cycleNo} >= 1`),
+    check(
+      "refinement_round_base_hash_len",
+      sql`length(btrim(${t.baseSectionHash})) between 1 and 200`,
+    ),
     // Which outcome carries which part, and §6's cap: two revisions, then the
     // human. `cardinality` rather than `array_length`, which is NULL on an empty
     // array — and a CHECK whose expression is NULL passes (0009).
+    //
+    // A surfacing is round 3 — the third objection, after two revisions — or an
+    // early one, and an early one is only the objection whose quote would not
+    // fit (AA3): `evidenceTruncated`, and no author position, because the author
+    // was never shown it. Tying the two together is what keeps §6's cap the
+    // database's: without it the table takes a round-1 surfacing on any
+    // objection, which is a loop skipping the cap with nothing noticing.
     check(
       "refinement_round_shape",
       sql`(${t.outcome} = 'revised' and ${t.roundNo} between 1 and 2
-             and ${t.revisedVersionId} is not null and ${t.outsideSections} is null)
+             and ${t.revisedVersionId} is not null and ${t.outsideSections} is null
+             and ${t.authorPosition} is not null)
        or (${t.outcome} = 'held' and ${t.roundNo} between 1 and 2
-             and ${t.revisedVersionId} is null and ${t.outsideSections} is null)
+             and ${t.revisedVersionId} is null and ${t.outsideSections} is null
+             and ${t.authorPosition} is not null)
        or (${t.outcome} = 'refused' and ${t.roundNo} between 1 and 2
              and ${t.revisedVersionId} is null and ${t.outsideSections} is not null
-             and cardinality(${t.outsideSections}) > 0)
-       or (${t.outcome} = 'surfaced' and ${t.roundNo} = 3
-             and ${t.revisedVersionId} is null and ${t.outsideSections} is null)`,
+             and cardinality(${t.outsideSections}) > 0
+             and ${t.authorPosition} is not null)
+       or (${t.outcome} = 'surfaced'
+             and ${t.revisedVersionId} is null and ${t.outsideSections} is null
+             and (${t.roundNo} = 3
+                  or (${t.roundNo} between 1 and 2
+                      and ${t.evidenceTruncated} and ${t.authorPosition} is null)))`,
     ),
   ],
 );
