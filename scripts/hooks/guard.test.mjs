@@ -1465,7 +1465,7 @@ describe("judge — reads the marker and the token file, then the thread", () =>
 // `c` in that cluster as `-c` — `bash -lc '…'`, `sh -ec '…'`, `bash -xc '…'` all run the next
 // word. The cluster hid that word from every rule below: on main this carried `pnpm db:push`
 // past rule (a), `git push --force` past rule (d) and a write to the board's API past rule (i).
-describe("T0.31 — a shell's -c bundled with other short flags", () => {
+describe("T0.31, AC1 — a shell's -c bundled with other short flags", () => {
   const run = (command, readScript = () => null) => [
     { tool_name: "Bash", tool_input: { command }, cwd: "/repo" },
     { currentBranch: () => "t0-31", readScript, mainScript: () => null },
@@ -1480,7 +1480,10 @@ describe("T0.31 — a shell's -c bundled with other short flags", () => {
       "bash -xc 'pnpm db:push'",
       "zsh -lec 'pnpm db:push'",
     ]) {
-      expect(parse(command).map((cmd) => cmd.argv.join(" ")), command).toContain("pnpm db:push");
+      expect(
+        parse(command).map((cmd) => cmd.argv.join(" ")),
+        command,
+      ).toContain("pnpm db:push");
     }
   });
 
@@ -1527,6 +1530,28 @@ describe("T0.31 — a shell's -c bundled with other short flags", () => {
   // Blind to the cluster, it read that string as the path of a script to open instead.
   it("does not also read the command string as a script path", () => {
     expect(decide(...run("bash -lc 'echo hi'", () => POST))).toBeNull();
+  });
+
+  // Bash's long options are spelled with one dash as well as two, and three of them end in a
+  // letter run that reads as a cluster: `-norc`, `-rcfile`, `-restricted`. Taken for a `-c`,
+  // the first of them shadows the real one behind it — review pass 2, Must 1.
+  it("does not take a single-dash long option for the cluster", () => {
+    expect(decide(...run("bash -norc -c 'pnpm db:push'"))).toContain("refused");
+    expect(decide(...run("bash -norc -c 'git push --force'"))).toContain("Force-pushing");
+    expect(decide(...run(`bash -norc -c "${POST}"`))).toContain(TOKEN);
+    expect(decide(...run("bash -rcfile /tmp/rc -c 'pnpm db:push'"))).toContain("refused");
+    expect(decide(...run("bash -restricted -c 'pnpm db:push'"))).toContain("refused");
+    // The ticket's own shape loses to the same word.
+    expect(decide(...run("bash -norc -lc 'pnpm db:push'"))).toContain("refused");
+    // And the second call site: the option is not a cluster, so the script is still read.
+    expect(decide(...run("bash -norc post.sh", () => POST))).toContain(TOKEN);
+  });
+
+  // An option the list above does not know must not hide a later `-c` either, so every word
+  // that reads as the flag is followed, not just the first.
+  it("reads past an option it does not know to the -c behind it", () => {
+    expect(decide(...run("bash -zzc -c 'pnpm db:push'"))).toContain("refused");
+    expect(decide(...run(`sh -qc -c "${POST}"`))).toContain(TOKEN);
   });
 
   // The cluster is the shell's, and only the words before the script are the shell's. A word
