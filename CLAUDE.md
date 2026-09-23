@@ -69,6 +69,7 @@ Report back as: ACs implemented, tests written, open questions.
 
 ## References (read on demand)
 `docs/product-spec.md` · `docs/design-spec.md` · `docs/schema.md`
+Area rules load by path from `.claude/rules/` — one file per area, each scoped by a `paths:` list, so a rule arrives when you open the code it governs.
 
 <!-- Humans: this file is the contract; edits here change agent behaviour globally.
      Keep it under ~150 lines — it is loaded into every single session. -->

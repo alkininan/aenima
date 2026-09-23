@@ -86,9 +86,12 @@ One file per ticket under `docs/log/`, oldest first. This list is written by `no
 - [T0.28 — Number task IDs across the phase](log/T0.28.md) · 2026-09-22
 - [T0.29 — Design spec v2.22](log/T0.29.md) · 2026-09-22
 - [T0.32 — Current state generated from the repo](log/T0.32.md) · 2026-09-23
+- [T0.33 — Load standing rules by path](log/T0.33.md) · 2026-09-23
 - [T0.31 — Read bundled shell -c flags](log/T0.31.md) · 2026-09-23
 
 ## Decisions made during the build
+
+The standing rules below are distilled one per line into `.claude/rules/`, which loads them by path when a session opens the code they govern; this section keeps the stories.
 
 _(when a ticket's report-back raises a question and you answer it, record the answer here.
 If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in the repo.)_
