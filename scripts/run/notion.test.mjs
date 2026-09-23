@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { client, comment, envValue, NOTION_VERSION, readToken, task } from "./notion.mjs";
+import { client, comment, envValue, NOTION_VERSION, readToken, run, task } from "./notion.mjs";
 
 /** A canned fetch: `routes` maps `METHOD path` (query string included) to a JSON body. */
 const canned = (routes, { status = 200 } = {}) => {
@@ -284,5 +284,39 @@ describe("client", () => {
       Commit: "",
     });
     expect(calls[0].method).toBe("GET");
+  });
+});
+
+// T0.30 — the Runs row read for the key it is recorded under: the task it relates to and the
+// minute it started. Name comes too, since the next number is read from the same rows.
+describe("run", () => {
+  it("reads a Runs row's task, start and name", () => {
+    expect(
+      run({
+        id: "r1",
+        properties: {
+          Name: { title: [{ plain_text: "R-0060 T0.27" }] },
+          Task: { relation: [{ id: "3e379daf-d42e-81dc-9081-e9592cf1fc0d" }] },
+          Started: { date: { start: "2026-09-22T11:36:00.000Z", end: null } },
+        },
+      }),
+    ).toEqual({
+      id: "r1",
+      Name: "R-0060 T0.27",
+      Task: ["3e379daf-d42e-81dc-9081-e9592cf1fc0d"],
+      Started: "2026-09-22T11:36:00.000Z",
+    });
+  });
+
+  // An idle run claims nothing and a transcript without timestamps starts nowhere. Neither is
+  // an error here; the key decides what to do with them.
+  it("reads an unrelated, undated row as an empty relation and a null start", () => {
+    expect(run({ id: "r2", properties: { Name: { title: [{ plain_text: "R-0064" }] } } })).toEqual({
+      id: "r2",
+      Name: "R-0064",
+      Task: [],
+      Started: null,
+    });
+    expect(run(null)).toEqual({ id: null, Name: "", Task: [], Started: null });
   });
 });
