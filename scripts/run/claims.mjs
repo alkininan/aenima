@@ -47,8 +47,9 @@ const EXTENSIONS = new Set([
  * The ticket's own sections — the file with the Cited section cut out of it.
  *
  * The Cited section is spec text quoted verbatim, so its names are the document's claims and
- * not the ticket's. Checking them would report `.env.migrate`, which is deliberately in no
- * commit, as drift on every ticket that cites guidelines §5.
+ * not the ticket's. Checking them would report `.claude/settings.local.json`, which guidelines
+ * §5 names and which is gitignored and so in no commit, as drift on every one of the seventeen
+ * ticket files that quote that section.
  *
  * Cut out, not truncated at: an addendum round appends `## Addendum` to a file that already
  * carries a Cited section, so two of the seven ticket files with one keep it *below* the
@@ -109,6 +110,13 @@ export function codeSpans(text) {
  * `tops` is the top level of the reference, and it is what tells a path from a git ref:
  * `src/packs` names a directory of this repository and `origin/main` names a branch, and
  * nothing in the two strings themselves says which is which.
+ *
+ * A single-segment name that leads with a dot — `.gitignore`, `.env.migrate` — is skipped and
+ * not looked up. It reads as a dotfile here and the corpus holds nothing else in that shape,
+ * but the shape is also a bare property reference: nothing separates `.git` from `.map`, and a
+ * count of the documents that exist cannot answer for the one nobody has written. Skipping is
+ * the direction that costs a missing report rather than a false one; widening it needs a rule
+ * about the shape, not another count.
  */
 export function classify(token, { tops = [] } = {}) {
   const name = String(token ?? "").trim();
