@@ -27,7 +27,7 @@ import {
 
 const root = join(import.meta.dirname, "..", "..");
 
-// T0.8's TC2 → its AC2, and T0.32's TC3 → its AC3. Both generated sections of
+// T0.10's TC2 → its AC2, and T0.32's TC3 → its AC3. Both generated sections of
 // docs/build-log.md are a function of the repo: what the script would write from docs/log/
 // and from the documents' own headers is what the file holds, so a hand edit to either
 // block — a version, the newest entry, a standing line — turns this red.
@@ -256,9 +256,21 @@ describe("the narrative that left Current state", () => {
     }
   });
 
-  it("keeps the v2.7–v2.12 details the entry did not carry", () => {
+  it("keeps every v2.7–v2.12 clause, the half already there and the half moved in", () => {
     const entry = read("docs/log/design-spec-v2.7-v2.12.md");
     for (const item of [
+      // Already in the entry when Current state still carried the sentence. Grepped too,
+      // because AC4 is a claim about the whole sentence and half a grep guards half of it.
+      // Current state's "centred step chrome" is this entry's "step alignment": the same
+      // commit said differently, so it is the clause's wording that changed and not its
+      // content.
+      "step alignment and the neutral variant",
+      "the derived press value and the brand hexes",
+      "the resend cooldown",
+      "field state to the leading icon",
+      "the 24h label zone",
+      "one step-chrome variant",
+      // Moved in by this ticket.
       "#08090C base",
       "`--grad-primary`",
       "field sheen",
@@ -276,10 +288,11 @@ describe("the narrative that left Current state", () => {
   });
 
   it("keeps the closed-and-matching claim, as a fact about the moment it stamped", () => {
-    // The design spec says the closure half of itself, at its own current version. Nothing
-    // in the repo has ever said it of the product spec, and nothing has ever said the code
-    // matches either document — so the clause is recorded once, in this ticket's own entry.
-    expect(read("docs/design-spec.md")).toContain("complete and closed: no open items");
+    // Nothing in the repo has ever said the product spec is closed, and nothing has ever
+    // said the code matches either document, so the entry is the branch of AC4 that is
+    // met. The design spec's own closing line says the closure half of itself and is not
+    // asserted here: it is prose that may be reworded at the next version, and AC4 is not
+    // a claim about how that document happens to phrase its own state today.
     expect(read("docs/log/T0.32.md")).toContain(
       "both documents stood complete and closed and the code matched them",
     );

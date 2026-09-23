@@ -7,7 +7,8 @@ disable-model-invocation: true
 Close out the ticket just completed. Update docs/build-log.md:
 
 1. Write the ticket's entry as its own file, docs/log/<ticket ID>.md —
-   first line "# <title>", second line the UTC timestamp in italics —
+   first line "# <ticket ID> — <title>", second line the UTC timestamp
+   in italics, and UTC means UTC, not local time with a Z on it —
    then run `node scripts/run/log-index.mjs`. That rewrites Current
    state and Tickets done from the repo. Never hand-edit either block:
    both are generated and their test refuses a stale copy.
