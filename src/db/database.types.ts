@@ -6,6 +6,12 @@
  * route is the Supabase MCP server's `generate_typescript_types` against the
  * project the migration was just applied to.
  *
+ * T3.2's `drizzle/0017` was **not** written in here by hand; the run that
+ * applied it regenerated the file against the project and diffed it whole. The
+ * `refinement_round` block is the only thing that moved — `cycle_no`,
+ * `base_section_hash`, `reason_truncated`, `evidence_truncated`, and
+ * `author_position` becoming nullable — and `PostgrestVersion` is still `14.5`.
+ *
  * T1.4 added `opportunity.key` (drizzle/0016) **by hand, before the migration
  * was applied**, in `item.key`'s shape — required on Row and Insert, optional on
  * Update, what a NOT NULL column with no default gets. **The run that applied
@@ -637,15 +643,19 @@ export type Database = {
         Row: {
           artifact_id: string;
           artifact_version_id: string;
-          author_position: string;
+          author_position: string | null;
+          base_section_hash: string | null;
           check_id: string;
           created_at: string;
+          cycle_no: number;
           evidence: string;
+          evidence_truncated: boolean;
           id: string;
           item_id: string;
           outcome: Database["public"]["Enums"]["refinement_outcome"];
           outside_sections: string[] | null;
           reason: string;
+          reason_truncated: boolean;
           revised_version_id: string | null;
           round_no: number;
           section_id: string;
@@ -654,15 +664,19 @@ export type Database = {
         Insert: {
           artifact_id: string;
           artifact_version_id: string;
-          author_position: string;
+          author_position?: string | null;
+          base_section_hash?: string | null;
           check_id: string;
           created_at?: string;
+          cycle_no: number;
           evidence: string;
+          evidence_truncated: boolean;
           id?: string;
           item_id: string;
           outcome: Database["public"]["Enums"]["refinement_outcome"];
           outside_sections?: string[] | null;
           reason: string;
+          reason_truncated: boolean;
           revised_version_id?: string | null;
           round_no: number;
           section_id: string;
@@ -671,15 +685,19 @@ export type Database = {
         Update: {
           artifact_id?: string;
           artifact_version_id?: string;
-          author_position?: string;
+          author_position?: string | null;
+          base_section_hash?: string | null;
           check_id?: string;
           created_at?: string;
+          cycle_no?: number;
           evidence?: string;
+          evidence_truncated?: boolean;
           id?: string;
           item_id?: string;
           outcome?: Database["public"]["Enums"]["refinement_outcome"];
           outside_sections?: string[] | null;
           reason?: string;
+          reason_truncated?: boolean;
           revised_version_id?: string | null;
           round_no?: number;
           section_id?: string;
