@@ -4,7 +4,15 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { claims, classify, codeSpans, gitLook, ownSections } from "./claims.mjs";
+import {
+  basename,
+  claims,
+  classify,
+  codeSpans,
+  gitLook,
+  ownSections,
+  readClaims,
+} from "./claims.mjs";
 
 /**
  * T0.34 — TC1 → AC1. A fixture ticket carrying one of each case the classifier has to tell
@@ -91,6 +99,11 @@ describe("classify", () => {
     expect(classify("runScorer", look)).toMatchObject({ kind: "identifier" });
     expect(classify("next_scoring_attempt_at", look)).toMatchObject({ kind: "identifier" });
     expect(classify("db:migrate", look)).toMatchObject({ kind: "identifier" });
+  });
+
+  it("skips a token that is separators and nothing else, which claims no name at all", () => {
+    expect(classify("/", look)).toMatchObject({ kind: "skip" });
+    expect(classify("../", look)).toMatchObject({ kind: "skip" });
   });
 
   it("skips a command, a flag, a placeholder, a fragment and a bare number", () => {
@@ -191,6 +204,39 @@ describe("gitLook", () => {
     const look = gitLook({ ref: "main", cwd: dir });
     expect(look.file("docs/later.md")).toBe(false);
     expect(look.identifier("zzzOnlyInTheWorkingTree")).toBe(false);
+  });
+
+  // A ticket writes `log-index.mjs` and means the one file of that name in the tree. Looked
+  // up at the root alone it is absent, and over docs/tickets/ that read reported 41 files
+  // main tracks as missing from it — the noise that would make the whole step unreadable.
+  it("finds a bare file name anywhere in the reference, not at the root alone", () => {
+    const look = gitLook({ ref: "main", cwd: dir });
+    expect(look.file("guidelines.md")).toBe(true);
+    expect(look.file("no-such-file.md")).toBe(false);
+  });
+
+  // A name with a slash is a path and has to resolve as one: `elsewhere/guidelines.md` is a
+  // claim about a directory, and answering it from the file's name would make every path
+  // claim in every ticket unfalsifiable.
+  it("does not answer a path from a file name it happens to end with", () => {
+    expect(gitLook({ ref: "main", cwd: dir }).file("elsewhere/guidelines.md")).toBe(false);
+  });
+
+  // A substring search answers `unScorer` with the line holding `runScorer`, so a function
+  // renamed one letter reads as present — the drift this exists to catch.
+  it("matches an identifier on word boundaries, not as a substring", () => {
+    const look = gitLook({ ref: "main", cwd: dir });
+    expect(look.identifier("unScorer")).toBe(false);
+    expect(look.identifier("runScorer")).toBe(true);
+  });
+
+  it("says the reference is unreadable rather than calling every name absent", () => {
+    const look = gitLook({ ref: "no-such-ref", cwd: dir });
+    expect(look.readable).toBe(false);
+    expect(readClaims(join(dir, "docs", "guidelines.md"), { look })).toMatchObject({
+      error: "cannot read no-such-ref",
+    });
+    expect(gitLook({ ref: "main", cwd: dir }).readable).toBe(true);
   });
 });
 

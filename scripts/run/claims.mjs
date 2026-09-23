@@ -104,6 +104,7 @@ export function classify(token, { tops = [] } = {}) {
   if (/[*?]/.test(name)) return skip("a glob");
   if (/[(){}[\]=;"'`|&!,@#§~^\\+]/.test(name)) return skip("a code fragment");
   if (/^[\d.,%:+-]+$/.test(name) || /^v\d+(?:\.\d+)*$/.test(name)) return skip("a number");
+  if (/^[./]+$/.test(name)) return skip("separators and nothing else");
 
   const segments = name.split("/");
   const last = segments[segments.length - 1];
@@ -145,27 +146,57 @@ export function claims(text, look) {
   return { absent, present, skipped };
 }
 
+/** The last segment of a path — `scripts/run/claims.mjs` is named `claims.mjs`. */
+export function basename(path) {
+  return path.slice(path.lastIndexOf("/") + 1);
+}
+
 /**
  * Lookups against one git reference. Arguments are an array and never a shell line, so a
  * name out of a ticket is an argument and can be nothing else.
+ *
+ * A token with no slash is matched on the reference's file *names* as well as at the root,
+ * because a ticket says `log-index.mjs` and means the one file of that name in the tree —
+ * looking it up at the root alone reported 41 files main tracks as missing from it.
+ *
+ * `git grep` runs word-bounded: a substring search answers `unScorer` with the line holding
+ * `runScorer`, so a function renamed one letter reads as present and the drift this exists
+ * to catch is exactly what it misses. A name that appears only in a document is still in the
+ * repository and still counts, so nothing narrows the search to code.
+ *
+ * `readable` is false when the reference itself could not be read — a bad ref, a fetch that
+ * has not happened. Every name is then unfindable and reporting them all as drift would be a
+ * claim about the ticket made from a fact about the checkout.
  */
 export function gitLook({ ref = "origin/main", cwd = process.cwd(), run } = {}) {
   const g =
     run ??
     ((args) =>
       spawnSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }));
-  const tree = g(["ls-tree", "--name-only", ref]);
+  const tree = g(["ls-tree", "-r", "--name-only", ref]);
+  const paths = tree.status === 0 ? tree.stdout.split("\n").filter(Boolean) : [];
+  const names = new Set(paths.map(basename));
   return {
     ref,
-    tops: tree.status === 0 ? tree.stdout.split("\n").filter(Boolean) : [],
-    file: (name) => g(["cat-file", "-e", `${ref}:${name}`]).status === 0,
-    identifier: (name) => g(["grep", "--quiet", "--fixed-strings", "-e", name, ref]).status === 0,
+    readable: tree.status === 0,
+    tops: [...new Set(paths.map((path) => path.split("/")[0]))],
+    file: (name) =>
+      g(["cat-file", "-e", `${ref}:${name}`]).status === 0 ||
+      (!name.includes("/") && names.has(name)),
+    identifier: (name) =>
+      g(["grep", "--quiet", "--word-regexp", "--fixed-strings", "-e", name, ref]).status === 0,
   };
 }
 
-/** `{ ticket, ref, absent, present, skipped }` for one ticket file. */
+/**
+ * `{ ticket, ref, absent, present, skipped }` for one ticket file, or `{ error }` when the
+ * reference could not be read.
+ */
 export function readClaims(path, options = {}) {
   const look = options.look ?? gitLook(options);
+  if (look.readable === false) {
+    return { ticket: path, ref: look.ref ?? null, error: `cannot read ${look.ref}` };
+  }
   return { ticket: path, ref: look.ref ?? null, ...claims(readFileSync(path, "utf8"), look) };
 }
 

@@ -1,5 +1,7 @@
 <!-- build-guide.md · v2.9 · in the repo · §2 names where a rule goes: one area of the
      code to .claude/rules/<area>.md, everywhere to CLAUDE.md, which a run never edits (T0.34).
+     v2.8 is held by an open branch and this change skipped it; the title line, left at v2.5
+     since v2.6, is corrected here.
      v2.7 · in the repo · the hooks paragraph: your word is left for one
      sentence — a migration, or a diff that weakens a restraint, measured on both sides.
      v2.6 · in the repo · the hooks paragraph: a finished ticket merges itself
@@ -15,7 +17,7 @@
      v2.0 was a rewrite rather than a revision: v1.0 was written before ticket 0.1 and proposed a
      stack, a setup script and a set of habits, all of which the build has since replaced. -->
 
-# aenima — build guide v2.5
+# aenima — build guide v2.9
 
 How to run a ticket on aenima with Claude Code.
 
