@@ -1,4 +1,10 @@
-<!-- guidelines.md · v1.20 · in the repo · an ID names one task (T0.28): §7 says a number
+<!-- guidelines.md · v1.24 · in the repo · a branch takes main before it merges (T0.36):
+     §5 steps 0 and 9 merge origin/main into the ticket branch first (premerge.mjs), and a
+     conflict confined to the build log's generated sections settles itself — main's copy,
+     then log-index.mjs over the entries the merge brought in. A conflict anywhere else, or
+     one reaching the build log's written passages, is refused by name as before. Numbered
+     past v1.21 and v1.23, which branches still open are holding.
+     v1.20 · in the repo · an ID names one task (T0.28): §7 says a number
      belongs to its phase and not to its epic, and stays taken while a branch or a docs file
      carries it; §5 step 1 reads next-id.mjs over the whole board.
      v1.19 · in the repo · runs and reviews at xhigh effort (T0.27): §5 names the
@@ -431,8 +437,11 @@ has no effort control, and a repository setting would reach every session opened
                 from) · a task In progress whose marker is fresh is a live run: exit, before
                 anything is read or claimed · read every task's thread over the API in one command (threads.mjs)
                 and give each reply newer than the pipeline's last comment one assessment
-                (§4): a change at Review → addendum, Ready · merge at Review → claim, gh pr
-                merge --merge, one comment, release · apply on a migration question → claim,
+                (§4): a change at Review → addendum, Ready · merge at Review → claim, check
+                the branch out here (branch.mjs), take main into it (premerge.mjs) — and where
+                that moved the branch, gate the result and push it — then gh pr merge --merge,
+                one comment, release; a conflict it will not settle is refused by name and the
+                task stays at Review · apply on a migration question → claim,
                 apply.mjs --ref origin/t<id> before the branch is checked out — from
                 any checkout — then branch, carry on · ready at Backlog → Ready,
                 one comment · new work → one
@@ -518,7 +527,8 @@ has no effort control, and a repository setting would reach every session opened
                 into the body Report section: ACs implemented (each with its test) · tests
                 written · open questions · write docs/log/<id>.md and regenerate the build
                 log's list from the directory (log-index.mjs)
-9  Close        commit, push branch, open the PR unless the branch has one → Review · a diff
+9  Close        commit, take main into the branch (premerge.mjs), push branch, open the PR
+                unless the branch has one → Review · a diff
                 that adds no migration and weakens no restraint (gated.mjs, loosening.mjs)
                 with the reviewer's PASS on file is merged by the run itself once the gate,
                 run again here, has its green for this tree on record — gh pr merge --merge
