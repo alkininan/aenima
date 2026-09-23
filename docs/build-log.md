@@ -9,7 +9,7 @@
 Written from the repo by `node scripts/run/log-index.mjs`, like the Tickets done list below, and its test refuses a stale copy: edit the documents and the log entries, never this block. No phase and no next ticket here — the board owns the queue and the roadmap owns the phases, and a stamp a human maintains is a stamp that is eventually wrong.
 
 **Specs:** product-spec v1.9 · design-spec v2.22 · guidelines v1.25
-**Newest entry:** [T0.36 — Regenerate the build log at merge](log/T0.36.md) · 2026-09-23
+**Newest entry:** [T0.26 — Applied migrations merge themselves](log/T0.26.md) · 2026-09-23
 **Repo:** github.com/alkininan/aenima
 **Deployed:** yes — **aeni.ma** on Vercel
 
@@ -86,12 +86,12 @@ One file per ticket under `docs/log/`, oldest first. This list is written by `no
 - [T0.28 — Number task IDs across the phase](log/T0.28.md) · 2026-09-22
 - [T3.2 — Chat panel: the ledger first, the dock next](log/T3.2.md) · 2026-09-22
 - [T0.29 — Design spec v2.22](log/T0.29.md) · 2026-09-22
-- [T0.26 — Applied migrations merge themselves](log/T0.26.md) · 2026-09-23
 - [T0.32 — Current state generated from the repo](log/T0.32.md) · 2026-09-23
 - [T0.33 — Load standing rules by path](log/T0.33.md) · 2026-09-23
 - [T0.31 — Read bundled shell -c flags](log/T0.31.md) · 2026-09-23
 - [T0.35 — Patch §9: delivery and report-back](log/T0.35.md) · 2026-09-23
 - [T0.36 — Regenerate the build log at merge](log/T0.36.md) · 2026-09-23
+- [T0.26 — Applied migrations merge themselves](log/T0.26.md) · 2026-09-23
 
 ## Decisions made during the build
 
