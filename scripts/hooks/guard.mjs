@@ -410,11 +410,15 @@ function lex(text) {
 const UPSTREAM = new WeakMap();
 
 /**
- * Bash's long options are spelled with one dash as much as two, and three of them are a run of
+ * Bash's long options are spelled with one dash as much as two, and four of them are a run of
  * letters holding a `c`: read as a cluster of short flags they would each be a `-c` that is not
- * one. The rest of bash's list carries a hyphen or no `c` and cannot reach the matcher below.
+ * one. The rest of the list — `debug`, `debugger`, `help`, `login`, `noediting`, `noprofile`,
+ * `posix`, `verbose`, `version`, `wordexp`, and the hyphenated `init-file`, `dump-strings`,
+ * `dump-po-strings`, `pretty-print`, `rpm-requires` — carries a hyphen or no `c`, so it cannot
+ * reach the matcher below. A name this set misses is caught anyway where it would cost
+ * something: `parse()` follows every word that reads as the flag, not the first.
  */
-const ONE_DASH_LONG = new Set(["-norc", "-rcfile", "-restricted"]);
+const ONE_DASH_LONG = new Set(["-norc", "-rcfile", "-restricted", "-protected"]);
 
 /**
  * A shell's `-c` flag, whether it stands alone or clusters with other short flags. Short flags

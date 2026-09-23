@@ -1547,6 +1547,15 @@ describe("T0.31, AC1 — a shell's -c bundled with other short flags", () => {
     expect(decide(...run("bash -norc post.sh", () => POST))).toContain(TOKEN);
   });
 
+  // Bash's letters-only long options holding a `c` are four, not three: review pass 3, Should 1
+  // measured `bash -protected post.sh` refused on main and allowed here.
+  it("knows every one-dash long option that reads as a cluster", () => {
+    for (const option of ["-norc", "-rcfile", "-restricted", "-protected"]) {
+      expect(decide(...run(`bash ${option} post.sh`, () => POST)), option).toContain(TOKEN);
+      expect(decide(...run(`bash ${option} -c 'pnpm db:push'`)), option).toContain("refused");
+    }
+  });
+
   // An option the list above does not know must not hide a later `-c` either, so every word
   // that reads as the flag is followed, not just the first.
   it("reads past an option it does not know to the -c behind it", () => {
