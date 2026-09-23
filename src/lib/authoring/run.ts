@@ -1,7 +1,12 @@
 import "server-only";
 
 import type { UsageActor } from "@/db/queries/ai-usage";
-import { readLatestConditions, readRounds, writeRound } from "@/db/queries/refinement";
+import {
+  readHumanBaseline,
+  readRounds,
+  readVersionConditions,
+  writeRound,
+} from "@/db/queries/refinement";
 import { readScorableArtifact } from "@/db/queries/scoring";
 import { runGeneration } from "@/lib/ai";
 import type { CallContext } from "@/lib/ai";
@@ -11,6 +16,7 @@ import { applicableChecks } from "@/packs";
 import { refineSection } from "./loop";
 import type { Agents, Ledger, RefineResult } from "./loop";
 import type { Turn } from "./prompt";
+import { parseSections, sectionHash } from "./sections";
 import {
   AUTHOR_MAX_TOKENS,
   CRITIC_MAX_TOKENS,
@@ -73,8 +79,13 @@ export type RefineArtifactResult =
  * surfaces.
  *
  * The checks in play are the ones §4's engine left in the denominator on the
- * artifact's newest scoring run; an artifact never scored has only the checks
- * no condition governs, since no condition is known to hold.
+ * scoring run for **the version under refinement** (AA2); a version nothing has
+ * scored has only the checks no condition governs, since no condition is known
+ * to hold of it.
+ *
+ * §6's cap is counted against the section's **human baseline** (AA1) — its text
+ * in the newest human-authored version — so that a surfaced check reopens when
+ * the human rewrites the section and not when the author revises it.
  */
 export async function refineArtifactSection(
   input: RefineArtifactInput,
@@ -101,8 +112,16 @@ export async function refineArtifactSection(
     return { ok: false, reason: "not-refinable", detail: "artifact content has no markdown body" };
   }
 
-  const conditions = (await readLatestConditions(input.workspaceId, input.artifactId)) ?? [];
+  const conditions = (await readVersionConditions(input.workspaceId, artifact.versionId)) ?? [];
   const checkIds = applicableChecks(pack, conditions).map((check) => check.id);
+
+  // The cycle's baseline. An artifact no human has cut a version of, and a
+  // section no human version holds, both give null: nothing the human wrote can
+  // have changed, so every closure stands where it is.
+  const baseline = await readHumanBaseline(input.workspaceId, input.artifactId);
+  const baseBody = baseline === null ? null : markdownBody(baseline.content);
+  const baseSectionHash =
+    baseBody === null ? null : sectionHash(parseSections(baseBody), input.sectionId);
 
   const ledger: Ledger = {
     rounds: () => readRounds(input.workspaceId, input.artifactId),
@@ -130,6 +149,7 @@ export async function refineArtifactSection(
         body,
         versionId: artifact.versionId,
         sectionId: input.sectionId,
+        baseSectionHash,
         conversation: input.conversation,
       },
       seamAgents({

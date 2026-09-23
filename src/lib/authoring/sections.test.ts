@@ -5,6 +5,7 @@ import {
   PREAMBLE_ID,
   joinSections,
   parseSections,
+  sectionHash,
   slugOf,
   spliceSection,
 } from "./sections";
@@ -111,5 +112,39 @@ describe("spliceSection", () => {
 
   it("refuses to splice a section the document does not have", () => {
     expect(() => spliceSection(parseSections(body), "three", "x")).toThrow(/three/);
+  });
+});
+
+describe("sectionHash — T3.2's TA1 → AA1", () => {
+  const body = "# Juno\n\n## Scheduling\nPropose 2 time options.\n\n## Safety\nBlock and report.\n";
+
+  it("hashes one section's text, and two bodies that agree on it agree on the hash", () => {
+    const moved =
+      "# Juno\n\n## Safety\nBlock and report.\n\n## Scheduling\nPropose 2 time options.\n";
+    expect(sectionHash(parseSections(body), "scheduling")).toBe(
+      sectionHash(parseSections(moved), "scheduling"),
+    );
+  });
+
+  it("moves when that section's own text moves, and not when a neighbour's does", () => {
+    const rewritten =
+      "# Juno\n\n## Scheduling\nPropose 3 time options.\n\n## Safety\nBlock and report.\n";
+    const elsewhere =
+      "# Juno\n\n## Scheduling\nPropose 2 time options.\n\n## Safety\nBlock, report, mute.\n";
+
+    expect(sectionHash(parseSections(rewritten), "scheduling")).not.toBe(
+      sectionHash(parseSections(body), "scheduling"),
+    );
+    expect(sectionHash(parseSections(elsewhere), "scheduling")).toBe(
+      sectionHash(parseSections(body), "scheduling"),
+    );
+  });
+
+  it("is null for a section the body does not hold, so an unknown baseline is never a hash", () => {
+    expect(sectionHash(parseSections(body), "pricing")).toBeNull();
+  });
+
+  it("fits the column a round stores it in", () => {
+    expect(sectionHash(parseSections(body), "scheduling")!.length).toBeLessThanOrEqual(200);
   });
 });

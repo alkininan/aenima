@@ -6,28 +6,12 @@
 
 ## Current state
 
-**Phase:** 3 — authoring · phases 0 (foundation), 1 (the spine) and 2 (the scoring engine) complete
-**Next ticket:** T3.1 — the author/critic loop: two-round limit, check-ID binding (§6)
+Written from the repo by `node scripts/run/log-index.mjs`, like the Tickets done list below, and its test refuses a stale copy: edit the documents and the log entries, never this block. No phase and no next ticket here — the board owns the queue and the roadmap owns the phases, and a stamp a human maintains is a stamp that is eventually wrong.
+
+**Specs:** product-spec v1.9 · design-spec v2.22 · guidelines v1.26
+**Newest entry:** [T0.36 — Regenerate the build log at merge](log/T0.36.md) · 2026-09-23
 **Repo:** github.com/alkininan/aenima
 **Deployed:** yes — **aeni.ma** on Vercel
-
-`docs/design-spec.md` is **v2.17** and `docs/product-spec.md` is **v1.5**, both complete and
-closed, and the code matches. v1.4 landed just ahead of T2.2: §12's code node law, and the scope
-a critic objection carries (§6).
-
-The form language was settled over two runs against real use of the sign-in flow. v2.3–v2.6:
-48h fields, floating labels bound at every moment, an always-reserved label zone and helper
-line, the subtitle slot, the step header, one-text fields, the focus split, flag-slow
-validation. v2.7–v2.12: centred step chrome and the **neutral** button variant; the deep ramp
-and aero materials (#08090C base, `--grad-primary`, field sheen, press squish); derived values
-pinned and the brand hexes reconciled; the resend cooldown, and a helper line carrying only its
-own field's errors; field state reaching the leading icon, a 24h label zone, and one variant
-for all step chrome.
-
-v2.13–v2.15 came out of the first surfaces rather than the sign-in flow: SemiBold buttons, the
-sidebar's bottom account slot and a nested-radius rule, then the laws the list surface needed —
-glass is navigation and nothing else, buttons a step smaller again, the item row as a
-continuous ledger, the type label bare, and row meters waiting until scoring exists.
 
 ## Stack
 
@@ -100,10 +84,18 @@ One file per ticket under `docs/log/`, oldest first. This list is written by `no
 - [T0.27 — Extra-high effort for runs](log/T0.27.md) · 2026-09-22
 - [T0.40 — Tokens and fonts to v2.21](log/T0.40.md) · 2026-09-22
 - [T0.28 — Number task IDs across the phase](log/T0.28.md) · 2026-09-22
+- [T3.2 — Chat panel: the ledger first, the dock next](log/T3.2.md) · 2026-09-22
 - [T0.29 — Design spec v2.22](log/T0.29.md) · 2026-09-22
+- [T0.32 — Current state generated from the repo](log/T0.32.md) · 2026-09-23
 - [T0.30 — Runs rows written once](log/T0.30.md) · 2026-09-23
+- [T0.33 — Load standing rules by path](log/T0.33.md) · 2026-09-23
+- [T0.31 — Read bundled shell -c flags](log/T0.31.md) · 2026-09-23
+- [T0.35 — Patch §9: delivery and report-back](log/T0.35.md) · 2026-09-23
+- [T0.36 — Regenerate the build log at merge](log/T0.36.md) · 2026-09-23
 
 ## Decisions made during the build
+
+The standing rules below are distilled one per line into `.claude/rules/`, which loads them by path when a session opens the code they govern; this section keeps the stories.
 
 _(when a ticket's report-back raises a question and you answer it, record the answer here.
 If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in the repo.)_
