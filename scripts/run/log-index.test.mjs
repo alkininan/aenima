@@ -27,8 +27,10 @@ import {
 
 const root = join(import.meta.dirname, "..", "..");
 
-// TC2 → AC2. The Tickets done list in docs/build-log.md is a function of docs/log/: what
-// the script would write from the directory as it stands is what the file holds.
+// T0.8's TC2 → its AC2, and T0.32's TC3 → its AC3. Both generated sections of
+// docs/build-log.md are a function of the repo: what the script would write from docs/log/
+// and from the documents' own headers is what the file holds, so a hand edit to either
+// block — a version, the newest entry, a standing line — turns this red.
 describe("the committed build log is the generated one", () => {
   it("matches docs/log/ and the documents' own headers, section for section", () => {
     const current = readFileSync(join(root, BUILD_LOG), "utf8");
@@ -179,10 +181,9 @@ describe("generate over a directory", () => {
 // carry, and names the newest entry under docs/log/ with its date.
 describe("the committed Current state", () => {
   const current = () => readFileSync(join(root, BUILD_LOG), "utf8");
-  const header = (path) =>
-    /\bv(\d+\.\d+)\b/.exec(
-      readFileSync(join(root, path), "utf8").split("\n").slice(0, 6).join("\n"),
-    )?.[1];
+  // The same parser the script uses, for the reason AC5 gives: a copy of its regex and its
+  // header window here would be the second parser, one file over, and would drift silently.
+  const header = (path) => parseHeaderVersion(readFileSync(join(root, path), "utf8"));
 
   it("names product-spec, design-spec and guidelines at their header versions", () => {
     const specs = /^\*\*Specs:\*\* (.+)$/m.exec(current())?.[1];
@@ -274,8 +275,14 @@ describe("the narrative that left Current state", () => {
     );
   });
 
-  it("leaves the closed-and-matching claim with the document that makes it", () => {
+  it("keeps the closed-and-matching claim, as a fact about the moment it stamped", () => {
+    // The design spec says the closure half of itself, at its own current version. Nothing
+    // in the repo has ever said it of the product spec, and nothing has ever said the code
+    // matches either document — so the clause is recorded once, in this ticket's own entry.
     expect(read("docs/design-spec.md")).toContain("complete and closed: no open items");
+    expect(read("docs/log/T0.32.md")).toContain(
+      "both documents stood complete and closed and the code matched them",
+    );
   });
 });
 
@@ -291,12 +298,14 @@ describe("versions reads through version-drift's parser", () => {
       // The comment shape, and one that names a later version as history below the first.
       "docs/guidelines.md": "<!-- guidelines.md · v1.20 · in the repo\n     v1.19 was … -->\n",
     };
-    expect(versions((path) => headers[path])).toEqual(
-      CURRENT_DOCS.map((doc, i) => ({
-        doc,
-        version: parseHeaderVersion(Object.values(headers)[i]),
-      })),
-    );
+    // Literal, not `parseHeaderVersion(...)` on the other side: comparing the function to
+    // itself moves both sides together and answers nothing about the parser.
+    expect(versions((path) => headers[path])).toEqual([
+      { doc: "product-spec", version: "1.8" },
+      { doc: "design-spec", version: "2.22" },
+      { doc: "guidelines", version: "1.20" },
+    ]);
+    expect(CURRENT_DOCS).toEqual(["product-spec", "design-spec", "guidelines"]);
   });
 
   it("defines no version pattern of its own", () => {

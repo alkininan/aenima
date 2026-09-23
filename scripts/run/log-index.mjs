@@ -12,9 +12,10 @@
  * missing either line is refused with its name, so a run that writes one wrong finds out
  * from `log-index.test.mjs` before the list silently drops it.
  *
- * Current state is the same kind of thing, for the same reason: it was four versions and a
- * finished phase out of date when this was written, because a person had to remember to
- * move it. So it too is a function of the repo — the version each document carries in its
+ * Current state is the same kind of thing, for the same reason: when this was written it
+ * named product-spec v1.5 and design-spec v2.17 against a repo holding v1.8 and v2.22, and a
+ * next ticket, T3.1, that was already done — because a person had to remember to move it.
+ * So it too is a function of the repo — the version each document carries in its
  * own header, read through the parser `version-drift.mjs` already uses, and the newest entry
  * under `docs/log/`. Phase and next ticket are not in it at all: the board owns the queue
  * and the roadmap owns the phases, and a copy here could only ever disagree with them.
@@ -68,18 +69,18 @@ export function readEntry(name, text) {
 }
 
 /** The entries oldest first, ties by id in natural order. */
-export function ordered(entries) {
+function ordered(entries) {
   const natural = (a, b) => a.localeCompare(b, "en", { numeric: true });
   return [...entries].sort((a, b) => a.when.localeCompare(b.when) || natural(a.id, b.id));
 }
 
 /** One entry as a link to its file. */
-export function link(entry) {
+function link(entry) {
   return `[${entry.title}](log/${entry.id}.md)`;
 }
 
 /** One entry's date, and its commit where it has one. */
-export function stamp(entry) {
+function stamp(entry) {
   return `${entry.when.slice(0, 10)}${entry.commit ? ` · \`${entry.commit}\`` : ""}`;
 }
 
@@ -106,8 +107,8 @@ export function section(entries) {
  * A document whose header carries no version is refused by name rather than printed as a
  * blank, the way `readEntry` refuses a log file missing its stamp.
  */
-export function versions(readDoc, docs = CURRENT_DOCS) {
-  return docs.map((doc) => {
+export function versions(readDoc) {
+  return CURRENT_DOCS.map((doc) => {
     const version = parseHeaderVersion(readDoc(DOCS[doc]));
     if (!version) throw new Error(`${DOCS[doc]}: no version in its header`);
     return { doc, version };

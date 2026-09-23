@@ -413,12 +413,13 @@ A refused report is not written to the board: fill the record it names and run t
 Once it passes, mirror the report into the task body's `Report` section, then write the ticket's
 build-log entry as its own file, `docs/log/<id>.md` — first line `# <id> — <title>`, second line
 `_<UTC timestamp>_` (the commit is the board row's; leave it off), then the entry, a paragraph or
-two in the build log's register — and regenerate the list in `docs/build-log.md` from the
-directory:
+two in the build log's register — and regenerate the two generated sections of
+`docs/build-log.md`, Current state from the documents' own headers and this directory,
+Tickets done from this directory:
 
     node scripts/run/log-index.mjs
 
-Never edit that list by hand; its test refuses a stale copy.
+Never edit either block by hand; their test refuses a stale copy.
 
 ## 9 Close
 
