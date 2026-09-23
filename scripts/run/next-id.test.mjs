@@ -262,6 +262,6 @@ describe("docs/guidelines.md", () => {
   });
 
   it("carries the bumped version in its header", () => {
-    expect(parseHeaderVersion(text)).toBe("1.20");
+    expect(parseHeaderVersion(text)).toBe("1.21");
   });
 });

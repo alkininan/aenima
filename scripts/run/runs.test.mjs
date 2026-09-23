@@ -573,7 +573,7 @@ describe("post", () => {
     expect(result.why).toContain("401");
   });
 
-  // TC1 → AC1. A board that keeps what it is given, and reads a row's Started back to the
+  // T0.30 TC1 → AC1. A board that keeps what it is given, and reads a row's Started back to the
   // minute as Notion does — the row is written with seconds and comes back without them.
   const boardOf = (rows = []) => {
     const held = [...rows];
@@ -649,7 +649,7 @@ describe("post", () => {
   });
 });
 
-// TC1 → AC1. The key itself: a task and a minute, both sides cut to the minute Notion keeps.
+// T0.30 TC1 → AC1. The key itself: a task and a minute, both sides cut to the minute Notion keeps.
 describe("startMinute and runKey", () => {
   it("cuts a timestamp to its minute, in UTC", () => {
     expect(startMinute("2026-09-13T11:22:30.874Z")).toBe("2026-09-13T11:22:00.000Z");

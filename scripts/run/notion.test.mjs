@@ -258,6 +258,36 @@ describe("client", () => {
     expect(seen[0].aborted).toBe(false);
   });
 
+  // T0.30 TC1 → AC1. The Runs rows `post` keys against, paged as any data source is.
+  it("reads every Runs row as the key needs it", async () => {
+    const { calls, fetch } = canned({
+      "POST /data_sources/runs-ds/query": {
+        results: [
+          {
+            id: "r1",
+            properties: {
+              Name: { title: [{ plain_text: "R-0060 T0.27" }] },
+              Task: { relation: [{ id: "3e379daf-d42e-81dc-9081-e9592cf1fc0d" }] },
+              Started: { date: { start: "2026-09-22T11:36:00.000Z" } },
+            },
+          },
+        ],
+        has_more: false,
+      },
+    });
+    const rows = await client("ntn_x", { fetch }).runs("runs-ds");
+    expect(rows).toEqual([
+      {
+        id: "r1",
+        Name: "R-0060 T0.27",
+        Task: ["3e379daf-d42e-81dc-9081-e9592cf1fc0d"],
+        Started: "2026-09-22T11:36:00.000Z",
+      },
+    ]);
+    expect(calls[0].method).toBe("POST");
+    expect(JSON.parse(calls[0].body).page_size).toBe(100);
+  });
+
   // The page the guard reads is a Tasks row, and the board holds its Status as a select
   // (T0.15): this is the read behind `permission.mjs`'s "at no status".
   it("reads one page as a Tasks row", async () => {
