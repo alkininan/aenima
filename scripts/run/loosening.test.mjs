@@ -211,15 +211,17 @@ describe("pathsLoosened", () => {
   });
 });
 
-// T0.26 TC2 → AC2 and TC3 → AC3. Since T0.26 the migration gate narrows on what a thread
+// T0.26, the detector's own half of Build 1's last sentence: the gate narrows and the other
+// rules are untouched, which only holds if something measures the narrowing. Since T0.26 the
+// migration gate narrows on what a thread
 // says, which puts the narrowing itself among the restraints that have to be measured on both
 // sides: `isGatedPath` still answers true for every migration, so `pathsLoosened` cannot see a
 // gate that started reading any thread, or no thread, as a consumed apply.
 describe("diffGating and diffsLoosened", () => {
-  it("holds the three shapes a narrowed migration gate must still gate", () => {
+  it("holds the shapes a narrowed migration gate must still gate", () => {
     const answers = diffGating((input) => gatedDiff(input));
-    expect(Object.values(answers)).toEqual([true, true, true]);
-    expect(DIFF_CORPUS).toHaveLength(3);
+    expect(Object.values(answers)).toEqual(DIFF_CORPUS.map(() => true));
+    expect(DIFF_CORPUS.length).toBeGreaterThanOrEqual(3);
   });
 
   it("reads a gate that stopped asking whose apply it was as loosened", () => {
@@ -246,7 +248,7 @@ describe("diffGating and diffsLoosened", () => {
     const broken = diffGating(() => {
       throw new Error("boom");
     });
-    expect(Object.values(broken)).toEqual([false, false, false]);
+    expect(Object.values(broken)).toEqual(DIFF_CORPUS.map(() => false));
   });
 
   it("is carried by loosenings beside the other measurements", () => {

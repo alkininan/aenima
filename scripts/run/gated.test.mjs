@@ -4,7 +4,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
-import { gatedDiff, gatedDiffOf, gatedPaths, isGatedPath, migrationTag } from "./gated.mjs";
+import {
+  consumedApplies,
+  gatedDiff,
+  gatedDiffOf,
+  gatedPaths,
+  isGatedPath,
+  migrationTag,
+} from "./gated.mjs";
 import { migrationCheck, MIGRATIONS_DIR } from "./migration-check.mjs";
 
 // T0.21 TC1 → AC1, TC2 → AC2 and TC5 → AC5. T0.16 gated whole paths; this replaces all but
@@ -247,6 +254,36 @@ describe("a consumed apply ungates its own migration", () => {
     ]);
   });
 
+  it("lets a snapshot through with the migration it records", () => {
+    // TC1 → AC1: `pnpm db:generate` is how CLAUDE.md says to make a migration, and it writes
+    // a snapshot beside the journal. A diff that kept it gated would keep the whole ticket
+    // waiting for a word its migration had already been given.
+    const result = gatedDiff({
+      files: [
+        "drizzle/0022_x.sql",
+        "drizzle/meta/_journal.json",
+        "drizzle/meta/0022_snapshot.json",
+      ],
+      weakened: [],
+      applied: ["0022_x"],
+    });
+    expect(result.ok).toBe(true);
+    expect(result.gated).toEqual([]);
+  });
+
+  it("keeps a snapshot gated while its migration is still waiting", () => {
+    // TC2 → AC2
+    const result = gatedDiff({
+      files: ["drizzle/0022_x.sql", "drizzle/meta/0022_snapshot.json"],
+      weakened: [],
+      applied: [],
+    });
+    expect(result.gated).toEqual([
+      "it adds the migration drizzle/0022_x.sql",
+      "it adds the migration drizzle/meta/0022_snapshot.json",
+    ]);
+  });
+
   it("does not ungate a journal that stands on its own", () => {
     // TC3 → AC3: with no migration in the diff there is nothing an apply could have been for.
     const result = gatedDiff({
@@ -266,5 +303,96 @@ describe("a consumed apply ungates its own migration", () => {
     });
     expect(result.ok).toBe(false);
     expect(result.gated).toEqual(["the guard no longer refuses pnpm db:push"]);
+  });
+});
+
+// T0.26 TC1 → AC1 and TC2 → AC2, the run's own half. AC1 is the diff self-merging, and the
+// self-merge is the run reading `ok: true` from this command at step 9 — the guard's door
+// reads the tags off `verify`'s fetch, and nothing else reads them from a command line. Every
+// path that cannot establish what the thread says answers with no tags, because a migration
+// nobody could read a thread about is gated exactly as it was.
+describe("consumedApplies", () => {
+  const marker = () => ({ task: "T0.26", page: "page-1", branch: "t0-26" });
+  const board = () => ({ prefix: "⟡ ", tasks_ds: "ds" });
+  const spent = [
+    {
+      text: "⟡ This change adds a migration, drizzle/0016_opportunity_keys.sql, and applying it to the shared database is your call.",
+      created_time: "2026-09-21T10:00:00Z",
+    },
+    { text: "apply", created_time: "2026-09-21T12:13:00Z" },
+    {
+      text: "⟡ Applied 0016_opportunity_keys (idx 16) to the shared database. The ticket picks up from where it stopped.",
+      created_time: "2026-09-21T12:16:00Z",
+    },
+  ];
+  const deps = (extra = {}) => ({
+    marker,
+    token: () => "t",
+    board,
+    comments: async () => spent,
+    ...extra,
+  });
+
+  it("answers with the tags the claimed task's thread says are spent", async () => {
+    // TC1 → AC1
+    expect(await consumedApplies({ deps: deps() })).toEqual({
+      tags: ["0016_opportunity_keys"],
+      why: null,
+    });
+  });
+
+  it("answers with nothing, and says why, when no marker names a claimed task", async () => {
+    // TC2 → AC2
+    const result = await consumedApplies({ deps: deps({ marker: () => null }) });
+    expect(result.tags).toEqual([]);
+    expect(result.why).toContain("no run marker");
+  });
+
+  it("answers with nothing when the marker names no page", async () => {
+    // TC2 → AC2
+    const result = await consumedApplies({ deps: deps({ marker: () => ({ task: "T0.26" }) }) });
+    expect(result.tags).toEqual([]);
+    expect(result.why).toContain("no run marker");
+  });
+
+  it("answers with nothing when the token is not there to read the board with", async () => {
+    // TC2 → AC2
+    const result = await consumedApplies({ deps: deps({ token: () => null }) });
+    expect(result.tags).toEqual([]);
+    expect(result.why).toContain("NOTION_TOKEN");
+  });
+
+  it("answers with nothing when the board file cannot be read", async () => {
+    // TC2 → AC2
+    const result = await consumedApplies({
+      deps: deps({
+        board: () => {
+          throw new Error("no board.json");
+        },
+      }),
+    });
+    expect(result.tags).toEqual([]);
+    expect(result.why).toContain("no board.json");
+  });
+
+  it("answers with nothing when the thread itself will not load", async () => {
+    // TC2 → AC2: the API refusing is not a licence to merge.
+    const result = await consumedApplies({
+      deps: deps({
+        comments: async () => {
+          throw new Error("429 rate limited");
+        },
+      }),
+    });
+    expect(result.tags).toEqual([]);
+    expect(result.why).toContain("429 rate limited");
+  });
+
+  it("answers with nothing when the thread carries no spent apply", async () => {
+    // TC2 → AC2
+    expect(await consumedApplies({ deps: deps({ comments: async () => [spent[0]] }) })).toEqual({
+      tags: [],
+      why: null,
+    });
   });
 });

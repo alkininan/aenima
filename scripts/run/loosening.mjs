@@ -248,7 +248,7 @@ export const DOOR_CORPUS = [
   },
   {
     // Review pass 3, Must 1: every other entry hands `reviewed` a `diff`, so the line that
-    // computes one — `deps.diff ? deps.diff() : gatedDiffOf({ cwd: dir })` — is outside the
+    // computes one — `deps.diff ? deps.diff(applied) : gatedDiffOf({ cwd: dir, applied })` — is outside the
     // measurement, and so is `gatedDiff`'s own `...weakened` spread. Withholding `diff` puts
     // both back inside it. The directory is deliberately no repository: `gatedDiffOf` then
     // answers from `checkoutScripts` failing, in milliseconds and with no child process, so
@@ -385,6 +385,10 @@ export const DIFF_CORPUS = [
   {
     name: "the journal beside a migration with no consumed apply",
     input: { files: ["drizzle/0022_x.sql", "drizzle/meta/_journal.json"], applied: [] },
+  },
+  {
+    name: "a snapshot beside a migration with no consumed apply",
+    input: { files: ["drizzle/0022_x.sql", "drizzle/meta/0022_snapshot.json"], applied: [] },
   },
 ];
 

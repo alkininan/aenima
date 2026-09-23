@@ -50,6 +50,16 @@ export function gatedPaths(files = []) {
 export const JOURNAL = `${MIGRATIONS_DIR}meta/_journal.json`;
 
 /**
+ * A gated path that is a migration's bookkeeping rather than a migration: the journal, which
+ * decides what runs, and the snapshots `pnpm db:generate` writes beside it. Neither carries a
+ * tag an `applied` note could name, and neither is a schema change of its own — they are the
+ * record of the migrations in the same diff, so they answer to those.
+ */
+export function isBookkeeping(path) {
+  return path === JOURNAL || /^drizzle\/meta\/[^/]+_snapshot\.json$/.test(String(path ?? ""));
+}
+
+/**
  * A migration's tag — the basename the journal names it with, and the name an `applied` note
  * carries — or null for anything else under `drizzle/`: the journal, a snapshot, a directory
  * deeper down.
@@ -67,17 +77,18 @@ export function migrationTag(path) {
  *
  * A migration goes when its own tag is among them, and never on another's: T3.1's `0015` was
  * applied days before T1.4's `0016`, on another thread, and a gate that read "some apply" would
- * have landed the second on the first. The journal goes only when every migration in the diff
- * has, because it is their record and nothing else's — and never on its own, where there is no
- * migration an apply could have been for.
+ * have landed the second on the first. The bookkeeping beside them — the journal, and the
+ * snapshots `db:generate` writes, which is the way CLAUDE.md says to make a migration — goes
+ * only when every migration in the diff has, because it is their record and nothing else's; and
+ * never on its own, where there is no migration an apply could have been for.
  */
 export function coveredBy(files = [], applied = []) {
   const spent = new Set((applied ?? []).map(String));
   const gated = gatedPaths(files);
   const migrations = gated.filter((path) => migrationTag(path) !== null);
   const covered = new Set(migrations.filter((path) => spent.has(migrationTag(path))));
-  if (migrations.length > 0 && covered.size === migrations.length && gated.includes(JOURNAL)) {
-    covered.add(JOURNAL);
+  if (migrations.length > 0 && covered.size === migrations.length) {
+    for (const path of gated.filter(isBookkeeping)) covered.add(path);
   }
   return covered;
 }

@@ -101,6 +101,7 @@ One file per ticket under `docs/log/`, oldest first. This list is written by `no
 - [T0.40 — Tokens and fonts to v2.21](log/T0.40.md) · 2026-09-22
 - [T0.28 — Number task IDs across the phase](log/T0.28.md) · 2026-09-22
 - [T0.29 — Design spec v2.22](log/T0.29.md) · 2026-09-22
+- [T0.26 — Applied migrations merge themselves](log/T0.26.md) · 2026-09-23
 
 ## Decisions made during the build
 
@@ -1158,7 +1159,21 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
 39. **T0.7 — `git push origin +main` forces by refspec**, with neither `--force` nor `-f`. The
     ticket named the two flags. Settled by T0.8: `namesMain` strips the leading `+`.
 
-40. **A migration's own db test cannot be green in the run that writes it — T1.4 made that a skip,
+40. **~~A migration's own db test cannot be green in the run that writes it — T1.4 made that a
+    skip, and the pattern needs deciding once.~~ Ruled by T0.26: the skip is the house pattern,
+    and it ends at `origin/main`.** `src/test/migration-gate.ts` holds it in one place. A database
+    test guarding a schema change may skip while its migration is still on a branch waiting for
+    the human's `apply` — between the run that writes one and the run that applies it the column
+    exists nowhere. The moment the file is on `origin/main` that licence ends: a migration that has
+    landed is one every checkout has, so a missing column is a database behind the code rather than
+    a ticket in flight, and the test fails. **Every case that cannot prove the migration is still
+    waiting falls the same way** — a ref that will not resolve, a git that will not run, a lookup
+    that fails — because a skip on main is a failure hidden, which is the cost the original note
+    named and could not price. Both files call the helper and neither carries a skip path of its
+    own; with `0015` and `0016` both on main, all fifteen of their tests run for real. The original
+    note follows.
+
+    **A migration's own db test cannot be green in the run that writes it — T1.4 made that a skip,
     and the pattern needs deciding once.** §5 step 6 splits a migration ticket in two: the run
     writes the SQL and stops at Decision, and a later run in a checkout holding `.env.migrate`
     applies it. Between those two runs the column exists in no database, so a db test written
@@ -1180,8 +1195,10 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
     somebody makes.
 
     T3.1 was that next migration, and copied the skip into `src/db/refinement.db.test.ts` without
-    deciding it; both skips stayed in place after their applies. So the pattern holds twice by
-    precedent and never by decision. The question stays open.
+    deciding it; both skips stayed in place after their applies. So the pattern held twice by
+    precedent and never by decision — until T0.26, which took the third alternative the note did
+    not list: keep the skip, and bound it by where the migration is rather than by whether the
+    column is.
 
     ~~Also from T1.4: `src/db/database.types.ts` carries one hand-written block, `opportunity.key`.~~
     **Closed 2026-09-21** by the run that applied `drizzle/0016`: it regenerated the file against
