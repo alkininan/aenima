@@ -56,19 +56,37 @@ export function withoutGenerated(text) {
 }
 
 /**
- * True when two sides of a generated file differ only inside the generated sections.
+ * Which side of a generated file's conflict to keep — `"ours"`, `"theirs"`, or null for a
+ * disagreement nobody can settle alone.
  *
  * This is the whole of the judgment. `git` says the file conflicts; it cannot say whether the
  * conflict is the generated list disagreeing with itself — which is expected and meaningless —
  * or two people writing different sentences in "Decisions made during the build", which is
- * neither.
+ * neither. Read two ways it gets the second question wrong: a branch that added a paragraph
+ * main never touched differs from main outside the generated sections, and refusing it would
+ * refuse exactly the branches this ticket exists to merge (review pass 1, Must 1). So it is
+ * read three ways, against the merge base: the side that moved is the side to keep, and only
+ * when *both* moved, to different words, is there anything to settle. With no base — the file
+ * was added on both sides — two-way equality is all there is, and anything else is refused.
  */
-export function confined(ours, theirs) {
+export function sideToKeep(ours, theirs, base = null) {
+  let written;
   try {
-    return withoutGenerated(ours) === withoutGenerated(theirs);
+    written = [ours, theirs, base].map((text) => (text === null ? null : withoutGenerated(text)));
   } catch {
-    return false;
+    return null;
   }
+  const [o, t, b] = written;
+  if (o === t) return "theirs";
+  if (b === null) return null;
+  if (t === b) return "ours";
+  if (o === b) return "theirs";
+  return null;
+}
+
+/** True when a generated file's conflict is one a run settles by itself. */
+export function confined(ours, theirs, base = null) {
+  return sideToKeep(ours, theirs, base) !== null;
 }
 
 /** Rewrite `dir`'s build log from `dir`'s own log entries and document headers. */
@@ -161,17 +179,21 @@ export function premerge({
   }
 
   for (const file of files) {
-    const ours = out(g(["show", `:2:${file}`]));
-    const theirs = out(g(["show", `:3:${file}`]));
-    if (!confined(ours, theirs)) {
+    const staged = (stage) => {
+      const shown = g(["show", `:${stage}:${file}`]);
+      return shown.status === 0 ? out(shown) : null;
+    };
+    const side = sideToKeep(staged(2), staged(3), staged(1));
+    if (side === null) {
       return abort(
         `${file} conflicts outside its generated sections, where both sides wrote different words — that is a disagreement to settle, not a list to rebuild`,
       );
     }
-    // Main's copy, then the list rebuilt over the entries the merge just brought in.
-    const taken = g(["checkout", "--theirs", "--", file]);
-    if (taken.status !== 0)
-      return abort(`main's copy of ${file} could not be taken: ${said(taken)}`);
+    // The side that wrote, then the list rebuilt over the entries the merge just brought in.
+    const taken = g(["checkout", `--${side}`, "--", file]);
+    if (taken.status !== 0) {
+      return abort(`the ${side} copy of ${file} could not be taken: ${said(taken)}`);
+    }
   }
 
   try {

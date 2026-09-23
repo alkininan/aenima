@@ -3,7 +3,7 @@
      conflict confined to the build log's generated sections settles itself — main's copy,
      then log-index.mjs over the entries the merge brought in. A conflict anywhere else, or
      one reaching the build log's written passages, is refused by name as before. Numbered
-     v1.24 because v1.21, v1.22 and v1.23 are held by branches still open.
+     past v1.21 and v1.23, which branches still open are holding.
      v1.20 · in the repo · an ID names one task (T0.28): §7 says a number
      belongs to its phase and not to its epic, and stays taken while a branch or a docs file
      carries it; §5 step 1 reads next-id.mjs over the whole board.

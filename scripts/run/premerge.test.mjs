@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { BUILD_LOG, generate } from "./log-index.mjs";
 import { parseHeaderVersion } from "./version-drift.mjs";
-import { confined, premerge, withoutGenerated } from "./premerge.mjs";
+import { confined, premerge, sideToKeep, withoutGenerated } from "./premerge.mjs";
 
 // T0.36 TC1 → AC1 and TC2 → AC2. Over a real repository: what conflicts, and what a
 // resolution leaves behind, are git's to say, and a stubbed runner would only prove the stub
@@ -163,6 +163,39 @@ describe("premerge over a temporary repository", () => {
     expect(git("status", "--porcelain")).toBe("");
   });
 
+  // Review pass 1, Must 1: prose only the branch wrote is not a disagreement. Both sides
+  // differ outside the generated sections, but only one of them moved from the base — which
+  // is the shape origin/t0-26 is actually in, and AC1 says it merges.
+  it("keeps prose the branch added that main never touched", () => {
+    writeFileSync(
+      join(dir, BUILD_LOG),
+      `${buildLog()}\n## What the ticket wrote\n\nOnly on this branch.\n`,
+    );
+    commit("t9-2 prose");
+
+    const result = premerge({ cwd: dir, base: "main", fetch: false });
+
+    expect(result).toMatchObject({ ok: true, merged: true, resolved: [BUILD_LOG] });
+    expect(buildLog()).toContain("Only on this branch.");
+    expect(buildLog()).toContain("log/T9.1.md");
+    expect(buildLog()).toContain("log/T9.2.md");
+    expect(buildLog()).toBe(regenerated());
+  });
+
+  // The mirror of it: prose only main wrote survives a branch that touched none of it.
+  it("keeps prose main added that the branch never touched", () => {
+    git("checkout", "--quiet", "main");
+    writeFileSync(join(dir, BUILD_LOG), `${buildLog()}\n## What main wrote\n\nOnly on main.\n`);
+    commit("main prose");
+    git("checkout", "--quiet", "t9-2");
+
+    const result = premerge({ cwd: dir, base: "main", fetch: false });
+
+    expect(result).toMatchObject({ ok: true, merged: true });
+    expect(buildLog()).toContain("Only on main.");
+    expect(buildLog()).toBe(regenerated());
+  });
+
   it("refuses a build log whose conflict is outside the generated sections", () => {
     const rewrite = (line) => {
       writeFileSync(
@@ -205,8 +238,17 @@ describe("confined", () => {
     expect(confined(log("a", "one", "same"), log("b", "two", "same"))).toBe(true);
   });
 
-  it("reads a difference in the written part as a real one", () => {
+  it("reads a difference in the written part, with no base to judge it by, as a real one", () => {
     expect(confined(log("a", "one", "mine"), log("a", "one", "theirs"))).toBe(false);
+  });
+
+  // Review pass 1, Must 1: the third text is what tells a disagreement from a one-sided edit.
+  it("keeps the side that moved away from the base, and only that side", () => {
+    const base = log("b", "b", "was");
+    expect(sideToKeep(log("a", "x", "written"), log("b", "y", "was"), base)).toBe("ours");
+    expect(sideToKeep(log("a", "x", "was"), log("b", "y", "written"), base)).toBe("theirs");
+    expect(sideToKeep(log("a", "x", "mine"), log("b", "y", "theirs"), base)).toBe(null);
+    expect(sideToKeep(log("a", "x", "same"), log("b", "y", "same"), base)).toBe("theirs");
   });
 
   it("reads a file missing its headings as not confined", () => {
@@ -246,8 +288,14 @@ describe("the protocol carries the step", () => {
     expect(step(9)).toContain("premerge.mjs");
   });
 
+  // The rule, not the number: pinning the number exactly is what failed this very ticket
+  // from `next-id.test.mjs`, and the same trap set here would fail the next one.
   it("bumps the guidelines version past the one this ticket was cut against", () => {
-    expect(parseHeaderVersion(guidelines)).toBe("1.24");
+    const version = parseHeaderVersion(guidelines);
+
+    expect(version).toMatch(/^\d+\.\d+$/);
+    const [major, minor] = version.split(".").map(Number);
+    expect(major > 1 || (major === 1 && minor > 20)).toBe(true);
   });
 
   it("gives the skill the step at both places a merge happens", () => {

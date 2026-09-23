@@ -108,8 +108,11 @@ the cap — keep reading, post nothing. Every other assessment posts its comment
   one `refused` comment with its `files` and what would settle them, leave the task at Review,
   and go on; nothing was pushed. `merged: true` means the branch moved, so the gate runs on the
   result and the branch is pushed before anything merges — the gate as step 9 runs it, then
-  `git push origin HEAD:t<id>`. `merged: false` is a branch that already carries main: push
-  nothing, gate nothing. Then
+  `git push origin HEAD:t<id>`. A red gate there is main meeting this branch badly, and it is
+  not this run's to fix on a ticket it did not build: push nothing, post one `refused` comment
+  naming the gate step that failed and that the branch needs a round of its own, and leave the
+  task at Review. `merged: false` is a branch that already carries main: push nothing, gate
+  nothing. Then
 
       gh pr merge t<id> --merge
 
@@ -447,17 +450,20 @@ every branch, so the second to arrive would otherwise be refused on that file al
 
 `merged: true` means main came in and the tree changed: everything below — the gate, the diff
 `gated.mjs` measures, the reviewer's verdict against the pushed commit — is about this tree, so
-nothing here runs before it. `ok: false` is a conflict this run does not settle: post one
-`refused` comment with its `files` and what would settle them, set the task `Review` with the
-commit it has, release the marker, and exit — the human's `merge` at step 0 lands it once the
-conflict is gone. `merged: false` is a branch that already carries main; go straight on. Then:
+nothing here runs before it. `merged: false` is a branch that already carries main. `ok: false`
+is a conflict this run does not settle; it changes nothing about what happens next, because
+**every exit pushes**:
 
     git push -u origin <branch>
     gh pr view <branch> --json url --jq .url || gh pr create --fill --base main
 
 One ticket, one pull request: a reused branch already has one, and the push updated it. No
 `gh` → put the compare URL in the report instead. Set the task's Commit to the short hash and
-Status to `Review`. Then ask whether this diff is the run's own to merge:
+Status to `Review`. A `premerge.mjs` that said `ok: false` stops here: post one `refused`
+comment with its `files` and what would settle them, release the marker, and exit — the work is
+on origin with its pull request, and the human's *merge* at step 0 lands it once the conflict is
+gone. A branch left unpushed would have neither, and the Commit on the board would name a
+commit nobody can fetch. Otherwise, ask whether this diff is the run's own to merge:
 
     node scripts/run/gated.mjs
 
