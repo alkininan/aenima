@@ -11,11 +11,12 @@
  * claim the session could have made about itself.
  *
  * One run, one row: SessionEnd is not the once-per-session event it reads as, and the same
- * transcript reaches this script more than once — thirty-seven rows in Runs described fifteen
- * runs, every copy repeating its original's tokens and findings to the digit, which is a second
- * read of one transcript and not a second run. What fires the hook again is not established
- * here; the row is keyed on the task and the minute the run started instead, so a second post
- * finds its own key and writes nothing whatever fired it (T0.30).
+ * transcript reaches this script more than once — every copy repeated its original's tokens and
+ * findings to the digit, which is a second read of one transcript and not a second run. The
+ * count as the board stood at T0.30 and the rows it names are in `docs/reports/T0.30.md`; what
+ * fires the hook again is not established there or here. The row is keyed on the task and the
+ * minute the run started instead, so a second post finds its own key and writes nothing
+ * whatever fired it (T0.30).
  *
  * What the transcript holds and how it is read:
  *   - one line per event, each with a `type` and most with a `timestamp`; the first and the

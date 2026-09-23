@@ -600,9 +600,9 @@ describe("post", () => {
     expect(runKey(null, props.Started.date.start)).toBe(runKey(null, "2026-09-13T11:22:00.000Z"));
   });
 
-  // The SessionEnd hook fires again when a session is cleared, resumed or exited, and reads the
-  // same transcript from the same first timestamp. The second post is the duplicate R-0055,
-  // R-0057, R-0058 and R-0061 are; it writes nothing and says the run is already recorded.
+  // The same transcript reaches the script more than once, whatever fires SessionEnd again.
+  // The second post is the duplicate R-0055, R-0057, R-0058 and R-0061 are: same task, same
+  // minute, every figure repeated. It writes nothing and says the run is already recorded.
   it("writes one row for a run posted twice, and names the row that already holds it", async () => {
     const api = boardOf();
     const summary = parseTranscript(transcript());

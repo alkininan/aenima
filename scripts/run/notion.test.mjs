@@ -317,8 +317,8 @@ describe("client", () => {
   });
 });
 
-// T0.30 — the Runs row read for the key it is recorded under: the task it relates to and the
-// minute it started. Name comes too, since the next number is read from the same rows.
+// T0.30 TC1 → AC1. The Runs row read for the key it is recorded under: the task it relates to
+// and the minute it started. Name comes too, since the next number is read from the same rows.
 describe("run", () => {
   it("reads a Runs row's task, start and name", () => {
     expect(
