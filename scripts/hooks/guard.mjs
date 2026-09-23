@@ -410,6 +410,16 @@ function lex(text) {
 const UPSTREAM = new WeakMap();
 
 /**
+ * A shell's `-c` flag, whether it stands alone or clusters with other short flags. Short flags
+ * bundle into one word, and every shell here reads a `c` anywhere in that bundle as `-c`:
+ * `bash -lc '…'`, `sh -ec '…'`, `bash -xc '…'` and `bash -cl '…'` all run the next word. Read
+ * as text a bundle is not `-c`, so the word it runs was hidden from every rule below — on main
+ * that carried `pnpm db:push` past rule (a), a force-push past rule (d) and a write to the
+ * board's API past rule (i) (T0.31). A long option is not a bundle: `--color` is not this.
+ */
+const isCommandFlag = (token) => /^-[A-Za-z]*c[A-Za-z]*$/.test(token);
+
+/**
  * The simple commands a Bash string runs, each as `{ argv, redirects, heredocs }`.
  *
  * Nested command lines — `$(…)`, backticks, `sh -c "…"` — are parsed and returned beside
@@ -459,7 +469,7 @@ export function parse(command) {
   // `sh -c "…"` runs its string as a command line of its own.
   for (const cmd of commands.slice()) {
     const { exe, args } = program(cmd.argv);
-    const c = args.indexOf("-c");
+    const c = args.findIndex(isCommandFlag);
     if (SHELLS.has(exe) && c !== -1 && typeof args[c + 1] === "string") {
       commands.push(...parse(args[c + 1]));
     }
@@ -852,7 +862,7 @@ function shellRun(cmd, readScript) {
     return isText(text) ? [text] : [];
   };
   if (name === "source" || name === ".") return read(rest[0]);
-  if (!SHELLS.has(name) || rest.includes("-c")) return [];
+  if (!SHELLS.has(name) || rest.some(isCommandFlag)) return [];
   const script = rest.find((token) => !token.startsWith("-"));
   return script === undefined ? stdinOf(cmd, readScript) : read(script);
 }
