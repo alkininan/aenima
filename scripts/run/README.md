@@ -191,7 +191,9 @@ migrate`, `db:baseline`, that script, or anything handed `.env.migrate` — thro
 over the API — the marker names the task, the token opens the board, the reply must be the
 human's newest since the pipeline's question, and the task must be at the state the word is
 for, the same `shapeOf` the preflight reads — and the same check gates `gh pr merge` on the
-word `merge` at Review. The guard verifies; the model never asserts.
+word `merge` at Review. The guard verifies; the model never asserts. That one word is the whole
+of a migration's permission: since T0.26 the ticket carrying it merges itself at close once the
+word has been spent (step 9).
 
 ## 7 Gate
 
@@ -224,12 +226,18 @@ results), pushes it, opens the PR against `main` unless the branch already
 has one, sets the task's Commit to the short hash and its Status to Review, and then asks
 `gated.mjs` whether the diff is its own to merge: since T0.21 that is a diff adding a migration
 under `drizzle/`, or one that **weakens a restraint**, which `loosening.mjs` measures rather than
-reads off the paths — it runs the guard's `decide` and `gated.mjs`'s own `isGatedPath` from both
-`origin/main` and this checkout against one fixed corpus, in a child process a side (`--probe`),
+reads off the paths — it runs the guard's `decide`, `gated.mjs`'s own `isGatedPath` and its
+`gatedDiff` from both `origin/main` and this checkout against one fixed corpus, in a child process
+a side (`--probe`),
 and anything refused before and allowed after is a rule deleted or a matcher narrowed; a guard
 rule with no corpus entry, a hook gone from `.claude/settings.json` or no longer carrying main's
 command, a gate step dropped or its release count raised, a deleted test whose criteria nothing
-added names, and any diff touching `loosening.mjs` itself are gated the same way. Each reason
+added names, and any diff touching `loosening.mjs` itself are gated the same way. Since T0.26 a
+migration leaves that list once your `apply` has been spent on it: `consumedApplies` reads the
+claimed task's thread over the API — your reply beginning with `apply`, and the run's own
+`applied` note after it naming that migration's tag — so the schema decision is taken once and
+the code that reads the column follows it, while a migration nobody has applied is gated exactly
+as before. Each reason
 carries what would ungate it, and the answer is read by the guard and the skill both. A diff
 that trips none of them, with the reviewer's `PASS` on file, is merged by the run itself with `gh pr merge --merge --delete-branch` from the pushed commit — the gate run once
 more first, so its green for that tree is on record — and the task is Done with its Release row

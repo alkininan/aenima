@@ -467,8 +467,9 @@ commit nobody can fetch. Otherwise, ask whether this diff is the run's own to me
 
     node scripts/run/gated.mjs
 
-`ok: false` → this diff is one only the human's word merges: it adds a migration, or it weakens
-one of the pipeline's own restraints — a guard rule, the gated list, a hook, the Stop gate, a
+`ok: false` → this diff is one only the human's word merges: it adds a migration your `apply` is
+still owed on — a migration the thread has already spent that word on is not one of them (T0.26)
+— or it weakens one of the pipeline's own restraints — a guard rule, the gated list, a hook, the Stop gate, a
 test — which `loosening.mjs` measured by running both sides rather than by reading the diff.
 Post one `gated` comment, `reasons` its `reasons` exactly as printed: each carries the rule the
 diff trips and what would ungate it, and neither is yours to word. The task stays at `Review`;
@@ -507,8 +508,8 @@ Either way, release the marker: `node scripts/run/release.mjs`. If step 3 said `
 `git checkout main`. Exit.
 
 **Never merge on your own word.** The two doors are the guard's, read in code: the human's
-*merge* on the task at Review, or the reviewer's `PASS` on file over a diff that adds no
-migration and weakens no restraint. Nothing you say in this transcript opens either. The Runs row is not yours to write
+*merge* on the task at Review, or the reviewer's `PASS` on file over a diff that weakens no
+restraint and adds no migration your `apply` is still owed on. Nothing you say in this transcript opens either. The Runs row is not yours to write
 either: the SessionEnd hook runs `scripts/run/runs.mjs` over this session's transcript once you
 have exited, and posts it with the token — task, outcome, model, tokens, findings, all read from
 what happened, none of it from what you say.
