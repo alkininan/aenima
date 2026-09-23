@@ -3,7 +3,7 @@
 import {
   cloneElement,
   useCallback,
-  useEffect,
+  useLayoutEffect,
   useId,
   useMemo,
   useRef,
@@ -16,15 +16,12 @@ import {
 import { cx } from "@/lib/cx";
 import { nextRovingIndex } from "@/lib/roving";
 
-import { useEscapeLayer, useOutsideDismiss, usePanelPlacement } from "./useLayer";
+import { Panel } from "./Panel";
 import {
   MENU_SECTION_CLASSES,
   MENU_SEPARATOR_CLASSES,
-  PANEL_MAX_HEIGHT,
   menuPanelClasses,
   panelRowClasses,
-  type MenuAlign,
-  type PanelPlacement,
 } from "./variants";
 
 /**
@@ -60,28 +57,32 @@ type MenuProps = {
   entries: readonly MenuEntry[];
   /** Names the menu for assistive tech. */
   label: string;
-  align?: MenuAlign;
   className?: string;
 };
 
 /**
- * Context / overflow menu (design-spec.md §8) — `--surface-1` panel at radius
- * 12 on the dropdown shadow with 6px padding, 36h ui-body rows, `--danger` on
- * destructive rows, mono-micro `--n-secondary` section titles, 1px
- * `--glass-border` separators.
+ * Context / overflow menu (design-spec.md §8.18) — the glass recipe at
+ * `--r-panel` on `--shadow-float` with 6px padding, rows 36 on pointer and 44
+ * on touch, `--danger` on destructive rows, mono-micro `--n-secondary` section
+ * titles, 1px `--glass-border` separators, min-width 200 and max-width 280.
+ *
+ * Since v2.21 the panel **morphs from its trigger** (§6): it is a `Panel`, which
+ * is a popover in the top layer, placed by §6's rule and grown out of the
+ * trigger's box. Which corner it grows from is no longer the caller's to pass —
+ * §6 decides it from the room around the trigger — so the old `align` prop is
+ * gone rather than left as a second opinion.
  *
  * Unlike the select, a menu moves real focus onto its rows: there is no field
  * holding the user's place, and §11 wants the arrow keys to walk something that
  * can be seen to have focus. Escape and Tab both hand focus back to the trigger.
  */
-export function Menu({ trigger, entries, label, align = "start", className }: MenuProps) {
+export function Menu({ trigger, entries, label, className }: MenuProps) {
   const baseId = useId();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLDivElement | null>(null);
 
   const [open, setOpen] = useState(false);
-  const [placement, setPlacement] = useState<PanelPlacement>("below");
   const [activeIndex, setActiveIndex] = useState(-1);
 
   // Only rows take the cursor; sections and separators are passed over.
@@ -89,48 +90,52 @@ export function Menu({ trigger, entries, label, align = "start", className }: Me
   const positions = useMemo(() => rowPositions(entries), [entries]);
   const isDisabled = useCallback((index: number) => rows[index]?.disabled === true, [rows]);
 
-  const measurePlacement = usePanelPlacement(rootRef, PANEL_MAX_HEIGHT);
-
   const close = useCallback(() => {
     setOpen(false);
     setActiveIndex(-1);
   }, []);
 
-  // §11: on close, focus returns to the opener.
+  // §11: on close, focus returns to the opener — but not on this line. §6 hides the
+  // trigger for the panel's lifetime, so at the moment the state is set it is still
+  // hidden and cannot take focus; `Panel` restores it in its own layout effect, and a
+  // child's layout effects run before its parent's.
+  const returnFocus = useRef(false);
   const closeAndFocus = useCallback(() => {
     close();
-    triggerRef.current?.querySelector("button")?.focus();
+    returnFocus.current = true;
   }, [close]);
+
+  useLayoutEffect(() => {
+    if (open || !returnFocus.current) return;
+    returnFocus.current = false;
+    triggerRef.current?.querySelector("button")?.focus();
+  }, [open]);
 
   const focusRow = useCallback((index: number) => {
     setActiveIndex(index);
     listRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')[index]?.focus();
   }, []);
 
-  useEscapeLayer({ open, kind: "popover", onClose: closeAndFocus });
-  useOutsideDismiss({ open, refs: [rootRef], onDismiss: close });
-
-  // A menu moves real focus onto its first row when it opens — once per
-  // opening, so a later re-render never drags the cursor back to the top.
-  const autoFocused = useRef(false);
-  useEffect(() => {
-    if (!open) {
-      autoFocused.current = false;
-      return;
-    }
-    if (autoFocused.current) return;
-    autoFocused.current = true;
-    focusRow(nextRovingIndex({ key: "Home", current: -1, count: rows.length, isDisabled }) ?? 0);
-  }, [open, rows.length, isDisabled, focusRow]);
+  // §6: focus is placed inside the morph's update callback, on the panel's
+  // first item. `Panel` calls this straight after `showPopover()` — never at
+  // `finished`, because the trigger is hidden by then and a keystroke in the
+  // gap would go nowhere (C-17). The cursor state is set here too, so the row
+  // that has focus is the row that is painted active.
+  const firstRow = useCallback((): HTMLElement | null => {
+    const index = nextRovingIndex({ key: "Home", current: -1, count: rows.length, isDisabled }) ?? 0;
+    setActiveIndex(index);
+    return (
+      listRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')[index] ?? null
+    );
+  }, [rows.length, isDisabled]);
 
   const toggle = useCallback(() => {
     if (open) {
       closeAndFocus();
       return;
     }
-    setPlacement(measurePlacement(true));
     setOpen(true);
-  }, [open, closeAndFocus, measurePlacement]);
+  }, [open, closeAndFocus]);
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Tab") {
@@ -161,14 +166,14 @@ export function Menu({ trigger, entries, label, align = "start", className }: Me
         {cloneElement(trigger, { "aria-expanded": open, "aria-haspopup": "menu" })}
       </span>
 
-      {open ? (
-        <div
-          ref={listRef}
-          role="menu"
-          aria-label={label}
-          className={menuPanelClasses({ placement, align })}
-          onKeyDown={onKeyDown}
-        >
+      <Panel
+        open={open}
+        onClose={closeAndFocus}
+        triggerRef={triggerRef}
+        focusOnOpen={firstRow}
+        className={menuPanelClasses()}
+      >
+        <div ref={listRef} role="menu" aria-label={label} onKeyDown={onKeyDown}>
           {entries.map((entry, index) => {
             if (entry.kind === "separator") {
               return (
@@ -211,7 +216,7 @@ export function Menu({ trigger, entries, label, align = "start", className }: Me
             );
           })}
         </div>
-      ) : null}
+      </Panel>
     </div>
   );
 }

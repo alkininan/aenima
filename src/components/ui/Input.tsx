@@ -45,6 +45,13 @@ type InputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "size"> & {
    * would otherwise be in the way.
    */
   fieldOverlay?: ReactNode | undefined;
+  /**
+   * The pill itself, for a caller that has to measure it. §8.5's panel morphs
+   * from the *field*, not from the composite — the composite reserves a label
+   * zone above and a helper line below, so its box is taller than the thing the
+   * panel grows out of and wider by nothing at all.
+   */
+  fieldRef?: Ref<HTMLDivElement> | undefined;
   /** Classes for the outer composite. `fieldClassName` targets the pill itself. */
   fieldClassName?: string | undefined;
   /**
@@ -94,6 +101,7 @@ export function Input({
   leadingIcon,
   trailingIcon,
   fieldOverlay,
+  fieldRef,
   className,
   fieldClassName,
   disabled = false,
@@ -115,7 +123,10 @@ export function Input({
       })}
     >
       <div className="relative">
-        <div className={inputFieldClasses({ invalid, disabled, className: fieldClassName })}>
+        <div
+          ref={fieldRef}
+          className={inputFieldClasses({ invalid, disabled, className: fieldClassName })}
+        >
           {leadingIcon ? <span className={INPUT_LEADING_ICON_CLASSES}>{leadingIcon}</span> : null}
           <input
             id={inputId}

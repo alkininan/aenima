@@ -23,14 +23,29 @@ function Harness({ options = OPTIONS }: { options?: readonly SelectOption[] }) {
   return <Select label="Type" options={options} value={value} onValueChange={setValue} />;
 }
 
-const combobox = () => screen.getByRole("combobox") as HTMLInputElement;
+/**
+ * The field. §6 gives it `visibility: hidden` for the panel's lifetime, which
+ * takes it out of the accessibility tree with the paint, so while the panel is
+ * open it is reached by its id rather than by its role.
+ */
+const combobox = () =>
+  (screen.queryByRole("combobox") ??
+    document.querySelector('input[role="combobox"]')) as HTMLInputElement;
+
+/**
+ * Where the keyboard cursor is. Since v2.21 that is **real focus**, not
+ * `aria-activedescendant`: §6 places focus "on the panel's first item, which in
+ * a select is the selected option" inside the morph's update callback, because
+ * the field is hidden from that moment and a keystroke aimed at it would go
+ * nowhere (C-17). So the cursor is read off `document.activeElement`.
+ */
 const activeOptionLabel = () => {
-  const id = combobox().getAttribute("aria-activedescendant");
-  return id ? (document.getElementById(id)?.textContent ?? null) : null;
+  const active = document.activeElement;
+  return active?.getAttribute("role") === "option" ? active.textContent : null;
 };
 
 /**
- * design-spec.md §8 (select panel behaviour) and §11 (arrow keys walk selects,
+ * design-spec.md §8.5 (select panel behaviour) and §11 (arrow keys walk selects,
  * Esc closes the topmost layer, focus stays reachable).
  */
 describe("Select keyboard", () => {
@@ -68,13 +83,21 @@ describe("Select keyboard", () => {
     expect(activeOptionLabel()).toBe("Fix");
   });
 
-  it("keeps focus on the trigger rather than moving it into the list", async () => {
+  /**
+   * C-17, and the one contract v2.21 reversed here. Until v2.18 focus stayed on
+   * the field and the active option was named by `aria-activedescendant`; §6's
+   * morph makes that untenable, because the field is `visibility: hidden` for
+   * the panel's lifetime and "the hidden trigger loses focus at the next
+   * rendering update … and a keystroke in the gap would go nowhere".
+   */
+  it("moves focus into the panel, onto the option the cursor is on", async () => {
     const user = userEvent.setup();
     render(<Harness />);
     combobox().focus();
 
     await user.keyboard("{ArrowDown}{ArrowDown}");
-    expect(document.activeElement).toBe(combobox());
+    expect(document.activeElement?.getAttribute("role")).toBe("option");
+    expect(document.activeElement?.textContent).toBe("Enhancement");
   });
 
   it("commits on Enter, closes, and leaves focus on the trigger", async () => {
@@ -103,14 +126,17 @@ describe("Select keyboard", () => {
     expect(document.activeElement).toBe(combobox());
   });
 
-  it("closes when Tab leaves the field", async () => {
+  // §8.5: "Tab selects the active option and closes, carrying focus onward."
+  it("commits the active option on Tab and closes", async () => {
     const user = userEvent.setup();
     render(<Harness />);
     combobox().focus();
 
     await user.keyboard("{ArrowDown}");
     await user.tab();
+
     expect(screen.queryByRole("listbox")).toBeNull();
+    expect(combobox().value).toBe("Feature");
   });
 
   // §8: type-to-jump.

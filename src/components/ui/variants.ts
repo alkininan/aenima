@@ -388,27 +388,47 @@ export function spinnerClasses({
 /* Tooltip — §8 "Tooltip"                                                     */
 /* -------------------------------------------------------------------------- */
 
-/** §8 gives no placement; top is the default and bottom is the flip. */
-export type TooltipSide = "top" | "bottom";
+/** §8.14: "below it and centred, flipping above when it would leave the viewport". */
+export type TooltipSide = "bottom" | "top";
 
-/** §8: 500ms show delay, instant hide. */
+/** §8.14: `--delay-tooltip` show delay, instant hide. */
 export const TOOLTIP_SHOW_DELAY_MS = 500;
 
-// §8: --surface-2, radius 8, ui-caption, pad 6/10, max-width 240, no arrow,
-// z 600 (§4). Colour is §2's default text — §8 names only the surface.
-const TOOLTIP_BASE =
-  "pointer-events-none absolute z-[var(--z-tooltip)] w-max max-w-[240px] rounded-xs " +
-  "bg-surface-2 px-[10px] py-[6px] type-ui-caption text-n-primary";
+/**
+ * The bridge. §8.14: a tooltip "stays while the pointer is over the trigger, the
+ * tooltip or **the 8 between them**, and hides at once on leaving all three."
+ *
+ * So the 8 is padding on this element rather than a margin on the bubble: a
+ * margin is outside the box and the pointer crossing it leaves the trigger's
+ * subtree, which fires `mouseleave` and hides the tooltip halfway across the
+ * gap — the tooltip would be unreachable by pointer, and §8.14 exists to say it
+ * is reachable. As padding the gap belongs to the hoverable box, and the pointer
+ * never leaves.
+ *
+ * It takes pointer events for the same reason. A tooltip is the one floating
+ * layer that is not navigation (§5), so it blocks nothing worth clicking; what
+ * it does block is the trigger beneath the 8, which is the trigger's own edge.
+ */
+const TOOLTIP_BRIDGE_BASE = "absolute left-1/2 z-[var(--z-tooltip)] -translate-x-1/2";
 
-// The 8px stand-off is the §8 input composite's rhythm (label → 8 → field → 8
-// → helper), confirmed on the ticket as the offset for every floating layer.
 const TOOLTIP_SIDE_CLASSES: Record<TooltipSide, string> = {
-  top: "bottom-full left-1/2 mb-[8px] -translate-x-1/2",
-  bottom: "top-full left-1/2 mt-[8px] -translate-x-1/2",
+  bottom: "top-full pt-[8px]",
+  top: "bottom-full pb-[8px]",
 };
 
-export function tooltipClasses(side: TooltipSide = "top", className?: string): string {
-  return cx(TOOLTIP_BASE, TOOLTIP_SIDE_CLASSES[side], className);
+export function tooltipBridgeClasses(side: TooltipSide = "bottom", className?: string): string {
+  return cx(TOOLTIP_BRIDGE_BASE, TOOLTIP_SIDE_CLASSES[side], className);
+}
+
+// §8.14: --surface-2, --r-xs, ui-caption, pad 6/10, max-width 240, no arrow,
+// z 600 (§4). Colour is §2's default text — §8.14 names only the surface. It
+// stays solid: "it is too small for blur to read as anything but noise" (§5).
+export function tooltipBubbleClasses(className?: string): string {
+  return cx(
+    "block w-max max-w-[240px] rounded-xs bg-surface-2 px-[10px] py-[6px] " +
+      "type-ui-caption text-n-primary",
+    className,
+  );
 }
 
 /* -------------------------------------------------------------------------- */
@@ -418,24 +438,26 @@ export function tooltipClasses(side: TooltipSide = "top", className?: string): s
 /** §8: opens below, above if less than 320px of space. Also the max height. */
 export const PANEL_MAX_HEIGHT = 320;
 
-export type PanelPlacement = "below" | "above";
+// `.panel` in globals.css carries §8's radius 12, the float shadow, 6px padding
+// and the pointer/touch row height; the fill, border and specular edge are §5's
+// glass recipe, which §8.5 and §8.18 both name — "it is navigation layer, and the
+// morph needs trigger and panel to be one material". A panel is one of the three
+// surfaces C-37 lets carry a blur, since page content passes beneath it
+// unscrimmed. Popovers sit at z 300 on the §4 ladder; a popover in the top layer
+// is painted above it regardless, and the rung is what the class still declares.
+const PANEL_BASE =
+  "panel glass glass-blur scroll-thin z-[var(--z-popover)] overflow-y-auto " +
+  "[--glass-elevation:var(--shadow-float)]";
 
-// `.panel` in globals.css carries §8's surface-1 / radius 12 / dropdown shadow
-// / 6px padding. Popovers sit at z 300 on the §4 ladder.
-const PANEL_BASE = "panel scroll-thin absolute z-[var(--z-popover)] overflow-y-auto";
-
-const PANEL_PLACEMENT_CLASSES: Record<PanelPlacement, string> = {
-  below: "top-full mt-[8px]",
-  above: "bottom-full mb-[8px]",
-};
-
-export type PanelClassOptions = {
-  placement?: PanelPlacement | undefined;
-  className?: string | undefined;
-};
-
-export function panelClasses({ placement = "below", className }: PanelClassOptions = {}): string {
-  return cx(PANEL_BASE, PANEL_PLACEMENT_CLASSES[placement], "max-h-[320px]", className);
+/**
+ * The panel's own surface. Where it lands is `placePanel`'s and the `Panel`
+ * component's: since v2.21 a panel is a popover in the top layer, so it is
+ * positioned against the viewport rather than laid out inside a relative
+ * wrapper, and a placement class here would be a second opinion about a rule §6
+ * states once.
+ */
+export function panelSurfaceClasses(className?: string): string {
+  return cx(PANEL_BASE, className);
 }
 
 // §8 options: 36h, ui-body, radius 8; hover --surface-3; selected --prime-soft
@@ -449,7 +471,8 @@ export function panelClasses({ placement = "below", className }: PanelClassOptio
 // old `rounded-xs` (8) was 2 more than the space allows, and what it broke was
 // the panel's corner rather than its own.
 const PANEL_ROW_BASE =
-  "flex h-[36px] w-full items-center gap-[8px] rounded-[calc(var(--r-panel)-var(--panel-pad))] " +
+  "flex h-[var(--panel-row-h)] w-full items-center gap-[8px] " +
+  "rounded-[calc(var(--r-panel)-var(--panel-pad))] " +
   "px-[12px] type-ui-body text-left transition-colors duration-[var(--t-fast)] ease-brand";
 
 export type PanelRowClassOptions = {
@@ -474,27 +497,25 @@ export function panelRowClasses({
     PANEL_ROW_BASE,
     disabled
       ? "cursor-default text-n-disabled"
-      : cx("cursor-pointer hover:bg-surface-3", destructive ? "text-danger" : "text-n-primary"),
+      : cx(
+          "cursor-pointer hover:bg-hover-overlay",
+          destructive ? "text-danger" : "text-n-primary",
+        ),
     selected && "bg-prime-soft",
-    active && !disabled && !selected && "bg-surface-3",
+    active && !disabled && !selected && "bg-hover-overlay",
     className,
   );
 }
 
 export type MenuAlign = "start" | "end";
 
-const MENU_ALIGN_CLASSES: Record<MenuAlign, string> = {
-  start: "left-0",
-  end: "right-0",
-};
-
-/** §8 gives a menu no width, so the panel takes its content's. */
-export function menuPanelClasses({
-  placement = "below",
-  align = "start",
-  className,
-}: PanelClassOptions & { align?: MenuAlign | undefined } = {}): string {
-  return cx(panelClasses({ placement }), "w-max", MENU_ALIGN_CLASSES[align], className);
+/**
+ * §8.18: a menu is "min-width 200, max-width 280". §8 gives it no fixed width,
+ * so the panel takes its content's between those two. Which edge it grows from
+ * is §6's placement rule and is decided in script, not here.
+ */
+export function menuPanelClasses(className?: string): string {
+  return cx(panelSurfaceClasses(), "w-max min-w-[200px] max-w-[280px]", className);
 }
 
 /** §8 menus: section titles mono-micro --n-secondary. */
@@ -630,7 +651,8 @@ export const TOAST_VIEWPORT_CLASSES =
 // The 400 max width is §8's confirm-modal measure — the spec's only figure for
 // a narrow overlay — and 20px padding is the ticket-confirmed overlay padding.
 const TOAST_BASE =
-  "glass pointer-events-auto flex w-full max-w-[400px] items-center gap-[8px] " +
+  "glass glass-blur overlay-rise pointer-events-auto flex w-full max-w-[400px] " +
+  "items-center gap-[8px] " +
   "rounded-panel p-[20px] type-ui-body text-n-primary " +
   "[--glass-elevation:var(--shadow-float)]";
 
@@ -649,11 +671,15 @@ export function toastDotClasses(tone: ToastTone = "success", className?: string)
 }
 
 /**
- * §8: optional undo action in --prime. The action reuses the T0.2 ghost button
- * for its sizing and press physics, and ghost paints its label --n-secondary,
- * so the colour is forced rather than left to stylesheet order.
+ * §8.20 (v2.21): the action is a **Neutral** sm button, and the document gives
+ * the reason rather than leaving it to taste — "Neutral, not Soft, because an
+ * aqua label on `--prime-soft` falls under AA on glass with a bright fill
+ * beneath it (§13)". The same arithmetic retired the forced `--prime` label
+ * this class used to carry: Neutral's own `--n-primary` on `--surface-2` is
+ * what holds the contrast, so nothing here paints any more. What is left is the
+ * §8.20 gap of 8 between the three parts, closed from the message's side.
  */
-export const TOAST_ACTION_CLASSES = "ml-auto text-prime! hover:not-disabled:text-prime!";
+export const TOAST_ACTION_CLASSES = "ml-auto";
 
 /* -------------------------------------------------------------------------- */
 /* Modal & sheet — §8 "Modals & sheets"                                       */
@@ -675,8 +701,8 @@ export const MODAL_VIEWPORT_CLASSES =
 // the ticket-confirmed overlay spacing; the max height is the viewport less
 // §4's gutter top and bottom.
 const MODAL_BASE =
-  "glass pointer-events-auto relative flex max-h-[calc(100vh_-_48px)] w-full flex-col " +
-  "rounded-md p-[20px] [--glass-elevation:var(--shadow-modal)]";
+  "glass overlay-rise pointer-events-auto relative flex max-h-[calc(100vh_-_48px)] w-full " +
+  "flex-col rounded-md p-[20px] [--glass-elevation:var(--shadow-modal)]";
 
 const MODAL_WIDTH_CLASSES: Record<ModalWidth, string> = {
   confirm: "max-w-[400px]",
@@ -694,7 +720,7 @@ export const SHEET_VIEWPORT_CLASSES =
   "pointer-events-none fixed inset-0 z-[var(--z-modal)] flex justify-end";
 
 const SHEET_BASE =
-  "glass sheet-in pointer-events-auto relative flex h-full w-full max-w-[480px] flex-col " +
+  "glass overlay-slide pointer-events-auto relative flex h-full w-full max-w-[480px] flex-col " +
   "rounded-l-lg p-[20px] [--glass-elevation:var(--shadow-modal)]";
 
 export function sheetClasses(className?: string): string {

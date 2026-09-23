@@ -34,7 +34,6 @@ export function ItemRowMenu({ itemKey, label }: { itemKey: string; label: string
 
   return (
     <Menu
-      align="end"
       // Names the menu itself, not just its trigger — a row of identical
       // overflow buttons is otherwise indistinguishable in the a11y tree.
       label={label}

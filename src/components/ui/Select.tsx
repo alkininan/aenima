@@ -1,15 +1,24 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
 
 import { cx } from "@/lib/cx";
 import { nextRovingIndex } from "@/lib/roving";
+import { tabStopAround } from "@/lib/tab-stop";
 import { TYPEAHEAD_RESET_MS, matchTypeahead } from "@/lib/typeahead";
 
 import { Input } from "./Input";
+import { Panel } from "./Panel";
 import { CheckIcon, ChevronDownIcon } from "./icons";
-import { useEscapeLayer, useOutsideDismiss, usePanelPlacement } from "./useLayer";
-import { PANEL_MAX_HEIGHT, panelClasses, panelRowClasses, type PanelPlacement } from "./variants";
+import { panelRowClasses } from "./variants";
 
 export type SelectOption = {
   value: string;
@@ -22,9 +31,9 @@ type SelectProps = {
   /** Null leaves the trigger empty, with its label at rest inside it. */
   value: string | null;
   onValueChange: (value: string) => void;
-  /** §8: the trigger inherits the field's floating label, so this is a string. */
+  /** §8.5: the trigger inherits the field's floating label, so this is a string. */
   label: string;
-  /** §8: validation outcome only — instructions live in the subtitle slot. */
+  /** §8.5: validation outcome only — instructions live in the subtitle slot. */
   helper?: string;
   invalid?: boolean;
   disabled?: boolean;
@@ -32,17 +41,27 @@ type SelectProps = {
 };
 
 /**
- * Select (design-spec.md §8) — the trigger is the T0.2 pill field with a
- * trailing chevron (20); the panel is `--surface-1` at radius 12 on the
- * dropdown shadow, 36h option rows, `--surface-3` on hover, `--prime-soft` plus
- * a 16px check on the selected row, max-height 320 with inner scroll, opening
- * above when there is less than 320px of room below.
+ * Select (design-spec.md §8.5) — the trigger is the pill field with a trailing chevron
+ * (20); the panel is the glass recipe at `--r-panel` on `--shadow-float` with 6 padding,
+ * option rows 36 on pointer and 44 on touch, `--hover-overlay` on hover, `--prime-soft`
+ * plus a 16px check on the selected row, max-height 320 with inner scroll.
  *
- * Built as an ARIA combobox over a read-only field rather than a native
- * `<select>`: a native select cannot be given §8's panel. Focus therefore stays
- * on the trigger and the active row is named by `aria-activedescendant`, which
- * is what lets §11's arrow keys and type-to-jump work without moving focus into
- * a list the user would then have to Tab back out of.
+ * Since v2.21 the panel **morphs from the field** (§6): "top-aligned with the field's top
+ * and the field's width … with the field hidden beneath it for the panel's lifetime". So
+ * the panel is a `Panel` — a popover in the top layer — and it is measured against the
+ * pill rather than the composite, which is why `Input` hands back a `fieldRef`.
+ *
+ * Built as an ARIA combobox over a read-only field rather than a native `<select>`: a
+ * native select cannot be given §8.5's panel. **Focus moves into the panel**, which is the
+ * one thing v2.21 changed here and it is not cosmetic: §6 places focus "inside the update
+ * callback, straight after `showPopover()` … on the panel's first item, which in a select
+ * is the selected option", because the trigger is hidden from that moment and a keystroke
+ * in the gap would go nowhere. `aria-activedescendant` on the combobox stays, so the
+ * relationship a screen reader reads is unchanged; what moved is where the keystrokes go.
+ *
+ * The keyboard contract is §8.5's, which is the native `<select>`'s so nobody relearns it:
+ * arrows move the active option, Enter selects, Esc closes without change, Tab selects the
+ * active option and closes, carrying focus onward (§11, C-17).
  */
 export function Select({
   options,
@@ -60,20 +79,24 @@ export function Select({
   const optionId = (index: number) => `${baseId}-option-${index}`;
 
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const fieldRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLUListElement | null>(null);
   const buffer = useRef("");
   const bufferTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [open, setOpen] = useState(false);
-  const [placement, setPlacement] = useState<PanelPlacement>("below");
   const [activeIndex, setActiveIndex] = useState(-1);
 
   const selectedIndex = options.findIndex((option) => option.value === value);
   const selected = selectedIndex >= 0 ? options[selectedIndex] : undefined;
   const isDisabled = useCallback((index: number) => options[index]?.disabled === true, [options]);
 
-  const measurePlacement = usePanelPlacement(rootRef, PANEL_MAX_HEIGHT);
+  const optionAt = useCallback(
+    (index: number): HTMLElement | null =>
+      listRef.current?.querySelectorAll<HTMLElement>('[role="option"]')[index] ?? null,
+    [],
+  );
 
   const close = useCallback(() => {
     setOpen(false);
@@ -81,21 +104,32 @@ export function Select({
     buffer.current = "";
   }, []);
 
-  // §11: on close, focus returns to the opener — here, the trigger it never
-  // really left.
+  // §11: on close, focus returns to the opener — but not on this line. §6 hides the
+  // field for the panel's lifetime, so at the moment the state is set it cannot take
+  // focus; `Panel` restores it in its own layout effect, and a child's layout effects
+  // run before its parent's.
+  const returnFocus = useRef(false);
   const closeAndFocus = useCallback(() => {
     close();
-    inputRef.current?.focus();
+    returnFocus.current = true;
   }, [close]);
 
-  const openPanel = useCallback(
-    (index: number) => {
-      setPlacement(measurePlacement(true));
-      setOpen(true);
-      setActiveIndex(index);
-    },
-    [measurePlacement],
-  );
+  useLayoutEffect(() => {
+    if (open || !returnFocus.current) return;
+    returnFocus.current = false;
+    inputRef.current?.focus();
+  }, [open]);
+
+  /**
+   * Opens with the cursor on `index`, or on the first option where there is no selection
+   * to open on — `selectedIndex` is -1 then, and a cursor at -1 would leave the option
+   * that takes focus (§6 places it on the panel's first item) painted as though it did
+   * not have it, with nothing for Enter or Tab to commit.
+   */
+  const openPanel = useCallback((index: number) => {
+    setOpen(true);
+    setActiveIndex(index >= 0 ? index : 0);
+  }, []);
 
   const commit = useCallback(
     (index: number) => {
@@ -107,17 +141,25 @@ export function Select({
     [closeAndFocus, onValueChange, options],
   );
 
-  useEscapeLayer({ open, kind: "popover", onClose: closeAndFocus });
-  useOutsideDismiss({ open, refs: [rootRef], onDismiss: close });
+  /** Where the cursor goes when the panel opens: the selected option (§6, C-17). */
+  const focusOnOpen = useCallback((): HTMLElement | null => {
+    const index = activeIndex >= 0 ? activeIndex : selectedIndex >= 0 ? selectedIndex : 0;
+    const row = optionAt(index);
+    // §8.5: the selected row is "scrolled into view on open".
+    if (row && typeof row.scrollIntoView === "function") row.scrollIntoView({ block: "nearest" });
+    return row;
+  }, [activeIndex, selectedIndex, optionAt]);
 
-  // Keep the keyboard cursor in view inside the 320px scroll box.
+  /** Keep the keyboard cursor in view, and on the row that has it. */
   useEffect(() => {
     if (!open || activeIndex < 0) return;
-    const row = listRef.current?.children[activeIndex];
-    if (row instanceof HTMLElement && typeof row.scrollIntoView === "function") {
-      row.scrollIntoView({ block: "nearest" });
+    const row = optionAt(activeIndex);
+    if (!row) return;
+    if (typeof row.scrollIntoView === "function") row.scrollIntoView({ block: "nearest" });
+    if (document.activeElement !== row && listRef.current?.contains(document.activeElement)) {
+      row.focus();
     }
-  }, [open, activeIndex]);
+  }, [open, activeIndex, optionAt]);
 
   useEffect(() => {
     return () => {
@@ -147,13 +189,28 @@ export function Select({
     [activeIndex, isDisabled, open, openPanel, options, selectedIndex],
   );
 
-  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+  /**
+   * One handler for both states. While the panel is open the keystrokes arrive at the
+   * option that has focus and bubble to the listbox; while it is closed they arrive at
+   * the field. The contract is the same either way, which is what §8.5 means by "the
+   * native `<select>` contract".
+   */
+  const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (disabled) return;
 
-    // Tab leaves the field, so the panel goes with it — §11 keeps Tab moving in
-    // visual order rather than cycling inside a popover.
     if (event.key === "Tab") {
-      if (open) close();
+      if (!open) return;
+      // §8.5 and C-17: Tab "selects the active option and closes, carrying focus
+      // onward". The panel is in the top layer and the field is hidden beneath it, so
+      // where Tab would have gone is a question only the document can answer.
+      event.preventDefault();
+      const onward = tabStopAround(rootRef.current ?? event.currentTarget, event.shiftKey);
+      if (activeIndex >= 0) {
+        const option = options[activeIndex];
+        if (option && !option.disabled) onValueChange(option.value);
+      }
+      close();
+      onward?.focus();
       return;
     }
 
@@ -177,7 +234,7 @@ export function Select({
       return;
     }
 
-    // §8: type-to-jump. Single printable characters only, so shortcuts survive.
+    // §8.5: type-to-jump. Single printable characters only, so shortcuts survive.
     if (event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey) {
       event.preventDefault();
       jump(event.key);
@@ -189,6 +246,7 @@ export function Select({
       <Input
         id={inputId}
         ref={inputRef}
+        fieldRef={fieldRef}
         role="combobox"
         readOnly
         label={label}
@@ -199,59 +257,55 @@ export function Select({
         aria-controls={listId}
         aria-haspopup="listbox"
         aria-autocomplete="none"
-        aria-activedescendant={open && activeIndex >= 0 ? optionId(activeIndex) : undefined}
         value={selected?.label ?? ""}
         onKeyDown={onKeyDown}
         onClick={() => {
           if (disabled) return;
-          if (open) close();
+          if (open) closeAndFocus();
           else openPanel(selectedIndex);
         }}
         trailingIcon={
-          // §8 gives the trigger a 20px chevron; the T0.2 icon slot is 24.
+          // §8.5 gives the trigger a 20px chevron; the icon slot is 24.
           <span className="flex size-[20px] items-center justify-center">
             <ChevronDownIcon />
           </span>
         }
-        // The panel rides in the field's own positioning context, so its §8
-        // 8px stand-off is measured from the pill — not from the composite,
-        // whose reserved label zone sits above it and helper line below.
-        fieldOverlay={
-          open ? (
-            <ul
-              ref={listRef}
-              id={listId}
-              role="listbox"
-              aria-label={label}
-              className={panelClasses({ placement, className: "inset-x-0" })}
-            >
-              {options.map((option, index) => (
-                <li
-                  key={option.value}
-                  id={optionId(index)}
-                  role="option"
-                  aria-selected={index === selectedIndex}
-                  aria-disabled={option.disabled ?? false}
-                  className={panelRowClasses({
-                    active: index === activeIndex,
-                    selected: index === selectedIndex,
-                    disabled: option.disabled ?? false,
-                  })}
-                  onClick={() => commit(index)}
-                  onMouseMove={() => {
-                    if (!option.disabled) setActiveIndex(index);
-                  }}
-                >
-                  <span className="min-w-0 flex-1 truncate">{option.label}</span>
-                  {index === selectedIndex ? (
-                    <CheckIcon className="size-[16px] shrink-0 text-prime" />
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          ) : null
-        }
       />
+
+      <Panel
+        open={open}
+        onClose={closeAndFocus}
+        triggerRef={fieldRef}
+        width="trigger"
+        focusOnOpen={focusOnOpen}
+      >
+        <ul ref={listRef} id={listId} role="listbox" aria-label={label} onKeyDown={onKeyDown}>
+          {options.map((option, index) => (
+            <li
+              key={option.value}
+              id={optionId(index)}
+              role="option"
+              tabIndex={-1}
+              aria-selected={index === selectedIndex}
+              aria-disabled={option.disabled ?? false}
+              className={panelRowClasses({
+                active: index === activeIndex,
+                selected: index === selectedIndex,
+                disabled: option.disabled ?? false,
+              })}
+              onClick={() => commit(index)}
+              onMouseMove={() => {
+                if (!option.disabled) setActiveIndex(index);
+              }}
+            >
+              <span className="min-w-0 flex-1 truncate">{option.label}</span>
+              {index === selectedIndex ? (
+                <CheckIcon className="size-[16px] shrink-0 text-prime" />
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      </Panel>
     </div>
   );
 }
