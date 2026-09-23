@@ -120,7 +120,8 @@ describe("C-37 · which surfaces carry the blurred class", () => {
     // system is written; no component assembles one of its own.
     expect(carriers).toEqual(["src/components/ui/variants.ts"]);
 
-    const variants = files.find((file) => file.path === "src/components/ui/variants.ts")?.text ?? "";
+    const variants =
+      files.find((file) => file.path === "src/components/ui/variants.ts")?.text ?? "";
     const blurred = variants
       .split("\n")
       .filter((line) => line.includes("glass-blur"))
@@ -132,7 +133,8 @@ describe("C-37 · which surfaces carry the blurred class", () => {
   // §5: surfaces over `--bg-scrim`, and in-flow glass, take the recipe without
   // its two backdrop-filter lines.
   it("is not claimed by a modal, a sheet or the pipeline strip", () => {
-    const variants = files.find((file) => file.path === "src/components/ui/variants.ts")?.text ?? "";
+    const variants =
+      files.find((file) => file.path === "src/components/ui/variants.ts")?.text ?? "";
     for (const base of ["MODAL_SURFACE_BASE", "SHEET_SURFACE_BASE"]) {
       const at = variants.indexOf(base);
       if (at === -1) continue;
@@ -141,8 +143,7 @@ describe("C-37 · which surfaces carry the blurred class", () => {
       expect(declaration, base).not.toContain("glass-blur");
     }
 
-    const strip =
-      files.find((file) => file.path === "src/app/app/PipelineStrip.tsx")?.text ?? "";
+    const strip = files.find((file) => file.path === "src/app/app/PipelineStrip.tsx")?.text ?? "";
     expect(strip).toContain('"glass ');
     expect(strip).not.toContain("glass-blur");
   });

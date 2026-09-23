@@ -37,8 +37,6 @@ async function countTransitions(page: Page): Promise<() => Promise<number>> {
     );
 }
 
-
-
 const menuTrigger = (page: Page): Locator => page.getByLabel("Open menu");
 const menuPanel = (page: Page): Locator => page.getByRole("menu", { name: "Item actions" });
 
@@ -80,10 +78,11 @@ test.describe("C-14 · the morph", () => {
 
     // §6: "two live elements sharing a name abort every transition on the page",
     // which is why the names come off at `finished` rather than being left.
-    const named = await page.evaluate(() =>
-      [...document.querySelectorAll<HTMLElement>("*")].filter(
-        (element) => element.style.getPropertyValue("view-transition-name") !== "",
-      ).length,
+    const named = await page.evaluate(
+      () =>
+        [...document.querySelectorAll<HTMLElement>("*")].filter(
+          (element) => element.style.getPropertyValue("view-transition-name") !== "",
+        ).length,
     );
     expect(named).toBe(0);
   });

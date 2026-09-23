@@ -79,7 +79,8 @@ export function placePanel({ trigger, panel, viewport, maxHeight }: PlacePanelOp
   // its right edge, toward whichever has more room.
   const roomRight = viewport.width - trigger.left;
   const roomLeft = trigger.left + trigger.width;
-  const unclamped = roomRight >= roomLeft ? trigger.left : trigger.left + trigger.width - panel.width;
+  const unclamped =
+    roomRight >= roomLeft ? trigger.left : trigger.left + trigger.width - panel.width;
 
   // A last guard, which §6 does not state: a panel wider than the room on the side it
   // chose would otherwise hang off the viewport. Clamping cannot move it off the other

@@ -332,7 +332,9 @@ describe("modalClasses", () => {
   // §8: 480 wide, right slide-in, --r-lg on the leading corners only.
   it("builds the sheet on its leading corners", () => {
     const classes = sheetClasses();
-    expect(has(classes, "glass", "max-w-[480px]", "rounded-l-lg", "overlay-slide", "h-full")).toBe(true);
+    expect(has(classes, "glass", "max-w-[480px]", "rounded-l-lg", "overlay-slide", "h-full")).toBe(
+      true,
+    );
     expect(classes).not.toContain("rounded-lg ");
   });
 });

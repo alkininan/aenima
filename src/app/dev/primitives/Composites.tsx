@@ -267,7 +267,7 @@ function Composites() {
   return (
     <div className="flex flex-col gap-[48px]">
       <Section label="Tooltip">
-{/* §8.14 places a tooltip below and flips it above at the viewport's edge, so
+        {/* §8.14 places a tooltip below and flips it above at the viewport's edge, so
             the first of these takes the measured side and the second pins the flip. */}
         <Row label="below by default · pinned above · on a chip">
           <Tooltip content="500ms in, instant out">

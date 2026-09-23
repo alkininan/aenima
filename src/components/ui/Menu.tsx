@@ -122,11 +122,10 @@ export function Menu({ trigger, entries, label, className }: MenuProps) {
   // gap would go nowhere (C-17). The cursor state is set here too, so the row
   // that has focus is the row that is painted active.
   const firstRow = useCallback((): HTMLElement | null => {
-    const index = nextRovingIndex({ key: "Home", current: -1, count: rows.length, isDisabled }) ?? 0;
+    const index =
+      nextRovingIndex({ key: "Home", current: -1, count: rows.length, isDisabled }) ?? 0;
     setActiveIndex(index);
-    return (
-      listRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')[index] ?? null
-    );
+    return listRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')[index] ?? null;
   }, [rows.length, isDisabled]);
 
   const toggle = useCallback(() => {

@@ -497,10 +497,7 @@ export function panelRowClasses({
     PANEL_ROW_BASE,
     disabled
       ? "cursor-default text-n-disabled"
-      : cx(
-          "cursor-pointer hover:bg-hover-overlay",
-          destructive ? "text-danger" : "text-n-primary",
-        ),
+      : cx("cursor-pointer hover:bg-hover-overlay", destructive ? "text-danger" : "text-n-primary"),
     selected && "bg-prime-soft",
     active && !disabled && !selected && "bg-hover-overlay",
     className,

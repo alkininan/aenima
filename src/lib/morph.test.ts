@@ -45,9 +45,9 @@ describe("C-14 · which path an open takes", () => {
   });
 
   it("opens bare where startViewTransition is absent", () => {
-    expect(morphPath({ hasViewTransition: false, reducedMotion: false, forceFallback: false })).toBe(
-      "bare",
-    );
+    expect(
+      morphPath({ hasViewTransition: false, reducedMotion: false, forceFallback: false }),
+    ).toBe("bare");
   });
 
   it("opens bare under reduced motion", () => {

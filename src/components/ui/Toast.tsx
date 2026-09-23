@@ -153,12 +153,7 @@ function ToastViewport({
   }, [host]);
 
   const viewport = (
-    <div
-      ref={ref}
-      className={TOAST_VIEWPORT_CLASSES}
-      role="region"
-      aria-label="Notifications"
-    >
+    <div ref={ref} className={TOAST_VIEWPORT_CLASSES} role="region" aria-label="Notifications">
       <ToastSlot toast={toast} dismiss={dismiss} />
     </div>
   );
