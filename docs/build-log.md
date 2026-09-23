@@ -6,28 +6,12 @@
 
 ## Current state
 
-**Phase:** 3 — authoring · phases 0 (foundation), 1 (the spine) and 2 (the scoring engine) complete
-**Next ticket:** T3.1 — the author/critic loop: two-round limit, check-ID binding (§6)
+Written from the repo by `node scripts/run/log-index.mjs`, like the Tickets done list below, and its test refuses a stale copy: edit the documents and the log entries, never this block. No phase and no next ticket here — the board owns the queue and the roadmap owns the phases, and a stamp a human maintains is a stamp that is eventually wrong.
+
+**Specs:** product-spec v1.8 · design-spec v2.22 · guidelines v1.20
+**Newest entry:** [T0.31 — Read bundled shell -c flags](log/T0.31.md) · 2026-09-23
 **Repo:** github.com/alkininan/aenima
 **Deployed:** yes — **aeni.ma** on Vercel
-
-`docs/design-spec.md` is **v2.17** and `docs/product-spec.md` is **v1.5**, both complete and
-closed, and the code matches. v1.4 landed just ahead of T2.2: §12's code node law, and the scope
-a critic objection carries (§6).
-
-The form language was settled over two runs against real use of the sign-in flow. v2.3–v2.6:
-48h fields, floating labels bound at every moment, an always-reserved label zone and helper
-line, the subtitle slot, the step header, one-text fields, the focus split, flag-slow
-validation. v2.7–v2.12: centred step chrome and the **neutral** button variant; the deep ramp
-and aero materials (#08090C base, `--grad-primary`, field sheen, press squish); derived values
-pinned and the brand hexes reconciled; the resend cooldown, and a helper line carrying only its
-own field's errors; field state reaching the leading icon, a 24h label zone, and one variant
-for all step chrome.
-
-v2.13–v2.15 came out of the first surfaces rather than the sign-in flow: SemiBold buttons, the
-sidebar's bottom account slot and a nested-radius rule, then the laws the list surface needed —
-glass is navigation and nothing else, buttons a step smaller again, the item row as a
-continuous ledger, the type label bare, and row meters waiting until scoring exists.
 
 ## Stack
 
