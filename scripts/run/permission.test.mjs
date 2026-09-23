@@ -370,3 +370,60 @@ describe("reviewed", () => {
     }
   });
 });
+
+// T0.26 TC1 → AC1 and TC2 → AC2. The word and the migrations its thread says are spent come
+// off one read, so the guard's two doors never ask the board twice and never disagree.
+describe("the thread's consumed applies reach the second door", () => {
+  const APPLIED = `${P}Applied 0015_x (idx 15) to the shared database. The ticket picks up from where it stopped.`;
+
+  it("hands back the tags the thread's applied note names, beside the word", async () => {
+    // TC1 → AC1
+    const result = await verify("merge", {
+      deps: stub([
+        c(MIGRATION, "2026-09-20T10:00:00Z"),
+        c("apply", "2026-09-20T11:00:00Z"),
+        c(APPLIED, "2026-09-20T12:00:00Z"),
+        c("merge", "2026-09-20T13:00:00Z"),
+      ]),
+    });
+    expect(result.ok).toBe(true);
+    expect(result.applied).toEqual(["0015_x"]);
+  });
+
+  it("hands back no tags when the thread has no spent apply on it", async () => {
+    // TC2 → AC2
+    const result = await verify("merge", {
+      deps: stub([c(MIGRATION, "2026-09-20T10:00:00Z"), c("merge", "2026-09-20T13:00:00Z")]),
+    });
+    expect(result.applied).toEqual([]);
+  });
+
+  it("hands back no tags when the thread could not be read at all", async () => {
+    // TC2 → AC2: a door that cannot read the thread gates the migration, as before.
+    const result = await verify("merge", { deps: stub([], { token: () => null }) });
+    expect(result.ok).toBe(false);
+    expect(result.applied).toEqual([]);
+  });
+
+  it("hands the tags it was given down to the diff, and an empty list when it was given none", () => {
+    // TC1 → AC1 and TC2 → AC2: `reviewed` passes them to `gatedDiffOf`, so the migration in
+    // the diff is judged against the thread that answers for it.
+    const seen = [];
+    const spy = (extra) =>
+      reviewed({
+        deps: {
+          marker,
+          verdict: () => "PASS\n",
+          gate: () => ({ green: "h1", tree: "h1" }),
+          diff: (applied) => {
+            seen.push(applied);
+            return { files: [], gated: [], ok: true };
+          },
+          ...extra,
+        },
+      });
+    expect(spy({ applied: ["0015_x"] }).ok).toBe(true);
+    expect(spy({}).ok).toBe(true);
+    expect(seen).toEqual([["0015_x"], []]);
+  });
+});

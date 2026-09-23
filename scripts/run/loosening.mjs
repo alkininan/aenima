@@ -17,6 +17,10 @@
  *            is a rule deleted or a matcher narrowed — the measurement, not an opinion.
  *   paths    both copies of `isGatedPath` are run against one fixed corpus of paths. A path
  *            gated before and not after is a path taken off the list.
+ *   diffs    both copies of `gatedDiff` are run against one fixed corpus of diffs. Since
+ *            T0.26 a migration leaves the gated list when the thread carries a spent `apply`
+ *            for that file, and that narrowing sits above `isGatedPath` where the path corpus
+ *            cannot see it (`DIFF_CORPUS`).
  *   detector this file. A diff that edits the thing doing the measuring is gated whatever
  *            the measurement says.
  *   hooks    every hook in `origin/main`'s `.claude/settings.json` must still be there with
@@ -359,6 +363,47 @@ export function gating(isGatedPath, corpus = PATH_CORPUS) {
   return Object.fromEntries(corpus.map((path) => [path, Boolean(isGatedPath(path))]));
 }
 
+/**
+ * Diffs `gatedDiff` must go on gating, whatever a thread says (T0.26).
+ *
+ * `isGatedPath` still answers true for every migration, so `PATH_CORPUS` cannot see the gate
+ * that sits above it: since T0.26 a migration leaves the list when the claimed task's thread
+ * carries a spent `apply` for that file, and a copy that read any apply, or no apply, as
+ * answering for any migration would open the gate with every path still on the list. These are
+ * the three shapes that must survive the narrowing — no apply at all, an apply for another
+ * file, and the journal beside a migration with neither.
+ */
+export const DIFF_CORPUS = [
+  {
+    name: "a migration with no consumed apply",
+    input: { files: ["drizzle/0022_x.sql"], applied: [] },
+  },
+  {
+    name: "a migration whose consumed apply names another file",
+    input: { files: ["drizzle/0022_x.sql"], applied: ["0021_y"] },
+  },
+  {
+    name: "the journal beside a migration with no consumed apply",
+    input: { files: ["drizzle/0022_x.sql", "drizzle/meta/_journal.json"], applied: [] },
+  },
+];
+
+/** `{ name: gated }` for one `gatedDiff`. */
+export function diffGating(gatedDiff, corpus = DIFF_CORPUS) {
+  const answers = {};
+  for (const entry of corpus) {
+    let gated;
+    try {
+      gated = !gatedDiff(entry.input).ok;
+    } catch {
+      // A gate that throws on a corpus entry gates nothing, which is the weaker answer.
+      gated = false;
+    }
+    answers[entry.name] = gated;
+  }
+  return answers;
+}
+
 /** A reason a diff waits for the word: the rule it trips, and what would settle it. */
 const reason = (rule, ungate) => ({ rule, ungate });
 
@@ -405,6 +450,18 @@ export function pathsLoosened(before = {}, after = {}) {
       reason(
         `${path} is no longer a gated path`,
         "put it back in scripts/run/gated.mjs, or say merge here if the loosening is meant",
+      ),
+    );
+}
+
+/** A diff gated before and not after — the migration gate opened wider than it was (T0.26). */
+export function diffsLoosened(before = {}, after = {}) {
+  return Object.keys(before)
+    .filter((name) => before[name] && !after[name])
+    .map((name) =>
+      reason(
+        `${name} is no longer gated`,
+        "restore the rule in scripts/run/gated.mjs, or say merge here if the loosening is meant",
       ),
     );
 }
@@ -604,6 +661,7 @@ export function loosenings({
   guard = {},
   doors = {},
   paths = {},
+  diffs = {},
   letters = [],
   settings = {},
   gate = {},
@@ -615,6 +673,7 @@ export function loosenings({
     ...doorsLoosened(doors.before, doors.after),
     ...coverageGaps(letters),
     ...pathsLoosened(paths.before, paths.after),
+    ...diffsLoosened(diffs.before, diffs.after),
     ...hooksLoosened(settings.before, settings.after),
     ...gateLoosened(gate.before, gate.after),
     ...testsLoosened(tests.deleted, tests.added),
@@ -762,6 +821,7 @@ export function loosenedBy({
     guard: { before: before.guard, after: after.guard },
     doors: { before: before.doors, after: after.doors },
     paths: { before: before.paths, after: after.paths },
+    diffs: { before: before.diffs, after: after.diffs },
     letters: [...new Set([...(before.letters ?? []), ...(after.letters ?? [])])],
     settings: {
       before: git(["show", `${base}:.claude/settings.json`], cwd),
@@ -780,7 +840,7 @@ export function loosenedBy({
 async function runProbe(root) {
   const url = (file) => pathToFileURL(join(root, file)).href;
   const { decide } = await import(url("hooks/guard.mjs"));
-  const { isGatedPath } = await import(url("run/gated.mjs"));
+  const { gatedDiff, isGatedPath } = await import(url("run/gated.mjs"));
   const { reviewed } = await import(url("run/permission.mjs"));
   const { STEPS, MAX_RED, decide: gate } = await import(url("hooks/gate.mjs"));
   // One red step of *this* side's STEPS, the rest green: an entry follows a gate whose steps
@@ -798,6 +858,7 @@ async function runProbe(root) {
     guard: refusals(decide),
     doors: doorRefusals({ reviewed, gateDecide }),
     paths: gating(isGatedPath),
+    diffs: diffGating(gatedDiff),
     letters: ruleLetters(readFileSync(join(root, "hooks/guard.mjs"), "utf8")),
     gate: { steps: STEPS, maxRed: MAX_RED },
   });

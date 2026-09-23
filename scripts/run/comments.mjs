@@ -210,6 +210,45 @@ export function awaitingMigration(thread) {
 }
 
 /**
+ * The clause an `applied` note names its migrations in — the one sentence on a thread that
+ * says a schema change has actually happened, rather than that one is waiting to.
+ */
+const APPLIED_CLAUSE = /^Applied\s+([\s\S]+?)\s+to the shared database\./;
+
+/** A migration tag as drizzle writes one: the journal's `tag`, which is the file's basename. */
+const MIGRATION_TAG = /\b\d{4}_[A-Za-z0-9_]+/g;
+
+/**
+ * The migration tags this thread says are applied to the shared database (T0.26).
+ *
+ * A migration waits for one human word, `apply`, and `gated.mjs` stops gating a file once that
+ * word has been granted *and* spent: the human's reply begins with it (`mentions`, the same
+ * test the guard makes), and a later `applied` note of the run's own names the tag. Both
+ * halves, because either alone says something weaker — a word nobody acted on, or a note no
+ * word granted — and the tags come out of the answer rather than the question, since the
+ * `migration` comment names its file before anything has been applied.
+ *
+ * Pure, and the only reader of a thread that can open the merge gate: `gated.mjs` takes the
+ * tags from here and never from the run's account of what it did.
+ */
+export function appliedMigrations(thread, prefix = "⟡ ") {
+  const granted = (thread?.human ?? []).filter((comment) => mentions(comment.text, "apply"));
+  if (granted.length === 0) return [];
+  // The API gives a time to the minute, so a note written in the word's own minute is the
+  // word's: `>=` rather than `>`, and an earlier note is still an earlier one.
+  const spent = at(granted[0]);
+
+  const tags = new Set();
+  for (const comment of thread?.pipeline ?? []) {
+    if (comment.kind !== "applied" || at(comment) < spent) continue;
+    const body = String(comment.text ?? "").slice(prefix.length);
+    const named = body.match(APPLIED_CLAUSE)?.[1] ?? "";
+    for (const tag of named.match(MIGRATION_TAG) ?? []) tags.add(tag);
+  }
+  return [...tags].sort();
+}
+
+/**
  * The part of a reply's shape that is countable. `merge` is a Review task whose unanswered
  * reply begins with the word; `apply` is a Decision task waiting on a migration whose reply
  * begins with the word; `ready` is a Backlog task whose reply begins with the word — the

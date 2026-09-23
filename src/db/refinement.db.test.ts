@@ -2,6 +2,7 @@ import postgres from "postgres";
 import { afterAll, describe, expect, it, vi } from "vitest";
 
 import { roundCount } from "@/lib/authoring/rounds";
+import { migrationGate } from "@/test/migration-gate";
 import type { RoundWrite } from "@/lib/authoring/loop";
 
 vi.mock("server-only", () => ({}));
@@ -25,9 +26,12 @@ vi.mock("server-only", () => ({}));
  * runs `writeRun`: the shared client is mocked to hand it a handle whose
  * `begin` is a savepoint, and the outer transaction is discarded.
  *
- * **Until migration 0015 is applied this file skips, and says so.** The run that
- * wrote it holds a credential that cannot apply a migration (guidelines §5, the
- * capability boundary); the table exists once the human answers `apply`.
+ * **While migration 0015 is still on a branch this file skips, and says so.**
+ * `migrationGate` is the rule (src/test/migration-gate.ts, T0.26): the run that
+ * writes a migration holds a credential that cannot apply one (guidelines §5,
+ * the capability boundary), so the table exists once the human answers `apply`.
+ * Once the file is on `origin/main` the licence ends and a missing table is a
+ * real failure rather than a ticket in flight.
  */
 
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -35,32 +39,18 @@ const OFFLINE = !DATABASE_URL;
 
 const sql = OFFLINE ? null : postgres(DATABASE_URL, { max: 1, prepare: false, onnotice: () => {} });
 
-const APPLIED = sql
-  ? (
-      await sql<{ present: boolean }[]>`
-        select to_regclass('public.refinement_round') is not null as present`
-    )[0]!.present
-  : false;
+const gate = OFFLINE
+  ? { skip: false }
+  : migrationGate({
+      file: "drizzle/0015_refinement_round.sql",
+      present: (
+        await sql!<{ present: boolean }[]>`
+          select to_regclass('public.refinement_round') is not null as present`
+      )[0]!.present,
+      subject: "the round ledger's key, shape, append-only guarantee and RLS",
+    });
 
-if (sql && !APPLIED) {
-  process.stderr.write(
-    [
-      "",
-      "[33m  ============================================================[0m",
-      "[33m  SKIPPED: refinement_round tests did not run.[0m",
-      "",
-      "  The table does not exist on this database: migration",
-      "  drizzle/0015_refinement_round.sql has not been applied. The",
-      "  round ledger's key, shape, append-only guarantee and RLS were",
-      "  NOT verified by this run.",
-      "[33m  ============================================================[0m",
-      "",
-      "",
-    ].join("\n"),
-  );
-}
-
-const SKIP = OFFLINE || !APPLIED;
+const SKIP = OFFLINE || gate.skip;
 
 type Tx = postgres.TransactionSql;
 

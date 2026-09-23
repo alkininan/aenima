@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  appliedMigrations,
   awaitingMigration,
   CLARIFYING_CAP,
   compose,
@@ -795,5 +796,70 @@ describe("shapeOf and awaitingMigration", () => {
         thread([c("merge", "2026-09-13T10:00:00Z"), c("hold on", "2026-09-13T11:00:00Z")]),
       ),
     ).toBe("assess");
+  });
+});
+
+// T0.26 TC1 → AC1, TC2 → AC2. The thread is the record of a migration having been applied:
+// the human's `apply`, and the run's own `applied` note consuming it. `appliedMigrations`
+// reads the tags out of that note and nothing else, so `gated.mjs` can stop gating a file
+// whose schema half already happened.
+describe("appliedMigrations", () => {
+  const journey = (...texts) =>
+    readThread(
+      texts.map((text, i) => c(text, `2026-09-20T1${i}:00:00.000Z`)),
+      P,
+    );
+
+  it("reads the tag the run's applied note names, once the word granted it", () => {
+    // TC1 → AC1
+    const thread = journey(
+      said("migration", { file: "drizzle/0016_opportunity_keys.sql" }),
+      "apply",
+      said("applied", { file: "0016_opportunity_keys (idx 16)" }),
+    );
+    expect(appliedMigrations(thread, P)).toEqual(["0016_opportunity_keys"]);
+  });
+
+  it("reads every tag of an apply that carried more than one migration", () => {
+    // TC1 → AC1
+    const thread = journey(
+      said("migration", { file: "drizzle/0017_a.sql and drizzle/0018_b.sql" }),
+      "apply",
+      said("applied", { file: "0017_a (17) and 0018_b (18)" }),
+    );
+    expect(appliedMigrations(thread, P)).toEqual(["0017_a", "0018_b"]);
+  });
+
+  it("reads nothing off a thread the human has not said the word on", () => {
+    // TC2 → AC2: the migration question alone ungates nothing.
+    const thread = journey(said("migration", { file: "drizzle/0016_opportunity_keys.sql" }));
+    expect(appliedMigrations(thread, P)).toEqual([]);
+  });
+
+  it("reads nothing off an applied note that stands before the word", () => {
+    // TC2 → AC2: the guard cannot produce that order, and it is not consumption.
+    const thread = journey(said("applied", { file: "0016_opportunity_keys (idx 16)" }), "apply");
+    expect(appliedMigrations(thread, P)).toEqual([]);
+  });
+
+  it("does not read the file out of the question, only out of the answer", () => {
+    // TC1 → AC1: the migration comment names the file before anything is applied, so a
+    // reader that took its tag would ungate a migration on the question alone.
+    const thread = journey(
+      said("migration", { file: "drizzle/0016_opportunity_keys.sql" }),
+      "apply",
+      said("applied", {}),
+    );
+    expect(appliedMigrations(thread, P)).toEqual([]);
+  });
+
+  it("reads nothing off a reply that only mentions applying in passing", () => {
+    // TC2 → AC2: `mentions` is the same test the guard makes — the word begins the reply.
+    const thread = journey(
+      said("migration", { file: "drizzle/0016_opportunity_keys.sql" }),
+      "don't apply that yet",
+      said("applied", { file: "0016_opportunity_keys (idx 16)" }),
+    );
+    expect(appliedMigrations(thread, P)).toEqual([]);
   });
 });

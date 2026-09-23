@@ -15,6 +15,9 @@ import {
   doorRefusals,
   doorsLoosened,
   gateLoosened,
+  DIFF_CORPUS,
+  diffGating,
+  diffsLoosened,
   GUARD_CORPUS,
   guardLoosened,
   hookName,
@@ -30,6 +33,7 @@ import {
   testsLoosened,
   uncovered,
 } from "./loosening.mjs";
+import { gatedDiff } from "./gated.mjs";
 
 /**
  * T0.21 — the gated set stops being a list of paths and becomes a measurement. The tests
@@ -204,6 +208,54 @@ describe("pathsLoosened", () => {
     const found = pathsLoosened({ "drizzle/0015.sql": true }, { "drizzle/0015.sql": false });
     expect(found).toHaveLength(1);
     expect(found[0].rule).toBe("drizzle/0015.sql is no longer a gated path");
+  });
+});
+
+// T0.26 TC2 → AC2 and TC3 → AC3. Since T0.26 the migration gate narrows on what a thread
+// says, which puts the narrowing itself among the restraints that have to be measured on both
+// sides: `isGatedPath` still answers true for every migration, so `pathsLoosened` cannot see a
+// gate that started reading any thread, or no thread, as a consumed apply.
+describe("diffGating and diffsLoosened", () => {
+  it("holds the three shapes a narrowed migration gate must still gate", () => {
+    const answers = diffGating((input) => gatedDiff(input));
+    expect(Object.values(answers)).toEqual([true, true, true]);
+    expect(DIFF_CORPUS).toHaveLength(3);
+  });
+
+  it("reads a gate that stopped asking whose apply it was as loosened", () => {
+    // The mutation the corpus exists for: any consumed apply ungating any migration.
+    const sloppy = ({ applied = [] }) => ({ ok: applied.length > 0 });
+    const found = diffsLoosened(
+      diffGating((input) => gatedDiff(input)),
+      diffGating(sloppy),
+    );
+    expect(found).toHaveLength(1);
+    expect(found[0].rule).toBe(
+      "a migration whose consumed apply names another file is no longer gated",
+    );
+    expect(found[0].ungate).toMatch(/scripts\/run\/gated\.mjs/);
+  });
+
+  it("says nothing about a gate that answers the same or tighter", () => {
+    const answers = diffGating((input) => gatedDiff(input));
+    expect(diffsLoosened(answers, answers)).toEqual([]);
+    expect(diffsLoosened({ a: false }, { a: true })).toEqual([]);
+  });
+
+  it("reads a corpus entry that throws as gating nothing, which is the weaker answer", () => {
+    const broken = diffGating(() => {
+      throw new Error("boom");
+    });
+    expect(Object.values(broken)).toEqual([false, false, false]);
+  });
+
+  it("is carried by loosenings beside the other measurements", () => {
+    const found = loosenings({
+      diffs: { before: { "a migration with no consumed apply": true }, after: {} },
+    });
+    expect(found.map((r) => r.rule)).toContain(
+      "a migration with no consumed apply is no longer gated",
+    );
   });
 });
 

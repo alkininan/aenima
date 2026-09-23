@@ -261,7 +261,17 @@ describe("docs/guidelines.md", () => {
     expect(names).toMatch(/branch or a file under\s+`docs\/`/);
   });
 
-  it("carries the bumped version in its header", () => {
-    expect(parseHeaderVersion(text)).toBe("1.20");
+  // Pinned as the rule rather than as the number that satisfied it on the day. T0.28 asserted
+  // `1.20` exactly, which is a fact about that afternoon and not about §7: every later bump
+  // reddened it, and the next ticket's only move was to retype the number — which pins the
+  // trap again rather than the rule. What has to hold is that §7's rule arrived with a version
+  // and that the header has never gone back behind it.
+  it("carries a version at or past the one §7's rule arrived in", () => {
+    const version = parseHeaderVersion(text);
+    expect(version).toMatch(/^\d+\.\d+$/);
+    const at = (v) => v.split(".").map(Number);
+    const [major, minor] = at(version);
+    const [wasMajor, wasMinor] = at("1.20");
+    expect(major > wasMajor || (major === wasMajor && minor >= wasMinor), version).toBe(true);
   });
 });

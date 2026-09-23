@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
-import { gatedDiff, gatedDiffOf, gatedPaths, isGatedPath } from "./gated.mjs";
+import { gatedDiff, gatedDiffOf, gatedPaths, isGatedPath, migrationTag } from "./gated.mjs";
 import { migrationCheck, MIGRATIONS_DIR } from "./migration-check.mjs";
 
 // T0.21 TC1 → AC1, TC2 → AC2 and TC5 → AC5. T0.16 gated whole paths; this replaces all but
@@ -158,6 +158,23 @@ describe("gatedDiffOf over a repository", () => {
     },
   );
 
+  // T0.26 TC1 → AC1, end to end: the tags the thread answered with reach the judgement, so a
+  // migration the human has already applied is not a second word to ask for.
+  it("lets a migration through on the tag its thread says is applied", { timeout: 60_000 }, () => {
+    const dir = branchWith((at) => {
+      mkdirSync(join(at, "drizzle", "meta"), { recursive: true });
+      writeFileSync(join(at, "drizzle/0022_x.sql"), "select 1;\n");
+      writeFileSync(join(at, "drizzle/meta/_journal.json"), '{"entries":[]}\n');
+    });
+    const waiting = gatedDiffOf({ cwd: dir, range: "main...HEAD" });
+    expect(waiting.ok).toBe(false);
+    expect(waiting.gated).toHaveLength(2);
+
+    const spent = gatedDiffOf({ cwd: dir, range: "main...HEAD", applied: ["0022_x"] });
+    expect(spent.ok).toBe(true);
+    expect(spent.gated).toEqual([]);
+  });
+
   it("names the migration a diff adds, from the diff itself", { timeout: 60_000 }, () => {
     // TC5 → AC5, end to end.
     const dir = branchWith((at) => {
@@ -167,5 +184,87 @@ describe("gatedDiffOf over a repository", () => {
     const result = gatedDiffOf({ cwd: dir, range: "main...HEAD" });
     expect(result.ok).toBe(false);
     expect(result.gated).toEqual(["it adds the migration drizzle/0022_x.sql"]);
+  });
+});
+
+// T0.26 TC1 → AC1, TC2 → AC2, TC3 → AC3. The migration gate narrows: a file whose `apply`
+// the thread has already granted and spent is a decision already made, so the code that uses
+// it stops waiting for a second word about it. Everything else about the gate is unchanged.
+describe("a consumed apply ungates its own migration", () => {
+  const FILES = ["drizzle/0016_opportunity_keys.sql", "drizzle/meta/_journal.json"];
+
+  it("reads a migration's tag off its path, and nothing else's", () => {
+    expect(migrationTag("drizzle/0016_opportunity_keys.sql")).toBe("0016_opportunity_keys");
+    expect(migrationTag("drizzle/meta/_journal.json")).toBe(null);
+    expect(migrationTag("drizzle/meta/0001_snapshot.json")).toBe(null);
+    expect(migrationTag("src/db/0016_opportunity_keys.sql")).toBe(null);
+  });
+
+  it("lets the migration and its journal entry through once the apply is spent", () => {
+    // TC1 → AC1: T1.4's own diff, after `0016` was applied from the branch.
+    const result = gatedDiff({ files: FILES, weakened: [], applied: ["0016_opportunity_keys"] });
+    expect(result.ok).toBe(true);
+    expect(result.gated).toEqual([]);
+  });
+
+  it("gates both files while no apply has been spent", () => {
+    // TC2 → AC2: the shape T1.4 and T3.1 both sat in, unchanged.
+    const result = gatedDiff({ files: FILES, weakened: [], applied: [] });
+    expect(result.ok).toBe(false);
+    expect(result.gated).toEqual([
+      "it adds the migration drizzle/0016_opportunity_keys.sql",
+      "it adds the migration drizzle/meta/_journal.json",
+    ]);
+  });
+
+  it("defaults to gated when nothing says an apply was spent", () => {
+    // TC2 → AC2: the field is absent on every caller that has not read a thread.
+    expect(gatedDiff({ files: FILES, weakened: [] }).ok).toBe(false);
+  });
+
+  it("does not let one migration's apply through for another's", () => {
+    // TC3 → AC3: T3.1's `0015` was applied days before T1.4's `0016`, on another thread and
+    // another branch. A gate that read "some apply" would have merged this one on it.
+    const result = gatedDiff({ files: FILES, weakened: [], applied: ["0015_refinement_round"] });
+    expect(result.ok).toBe(false);
+    expect(result.gated).toEqual([
+      "it adds the migration drizzle/0016_opportunity_keys.sql",
+      "it adds the migration drizzle/meta/_journal.json",
+    ]);
+  });
+
+  it("keeps the journal gated while any migration beside it is still waiting", () => {
+    // TC3 → AC3: the journal is the record of the diff's own migrations, so it goes only
+    // when every one of them has.
+    const result = gatedDiff({
+      files: ["drizzle/0017_a.sql", "drizzle/0018_b.sql", "drizzle/meta/_journal.json"],
+      weakened: [],
+      applied: ["0017_a"],
+    });
+    expect(result.gated).toEqual([
+      "it adds the migration drizzle/0018_b.sql",
+      "it adds the migration drizzle/meta/_journal.json",
+    ]);
+  });
+
+  it("does not ungate a journal that stands on its own", () => {
+    // TC3 → AC3: with no migration in the diff there is nothing an apply could have been for.
+    const result = gatedDiff({
+      files: ["drizzle/meta/_journal.json"],
+      weakened: [],
+      applied: ["0016_opportunity_keys"],
+    });
+    expect(result.gated).toEqual(["it adds the migration drizzle/meta/_journal.json"]);
+  });
+
+  it("leaves a weakening gated whatever the thread says about migrations", () => {
+    // TC2 → AC2: the apply answers the schema question and nothing else.
+    const result = gatedDiff({
+      files: FILES,
+      weakened: [{ rule: "the guard no longer refuses pnpm db:push", ungate: "restore the rule" }],
+      applied: ["0016_opportunity_keys"],
+    });
+    expect(result.ok).toBe(false);
+    expect(result.gated).toEqual(["the guard no longer refuses pnpm db:push"]);
   });
 });

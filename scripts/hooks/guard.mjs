@@ -1492,8 +1492,15 @@ export async function judge(input, { dir = resolveDir(input), deps = {} } = {}) 
     const page = word === "ready" ? (input?.tool_input?.page_id ?? null) : null;
     answers[word] = await verify(word, { dir, page, deps });
     // The reviewer's door is read only when the word is not there: a merge the human
-    // granted needs no verdict, and a verdict is never read for an apply.
-    if (word === "merge" && !answers[word].ok) passed = reviewed({ dir, deps });
+    // granted needs no verdict, and a verdict is never read for an apply. Since T0.26 the
+    // door is also told which of the diff's migrations the thread says are already applied —
+    // read off the same fetch `verify` just made, so the two doors ask the board once and
+    // cannot disagree about it. A thread it could not read hands back none, and the
+    // migration is gated as before.
+    if (word === "merge" && !answers[word].ok) {
+      const applied = deps.applied ?? answers[word].applied ?? [];
+      passed = reviewed({ dir, deps: { ...deps, applied } });
+    }
   }
   // A comment is read against the thread of the page it names (T0.20).
   const posted =

@@ -31,7 +31,7 @@ import { join } from "node:path";
 
 import { STATE_FILE, treeFingerprint } from "../hooks/gate.mjs";
 import { emit, isMain } from "./cli.mjs";
-import { kindOf, mayPost, readThread, shapeOf } from "./comments.mjs";
+import { appliedMigrations, kindOf, mayPost, readThread, shapeOf } from "./comments.mjs";
 import { gatedDiffOf } from "./gated.mjs";
 import { commonDir } from "./repo.mjs";
 import { client, readBoard, readToken, TOKEN_VAR } from "./notion.mjs";
@@ -47,19 +47,24 @@ const STATE = {
 };
 
 /**
- * `{ ok, why, marker, comment, task }` for `word` on the claimed task — or, for `ready`, on
- * `page`, the page the status write names. `task` is what the board says the page is —
- * `{ name, status, branch }`, the branch derived from the ID in the name, null when the name
- * carries none. Effects injected: `marker`, `token`, `board`, `comments` and `page` default
- * to the real ones for `dir`.
+ * `{ ok, why, marker, comment, task, applied }` for `word` on the claimed task — or, for
+ * `ready`, on `page`, the page the status write names. `task` is what the board says the page
+ * is — `{ name, status, branch }`, the branch derived from the ID in the name, null when the
+ * name carries none. `applied` is the migration tags the same thread says are already on the
+ * shared database (T0.26), read off this one fetch so the guard's two doors never ask the
+ * board twice; `[]` whenever the thread could not be read, which gates a migration as before.
+ * Effects injected: `marker`, `token`, `board`, `comments` and `page` default to the real ones
+ * for `dir`.
  */
 export async function verify(word, { dir = process.cwd(), page = null, deps = {} } = {}) {
-  if (!WORDS.includes(word)) return { ok: false, why: `"${word}" is not a word the board grants` };
+  if (!WORDS.includes(word)) {
+    return { ok: false, why: `"${word}" is not a word the board grants`, applied: [] };
+  }
 
   let marker = null;
   if (word === "ready") {
     if (!page) {
-      return { ok: false, why: "no page was named, so there is no thread to read" };
+      return { ok: false, why: "no page was named, so there is no thread to read", applied: [] };
     }
   } else {
     marker = deps.marker ? deps.marker() : readMarker(dir);
@@ -67,6 +72,7 @@ export async function verify(word, { dir = process.cwd(), page = null, deps = {}
       return {
         ok: false,
         why: "no run marker names a claimed task, so there is no thread to read",
+        applied: [],
       };
     }
   }
@@ -78,6 +84,7 @@ export async function verify(word, { dir = process.cwd(), page = null, deps = {}
       ok: false,
       why: `${TOKEN_VAR} is not in .env.local, so the board cannot be read`,
       marker,
+      applied: [],
     };
   }
 
@@ -85,7 +92,12 @@ export async function verify(word, { dir = process.cwd(), page = null, deps = {}
   try {
     board = deps.board ? deps.board() : readBoard(dir);
   } catch (error) {
-    return { ok: false, why: `the board file could not be read (${error.message})`, marker };
+    return {
+      ok: false,
+      why: `the board file could not be read (${error.message})`,
+      marker,
+      applied: [],
+    };
   }
 
   const api = deps.comments && deps.page ? null : client(token, { fetch: deps.fetch });
@@ -95,7 +107,12 @@ export async function verify(word, { dir = process.cwd(), page = null, deps = {}
     comments = deps.comments ? await deps.comments(target) : await api.comments(target);
     row = deps.page ? await deps.page(target) : await api.page(target);
   } catch (error) {
-    return { ok: false, why: `the thread could not be read: ${error.message}`, marker };
+    return {
+      ok: false,
+      why: `the thread could not be read: ${error.message}`,
+      marker,
+      applied: [],
+    };
   }
 
   const id = idOf(row?.Name);
@@ -109,7 +126,8 @@ export async function verify(word, { dir = process.cwd(), page = null, deps = {}
   // is for — `merge` on a task at Review, `apply` on a Decision waiting on a migration,
   // `ready` on a task at Backlog. A "merge the two helpers" on a task In progress is a change
   // request, not a merge (review pass 3).
-  const thread = readThread(comments, board.prefix ?? "⟡ ");
+  const prefix = board.prefix ?? "⟡ ";
+  const thread = readThread(comments, prefix);
   const shape = shapeOf(task.status, thread);
   const ok = shape === word;
   return {
@@ -120,6 +138,7 @@ export async function verify(word, { dir = process.cwd(), page = null, deps = {}
     marker,
     comment: ok ? thread.unanswered.at(-1) : null,
     task,
+    applied: appliedMigrations(thread, prefix),
   };
 }
 
@@ -219,8 +238,15 @@ export function gateState(dir = process.cwd()) {
  * against origin/main is not one only the human's word merges — since T0.21 that is a
  * migration, or a restraint the diff weakens, measured by `gated.mjs` — and the Stop gate's
  * last green is this very tree (`gateState`). The task's branch comes from the marker's id — the file is
- * named by it, so the two cannot name different tickets. Effects injected: `marker`,
- * `verdict(id)` (the file's text, or null), `diff()`, `gate()`.
+ * named by it, so the two cannot name different tickets.
+ *
+ * `deps.applied` is the migration tags the claimed task's thread says are already on the shared
+ * database, which `verify` read off the same fetch that looked for the word; since T0.26 they
+ * are what takes a migration off the gated list. Absent — every caller that has read no thread,
+ * the loosening detector's own corpus among them — every migration is gated, as before.
+ *
+ * Effects injected: `marker`, `verdict(id)` (the file's text, or null), `diff(applied)`,
+ * `gate()`.
  */
 export function reviewed({ dir = process.cwd(), deps = {} } = {}) {
   const marker = deps.marker ? deps.marker() : readMarker(dir);
@@ -247,7 +273,8 @@ export function reviewed({ dir = process.cwd(), deps = {} } = {}) {
     return { ok: false, why: `${file} ends in ${ends} rather than ${VERDICT}`, marker };
   }
 
-  const diff = deps.diff ? deps.diff() : gatedDiffOf({ cwd: dir });
+  const applied = deps.applied ?? [];
+  const diff = deps.diff ? deps.diff(applied) : gatedDiffOf({ cwd: dir, applied });
   if (!diff.ok) {
     return {
       ok: false,
