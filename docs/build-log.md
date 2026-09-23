@@ -9,7 +9,7 @@
 Written from the repo by `node scripts/run/log-index.mjs`, like the Tickets done list below, and its test refuses a stale copy: edit the documents and the log entries, never this block. No phase and no next ticket here — the board owns the queue and the roadmap owns the phases, and a stamp a human maintains is a stamp that is eventually wrong.
 
 **Specs:** product-spec v1.9 · design-spec v2.22 · guidelines v1.24
-**Newest entry:** [T0.35 — Patch §9: delivery and report-back](log/T0.35.md) · 2026-09-23
+**Newest entry:** [T0.36 — Regenerate the build log at merge](log/T0.36.md) · 2026-09-23
 **Repo:** github.com/alkininan/aenima
 **Deployed:** yes — **aeni.ma** on Vercel
 
@@ -89,6 +89,7 @@ One file per ticket under `docs/log/`, oldest first. This list is written by `no
 - [T0.33 — Load standing rules by path](log/T0.33.md) · 2026-09-23
 - [T0.31 — Read bundled shell -c flags](log/T0.31.md) · 2026-09-23
 - [T0.35 — Patch §9: delivery and report-back](log/T0.35.md) · 2026-09-23
+- [T0.36 — Regenerate the build log at merge](log/T0.36.md) · 2026-09-23
 
 ## Decisions made during the build
 
