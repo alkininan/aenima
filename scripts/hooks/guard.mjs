@@ -862,8 +862,13 @@ function shellRun(cmd, readScript) {
     return isText(text) ? [text] : [];
   };
   if (name === "source" || name === ".") return read(rest[0]);
-  if (!SHELLS.has(name) || rest.some(isCommandFlag)) return [];
-  const script = rest.find((token) => !token.startsWith("-"));
+  // Only the words before the script are the shell's own: a flag after it is an argument the
+  // script is handed, and reading the cluster there would let `bash post.sh -lc` hide the file
+  // (review pass 1, Must 1).
+  const end = rest.findIndex((token) => !token.startsWith("-"));
+  const options = end === -1 ? rest : rest.slice(0, end);
+  if (!SHELLS.has(name) || options.some(isCommandFlag)) return [];
+  const script = rest[end];
   return script === undefined ? stdinOf(cmd, readScript) : read(script);
 }
 

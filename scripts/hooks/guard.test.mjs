@@ -1513,16 +1513,28 @@ describe("T0.31 — a shell's -c bundled with other short flags", () => {
     expect(decide(...run("bash -cx 'pnpm db:push'"))).toContain("refused");
   });
 
-  // A long option is not a cluster of short flags, and neither is a bare dash.
+  // A long option is not a cluster of short flags, and neither is a bare dash. A long option
+  // beside a real `-c` is still a real `-c`.
   it("leaves a shell that runs no command string alone", () => {
     expect(decide(...run("bash --version"))).toBeNull();
+    expect(decide(...run("bash --color"))).toBeNull();
     expect(decide(...run("bash -l"))).toBeNull();
     expect(decide(...run("sh -e"))).toBeNull();
+    expect(decide(...run("bash --rcfile /tmp/rc -c 'pnpm db:push'"))).toContain("refused");
   });
 
   // `shellRun` skips a shell that carries `-c` because `parse()` has already read the string.
   // Blind to the cluster, it read that string as the path of a script to open instead.
   it("does not also read the command string as a script path", () => {
     expect(decide(...run("bash -lc 'echo hi'", () => POST))).toBeNull();
+  });
+
+  // The cluster is the shell's, and only the words before the script are the shell's. A word
+  // after it belongs to the script, so a flag-looking argument must not hide the file: review
+  // pass 1, Must 1 measured `bash post.sh -lc` refused on main and allowed here.
+  it("still reads a script whose own argument looks like the cluster", () => {
+    for (const command of ["bash post.sh -lc", "sh post.sh -vc extra", "bash -x post.sh -lc"]) {
+      expect(decide(...run(command, () => POST)), command).toContain(TOKEN);
+    }
   });
 });
