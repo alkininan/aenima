@@ -52,6 +52,41 @@ describe("ownSections", () => {
   it("keeps the whole file when there is no Cited section", () => {
     expect(ownSections("## Build\n\n`docs/a.md`")).toContain("docs/a.md");
   });
+
+  // An addendum round appends `## Addendum` to a file that already carries a Cited section,
+  // so the ticket's newest words sit below the quoted text. Two of the seven ticket files
+  // with an addendum are shaped this way.
+  it("keeps a section below Cited, which is where an addendum lands", () => {
+    const own = ownSections(`${FIXTURE}\n\n## Addendum\n\nAlso touch \`docs/addendum.md\`.`);
+    expect(own).toContain("docs/addendum.md");
+    expect(own).not.toContain("docs/only-in-the-quoted-section.md");
+    expect(own).toContain("docs/guidelines.md");
+  });
+
+  // A cited section that quotes a `## ` line must not end the quote in the middle of itself.
+  it("does not end the Cited section on a heading inside a fenced block", () => {
+    const text = [
+      "## Build",
+      "",
+      "`docs/kept.md`",
+      "",
+      "## Cited",
+      "",
+      "```markdown",
+      "## 5. Run protocol",
+      "",
+      "`docs/quoted.md`",
+      "```",
+      "",
+      "## Addendum",
+      "",
+      "`docs/addendum.md`",
+    ].join("\n");
+    const own = ownSections(text);
+    expect(own).toContain("docs/kept.md");
+    expect(own).toContain("docs/addendum.md");
+    expect(own).not.toContain("docs/quoted.md");
+  });
 });
 
 describe("codeSpans", () => {
@@ -299,7 +334,9 @@ describe("the protocol says when the names are checked and where a rule goes", (
   // TC7 → AC7
   it("the guidelines header carries one new version line naming §5 and §6", () => {
     const header = doc("docs/guidelines.md").split("-->")[0];
-    const newest = header.split(/^\s{5}v\d/m)[0];
+    // The entry separator is a version *and* its separator: prose naming an older version
+    // is part of the entry it is in, and splitting on the bare number cuts the entry short.
+    const newest = header.split(/^\s{5}v\d+\.\d+ · /m)[0];
     expect(newest).toContain("(T0.34)");
     expect(newest).toContain("§5 step 2");
     expect(newest).toContain("step 8");

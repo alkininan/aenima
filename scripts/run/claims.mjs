@@ -21,7 +21,7 @@ import { spawnSync } from "node:child_process";
 import { emit, isMain } from "./cli.mjs";
 
 /** Where the ticket's own words stop and the sections it quotes begin. */
-export const CITED_HEADING = /^##\s+Cited\s*$/m;
+export const CITED_HEADING = /^##\s+Cited\s*$/;
 
 /** Last segments this repo writes files with. A token ending in one is a file name. */
 const EXTENSIONS = new Set([
@@ -44,16 +44,43 @@ const EXTENSIONS = new Set([
 ]);
 
 /**
- * The ticket's own sections — everything before `## Cited`.
+ * The ticket's own sections — the file with the Cited section cut out of it.
  *
  * The Cited section is spec text quoted verbatim, so its names are the document's claims and
  * not the ticket's. Checking them would report `.env.migrate`, which is deliberately in no
  * commit, as drift on every ticket that cites guidelines §5.
+ *
+ * Cut out, not truncated at: an addendum round appends `## Addendum` to a file that already
+ * carries a Cited section, so two of the seven ticket files with one keep it *below* the
+ * quoted text. Reading only the head would drop the freshest names in the file, in the round
+ * §5 step 2 names in the same breath as this check.
+ *
+ * A heading inside a fenced block is quoted text and closes nothing — a cited section that
+ * quotes a `## ` line would otherwise end the quote in the middle of itself.
  */
 export function ownSections(text) {
-  const body = String(text ?? "");
-  const cited = CITED_HEADING.exec(body);
-  return cited ? body.slice(0, cited.index) : body;
+  const lines = String(text ?? "").split("\n");
+  const cited = lines.findIndex((line) => CITED_HEADING.test(line));
+  if (cited === -1) return lines.join("\n");
+
+  let fence = null;
+  let after = lines.length;
+  for (let i = cited + 1; i < lines.length; i += 1) {
+    const mark = /^\s*(`{3,}|~{3,})/.exec(lines[i]);
+    if (fence) {
+      if (mark && mark[1][0] === fence.char && mark[1].length >= fence.length) fence = null;
+      continue;
+    }
+    if (mark) {
+      fence = { char: mark[1][0], length: mark[1].length };
+      continue;
+    }
+    if (/^##\s/.test(lines[i])) {
+      after = i;
+      break;
+    }
+  }
+  return [...lines.slice(0, cited), ...lines.slice(after)].join("\n");
 }
 
 /**

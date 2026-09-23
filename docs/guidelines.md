@@ -3,8 +3,8 @@
      origin/main (claims.mjs) and §4 decides what an absent one means, step 8 files a rule
      that binds one area as a line in .claude/rules/<area>.md and sends a rule for everywhere
      to the open questions; §6 a ticket's Rules section carries only what is not already
-     standing. v1.21 and v1.22 are held by open branches and this change skipped them, the way
-     v1.13 records its own two.
+     standing. Two open branches both carry a v1.21 of this file, so between them v1.21 and a
+     v1.22 are spoken for and this change took v1.23; v1.13 records its own two the same way.
      v1.20 · in the repo · an ID names one task (T0.28): §7 says a number
      belongs to its phase and not to its epic, and stays taken while a branch or a docs file
      carries it; §5 step 1 reads next-id.mjs over the whole board.
