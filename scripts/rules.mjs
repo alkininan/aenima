@@ -56,7 +56,7 @@ export function readPaths(frontmatter) {
     .replace(/^paths\s*:/, "")
     .trim()
     .replace(/^\[|\]$/g, "");
-  if (unquote(inline) !== "") return inline.split(",").map(unquote).filter(Boolean);
+  if (unquote(inline) !== "") return dropBlanket(splitOutsideBraces(inline).map(unquote));
 
   const list = [];
   for (const line of lines.slice(start + 1)) {
@@ -64,7 +64,37 @@ export function readPaths(frontmatter) {
     if (!item) break;
     list.push(unquote(item[1]));
   }
-  return list;
+  return dropBlanket(list);
+}
+
+/**
+ * Split on commas at brace depth zero, as Claude Code's own parser does: `{ts,tsx}` is one
+ * pattern and not two. A naive split makes a brace group match nothing, which reports a stale
+ * glob for a pattern the mechanism expands and matches.
+ */
+function splitOutsideBraces(value) {
+  const parts = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < value.length; i++) {
+    if (value[i] === "{") depth++;
+    else if (value[i] === "}") depth--;
+    else if (value[i] === "," && depth === 0) {
+      parts.push(value.slice(start, i));
+      start = i + 1;
+    }
+  }
+  parts.push(value.slice(start));
+  return parts.filter((part) => part.trim() !== "");
+}
+
+/**
+ * A list of nothing but `**` is one the binary drops, and the file then loads at every launch
+ * like CLAUDE.md — the very thing AC1 refuses, arriving in a shape that reads as sound. Empty
+ * is how `check` already spells "this scopes nothing".
+ */
+function dropBlanket(patterns) {
+  return patterns.every((pattern) => pattern === "**") ? [] : patterns;
 }
 
 /** Every top-level list item in the body. One line per rule, so one line per item. */

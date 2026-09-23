@@ -175,6 +175,24 @@ describe("splitFrontmatter and readPaths", () => {
     ]);
   });
 
+  // Claude Code's own parser splits an inline list at brace depth zero, so a brace group is
+  // one pattern. Split on every comma it becomes two that match nothing, and `check` names
+  // the wrong cause for a pattern the mechanism expands and matches.
+  it("splits an inline list at brace depth zero, so a brace group survives", () => {
+    expect(readPaths('paths: "src/**/*.test.{ts,tsx}, drizzle/**"')).toEqual([
+      "src/**/*.test.{ts,tsx}",
+      "drizzle/**",
+    ]);
+    expect(readPaths('paths: ["src/**/*.{ts,tsx}"]')).toEqual(["src/**/*.{ts,tsx}"]);
+  });
+
+  // The binary drops a paths: list that is only `**` and loads the file at every launch —
+  // which is what AC1 refuses, arriving in a shape a naive guard reads as sound.
+  it("reads an all-** list as no list at all, the way the binary does", () => {
+    expect(readPaths('paths:\n  - "**"')).toEqual([]);
+    expect(readPaths('paths:\n  - "**"\n  - "src/db/**"')).toEqual(["**", "src/db/**"]);
+  });
+
   it("stops at the end of the list rather than swallowing the next key", () => {
     expect(readPaths('paths:\n  - "a"\ndescription: not a path')).toEqual(["a"]);
   });

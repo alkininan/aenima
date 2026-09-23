@@ -14,5 +14,5 @@ What this repo learned about changing the schema. Each line ends in where the st
 - A ledger's actor column carries no foreign key into `auth.users` — the id is a recorded fact, so the user stays deletable and the ledger stays immutable. — "An append-only table cannot carry `ON DELETE SET NULL`"
 - Foreign keys are composite on `(workspace_id, id)`, so cross-tenant stitching is structurally impossible rather than merely policed. — "Composite foreign keys on `(workspace_id, id)`"
 - Baseline only an environment whose schema was applied by hand; baselining a fresh one marks the migrations done and skips them forever. — "Baseline only an environment whose schema was applied by hand."
-- Regenerate `src/db/database.types.ts` against the live project after every migration and diff it whole, rather than at the next opportunity. — "Regenerate after every migration, not at the next opportunity."
+- Regenerate `src/db/database.types.ts` against the live project after every migration and diff it whole: the clients are parameterised with those types, so drift surfaces as a typecheck failure rather than a runtime null. — "Regenerate after every migration"
 - A db test for a column its own migration adds reads `information_schema` and skips with a loud banner naming the file to apply, because the Stop gate runs the whole suite in every worktree. — `docs/log/T1.4.md`
