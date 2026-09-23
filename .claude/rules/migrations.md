@@ -1,6 +1,7 @@
 ---
 paths:
   - "drizzle/**"
+  - "src/db/schema/**"
 ---
 
 # Migrations

@@ -49,8 +49,14 @@ export function readPaths(frontmatter) {
   if (start === -1) return null;
 
   const unquote = (value) => value.trim().replace(/^["']|["']$/g, "");
-  const inline = unquote(lines[start].replace(/^paths\s*:/, ""));
-  if (inline !== "") return inline.split(",").map(unquote).filter(Boolean);
+  // Three legal shapes for one field: a block list below, a comma-separated string, and a
+  // YAML flow list. The brackets come off first, or the flow list splits into two patterns
+  // that match nothing and the report names the wrong cause.
+  const inline = lines[start]
+    .replace(/^paths\s*:/, "")
+    .trim()
+    .replace(/^\[|\]$/g, "");
+  if (unquote(inline) !== "") return inline.split(",").map(unquote).filter(Boolean);
 
   const list = [];
   for (const line of lines.slice(start + 1)) {

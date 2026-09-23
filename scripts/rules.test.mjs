@@ -60,7 +60,9 @@ describe("the rules the build log paid for reach the code they are about", () =>
   it("database carries ::text::jsonb and the Date on the drizzle-wrapped raw client", () => {
     const text = file("database.md");
     expect(text).toContain("::text::jsonb");
-    expect(text).toContain("drizzle()");
+    // A clause of the rule, not any mention of drizzle: deleting the rule and leaving one
+    // would keep a bare `toContain("drizzle()")` green. tests.md's own last line, here.
+    expect(text).toContain("reaches the wire encoder unconverted");
   });
 
   it("scoring carries NFC-never-NFKC and the computed protocol version", () => {
@@ -136,6 +138,7 @@ describe("check refuses", () => {
   });
 });
 
+// TC1 → AC1. Reading the paths: field, in the three shapes Claude Code accepts.
 describe("splitFrontmatter and readPaths", () => {
   it("takes the YAML between the first two markers and leaves the body", () => {
     expect(splitFrontmatter('---\npaths:\n  - "a"\n---\n# Body\n')).toEqual({
@@ -162,6 +165,16 @@ describe("splitFrontmatter and readPaths", () => {
     expect(readPaths('paths: "src/**/*.ts, drizzle/**"')).toEqual(["src/**/*.ts", "drizzle/**"]);
   });
 
+  // The YAML flow list is the same field written a third legal way. Split naively it yields
+  // `["src/**` and `drizzle/**"]`, two patterns that match nothing — red, which is the safe
+  // direction, but it names the wrong cause for whoever wrote a form the mechanism accepts.
+  it("reads the YAML flow-list form", () => {
+    expect(readPaths('paths: ["src/**/*.ts", "drizzle/**"]')).toEqual([
+      "src/**/*.ts",
+      "drizzle/**",
+    ]);
+  });
+
   it("stops at the end of the list rather than swallowing the next key", () => {
     expect(readPaths('paths:\n  - "a"\ndescription: not a path')).toEqual(["a"]);
   });
@@ -171,6 +184,7 @@ describe("splitFrontmatter and readPaths", () => {
   });
 });
 
+// TC2 → AC2. Reading the source a rule line ends in.
 describe("readSource", () => {
   it("reads a docs/log path", () => {
     expect(readSource("- A rule. — `docs/log/T2.3.md`")).toEqual({
@@ -201,6 +215,7 @@ describe("readSource", () => {
   });
 });
 
+// TC1 → AC1. Resolving a glob against the tracked files, as Claude Code would.
 describe("matchTracked", () => {
   it("answers the tracked files a pattern reaches", () => {
     expect(matchTracked("src/db/queries/*.ts", { root, tracked })).toContain(
@@ -231,6 +246,7 @@ describe("matchTracked", () => {
   });
 });
 
+// TC2 → AC2. The fold that lets a hard-wrapped phrase be quoted at all.
 describe("flatten", () => {
   it("folds a hard-wrapped phrase onto one line so it can be quoted", () => {
     expect(flatten("a phrase\n  broken by the wrap")).toBe("a phrase broken by the wrap");
