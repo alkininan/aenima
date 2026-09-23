@@ -1162,8 +1162,8 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
     waiting falls the same way** — a ref that will not resolve, a git that will not run, a lookup
     that fails — because a skip on main is a failure hidden, which is the cost the original note
     named and could not price. Both files call the helper and neither carries a skip path of its
-    own; with `0015` and `0016` both on main, all fifteen of their tests run for real. The original
-    note follows.
+    own; with every migration they name on main — `0015`, `0016`, and `0017` since T3.2 — all
+    twenty-one of their tests run for real. The original note follows.
 
     **A migration's own db test cannot be green in the run that writes it — T1.4 made that a skip,
     and the pattern needs deciding once.** §5 step 6 splits a migration ticket in two: the run

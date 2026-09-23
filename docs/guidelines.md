@@ -2,8 +2,8 @@
      §4 the ticket carrying an applied migration merges itself, with the spending read off the
      thread — your `apply`, then the run's own `applied` note naming that tag — so another
      ticket's word ungates nothing; §2, §3 and §5 steps 6 and 9 say the gate the same way.
-     Numbered v1.25 rather than the v1.21 this branch held: main passed it while the branch
-     waited, so the line takes the first number free above main's newest.
+     Numbered v1.25 rather than the v1.21 this branch held: main reached v1.24 while the branch
+     waited, so the line takes the first number free above it.
      v1.24 · in the repo · a branch takes main before it merges (T0.36):
      §5 steps 0 and 9 merge origin/main into the ticket branch first (premerge.mjs), and a
      conflict confined to the build log's generated sections settles itself — main's copy,
