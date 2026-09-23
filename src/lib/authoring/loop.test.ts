@@ -350,7 +350,7 @@ describe("refineSection — the doors before the author", () => {
 
   // AA3 replaces T3.1's door here: a size is not a reason to discard an
   // objection, because a discarded one is a gap nobody hears about.
-  it("cuts an over-long reason to what a round holds, records the cut, and still asks the author", async () => {
+  it("T3.2's TA3 → AA3: cuts an over-long reason to what a round holds, records the cut, and still asks the author", async () => {
     const long = "x".repeat(2001);
     const { agents, sent } = scripted([objects(objection({ reason: long })), none], [revision(1)]);
     const { ledger, recorded } = memoryLedger();
@@ -369,7 +369,7 @@ describe("refineSection — the doors before the author", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("surfaces an objection whose quote will not fit rather than dropping it, and never shows the author a cut quote", async () => {
+  it("T3.2's TA3 → AA3: surfaces an objection whose quote will not fit rather than dropping it, and never shows the author a cut quote", async () => {
     const long = "y".repeat(2001);
     const body = `# Juno\n\n## Scheduling\n${long}\n\n${MEET}`;
     const { agents, sent } = scripted([objects(objection({ evidence: long })), none], []);
@@ -391,7 +391,7 @@ describe("refineSection — the doors before the author", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("discards no objection for its size on any path — every admitted one is recorded", async () => {
+  it("T3.2's TA3 → AA3: discards no objection for its size on any path — every admitted one is recorded", async () => {
     const long = "z".repeat(2001);
     const body = `# Juno\n\n## Scheduling\n${long}\n\n${MEET}`;
     const { agents } = scripted(
