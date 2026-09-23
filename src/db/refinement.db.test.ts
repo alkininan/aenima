@@ -397,7 +397,8 @@ describe.skipIf(SKIP)("an objection a round had to cut — TA3 → AA3", () => {
       await write(a, { reasonTruncated: true, evidenceTruncated: true });
 
       const [row] = await tx<{ reason_truncated: boolean; evidence_truncated: boolean }[]>`
-        select reason_truncated, evidence_truncated from refinement_round`;
+        select reason_truncated, evidence_truncated from refinement_round
+        where artifact_id = ${a.artifact}`;
       expect(row).toEqual({ reason_truncated: true, evidence_truncated: true });
     });
   });
