@@ -410,6 +410,28 @@ function lex(text) {
 const UPSTREAM = new WeakMap();
 
 /**
+ * Bash's long options are spelled with one dash as much as two, and four of them are a run of
+ * letters holding a `c`: read as a cluster of short flags they would each be a `-c` that is not
+ * one. The rest of the list — `debug`, `debugger`, `help`, `login`, `noediting`, `noprofile`,
+ * `posix`, `verbose`, `version`, `wordexp`, and the hyphenated `init-file`, `dump-strings`,
+ * `dump-po-strings`, `pretty-print`, `rpm-requires` — carries a hyphen or no `c`, so it cannot
+ * reach the matcher below. A name this set misses is caught anyway where it would cost
+ * something: `parse()` follows every word that reads as the flag, not the first.
+ */
+const ONE_DASH_LONG = new Set(["-norc", "-rcfile", "-restricted", "-protected"]);
+
+/**
+ * A shell's `-c` flag, whether it stands alone or clusters with other short flags. Short flags
+ * bundle into one word, and every shell here reads a `c` anywhere in that bundle as `-c`:
+ * `bash -lc '…'`, `sh -ec '…'`, `bash -xc '…'` and `bash -cl '…'` all run the next word. Read
+ * as text a bundle is not `-c`, so the word it runs was hidden from every rule below — on main
+ * that carried `pnpm db:push` past rule (a), a force-push past rule (d) and a write to the
+ * board's API past rule (i) (T0.31). A long option is not a bundle: `--color` is not this, and
+ * nor is the one-dash spelling above.
+ */
+const isCommandFlag = (token) => !ONE_DASH_LONG.has(token) && /^-[A-Za-z]*c[A-Za-z]*$/.test(token);
+
+/**
  * The simple commands a Bash string runs, each as `{ argv, redirects, heredocs }`.
  *
  * Nested command lines — `$(…)`, backticks, `sh -c "…"` — are parsed and returned beside
@@ -456,12 +478,16 @@ export function parse(command) {
   }
   close();
 
-  // `sh -c "…"` runs its string as a command line of its own.
+  // `sh -c "…"` runs its string as a command line of its own. Every word that reads as the flag
+  // is followed, not just the first: an option this file does not know — a one-dash long option
+  // holding a `c` — would otherwise stand in front of the real `-c` and hide its string.
   for (const cmd of commands.slice()) {
     const { exe, args } = program(cmd.argv);
-    const c = args.indexOf("-c");
-    if (SHELLS.has(exe) && c !== -1 && typeof args[c + 1] === "string") {
-      commands.push(...parse(args[c + 1]));
+    if (!SHELLS.has(exe)) continue;
+    for (let i = 0; i < args.length; i += 1) {
+      if (isCommandFlag(args[i]) && typeof args[i + 1] === "string") {
+        commands.push(...parse(args[i + 1]));
+      }
     }
   }
 
@@ -852,8 +878,13 @@ function shellRun(cmd, readScript) {
     return isText(text) ? [text] : [];
   };
   if (name === "source" || name === ".") return read(rest[0]);
-  if (!SHELLS.has(name) || rest.includes("-c")) return [];
-  const script = rest.find((token) => !token.startsWith("-"));
+  // Only the words before the script are the shell's own: a flag after it is an argument the
+  // script is handed, and reading the cluster there would let `bash post.sh -lc` hide the file
+  // (review pass 1, Must 1).
+  const end = rest.findIndex((token) => !token.startsWith("-"));
+  const options = end === -1 ? rest : rest.slice(0, end);
+  if (!SHELLS.has(name) || options.some(isCommandFlag)) return [];
+  const script = rest[end];
   return script === undefined ? stdinOf(cmd, readScript) : read(script);
 }
 
