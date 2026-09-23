@@ -1,10 +1,20 @@
-<!-- guidelines.md · v1.23 · in the repo · a ticket's names are checked and its rules are
+<!-- guidelines.md · v1.27 · in the repo · a ticket's names are checked and its rules are
      filed (T0.34): §5 step 2 reads the paths and identifiers a ticket claims against
      origin/main (claims.mjs) and §4 decides what an absent one means, step 8 files a rule
      that binds one area as a line in .claude/rules/<area>.md and sends a rule for everywhere
      to the open questions; §6 a ticket's Rules section carries only what is not already
-     standing. Two open branches both carry a v1.21 of this file, so between them v1.21 and a
-     v1.22 are spoken for and this change took v1.23; v1.13 records its own two the same way.
+     standing. Cut as v1.23 and renumbered past main's newest when this branch took main in;
+     v1.25 is t0-26's, and v1.13 records its own renumbering the same way.
+     v1.26 · in the repo · one run is one Runs row (T0.30): §2 says the
+     row is keyed on its Task and the minute of its Started, since the same transcript reaches
+     the script more than once and every copy repeated its original's Tokens and Findings.
+     Numbered past v1.24, main's newest, and past v1.25, which t0-26 is holding.
+     v1.24 · in the repo · a branch takes main before it merges (T0.36):
+     §5 steps 0 and 9 merge origin/main into the ticket branch first (premerge.mjs), and a
+     conflict confined to the build log's generated sections settles itself — main's copy,
+     then log-index.mjs over the entries the merge brought in. A conflict anywhere else, or
+     one reaching the build log's written passages, is refused by name as before. Numbered
+     past v1.21 and v1.23, which branches still open are holding.
      v1.20 · in the repo · an ID names one task (T0.28): §7 says a number
      belongs to its phase and not to its epic, and stays taken while a branch or a docs file
      carries it; §5 step 1 reads next-id.mjs over the whole board.
@@ -215,7 +225,9 @@ Done, Decision is Decision, anything else is Stopped, an idle run included), Fin
 reviewer's replies. A subagent's transcript — the reviewer's passes, written beside the session's
 under `<session>/subagents/` — counts towards Tokens and Model and nothing else, since the reviewer
 is about half of what a real run spends. A run that claimed nothing of its own is `R-nnnn` alone
-with no Task. A session that was not a `/ticket` writes no row.
+with no Task. A session that was not a `/ticket` writes no row. One run is one row: the same
+transcript reaches the script more than once, so the row is keyed on its Task and the minute of
+its Started, and a post that finds its own key writes nothing (T0.30).
 
 ### Documents
 
@@ -438,8 +450,11 @@ has no effort control, and a repository setting would reach every session opened
                 from) · a task In progress whose marker is fresh is a live run: exit, before
                 anything is read or claimed · read every task's thread over the API in one command (threads.mjs)
                 and give each reply newer than the pipeline's last comment one assessment
-                (§4): a change at Review → addendum, Ready · merge at Review → claim, gh pr
-                merge --merge, one comment, release · apply on a migration question → claim,
+                (§4): a change at Review → addendum, Ready · merge at Review → claim, check
+                the branch out here (branch.mjs), take main into it (premerge.mjs) — and where
+                that moved the branch, gate the result and push it — then gh pr merge --merge,
+                one comment, release; a conflict it will not settle is refused by name and the
+                task stays at Review · apply on a migration question → claim,
                 apply.mjs --ref origin/t<id> before the branch is checked out — from
                 any checkout — then branch, carry on · ready at Backlog → Ready,
                 one comment · new work → one
@@ -537,7 +552,8 @@ has no effort control, and a repository setting would reach every session opened
                 working there meets it; a rule that binds everywhere is not written into
                 CLAUDE.md by a run — that file is the contract and the edit is yours, so it
                 goes in the report's open questions
-9  Close        commit, push branch, open the PR unless the branch has one → Review · a diff
+9  Close        commit, take main into the branch (premerge.mjs), push branch, open the PR
+                unless the branch has one → Review · a diff
                 that adds no migration and weakens no restraint (gated.mjs, loosening.mjs)
                 with the reviewer's PASS on file is merged by the run itself once the gate,
                 run again here, has its green for this tree on record — gh pr merge --merge

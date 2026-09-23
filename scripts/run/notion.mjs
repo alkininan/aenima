@@ -102,6 +102,23 @@ export function task(raw) {
   };
 }
 
+/**
+ * One Runs row as the session-end script reads it: `{ id, Name, Task, Started }`.
+ *
+ * Task is the relation's page ids and Started the date's start — the two the row is keyed on
+ * (`runs.mjs`, T0.30). Started is read as the board holds it and normalised by the key, not
+ * here: what was written is what the board says, and the shaper has no business changing it.
+ */
+export function run(raw) {
+  const props = raw?.properties ?? {};
+  return {
+    id: raw?.id ?? null,
+    Name: plain(props.Name?.title),
+    Task: related(props.Task),
+    Started: props.Started?.date?.start ?? null,
+  };
+}
+
 /** How long one request may take, and the most a 429 may hold a call. */
 export const TIMEOUT_MS = 4000;
 export const RETRY_CAP_MS = 2000;
@@ -206,15 +223,24 @@ export function client(
 
     /** Every row of a data source, every status. */
     async tasks(dataSourceId) {
-      const raw = await all((cursor) =>
-        call("POST", `/data_sources/${dataSourceId}/query`, {
-          page_size: 100,
-          ...(cursor ? { start_cursor: cursor } : {}),
-        }),
-      );
-      return raw.map(task);
+      return (await rows(dataSourceId)).map(task);
+    },
+
+    /** Every row of the Runs data source, shaped for the key a run is recorded under. */
+    async runs(dataSourceId) {
+      return (await rows(dataSourceId)).map(run);
     },
   };
+
+  /** Every raw row of a data source, every page of it. */
+  async function rows(dataSourceId) {
+    return all((cursor) =>
+      call("POST", `/data_sources/${dataSourceId}/query`, {
+        page_size: 100,
+        ...(cursor ? { start_cursor: cursor } : {}),
+      }),
+    );
+  }
 }
 
 const wait = (ms) => new Promise((done) => setTimeout(done, ms));

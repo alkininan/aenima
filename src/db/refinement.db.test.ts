@@ -2,6 +2,7 @@ import postgres from "postgres";
 import { afterAll, describe, expect, it, vi } from "vitest";
 
 import { roundCount } from "@/lib/authoring/rounds";
+import { parseSections, sectionHash } from "@/lib/authoring/sections";
 import type { RoundWrite } from "@/lib/authoring/loop";
 
 vi.mock("server-only", () => ({}));
@@ -35,10 +36,19 @@ const OFFLINE = !DATABASE_URL;
 
 const sql = OFFLINE ? null : postgres(DATABASE_URL, { max: 1, prepare: false, onnotice: () => {} });
 
+/**
+ * The table *and* the cycle T3.2's AA1 keys it by. A database holding 0015 but
+ * not 0017 has a round ledger with no cycle, and every assertion below is about
+ * the cycle's ledger — so the gate reads the column, not only the table.
+ */
 const APPLIED = sql
   ? (
       await sql<{ present: boolean }[]>`
-        select to_regclass('public.refinement_round') is not null as present`
+        select to_regclass('public.refinement_round') is not null
+           and exists (select 1 from information_schema.columns
+                        where table_schema = 'public'
+                          and table_name = 'refinement_round'
+                          and column_name = 'cycle_no') as present`
     )[0]!.present
   : false;
 
@@ -49,8 +59,9 @@ if (sql && !APPLIED) {
       "[33m  ============================================================[0m",
       "[33m  SKIPPED: refinement_round tests did not run.[0m",
       "",
-      "  The table does not exist on this database: migration",
-      "  drizzle/0015_refinement_round.sql has not been applied. The",
+      "  The table or its cycle column is not on this database:",
+      "  drizzle/0015_refinement_round.sql or",
+      "  drizzle/0017_refinement_cycles.sql has not been applied. The",
       "  round ledger's key, shape, append-only guarantee and RLS were",
       "  NOT verified by this run.",
       "[33m  ============================================================[0m",
@@ -160,14 +171,21 @@ async function seed(tx: Tx, user: string, email: string, name: string): Promise<
 
 const BODY = "## Scheduling\nPropose 2 time options.\n";
 
+/** The section's text in the seeded human version, hashed — the cycle's baseline. */
+const BASE_HASH = sectionHash(parseSections(BODY), "scheduling")!;
+
 function round(seeded: Seeded, overrides: Partial<RoundWrite> = {}): RoundWrite {
   return {
     sectionId: "scheduling",
     checkId: "prd-4",
+    cycleNo: 1,
+    baseSectionHash: BASE_HASH,
     roundNo: 1,
     outcome: "held",
     reason: "No evidence is attached.",
+    reasonTruncated: false,
     evidence: "Propose 2 time options",
+    evidenceTruncated: false,
     authorPosition: "Nobody has shared evidence yet.",
     versionId: seeded.version,
     outsideSections: null,
@@ -205,6 +223,36 @@ describe.skipIf(SKIP)("the round ledger's key — TA3 → AA3", () => {
       await write(a, { roundNo: 1 });
       await expect(tx.savepoint(() => write(a, { roundNo: 1 }))).rejects.toThrow(
         /refinement_round_key/,
+      );
+    });
+  });
+
+  // T3.2's TA1 → AA1. The cycle sits above the round number in the key, so a
+  // check the human reopened starts again at round one without colliding with
+  // the cycle it already spent — and the spent cycle's rows are still there.
+  it("T3.2's TA1 → AA1: lets a reopened check start again at round one on the next cycle", async () => {
+    await rolledBack(async (tx) => {
+      const a = await seed(tx, USER_A, "refine-a@example.test", "Refine A");
+      await write(a, { roundNo: 1 });
+      await write(a, { roundNo: 2 });
+      await write(a, { roundNo: 3, outcome: "surfaced", outsideSections: null });
+
+      await write(a, { cycleNo: 2, baseSectionHash: "the-humans-rewrite", roundNo: 1 });
+
+      const rows = await readRounds(a.workspace, a.artifact);
+      expect(rows).toHaveLength(4);
+      expect(rows.filter((row) => row.cycleNo === 1)).toHaveLength(3);
+      // The surfaced row is exactly as it was written — history does not change.
+      const surfaced = rows.find((row) => row.outcome === "surfaced")!;
+      expect(surfaced).toMatchObject({ cycleNo: 1, roundNo: 3, baseSectionHash: BASE_HASH });
+    });
+  });
+
+  it("T3.2's TA1 → AA1: refuses a round with no cycle at all", async () => {
+    await rolledBack(async (tx) => {
+      const a = await seed(tx, USER_A, "refine-a@example.test", "Refine A");
+      await expect(tx.savepoint(() => write(a, { cycleNo: 0 }))).rejects.toThrow(
+        /refinement_round_cycle/,
       );
     });
   });
@@ -335,6 +383,57 @@ describe.skipIf(SKIP)("rounds are history, and workspace-isolated", () => {
       const visible = await tx<{ workspace_id: string }[]>`
         select workspace_id from refinement_round`;
       expect(visible.map((row) => row.workspace_id)).toEqual([a.workspace]);
+    });
+  });
+});
+
+// T3.2's TA3 → AA3. An objection too long for a round is cut and recorded, and
+// one whose quote had to be cut surfaces with no author position — a shape the
+// table refused before 0017, which is why it could only be dropped.
+describe.skipIf(SKIP)("an objection a round had to cut — TA3 → AA3", () => {
+  it("stores the cut as a fact on the row", async () => {
+    await rolledBack(async (tx) => {
+      const a = await seed(tx, USER_A, "refine-a@example.test", "Refine A");
+      await write(a, { reasonTruncated: true, evidenceTruncated: true });
+
+      const [row] = await tx<{ reason_truncated: boolean; evidence_truncated: boolean }[]>`
+        select reason_truncated, evidence_truncated from refinement_round
+        where artifact_id = ${a.artifact}`;
+      expect(row).toEqual({ reason_truncated: true, evidence_truncated: true });
+    });
+  });
+
+  it("takes a surfacing the author never answered, at round one, with no position", async () => {
+    await rolledBack(async (tx) => {
+      const a = await seed(tx, USER_A, "refine-a@example.test", "Refine A");
+      await write(a, {
+        roundNo: 1,
+        outcome: "surfaced",
+        authorPosition: null,
+        evidenceTruncated: true,
+      });
+
+      const rows = await readRounds(a.workspace, a.artifact);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ roundNo: 1, outcome: "surfaced", authorPosition: null });
+    });
+  });
+
+  it("still requires a position of every outcome the author answered", async () => {
+    await rolledBack(async (tx) => {
+      const a = await seed(tx, USER_A, "refine-a@example.test", "Refine A");
+      await expect(
+        tx.savepoint(() => write(a, { outcome: "held", authorPosition: null })),
+      ).rejects.toThrow(/refinement_round_shape/);
+    });
+  });
+
+  it("refuses a surfacing past round three, so the cap is still the database's", async () => {
+    await rolledBack(async (tx) => {
+      const a = await seed(tx, USER_A, "refine-a@example.test", "Refine A");
+      await expect(
+        tx.savepoint(() => write(a, { roundNo: 4, outcome: "surfaced", authorPosition: null })),
+      ).rejects.toThrow(/refinement_round_shape/);
     });
   });
 });
