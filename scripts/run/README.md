@@ -204,8 +204,12 @@ the diff against `origin/main` is missing from the record, or a reviewer pass do
 configured chain, say `yes` or `no` under resumed, or carry `PASS` or `FINDINGS` as its verdict.
 Once it passes, the run mirrors it into the task body's Report section, writes
 the ticket's build-log entry as its own file under `docs/log/`, and runs `log-index.mjs`,
-which rewrites the build log's Tickets done list from that directory so two open pull
-requests never edit the same lines.
+which rewrites the build log's two generated sections. Tickets done comes from that
+directory, so two open pull requests never edit the same lines. Current state comes from the
+repo as well since T0.32 — each document's own header version, read through the parser
+`version-drift.mjs` uses, and the newest entry in the directory — and carries no phase and no
+next ticket, because the board owns the queue and the roadmap owns the phases and a stamp a
+human maintains is a stamp that is eventually wrong.
 
 ## 9 Close
 
