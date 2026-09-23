@@ -77,6 +77,12 @@ export type RefineInput = {
   body: string;
   versionId: string;
   sectionId: string;
+  /**
+   * The section's text in the newest human-authored version of the artifact,
+   * hashed — what §6's cap is counted against, and what a human rewrite moves
+   * (AA1). Null where no human version holds this section.
+   */
+  baseSectionHash: string | null;
   /** The author's interview so far. Never the critic's to read. */
   conversation: readonly Turn[];
 };
@@ -93,12 +99,35 @@ export type RefineResult =
   /** The author answered with no position, or one longer than a round can hold. */
   | ({ ok: false; reason: "answer"; detail: string } & Standing);
 
+/**
+ * Text as a round can hold it: the whole of it, or its first `ROUND_TEXT_MAX`
+ * characters and the word that it was cut (AA3).
+ *
+ * Cut by UTF-16 code units, which is the conservative side of the column's
+ * character limit: Postgres `length()` counts characters, so a cut that fits
+ * 2000 code units always fits 2000 characters, and a quote of astral characters
+ * is cut earlier than it strictly need be. Nothing is appended to mark the cut —
+ * the record is the flag on the row, not an ellipsis inside the text a surface
+ * would then have to read back out.
+ */
+export function fit(text: string): { text: string; truncated: boolean } {
+  if (text.length <= ROUND_TEXT_MAX) return { text, truncated: false };
+  // Back off a code unit when the cut falls between a surrogate pair. A lone
+  // surrogate is replaced on its way to the driver, and an evidence quote that
+  // came back with a replacement character no longer occurs in the section it
+  // was quoted from — the guard would reject a quote the critic really made.
+  const cut = ROUND_TEXT_MAX;
+  const code = text.charCodeAt(cut - 1);
+  const whole = code >= 0xd800 && code <= 0xdbff ? cut - 1 : cut;
+  return { text: text.slice(0, whole), truncated: true };
+}
+
 export async function refineSection(
   input: RefineInput,
   agents: Agents,
   ledger: Ledger,
 ): Promise<RefineResult> {
-  const { pack, checkIds, sectionId, conversation } = input;
+  const { pack, checkIds, sectionId, conversation, baseSectionHash } = input;
   // The text before the first `##` heading is a section only so that the scope
   // wall can see it. The addendum's section is a `##` block, and nothing is
   // refined — or stored under a section id — that is not one.
@@ -148,28 +177,66 @@ export async function refineSection(
     // quoting the text the critic was shown. Then scope: the critic was shown
     // one section, and an objection that names another cannot be acted on by a
     // call that receives only this one.
-    // An objection whose reason or evidence is longer than a round can hold is
-    // one the loop could not record, so it cannot be acted on either.
-    const objections = admitObjections(pack, section.text, tested.value.objections).filter(
-      (objection) =>
-        objection.scope === section.id &&
-        objection.reason.length <= ROUND_TEXT_MAX &&
-        objection.evidence.length <= ROUND_TEXT_MAX,
-    );
+    //
+    // **Size is not a door** (AA3). T3.1 dropped an objection longer than a
+    // round can hold, which is a gap nobody hears about — §1 law 7 broken by a
+    // column width. An over-long reason is cut to what the round holds and the
+    // cut is recorded; an over-long *quote* is cut too, and because a cut quote
+    // is no longer the verbatim evidence §1 law 3 asks for, that objection is
+    // never sent to the author. It surfaces to the human instead.
+    const objections = admitObjections(pack, section.text, tested.value.objections)
+      .filter((objection) => objection.scope === section.id)
+      .map((objection) => {
+        const reason = fit(objection.reason);
+        const evidence = fit(objection.evidence);
+        // The scope is carried through so that what the author is sent is the
+        // objection as the round records it, cut and all — the author never
+        // argues from a sentence the ledger does not hold.
+        return {
+          checkId: objection.checkId,
+          scope: objection.scope,
+          reason: reason.text,
+          reasonTruncated: reason.truncated,
+          evidence: evidence.text,
+          evidenceTruncated: evidence.truncated,
+        };
+      });
 
     let retest = false;
     for (const objection of objections) {
-      const move = nextMove(await ledger.rounds(), section.id, objection.checkId);
+      const move = nextMove(await ledger.rounds(), section.id, objection.checkId, baseSectionHash);
       if (move.kind === "closed") continue;
 
       const base = {
         sectionId: section.id,
         checkId: objection.checkId,
+        cycleNo: move.cycleNo,
+        baseSectionHash,
         roundNo: move.roundNo,
         reason: objection.reason,
+        reasonTruncated: objection.reasonTruncated,
         evidence: objection.evidence,
+        evidenceTruncated: objection.evidenceTruncated,
         versionId,
       };
+
+      // AA3: an objection whose quote had to be cut is one the author must not
+      // be shown — a revision argued from a fragment is a revision argued from
+      // something the critic did not say. It goes straight to the human, at
+      // whatever round the cycle is on, with no author position, because the
+      // author was never asked. Nothing about this path is silent.
+      if (move.kind === "revise" && objection.evidenceTruncated) {
+        const round: RoundWrite = {
+          ...base,
+          outcome: "surfaced",
+          authorPosition: null,
+          outsideSections: null,
+          revisedBody: null,
+        };
+        await ledger.record(round);
+        written.push(round);
+        continue;
+      }
 
       if (move.kind === "surface") {
         // AC3: no revision is asked for, the document stays as it stands, and
