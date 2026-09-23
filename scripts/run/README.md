@@ -133,7 +133,12 @@ and a one-line body is expanded into the seven sections of guidelines §2.
 `spec-sections.mjs` returns every cited section verbatim from the repo, and the run writes
 `docs/tickets/<id>.md`: the seven sections, then a Cited section holding that text. This
 file is the whole of what the reviewer reads, so a section the script reports missing is
-said to be missing in the file rather than silently left out.
+said to be missing in the file rather than silently left out. `claims.mjs` then reads that
+file back and reports every backticked path and identifier in the ticket's own sections that
+`origin/main` lacks — paths as files, identifiers with `git grep`, commands and flags and
+fragments never looked up, and the Cited section left to the document it quotes; whether an
+absent name is something the ticket creates or drift is the skill's reading, since only a
+reader of the ticket can tell those apart.
 
 ## 3 Branch
 
