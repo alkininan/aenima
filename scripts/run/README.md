@@ -250,4 +250,6 @@ the session fell back), input plus output tokens counted once per API message wi
 writes excluded, the outcome from the last Status the run wrote on its task before any later claim
 — a Decision set after the release included (Review and Done are Done, Decision is Decision,
 anything else is Stopped) — and the reviewer's findings counted from its replies. A session that
-was not a `/ticket` writes no row.
+was not a `/ticket` writes no row, and a run the board already holds writes no second one: the
+same transcript reaches the script more than once, so the row is keyed on its task and the minute
+it started and a post that finds its own key does nothing (T0.30).

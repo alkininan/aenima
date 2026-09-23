@@ -1,4 +1,8 @@
-<!-- guidelines.md · v1.24 · in the repo · a branch takes main before it merges (T0.36):
+<!-- guidelines.md · v1.26 · in the repo · one run is one Runs row (T0.30): §2 says the
+     row is keyed on its Task and the minute of its Started, since the same transcript reaches
+     the script more than once and every copy repeated its original's Tokens and Findings.
+     Numbered past v1.24, main's newest, and past v1.25, which t0-26 is holding.
+     v1.24 · in the repo · a branch takes main before it merges (T0.36):
      §5 steps 0 and 9 merge origin/main into the ticket branch first (premerge.mjs), and a
      conflict confined to the build log's generated sections settles itself — main's copy,
      then log-index.mjs over the entries the merge brought in. A conflict anywhere else, or
@@ -214,7 +218,9 @@ Done, Decision is Decision, anything else is Stopped, an idle run included), Fin
 reviewer's replies. A subagent's transcript — the reviewer's passes, written beside the session's
 under `<session>/subagents/` — counts towards Tokens and Model and nothing else, since the reviewer
 is about half of what a real run spends. A run that claimed nothing of its own is `R-nnnn` alone
-with no Task. A session that was not a `/ticket` writes no row.
+with no Task. A session that was not a `/ticket` writes no row. One run is one row: the same
+transcript reaches the script more than once, so the row is keyed on its Task and the minute of
+its Started, and a post that finds its own key writes nothing (T0.30).
 
 ### Documents
 
