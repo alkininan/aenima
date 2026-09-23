@@ -125,7 +125,11 @@ describe("the database tests that guard a migration", () => {
     for (const file of FILES) {
       const source = readFileSync(file, "utf8");
       expect(source, file).toContain("migrationGate(");
-      const own = stderrWrites(source).filter((call) => call.includes("drizzle/00"));
+      // The migration each file names to the gate is the one its own banner would name, so
+      // the check follows the file rather than a literal that has to be kept in step.
+      const named = source.match(/file:\s*"([^"]+)"/)?.[1];
+      expect(named, file).toBeDefined();
+      const own = stderrWrites(source).filter((call) => call.includes(named!));
       expect(own, file).toEqual([]);
     }
   });

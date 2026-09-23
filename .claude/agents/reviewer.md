@@ -60,7 +60,8 @@ Work in this order.
    your last act. First line `# <id> — review`, then the commit you reviewed (`git rev-parse
    --short HEAD`), then your findings as returned above, and the **last line is the verdict
    alone: `PASS` when no Must stands, `FINDINGS` when one does**. The guard reads that file at close and lets a ticket whose
-   diff adds no migration and weakens no restraint merge itself on `PASS`
+   diff weakens no restraint, and adds no migration the human's `apply` is still owed on, merge
+   itself on `PASS`
    (`docs/guidelines.md` §4); a verdict the
    run wrote for itself would be the model's claim, which is why it is yours to write and the
    run is told never to touch it. Overwrite the file on every pass; the last pass is the one

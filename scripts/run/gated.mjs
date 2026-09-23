@@ -9,8 +9,10 @@
  * conversation that cuts the ticket, so re-approving a spec diff adds nothing; and a harness
  * diff is not dangerous because of where it lands but because of what it does. So:
  *
- *   - a diff adding a migration waits for `apply`, and its ticket waits for `merge`: the
- *     schema is shared, and applying one is the human's call either way (§4);
+ *   - a diff adding a migration waits for `apply`: the schema is shared, and applying one is
+ *     the human's call. Since T0.26 that is the whole of it — once the word has been spent on
+ *     the task's thread the ticket merges itself, and until then the diff waits, because code
+ *     that reads a column nobody has created is code main should not carry (§4);
  *   - a diff that **weakens a restraint** waits for `merge`, measured by running the
  *     restraints on both sides of it (`scripts/run/loosening.mjs`) rather than read off the
  *     paths it touches;
@@ -56,7 +58,8 @@ export const JOURNAL = `${MIGRATIONS_DIR}meta/_journal.json`;
  * record of the migrations in the same diff, so they answer to those.
  */
 export function isBookkeeping(path) {
-  return path === JOURNAL || /^drizzle\/meta\/[^/]+_snapshot\.json$/.test(String(path ?? ""));
+  const name = String(path ?? "");
+  return name === JOURNAL || new RegExp(`^${MIGRATIONS_DIR}meta/[^/]+_snapshot\\.json$`).test(name);
 }
 
 /**
