@@ -90,6 +90,8 @@ One file per ticket under `docs/log/`, oldest first. This list is written by `no
 
 ## Decisions made during the build
 
+The standing rules below are distilled one per line into `.claude/rules/`, which loads them by path when a session opens the code they govern; this section keeps the stories.
+
 _(when a ticket's report-back raises a question and you answer it, record the answer here.
 If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in the repo.)_
 
