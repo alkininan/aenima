@@ -106,8 +106,8 @@ export function task(raw) {
  * One Runs row as the session-end script reads it: `{ id, Name, Task, Started }`.
  *
  * Task is the relation's page ids and Started the date's start — the two the row is keyed on
- * (`runs.mjs`, T0.30). Started comes back as Notion stored it, which is to the minute; the key
- * normalises both sides rather than this shaper, since what was written is what the board says.
+ * (`runs.mjs`, T0.30). Started is read as the board holds it and normalised by the key, not
+ * here: what was written is what the board says, and the shaper has no business changing it.
  */
 export function run(raw) {
   const props = raw?.properties ?? {};

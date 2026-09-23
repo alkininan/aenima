@@ -1,7 +1,6 @@
 <!-- guidelines.md · v1.21 · in the repo · one run is one Runs row (T0.30): §2 says the
-     row is keyed on its Task and the minute of its Started, because SessionEnd fires again
-     when a session is cleared, resumed or exited and every firing reads the same transcript
-     from the same first timestamp.
+     row is keyed on its Task and the minute of its Started, since the same transcript reaches
+     the script more than once and every copy repeated its original's Tokens and Findings.
      v1.20 · in the repo · an ID names one task (T0.28): §7 says a number
      belongs to its phase and not to its epic, and stays taken while a branch or a docs file
      carries it; §5 step 1 reads next-id.mjs over the whole board.
@@ -212,11 +211,9 @@ Done, Decision is Decision, anything else is Stopped, an idle run included), Fin
 reviewer's replies. A subagent's transcript — the reviewer's passes, written beside the session's
 under `<session>/subagents/` — counts towards Tokens and Model and nothing else, since the reviewer
 is about half of what a real run spends. A run that claimed nothing of its own is `R-nnnn` alone
-with no Task. A session that was not a `/ticket` writes no row. One run is one row: SessionEnd
-fires again when a session is cleared, resumed or exited, and every firing reads the same
-transcript from the same first timestamp, so the row is keyed on its Task and the minute of its
-Started and a second post writes nothing (T0.30). Thirty-seven rows described fifteen runs before
-that key, every copy repeating its original's Tokens and Findings into the analytics.
+with no Task. A session that was not a `/ticket` writes no row. One run is one row: the same
+transcript reaches the script more than once, so the row is keyed on its Task and the minute of
+its Started, and a post that finds its own key writes nothing (T0.30).
 
 ### Documents
 

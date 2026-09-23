@@ -240,6 +240,5 @@ writes excluded, the outcome from the last Status the run wrote on its task befo
 — a Decision set after the release included (Review and Done are Done, Decision is Decision,
 anything else is Stopped) — and the reviewer's findings counted from its replies. A session that
 was not a `/ticket` writes no row, and a run the board already holds writes no second one: the
-hook fires again when a session is cleared, resumed or exited, and every firing reads the same
-transcript from the same first timestamp, so the row is keyed on its task and the minute it
-started and a post that finds its own key does nothing (T0.30).
+same transcript reaches the script more than once, so the row is keyed on its task and the minute
+it started and a post that finds its own key does nothing (T0.30).

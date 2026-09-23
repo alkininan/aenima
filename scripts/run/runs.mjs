@@ -10,9 +10,12 @@
  * path and the script reads the JSONL Claude Code wrote, with no model in the loop and no
  * claim the session could have made about itself.
  *
- * One run, one row: the hook fires again when a session is cleared, resumed or exited, and each
- * firing reads the same transcript from the same first timestamp, so the row is keyed on the task
- * and the minute the run started and a second post finds its own key and writes nothing (T0.30).
+ * One run, one row: SessionEnd is not the once-per-session event it reads as, and the same
+ * transcript reaches this script more than once — thirty-seven rows in Runs described fifteen
+ * runs, every copy repeating its original's tokens and findings to the digit, which is a second
+ * read of one transcript and not a second run. What fires the hook again is not established
+ * here; the row is keyed on the task and the minute the run started instead, so a second post
+ * finds its own key and writes nothing whatever fired it (T0.30).
  *
  * What the transcript holds and how it is read:
  *   - one line per event, each with a `type` and most with a `timestamp`; the first and the
@@ -338,12 +341,12 @@ export function startMinute(value) {
 /**
  * The key one run is recorded under: the task it claimed and the minute it started (T0.30).
  *
- * The SessionEnd hook is not the once-per-session event it reads as — a session cleared, resumed
- * or exited fires it again, and every firing reads the same transcript from the same first
- * timestamp and posts the whole run a second time. Keying the row on what identifies the run,
- * rather than on when the row happened to be written, makes that second post a no-op. `page` is
- * the claimed task's page id, dashes and all or none; a run that claimed nothing keys on the
- * minute alone.
+ * The same transcript reaches `post` more than once — what fires SessionEnd again is not
+ * established, but the copies are exact, token for token and finding for finding, which no
+ * second run would be. Keying the row on what identifies the run, rather than on when the row
+ * happened to be written, makes every read after the first a no-op without having to know what
+ * caused it. `page` is the claimed task's page id, dashes and all or none; a run that claimed
+ * nothing keys on the minute alone.
  *
  * Null when there is no start to key on — a transcript with no timestamps. Such a row cannot be
  * told from any other and is written rather than dropped: losing a run is the worse failure.
@@ -362,6 +365,9 @@ export function rowProperties(summary, number) {
     Tokens: { number: summary.tokens.total },
     Findings: { number: summary.findings },
   };
+  // The timestamp as the transcript carried it (T0.12). Notion keeps a date to the minute, so
+  // this is not what reads back — which is the key's problem and not this function's: `runKey`
+  // floors both sides, and writing the minute here would only move the same truncation earlier.
   if (summary.started) properties.Started = { date: { start: summary.started } };
   if (summary.durationMin !== null) properties.Duration = { number: summary.durationMin };
   if (summary.model) properties.Model = { select: { name: summary.model } };

@@ -574,7 +574,8 @@ describe("post", () => {
   });
 
   // T0.30 TC1 → AC1. A board that keeps what it is given, and reads a row's Started back to the
-  // minute as Notion does — the row is written with seconds and comes back without them.
+  // minute as Notion does — the row is written with seconds and comes back without them, which
+  // is the round trip the key has to survive.
   const boardOf = (rows = []) => {
     const held = [...rows];
     return {
@@ -590,6 +591,14 @@ describe("post", () => {
       },
     };
   };
+
+  // The row is written with seconds and Notion keeps none, so the key is what has to survive
+  // the round trip. The first post's own Started never matches itself as a string.
+  it("matches a row written with seconds against the minute the board reads back", () => {
+    const props = rowProperties(parseTranscript(transcript()), 1);
+    expect(props.Started.date.start).toBe("2026-09-13T11:22:30.000Z");
+    expect(runKey(null, props.Started.date.start)).toBe(runKey(null, "2026-09-13T11:22:00.000Z"));
+  });
 
   // The SessionEnd hook fires again when a session is cleared, resumed or exited, and reads the
   // same transcript from the same first timestamp. The second post is the duplicate R-0055,
