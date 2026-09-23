@@ -261,7 +261,14 @@ describe("docs/guidelines.md", () => {
     expect(names).toMatch(/branch or a file under\s+`docs\/`/);
   });
 
-  it("carries the bumped version in its header", () => {
-    expect(parseHeaderVersion(text)).toBe("1.20");
+  // T0.28's own bump. Pinning the number made every later version of the document a red
+  // here — T0.34's was the first to trip it — and another ticket bumping the file is not a
+  // regression of this one. What T0.28 claimed is that its line reached the header, so that
+  // is what is asserted, with the version it landed on as a floor: pin the rule, not the
+  // pair of numbers that currently satisfy it (`.claude/rules/tests.md`).
+  it("carries T0.28's line in its header, at the version it landed on or later", () => {
+    expect(text.split("-->")[0]).toContain("an ID names one task (T0.28)");
+    const [major, minor] = parseHeaderVersion(text).split(".").map(Number);
+    expect(major > 1 || (major === 1 && minor >= 20)).toBe(true);
   });
 });
