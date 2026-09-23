@@ -261,17 +261,15 @@ describe("docs/guidelines.md", () => {
     expect(names).toMatch(/branch or a file under\s+`docs\/`/);
   });
 
-  // Pinned as the rule rather than as the number that satisfied it on the day. T0.28 asserted
-  // `1.20` exactly, which is a fact about that afternoon and not about §7: every later bump
-  // reddened it, and the next ticket's only move was to retype the number — which pins the
-  // trap again rather than the rule. What has to hold is that §7's rule arrived with a version
-  // and that the header has never gone back behind it.
-  it("carries a version at or past the one §7's rule arrived in", () => {
+  // The number T0.28 bumped to was pinned here exactly, and the next ticket to touch the
+  // guidelines — T0.36 — was failed by it for no reason of its own. What T0.28 has to say is
+  // that its change reached the header and the header never goes backwards; the version it
+  // happened to land on is the header's business, and every later bump is a bump of its own.
+  it("carries a version no older than the one this rule arrived in", () => {
     const version = parseHeaderVersion(text);
+
     expect(version).toMatch(/^\d+\.\d+$/);
-    const at = (v) => v.split(".").map(Number);
-    const [major, minor] = at(version);
-    const [wasMajor, wasMinor] = at("1.20");
-    expect(major > wasMajor || (major === wasMajor && minor >= wasMinor), version).toBe(true);
+    const [major, minor] = version.split(".").map(Number);
+    expect(major > 1 || (major === 1 && minor >= 20)).toBe(true);
   });
 });
