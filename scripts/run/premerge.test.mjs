@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { BUILD_LOG, generate } from "./log-index.mjs";
 import { parseHeaderVersion } from "./version-drift.mjs";
-import { confined, premerge, sideToKeep, withoutGenerated } from "./premerge.mjs";
+import { mergeWritten, premerge, withoutGenerated } from "./premerge.mjs";
 
 // T0.36 TC1 → AC1 and TC2 → AC2. Over a real repository: what conflicts, and what a
 // resolution leaves behind, are git's to say, and a stubbed runner would only prove the stub
@@ -30,6 +30,10 @@ placeholder
 ## Decisions made during the build
 
 The passage two branches can genuinely disagree about.
+Every real build log has hundreds of lines here, and the distance matters: blanking the
+generated bodies pulls the written passages closer together, and two edits inside git's
+three lines of context overlap whether or not they are about the same thing. A fixture
+with two adjacent written lines would test the diff algorithm, not this script.
 `;
 
 const doc = (name, version) => `<!-- ${name}.md · v${version} · in the repo -->\n\n# ${name}\n`;
@@ -196,6 +200,32 @@ describe("premerge over a temporary repository", () => {
     expect(buildLog()).toBe(regenerated());
   });
 
+  // Review pass 2, Must 1: both sides wrote, in different places. Three equalities call that
+  // a disagreement; git merges it without a murmur, and so must this — it is what the build
+  // log's written passages do on a third of the commits that touch them.
+  it("merges written passages both sides moved, in places that do not overlap", () => {
+    writeFileSync(
+      join(dir, BUILD_LOG),
+      buildLog().replace(
+        "A hand-written section the generator never touches.",
+        "What the ticket decided, up in the Stack section.",
+      ),
+    );
+    commit("t9-2 decision");
+    git("checkout", "--quiet", "main");
+    writeFileSync(join(dir, BUILD_LOG), `${buildLog()}\n## What main wrote\n\nAt the other end.\n`);
+    commit("main prose");
+    git("checkout", "--quiet", "t9-2");
+
+    const result = premerge({ cwd: dir, base: "main", fetch: false });
+
+    expect(result).toMatchObject({ ok: true, merged: true, resolved: [BUILD_LOG] });
+    expect(buildLog()).toContain("What the ticket decided, up in the Stack section.");
+    expect(buildLog()).toContain("At the other end.");
+    expect(buildLog()).not.toContain("<<<<<<<");
+    expect(buildLog()).toBe(regenerated());
+  });
+
   it("refuses a build log whose conflict is outside the generated sections", () => {
     const rewrite = (line) => {
       writeFileSync(
@@ -230,29 +260,49 @@ describe("premerge over a temporary repository", () => {
   });
 });
 
-describe("confined", () => {
+describe("mergeWritten", () => {
   const log = (state, done, written) =>
     `# t\n\n## Current state\n\n${state}\n\n## Tickets done\n\n${done}\n\n## Decisions\n\n${written}\n`;
+  /** The written part of what came back, which is all the caller keeps. */
+  const kept = (text) => (text === null ? null : text.split("## Decisions\n\n")[1]?.trim());
 
   it("reads two different generated lists over the same words as the same file", () => {
-    expect(confined(log("a", "one", "same"), log("b", "two", "same"))).toBe(true);
+    expect(kept(mergeWritten(log("a", "one", "same"), log("b", "two", "same")))).toBe("same");
   });
 
   it("reads a difference in the written part, with no base to judge it by, as a real one", () => {
-    expect(confined(log("a", "one", "mine"), log("a", "one", "theirs"))).toBe(false);
+    expect(mergeWritten(log("a", "one", "mine"), log("a", "one", "theirs"))).toBe(null);
   });
 
   // Review pass 1, Must 1: the third text is what tells a disagreement from a one-sided edit.
-  it("keeps the side that moved away from the base, and only that side", () => {
+  it("keeps the words of the side that moved, when only one side moved", () => {
     const base = log("b", "b", "was");
-    expect(sideToKeep(log("a", "x", "written"), log("b", "y", "was"), base)).toBe("ours");
-    expect(sideToKeep(log("a", "x", "was"), log("b", "y", "written"), base)).toBe("theirs");
-    expect(sideToKeep(log("a", "x", "mine"), log("b", "y", "theirs"), base)).toBe(null);
-    expect(sideToKeep(log("a", "x", "same"), log("b", "y", "same"), base)).toBe("theirs");
+    expect(kept(mergeWritten(log("a", "x", "written"), log("b", "y", "was"), base))).toBe(
+      "written",
+    );
+    expect(kept(mergeWritten(log("a", "x", "was"), log("b", "y", "written"), base))).toBe(
+      "written",
+    );
   });
 
-  it("reads a file missing its headings as not confined", () => {
-    expect(confined("# t\n\nno headings here\n", log("a", "one", "same"))).toBe(false);
+  // Review pass 2, Must 1: both sides moved, and git is what says whether that is a conflict.
+  it("hands two moved sides to the merge, and keeps what it returns", () => {
+    const base = log("b", "b", "was");
+    const merged = mergeWritten(log("a", "x", "mine"), log("b", "y", "theirs"), base, () => "done");
+
+    expect(merged).toBe("done");
+  });
+
+  it("refuses when the merge refuses", () => {
+    const base = log("b", "b", "was");
+
+    expect(mergeWritten(log("a", "x", "mine"), log("b", "y", "theirs"), base, () => null)).toBe(
+      null,
+    );
+  });
+
+  it("reads a file missing its headings as one it cannot settle", () => {
+    expect(mergeWritten("# t\n\nno headings here\n", log("a", "one", "same"))).toBe(null);
   });
 
   it("blanks every generated body and keeps the rest", () => {

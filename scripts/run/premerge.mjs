@@ -10,20 +10,22 @@
  * merges itself at close escapes only because nothing lands between its push and its merge.
  *
  * So the branch takes main first. A clean merge is just a merge commit. A conflict is read
- * before it is touched: every conflicted path must be a generated file, and the two sides of
- * that file must differ *only* inside the generated sections — a hand-written passage of the
- * build log that both sides changed is a real disagreement, and taking main's copy would drop
- * the branch's words without saying so. Confined, it resolves the way the file is meant to be
- * resolved: main's copy, then `log-index.mjs` run again over `docs/log/`, which after the merge
- * holds both sides' entries. Anything else aborts and names the files, and the task stays at
- * Review — the same refusal as before, now only for the conflicts that deserve it.
+ * before it is touched: every conflicted path must be a generated file, and what the two sides
+ * wrote *outside* the generated sections must itself merge — a passage both sides rewrote is a
+ * real disagreement, and settling it from either copy would drop somebody's words without
+ * saying so. It resolves the way the file is meant to be resolved: the written passages merged
+ * three ways with the generated bodies blanked, then `log-index.mjs` run again over
+ * `docs/log/`, which after the merge holds both sides' entries. Anything else aborts and names
+ * the files, and the task stays at Review — the same refusal as before, now only for the
+ * conflicts that deserve it.
  *
  * Like `revert.mjs`, this prepares a commit and stops. The push is the skill's own command, so
  * the guard reads it, and the gate runs on the result before anything merges.
  */
 
 import { spawnSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { emit, isMain } from "./cli.mjs";
@@ -56,20 +58,25 @@ export function withoutGenerated(text) {
 }
 
 /**
- * Which side of a generated file's conflict to keep — `"ours"`, `"theirs"`, or null for a
- * disagreement nobody can settle alone.
+ * A generated file's written passages, merged three ways — or null when the two sides really
+ * did write over each other.
  *
- * This is the whole of the judgment. `git` says the file conflicts; it cannot say whether the
- * conflict is the generated list disagreeing with itself — which is expected and meaningless —
- * or two people writing different sentences in "Decisions made during the build", which is
- * neither. Read two ways it gets the second question wrong: a branch that added a paragraph
- * main never touched differs from main outside the generated sections, and refusing it would
- * refuse exactly the branches this ticket exists to merge (review pass 1, Must 1). So it is
- * read three ways, against the merge base: the side that moved is the side to keep, and only
- * when *both* moved, to different words, is there anything to settle. With no base — the file
- * was added on both sides — two-way equality is all there is, and anything else is refused.
+ * This is the whole of the judgment, and it took two review passes to get right. `git` says
+ * the file conflicts; it cannot say whether the conflict is the generated list disagreeing
+ * with itself, which is expected and meaningless, or two people writing different sentences
+ * in "Decisions made during the build", which is neither. Comparing the two sides refuses a
+ * branch that added a paragraph main never touched (pass 1); comparing all three for equality
+ * refuses a branch that wrote in one place while main wrote in another (pass 2), which is a
+ * clean merge by any reading and is what the build log's written passages actually do.
+ *
+ * So the equalities answer only what they can answer without merging, and everything else is
+ * handed to `git merge-file`, which is the thing that knows. The generated bodies are blanked
+ * on all three sides first, so the list can never be what conflicts — the caller regenerates
+ * it afterwards from `docs/log/` and the result is the file as it should read. With no base —
+ * the file was added on both sides — there is nothing to merge against, and only two sides
+ * that already agree go through.
  */
-export function sideToKeep(ours, theirs, base = null) {
+export function mergeWritten(ours, theirs, base = null, merge = mergeFile) {
   let written;
   try {
     written = [ours, theirs, base].map((text) => (text === null ? null : withoutGenerated(text)));
@@ -77,16 +84,27 @@ export function sideToKeep(ours, theirs, base = null) {
     return null;
   }
   const [o, t, b] = written;
-  if (o === t) return "theirs";
+  if (o === t) return o;
   if (b === null) return null;
-  if (t === b) return "ours";
-  if (o === b) return "theirs";
-  return null;
+  if (t === b) return o;
+  if (o === b) return t;
+  return merge(o, b, t);
 }
 
-/** True when a generated file's conflict is one a run settles by itself. */
-export function confined(ours, theirs, base = null) {
-  return sideToKeep(ours, theirs, base) !== null;
+/**
+ * `git merge-file -p` over three texts: the merged text, or null when it reported a conflict.
+ * Three temporary files because the command takes paths; `-p` keeps the result off them.
+ */
+export function mergeFile(ours, base, theirs) {
+  const dir = mkdtempSync(join(tmpdir(), "aenima-premerge-"));
+  try {
+    const paths = ["ours", "base", "theirs"].map((name) => join(dir, name));
+    for (const [i, text] of [ours, base, theirs].entries()) writeFileSync(paths[i], text);
+    const result = spawnSync("git", ["merge-file", "-p", ...paths], { encoding: "utf8" });
+    return result.status === 0 ? String(result.stdout ?? "") : null;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 /** Rewrite `dir`'s build log from `dir`'s own log entries and document headers. */
@@ -181,19 +199,16 @@ export function premerge({
   for (const file of files) {
     const staged = (stage) => {
       const shown = g(["show", `:${stage}:${file}`]);
-      return shown.status === 0 ? out(shown) : null;
+      return shown.status === 0 ? String(shown.stdout ?? "") : null;
     };
-    const side = sideToKeep(staged(2), staged(3), staged(1));
-    if (side === null) {
+    const written = mergeWritten(staged(2), staged(3), staged(1));
+    if (written === null) {
       return abort(
-        `${file} conflicts outside its generated sections, where both sides wrote different words — that is a disagreement to settle, not a list to rebuild`,
+        `${file} conflicts outside its generated sections, where both sides wrote over the same words — that is a disagreement to settle, not a list to rebuild`,
       );
     }
-    // The side that wrote, then the list rebuilt over the entries the merge just brought in.
-    const taken = g(["checkout", `--${side}`, "--", file]);
-    if (taken.status !== 0) {
-      return abort(`the ${side} copy of ${file} could not be taken: ${said(taken)}`);
-    }
+    // The written passages as both sides left them; the blanked lists are filled in below.
+    writeFileSync(join(cwd, file), written);
   }
 
   try {

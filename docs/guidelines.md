@@ -438,8 +438,10 @@ has no effort control, and a repository setting would reach every session opened
                 anything is read or claimed · read every task's thread over the API in one command (threads.mjs)
                 and give each reply newer than the pipeline's last comment one assessment
                 (§4): a change at Review → addendum, Ready · merge at Review → claim, check
-                the branch out here (branch.mjs), take main into it (premerge.mjs), gate,
-                push, gh pr merge --merge, one comment, release · apply on a migration question → claim,
+                the branch out here (branch.mjs), take main into it (premerge.mjs) — and where
+                that moved the branch, gate the result and push it — then gh pr merge --merge,
+                one comment, release; a conflict it will not settle is refused by name and the
+                task stays at Review · apply on a migration question → claim,
                 apply.mjs --ref origin/t<id> before the branch is checked out — from
                 any checkout — then branch, carry on · ready at Backlog → Ready,
                 one comment · new work → one
