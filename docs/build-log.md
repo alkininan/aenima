@@ -101,6 +101,7 @@ One file per ticket under `docs/log/`, oldest first. This list is written by `no
 - [T0.40 — Tokens and fonts to v2.21](log/T0.40.md) · 2026-09-22
 - [T0.28 — Number task IDs across the phase](log/T0.28.md) · 2026-09-22
 - [T0.29 — Design spec v2.22](log/T0.29.md) · 2026-09-22
+- [T0.31 — Read bundled shell -c flags](log/T0.31.md) · 2026-09-23
 
 ## Decisions made during the build
 
