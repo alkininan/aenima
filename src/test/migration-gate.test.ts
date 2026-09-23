@@ -125,12 +125,17 @@ describe("the database tests that guard a migration", () => {
     for (const file of FILES) {
       const source = readFileSync(file, "utf8");
       expect(source, file).toContain("migrationGate(");
-      // The migration each file names to the gate is the one its own banner would name, so
-      // the check follows the file rather than a literal that has to be kept in step.
-      const named = source.match(/file:\s*"([^"]+)"/)?.[1];
-      expect(named, file).toBeDefined();
-      const own = stderrWrites(source).filter((call) => call.includes(named!));
-      expect(own, file).toEqual([]);
+      // Every migration the file names to the gate, not only the first. A file waits on as
+      // many migrations as reach its schema — refinement.db.test.ts waits on two since 0017
+      // — and reading one of them covered whichever gate happened to be written first and
+      // said nothing at all about the rest. The check still follows the file rather than a
+      // literal that has to be kept in step.
+      const named = [...source.matchAll(/file:\s*"([^"]+)"/g)].map((match) => match[1]!);
+      expect(named, file).not.toEqual([]);
+      for (const migration of named) {
+        const own = stderrWrites(source).filter((call) => call.includes(migration));
+        expect(own, `${file} — ${migration}`).toEqual([]);
+      }
     }
   });
 });
