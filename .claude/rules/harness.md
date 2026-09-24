@@ -14,3 +14,4 @@ protocol is `docs/guidelines.md`; this is what was learned writing the code unde
 - A corpus measurement chooses a script's scope and never establishes its safety: a count says what the documents that exist contain, not what the next one will. — "Where a rule's correctness rests on a measurement, write down what the measurement cannot see."
 - A script that reads a document finds the facts; what a fact *means* stays with the reader that has the context to tell two causes apart. — `docs/log/T0.34.md`
 - A name out of a document reaches a child process as an argument in an array and never as a shell line. — `docs/log/T0.34.md`
+- A probe that got no answer has learned nothing about what it probes: silence is its own outcome, never read as a failure, and it records nothing so the question is asked again. — `docs/log/T0.39.md`

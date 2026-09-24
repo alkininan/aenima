@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { assess, CHECKS, describeFailed, health, probe } from "./health.mjs";
 
+const root = join(import.meta.dirname, "..", "..");
+
 // T0.16 TC5 → AC5. After a merge lands, the next run asks the deployed site two questions
 // from outside — /sign-in answers 200, /app answers 307 — once per commit of main. A
 // failure is what the revert is for.
@@ -14,21 +16,35 @@ describe("assess", () => {
     { path: "/app", expected: 307, status: app },
   ];
 
-  it("is ok when every check answered what it should", () => {
+  // T0.39 TC1 → AC1: the third outcome sits beside this one.
+  it("is up when every check answered what it should", () => {
     const result = assess({ commit: "abc", checked: "old", results: results(200, 307) });
-    expect(result).toMatchObject({ changed: true, ok: true, failed: [] });
+    expect(result).toMatchObject({ changed: true, outcome: "up", failed: [], unanswered: [] });
   });
 
-  it("fails on a wrong status, and on no answer at all", () => {
-    expect(assess({ commit: "abc", checked: "old", results: results(500, 307) }).ok).toBe(false);
+  // T0.39 TC2 → AC2. A wrong status is down, and down is what reverts.
+  it("is down on a wrong status, whether or not another check was silent", () => {
+    const wrong = assess({ commit: "abc", checked: "old", results: results(500, 307) });
+    expect(wrong).toMatchObject({ outcome: "down" });
+    expect(wrong.failed.map((f) => f.path)).toEqual(["/sign-in"]);
+    const both = assess({ commit: "abc", checked: "old", results: results(500, null) });
+    expect(both).toMatchObject({ outcome: "down" });
+    expect(both.failed.map((f) => f.path)).toEqual(["/sign-in"]);
+    expect(both.unanswered.map((f) => f.path)).toEqual(["/app"]);
+  });
+
+  // T0.39 TC1 → AC1. Silence is not a wrong answer: a merge cannot break a name lookup.
+  it("is unknown, never down, when a check never answered and none answered wrongly", () => {
     const silent = assess({ commit: "abc", checked: "old", results: results(200, null) });
-    expect(silent.ok).toBe(false);
-    expect(silent.failed).toHaveLength(1);
+    expect(silent).toMatchObject({ changed: true, outcome: "unknown", failed: [] });
+    expect(silent.unanswered.map((f) => f.path)).toEqual(["/app"]);
+    const mute = assess({ commit: "abc", checked: "old", results: results(null, null) });
+    expect(mute).toMatchObject({ outcome: "unknown", failed: [] });
   });
 
   it("checks nothing when main is the commit last checked, and says so", () => {
     const result = assess({ commit: "abc", checked: "abc", results: [] });
-    expect(result).toMatchObject({ changed: false, ok: null });
+    expect(result).toMatchObject({ changed: false, outcome: null });
   });
 
   it("checks nothing when main cannot be resolved", () => {
@@ -99,21 +115,47 @@ describe("health", () => {
     const record = join(dir, "checked");
     const fetch = async (url) => ({ status: url.endsWith("/app") ? 307 : 200 });
     const first = await health({ deps: { run: runner("c1"), recordPath: record, fetch } });
-    expect(first).toMatchObject({ commit: "c1", changed: true, ok: true });
+    expect(first).toMatchObject({ commit: "c1", changed: true, outcome: "up" });
     expect(readFileSync(record, "utf8").trim()).toBe("c1");
     const second = await health({ deps: { run: runner("c1"), recordPath: record, fetch } });
-    expect(second).toMatchObject({ commit: "c1", checked: "c1", changed: false, ok: null });
+    expect(second).toMatchObject({ commit: "c1", checked: "c1", changed: false, outcome: null });
   });
 
+  // T0.39 TC2 → AC2
   it("records a failed commit too, so one outage reverts one merge and not every merge after", async () => {
     dir = mkdtempSync(join(tmpdir(), "aenima-health-"));
     const record = join(dir, "checked");
     const result = await health({ deps: { run: runner("c2"), recordPath: record, fetch: green } });
-    expect(result.ok).toBe(false);
+    expect(result).toMatchObject({ outcome: "down" });
     expect(result.failed.map((f) => f.path)).toEqual(["/app"]);
+    expect(result.failedText).toBe("/app answered 200 rather than 307");
     expect(readFileSync(record, "utf8").trim()).toBe("c2");
+    const again = await health({ deps: { run: runner("c2"), recordPath: record, fetch: green } });
+    expect(again).toMatchObject({ changed: false, outcome: null });
   });
 
+  // T0.39 TC1 → AC1, TC3 → AC3. The 2026-09-24 case: the machine could not look the site up.
+  it("reads a site that never answered as unknown, records nothing, and asks again next run", async () => {
+    dir = mkdtempSync(join(tmpdir(), "aenima-health-"));
+    const record = join(dir, "checked");
+    let asked = 0;
+    const silent = async () => {
+      asked += 1;
+      throw new Error("getaddrinfo ENOTFOUND aeni.ma");
+    };
+    const first = await health({ deps: { run: runner("c5"), recordPath: record, fetch: silent } });
+    expect(first).toMatchObject({ commit: "c5", changed: true, outcome: "unknown" });
+    expect(first.failed).toEqual([]);
+    expect(first.why).toContain("could not be reached from this machine");
+    expect(existsSync(record)).toBe(false);
+    const fetch = async (url) => ({ status: url.endsWith("/app") ? 307 : 200 });
+    const second = await health({ deps: { run: runner("c5"), recordPath: record, fetch } });
+    expect(second).toMatchObject({ commit: "c5", changed: true, outcome: "up" });
+    expect(readFileSync(record, "utf8").trim()).toBe("c5");
+    expect(asked).toBe(4);
+  });
+
+  // T0.39 TC1 → AC1: a wait asked nothing, so it has no outcome.
   it("waits, asking and recording nothing, while the commit is younger than the deploy window", async () => {
     dir = mkdtempSync(join(tmpdir(), "aenima-health-"));
     const record = join(dir, "checked");
@@ -123,7 +165,7 @@ describe("health", () => {
     const result = await health({
       deps: { run: runner("c4", 1_700_000_000), recordPath: record, fetch, now },
     });
-    expect(result).toMatchObject({ commit: "c4", changed: true, ok: null, waiting: true });
+    expect(result).toMatchObject({ commit: "c4", changed: true, outcome: null, waiting: true });
     expect(result.why).toContain("60 s ago");
     expect(asked).toEqual([]);
     expect(existsSync(record)).toBe(false);
@@ -150,5 +192,28 @@ describe("health", () => {
     };
     await health({ deps: { run, recordPath: join(dir, "checked"), fetch: green } });
     expect(calls.slice(0, 2)).toEqual(["fetch", "rev-parse"]);
+  });
+});
+
+// T0.39 TC4 → AC4. The rule is written where a run reads it, not only in the script.
+describe("the deploy check's three outcomes, as the skill and the guidelines state them", () => {
+  const guidelines = readFileSync(join(root, "docs/guidelines.md"), "utf8");
+  const skill = readFileSync(join(root, ".claude/skills/ticket/SKILL.md"), "utf8");
+  const skillStep = skill.match(/^\*\*e\. The deploy\.\*\*[\s\S]*?(?=^\*\*f\. )/m)?.[0] ?? "";
+  const section =
+    guidelines.match(/^\*\*The deploy check\.\*\*[\s\S]*?(?=^\*\*The marker\*\*)/m)?.[0] ?? "";
+
+  it("the skill's step e reverts on down alone and asks again on unknown", () => {
+    expect(skillStep).toContain("`outcome: unknown`");
+    expect(skillStep).toContain("`outcome: down`");
+    expect(skillStep).toMatch(/unknown never\s+reverts/);
+  });
+
+  it("the guidelines' deploy check names up, down and unknown, and only down reverts", () => {
+    expect(section).toContain("**up**");
+    expect(section).toContain("**down**");
+    expect(section).toContain("**unknown**");
+    expect(section).toContain("Only down reverts");
+    expect(section).toContain("asks again");
   });
 });

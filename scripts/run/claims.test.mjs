@@ -362,14 +362,17 @@ describe("the protocol says when the names are checked and where a rule goes", (
   });
 
   // TC7 → AC7
-  it("the guidelines header carries one new version line naming §5 and §6", () => {
+  it("the guidelines header carries one version line naming §5 and §6", () => {
     const header = doc("docs/guidelines.md").split("-->")[0];
     // The entry separator is a version *and* its separator: prose naming an older version
     // is part of the entry it is in, and splitting on the bare number cuts the entry short.
-    const newest = header.split(/^\s{5}v\d+\.\d+ · /m)[0];
-    expect(newest).toContain("(T0.34)");
-    expect(newest).toContain("§5 step 2");
-    expect(newest).toContain("step 8");
-    expect(newest).toContain("§6");
+    // The entry is found by its ticket, not taken as the newest: a later ticket's version
+    // line goes above it (T0.39).
+    const entries = header.split(/^\s{5}(?=v\d+\.\d+ · )/m);
+    const entry = entries.find((text) => text.includes("(T0.34)")) ?? "";
+    expect(entry).toContain("(T0.34)");
+    expect(entry).toContain("§5 step 2");
+    expect(entry).toContain("step 8");
+    expect(entry).toContain("§6");
   });
 });
