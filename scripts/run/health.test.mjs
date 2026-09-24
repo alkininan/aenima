@@ -155,6 +155,7 @@ describe("health", () => {
     expect(asked).toBe(4);
   });
 
+  // T0.39 TC1 → AC1: a wait asked nothing, so it has no outcome.
   it("waits, asking and recording nothing, while the commit is younger than the deploy window", async () => {
     dir = mkdtempSync(join(tmpdir(), "aenima-health-"));
     const record = join(dir, "checked");

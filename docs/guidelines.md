@@ -472,7 +472,8 @@ has no effort control, and a repository setting would reach every session opened
                 (revert.mjs, then the one push to main the guard lets through, HEAD:main),
                 files one Fix task at Backlog, puts the reverted ticket back at Backlog, one
                 comment; no answer (unknown) reverts nothing, files nothing, records nothing
-                and is asked again next run · then refresh the Documents and Guidelines mirrors behind main
+                and is asked again next run
+                · then refresh the Documents and Guidelines mirrors behind main
                 (mirror.mjs plans; the skill writes through the connector): a stopped refresh
                 first, each page header-last under a refresh-in-progress sentinel,
                 allow_async false on every write, a page whose header commit equals its
