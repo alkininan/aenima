@@ -1,6 +1,6 @@
 import { act, render, screen } from "@testing-library/react";
 import { useRef } from "react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { useExitTransition } from "./useExit";
 
@@ -83,5 +83,34 @@ describe("useExitTransition", () => {
 
     rerender(<Harness open />);
     expect(surface()?.hasAttribute("data-leaving")).toBe(false);
+  });
+});
+
+/**
+ * §6: "The timers that live in script rather than CSS … live in one constants module …
+ * no component carries a number of its own." So the floor under an exit that was declared
+ * and never fired — an interrupted frame, a surface scrolled out of view — is the exit's
+ * own measured duration and one frame past it, never a literal the hook carries.
+ */
+describe("useExitTransition when no transitionend arrives", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("goes once its own declared exit has run, a frame later", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "requestAnimationFrame"] });
+    const { rerender } = render(<Harness open />);
+    rerender(<Harness open={false} />);
+    expect(surface()).not.toBeNull();
+
+    // 200ms is the Harness's declared duration: still leaving at it, gone a frame after.
+    act(() => {
+      vi.advanceTimersByTime(199);
+    });
+    expect(surface()).not.toBeNull();
+    act(() => {
+      vi.advanceTimersByTime(1 + 16);
+    });
+    expect(surface()).toBeNull();
   });
 });

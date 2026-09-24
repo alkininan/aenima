@@ -56,8 +56,8 @@ type SelectProps = {
  * one thing v2.21 changed here and it is not cosmetic: §6 places focus "inside the update
  * callback, straight after `showPopover()` … on the panel's first item, which in a select
  * is the selected option", because the trigger is hidden from that moment and a keystroke
- * in the gap would go nowhere. `aria-activedescendant` on the combobox stays, so the
- * relationship a screen reader reads is unchanged; what moved is where the keystrokes go.
+ * in the gap would land on a field nobody can see. The option itself holds focus, so no
+ * `aria-activedescendant` is needed to say which one the cursor is on.
  *
  * The keyboard contract is §8.5's, which is the native `<select>`'s so nobody relearns it:
  * arrows move the active option, Enter selects, Esc closes without change, Tab selects the

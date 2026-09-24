@@ -74,7 +74,9 @@ type MenuProps = {
  *
  * Unlike the select, a menu moves real focus onto its rows: there is no field
  * holding the user's place, and §11 wants the arrow keys to walk something that
- * can be seen to have focus. Escape and Tab both hand focus back to the trigger.
+ * can be seen to have focus. Escape hands focus back to the trigger. Tab hands it back
+ * too, synchronously and without preventing the key, so the browser's own Tab carries
+ * on from the trigger to the stop after it, or before it on Shift+Tab (C-17).
  */
 export function Menu({ trigger, entries, label, className }: MenuProps) {
   const baseId = useId();

@@ -287,8 +287,10 @@ export function Panel({
     >
       {/* §6: "The container morphs; the contents fade." The name goes on this element,
           never on the panel — naming the contents as one with the material warps every
-          glyph between a 34 pill and a 240×200 panel. */}
-      <div ref={contentRef} className="contents">
+          glyph between a 34 pill and a 240×200 panel. It has a box of its own: an
+          element that generates none (`display: contents`) is skipped by capture, and
+          the contents would pop in at the end rather than fade. */}
+      <div ref={contentRef} className="block min-w-0">
         {children}
       </div>
     </div>

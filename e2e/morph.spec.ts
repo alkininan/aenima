@@ -131,6 +131,42 @@ test.describe("C-14 · the morph", () => {
     expect(sampled).toBeLessThan(Math.max(trigger!.width, settled.width) + 1);
   });
 
+  /**
+   * §6: "The container morphs; the contents fade … the contents carry a second name and fade
+   * in over the last `--t-fast` of the open." A name on an element that generates no box —
+   * `display: contents` — is skipped by capture, so no `morph-content` pseudo-element exists
+   * and, `::view-transition-new(morph)` being `display: none`, the contents pop in at
+   * `finished` instead. Sampled mid-open, the fade has to be one of the running animations.
+   */
+  test("fades the contents in under their own name", async ({ page }) => {
+    await page.goto(SINK);
+    // Sampled every frame from before the press rather than once at a fixed delay: when
+    // the transition starts depends on how busy the machine is, and a single sample can
+    // land before it or after it.
+    await page.evaluate(() => {
+      const seen = new Set<string>();
+      (window as unknown as { __fades: Set<string> }).__fades = seen;
+      const sample = () => {
+        for (const animation of document.getAnimations()) {
+          const effect = animation.effect as KeyframeEffect | null;
+          if (effect?.pseudoElement === "::view-transition-new(morph-content)") {
+            seen.add((animation as CSSAnimation).animationName);
+          }
+        }
+        requestAnimationFrame(sample);
+      };
+      requestAnimationFrame(sample);
+    });
+    await menuTrigger(page).click();
+    await expect(menuPanel(page)).toBeVisible();
+    await page.waitForTimeout(500);
+
+    const fades = await page.evaluate(() => [
+      ...(window as unknown as { __fades: Set<string> }).__fades,
+    ]);
+    expect(fades).toContain("aenima-fade-in");
+  });
+
   test("opens in place, at the same rect, under reduced motion", async ({ page }) => {
     const morphs = await countTransitions(page);
 
@@ -277,6 +313,52 @@ test.describe("C-17 · where focus is", () => {
       return combobox?.parentElement?.parentElement?.contains(active) ?? false;
     });
     expect(insideTheControl).toBe(false);
+  });
+
+  /**
+   * C-17: "after Tab it is on the stop after the trigger … after Shift+Tab the one before".
+   * The expected stop is learned from the page itself with the panel closed — the trigger
+   * focused, one Tab or Shift+Tab, the element marked — so the assertion is about the
+   * panel leaving the order alone rather than about which control happens to sit next.
+   */
+  async function markStop(page: Page, trigger: Locator, key: "Tab" | "Shift+Tab") {
+    await trigger.focus();
+    await page.keyboard.press(key);
+    await page.evaluate(() => document.activeElement?.setAttribute("data-stop", ""));
+    return page.locator("[data-stop]");
+  }
+
+  test("carries focus to the stop before the trigger on Shift+Tab, committing first", async ({
+    page,
+  }) => {
+    await page.goto(SINK);
+    const field = page.getByLabel("empty — label at rest");
+    const before = await markStop(page, field, "Shift+Tab");
+
+    await field.click();
+    await expect(page.getByRole("listbox")).toBeVisible();
+    await expect(page.getByRole("option").first()).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+
+    await expect(page.getByRole("listbox")).toBeHidden();
+    await expect(field).not.toHaveValue("");
+    await expect(before).toBeFocused();
+  });
+
+  test("carries focus out of a menu to the stops either side of its trigger", async ({ page }) => {
+    for (const key of ["Tab", "Shift+Tab"] as const) {
+      await page.goto(SINK);
+      const stop = await markStop(page, menuTrigger(page), key);
+
+      await openMenu(page);
+      // Focus reaches the panel inside the morph's update, a frame after the panel is
+      // visible; a key pressed before that leaves from the trigger, not from the menu.
+      await expect(page.getByRole("menuitem").first()).toBeFocused();
+      await page.keyboard.press(key);
+
+      await expect(menuPanel(page)).toBeHidden();
+      await expect(stop).toBeFocused();
+    }
   });
 });
 

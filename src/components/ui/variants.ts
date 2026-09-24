@@ -504,8 +504,6 @@ export function panelRowClasses({
   );
 }
 
-export type MenuAlign = "start" | "end";
-
 /**
  * §8.18: a menu is "min-width 200, max-width 280". §8 gives it no fixed width,
  * so the panel takes its content's between those two. Which edge it grows from
@@ -639,16 +637,22 @@ export type ToastTone = "success" | "warning";
 export const TOAST_TONES: readonly ToastTone[] = ["success", "warning"];
 
 // §8: bottom-center, z 500 (§4). The 24px stand-off from the viewport edge is
-// §4's page gutter.
+// §4's page gutter. The region is shown as a `popover="manual"`, so the UA's
+// `[popover]:popover-open` rule — `inset: 0`, `fit-content` on both axes, a `Canvas`
+// fill, `overflow: auto` — is undone here: without `top-auto` the over-constrained
+// `bottom` is the inset the engine drops, and the toast sits at the top-left.
+// Below 768 §8.20 narrows the gutters to 16 and stands the toast 16 above the safe area.
 export const TOAST_VIEWPORT_CLASSES =
-  "pointer-events-none fixed inset-x-0 bottom-[24px] z-[var(--z-toast)] flex flex-col " +
-  "items-center gap-[8px] px-[24px]";
+  "pointer-events-none fixed inset-x-0 top-auto h-auto w-auto " +
+  "overflow-visible bg-transparent z-[var(--z-toast)] flex flex-col " +
+  "items-center gap-[8px] px-[16px] bottom-[calc(16px+env(safe-area-inset-bottom))] " +
+  "md:px-[24px] md:bottom-[24px]";
 
 // §8: glass recipe, --r-panel, ui-body. §5 puts a toast on the float shadow.
-// The 400 max width is §8's confirm-modal measure — the spec's only figure for
-// a narrow overlay — and 20px padding is the ticket-confirmed overlay padding.
+// §8.20's max width is 400, from 768 up; below it the toast spans the width less
+// the viewport's gutters. 20px padding is the ticket-confirmed overlay padding.
 const TOAST_BASE =
-  "glass glass-blur overlay-rise pointer-events-auto flex w-full max-w-[400px] " +
+  "glass glass-blur overlay-rise pointer-events-auto flex w-full md:max-w-[400px] " +
   "items-center gap-[8px] " +
   "rounded-panel p-[20px] type-ui-body text-n-primary " +
   "[--glass-elevation:var(--shadow-float)]";

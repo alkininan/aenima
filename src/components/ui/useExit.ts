@@ -23,14 +23,6 @@ import { useLayoutEffect, useState, type RefObject } from "react";
  */
 
 /**
- * The longest exit §6 has is `--t-med`, so this is comfortably past every real one. It is
- * a floor under a transition that was declared and then did not fire — an interrupted
- * frame, a surface scrolled out of view — not a timing anyone sees. A surface with no exit
- * declared at all never reaches it: `exitDuration` answers 0 and it goes at once.
- */
-const EXIT_FALLBACK_MS = 500;
-
-/**
  * How long this element's exit actually takes, in ms — the longest of its transitions and
  * animations, delay included, and 0 where there are none.
  *
@@ -44,10 +36,15 @@ function exitDuration(node: HTMLElement): number {
   const style = typeof getComputedStyle === "function" ? getComputedStyle(node) : null;
   if (!style) return 0;
 
+  // A computed duration is in seconds in every engine, but a DOM emulator hands back what
+  // was authored, so the unit is read rather than assumed.
   const seconds = (value: string) =>
     value
       .split(",")
-      .map((part) => Number.parseFloat(part) || 0)
+      .map((part) => {
+        const amount = Number.parseFloat(part) || 0;
+        return part.trim().endsWith("ms") ? amount / 1000 : amount;
+      })
       .reduce((longest, one) => Math.max(longest, one), 0);
 
   const transition = seconds(style.transitionDuration) + seconds(style.transitionDelay);
@@ -102,7 +99,8 @@ export function useExitTransition({ open, ref }: ExitTransitionOptions): ExitTra
 
     // Nothing is running, so there is nothing to wait for. A layout effect, so this lands
     // before the browser paints the frame the surface was supposed to have left on.
-    if (!node || exitDuration(node) === 0) {
+    const duration = node ? exitDuration(node) : 0;
+    if (!node || duration === 0) {
       finish();
       return;
     }
@@ -111,10 +109,18 @@ export function useExitTransition({ open, ref }: ExitTransitionOptions): ExitTra
     // animation leaves on one too, and neither is worth a second hook.
     node.addEventListener("transitionend", finish);
     node.addEventListener("animationend", finish);
-    const fallback = setTimeout(finish, EXIT_FALLBACK_MS);
+    // The floor under an exit that was declared and then did not fire — an interrupted
+    // frame, a surface scrolled out of view: the exit's own measured duration and one
+    // frame past it. Measured, never a literal, since §6 keeps script timers out of
+    // components (C-05).
+    let frame = 0;
+    const fallback = setTimeout(() => {
+      frame = requestAnimationFrame(finish);
+    }, duration);
 
     return () => {
       clearTimeout(fallback);
+      cancelAnimationFrame(frame);
       node.removeEventListener("transitionend", finish);
       node.removeEventListener("animationend", finish);
     };

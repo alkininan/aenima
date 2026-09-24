@@ -219,6 +219,54 @@ test.describe("C-11 · no square corner on a free edge, and nested radii", () =>
 });
 
 test.describe("C-20 · toasts", () => {
+  /**
+   * §8.20: "Bottom-centre, 24 above the viewport's bottom edge". The region is shown as a
+   * `popover="manual"`, so the UA's `[popover]:popover-open` rule — `inset: 0`,
+   * `fit-content` on both axes, a `Canvas` background — applies unless the region undoes
+   * it; with `top: 0` left standing the over-constrained `bottom` is the inset dropped and
+   * the toast sits at the top-left on a solid strip.
+   */
+  test("sits bottom-centre, 24 above the viewport's edge, on no fill of its own", async ({
+    page,
+  }) => {
+    await page.goto(SINK);
+    await page.getByRole("button", { name: "undo toast" }).click();
+
+    const toast = page.getByRole("status");
+    await expect(toast).toBeVisible();
+    // Past the entrance: §6's rise moves the toast while it runs.
+    await toast.evaluate((node) =>
+      Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished)),
+    );
+    const viewport = page.viewportSize()!;
+    const rect = await toast.evaluate((node) => node.getBoundingClientRect().toJSON());
+    expect(Math.round(rect.bottom)).toBe(viewport.height - 24);
+    expect(Math.round(rect.left + rect.width / 2)).toBe(Math.round(viewport.width / 2));
+
+    const fill = await page
+      .getByRole("region", { name: "Notifications" })
+      .evaluate((node) => getComputedStyle(node).backgroundColor);
+    expect(fill).toBe("rgba(0, 0, 0, 0)");
+  });
+
+  /** §8.20: "Below 768 a toast spans the width minus 16 gutters and sits 16 above
+   * `env(safe-area-inset-bottom)`" — which is 0 in a desktop engine, so 16 above the edge. */
+  test("spans the width less 16 gutters and sits 16 above the edge below 768", async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto(SINK);
+    await page.getByRole("button", { name: "undo toast" }).click();
+
+    const toast = page.getByRole("status");
+    await expect(toast).toBeVisible();
+    await toast.evaluate((node) =>
+      Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished)),
+    );
+    const rect = await toast.evaluate((node) => node.getBoundingClientRect().toJSON());
+    expect(Math.round(rect.left)).toBe(16);
+    expect(Math.round(rect.right)).toBe(375 - 16);
+    expect(Math.round(rect.bottom)).toBe(812 - 16);
+  });
+
   test("replaces the one showing with the newest, undo or not", async ({ page }) => {
     await page.goto(SINK);
 
@@ -267,7 +315,10 @@ test.describe("C-20 · toasts", () => {
     await expect(toast).toBeVisible();
     const inside = await toast.evaluate((node) => node.closest('[role="dialog"]') !== null);
     expect(inside).toBe(true);
-    await expect(page.getByRole("status").getByRole("button", { name: "Undo" })).toBeEnabled();
+    // C-20 says clickable, so it is clicked: the undo runs and the toast goes.
+    await page.getByRole("status").getByRole("button", { name: "Undo" }).click();
+    await expect(page.getByRole("status")).toBeHidden();
+    await expect(page.getByRole("dialog")).toBeVisible();
   });
 
   test("carries a Neutral sm action", async ({ page }) => {

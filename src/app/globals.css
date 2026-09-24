@@ -582,8 +582,8 @@
    * forces "the solid `--glass-fallback` recipe" so the glass path a build
    * normally reaches only on an engine without `backdrop-filter` runs in the
    * engine the browser check drives. The other two switches it forces — the JS
-   * positioner and the bare open — are read in script (`morphPath`,
-   * `usePanelPlacement`); this is the half that is a paint. */
+   * positioner and the bare open — are read in script (`morphPath`, and
+   * `Panel`'s `place()`); this is the half that is a paint. */
   [data-force-fallback] .glass {
     background-color: var(--glass-fallback);
   }

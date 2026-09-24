@@ -13,7 +13,6 @@ import {
 } from "react";
 
 import { cx } from "@/lib/cx";
-import { PANEL_VIEWPORT_GAP } from "@/lib/panel-placement";
 
 import { useEscapeLayer } from "./useLayer";
 import {
@@ -90,8 +89,8 @@ export function Tooltip({ content, side, children, className }: TooltipProps) {
 
   /**
    * §8.14's flip. Measured against the bubble's rendered height rather than a guess, and
-   * only where the caller has not pinned a side. `PANEL_VIEWPORT_GAP` is the same 8 every
-   * floating layer in the product stands off by.
+   * only where the caller has not pinned a side. The bridge's height already carries the 8
+   * the bubble stands off by — it is the bridge's own padding — so nothing is added to it.
    */
   useLayoutEffect(() => {
     if (!open || side) return;
@@ -100,8 +99,7 @@ export function Tooltip({ content, side, children, className }: TooltipProps) {
     if (!host || !bridge) return;
 
     const trigger = host.getBoundingClientRect();
-    const needed = bridge.offsetHeight + PANEL_VIEWPORT_GAP;
-    setMeasured(window.innerHeight - trigger.bottom < needed ? "top" : "bottom");
+    setMeasured(window.innerHeight - trigger.bottom < bridge.offsetHeight ? "top" : "bottom");
   }, [open, side]);
 
   return (
