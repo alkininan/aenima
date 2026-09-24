@@ -8,8 +8,8 @@
 
 Written from the repo by `node scripts/run/log-index.mjs`, like the Tickets done list below, and its test refuses a stale copy: edit the documents and the log entries, never this block. No phase and no next ticket here — the board owns the queue and the roadmap owns the phases, and a stamp a human maintains is a stamp that is eventually wrong.
 
-**Specs:** product-spec v1.9 · design-spec v2.22 · guidelines v1.28
-**Newest entry:** [T0.37 — Morph menus and selects](log/T0.37.md) · 2026-09-24
+**Specs:** product-spec v1.9 · design-spec v2.23 · guidelines v1.28
+**Newest entry:** [T0.41 — Design-spec §6: the morph's trigger hides by opacity](log/T0.41.md) · 2026-09-24
 **Repo:** github.com/alkininan/aenima
 **Deployed:** yes — **aeni.ma** on Vercel
 
@@ -95,6 +95,7 @@ One file per ticket under `docs/log/`, oldest first. This list is written by `no
 - [T0.36 — Regenerate the build log at merge](log/T0.36.md) · 2026-09-23
 - [T0.39 — Revert only on a wrong answer, never on silence](log/T0.39.md) · 2026-09-24
 - [T0.37 — Morph menus and selects](log/T0.37.md) · 2026-09-24
+- [T0.41 — Design-spec §6: the morph's trigger hides by opacity](log/T0.41.md) · 2026-09-24
 
 ## Decisions made during the build
 
