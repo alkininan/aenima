@@ -239,11 +239,17 @@ function ToastItem({
     };
   }, [resume]);
 
+  // One reversal, however it is asked for: a toast on its way out still takes a press for
+  // the length of its exit, so the undo goes quiet the moment it has run, and while the
+  // toast is leaving for any other reason.
   const action = toast.action;
+  const fired = useRef(false);
   const fire = useCallback(() => {
+    if (fired.current || leaving) return;
+    fired.current = true;
     action?.onAction();
     close();
-  }, [action, close]);
+  }, [action, close, leaving]);
 
   /**
    * §8.20: "While an undo shows, `Cmd/Ctrl+Z` triggers it when focus is not in a text
@@ -251,7 +257,7 @@ function ToastItem({
    * go quiet in a text field, where the platform's own undo is what the keystroke means.
    */
   useEffect(() => {
-    if (!action) return;
+    if (!action || leaving) return;
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key.toLowerCase() !== "z" || event.shiftKey || event.altKey) return;
@@ -263,7 +269,7 @@ function ToastItem({
 
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [action, fire]);
+  }, [action, fire, leaving]);
 
   return (
     <div

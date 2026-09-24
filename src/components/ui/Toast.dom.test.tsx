@@ -174,3 +174,37 @@ describe("Toast", () => {
     expect(screen.getByRole("status").outerHTML).not.toContain("danger");
   });
 });
+
+/**
+ * §8.20's undo is one reversal. A toast leaving over its `--t-fast` exit is still on the
+ * page and its button still takes a press, so the undo has to go quiet the moment it has
+ * run — or a second press, or a `Cmd/Ctrl+Z` in the exit's window, reverses the move twice.
+ * The exit is declared the way a browser reports it, since the DOM emulator has no
+ * stylesheet and would otherwise leave on the frame it was dismissed.
+ */
+describe("Toast undo while the toast is leaving", () => {
+  it("runs once, however it is pressed again during the exit", () => {
+    const real = window.getComputedStyle.bind(window);
+    const style = vi.spyOn(window, "getComputedStyle").mockImplementation((node, pseudo) => {
+      const computed = real(node, pseudo);
+      if (!(node instanceof HTMLElement) || node.getAttribute("role") !== "status") return computed;
+      return new Proxy(computed, {
+        get: (target, key) =>
+          key === "transitionDuration" ? "0.12s" : Reflect.get(target, key, target),
+      });
+    });
+    try {
+      const onAction = vi.fn();
+      show({ message: "Parked", action: { label: "Undo", onAction } });
+
+      fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+      expect(screen.queryByRole("status")).not.toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+      fireEvent.keyDown(document, { key: "z", metaKey: true });
+      expect(onAction).toHaveBeenCalledOnce();
+    } finally {
+      style.mockRestore();
+    }
+  });
+});
