@@ -291,9 +291,8 @@ describe("otp geometry", () => {
    */
   it("steps down below 768 and back up above it", () => {
     const box = otpBoxClasses();
-    expect(has(box, "size-[44px]", "rounded-[22px]", "md:size-[52px]", "md:rounded-[27px]")).toBe(
-      true,
-    );
+    // §8.2: "both `--r-pill`, which clamps to half the box" — the token at both sizes.
+    expect(has(box, "size-[44px]", "md:size-[52px]", "rounded-pill")).toBe(true);
     expect(has(OTP_GROUP_CLASSES, "gap-[8px]", "md:gap-[16px]")).toBe(true);
   });
 

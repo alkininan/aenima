@@ -44,9 +44,9 @@ export function ItemRowMenu({ itemKey, label }: { itemKey: string; label: string
           size="sm"
           label={label}
           icon={<OverflowIcon />}
-          // The row is a link with a stretched hit area; the menu sits above it
-          // so its own clicks land here rather than navigating.
-          className="relative z-[1] shrink-0"
+          // The row is a link with a stretched hit area; the menu sits one above
+          // §4's content rung so its own clicks land here rather than navigating.
+          className="relative z-[calc(var(--z-content)+1)] shrink-0"
         />
       }
       entries={[
