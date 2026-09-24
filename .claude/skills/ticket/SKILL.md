@@ -204,8 +204,12 @@ live site from outside:
 
 `changed: false` → main is the commit last checked; go on. `waiting: true` → the commit is
 younger than the deploy window and the previous deployment would answer for it; say so in the
-report line and go on. `ok: true` → say so in the report line and go on. `ok: false` → the merge
-at the tip is reverted, no human needed:
+report line and go on. Otherwise `outcome` is one of three. `outcome: up` → say so in the report
+line and go on. `outcome: unknown` → a check never answered and none answered wrongly: the site
+could not be reached from this machine, which is no verdict on the merge, so unknown never
+reverts — the commit is left unrecorded and the next run asks again; quote its `why` in the report
+line and go on. `outcome: down` → a check answered with the wrong status, and the merge at the
+tip is reverted, no human needed:
 
     node scripts/run/revert.mjs
     git push origin HEAD:main

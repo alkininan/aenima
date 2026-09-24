@@ -1,4 +1,8 @@
-<!-- guidelines.md · v1.27 · in the repo · a ticket's names are checked and its rules are
+<!-- guidelines.md · v1.28 · in the repo · the deploy check reverts on a wrong answer and
+     never on silence (T0.39): §5's deploy check reads three outcomes, up, down and unknown,
+     and only down reverts; unknown leaves the commit unrecorded and the next run asks again.
+     Numbered past v1.27, main's newest, and past v1.25, which t0-26 is holding.
+     v1.27 · in the repo · a ticket's names are checked and its rules are
      filed (T0.34): §5 step 2 reads the paths and identifiers a ticket claims against
      origin/main (claims.mjs) and §4 decides what an absent one means, step 8 files a rule
      that binds one area as a line in .claude/rules/<area>.md and sends a rule for everywhere
@@ -464,8 +468,9 @@ has no effort control, and a repository setting would reach every session opened
                 hours, is stale: keep its branch as t<id>-stale-<HHMM>, post one comment,
                 re-claim it from origin/main and continue — no human needed · main moved
                 since the last deploy check → ask the live site from outside (health.mjs):
-                /sign-in 200, /app 307; a wrong answer reverts the merge at the tip
+                /sign-in 200, /app 307; a wrong answer (down) reverts the merge at the tip
                 (revert.mjs, then the one push to main the guard lets through, HEAD:main),
+                and no answer (unknown) reverts nothing and is asked again next run,
                 files one Fix task at Backlog, puts the reverted ticket back at Backlog, one
                 comment · then refresh the Documents and Guidelines mirrors behind main
                 (mirror.mjs plans; the skill writes through the connector): a stopped refresh
@@ -607,7 +612,14 @@ once per commit of main the next run asks the live site two questions from outsi
 The commit last asked about is recorded beside the run marker (`aenima-deploy-checked`), so a
 site down for a reason of its own reverts the merge at the tip once and not every merge after
 it; a commit younger than five minutes is not asked about yet — Vercel may still be building it
-and the previous deployment would answer for it — and the next run asks. A wrong answer reverts: `revert.mjs` detaches at `origin/main` and reverts its tip with
+and the previous deployment would answer for it — and the next run asks. The answer is one of
+three outcomes (T0.39): **up**, every check answered as expected; **down**, at least one check
+answered with the wrong status; **unknown**, a check never answered — a timeout, a name this
+machine could not look up — and none answered wrongly. Only down reverts. A merge cannot break a
+name lookup, so silence is no verdict on one: on 2026-09-24 the machine running the schedule could
+not resolve aeni.ma, the check read that as down, and only the run's own judgement kept it from
+reverting a healthy merge. Unknown leaves the commit unrecorded, so the next run asks again, and
+the report line says the site could not be reached from this machine. A wrong answer reverts: `revert.mjs` detaches at `origin/main` and reverts its tip with
 `git revert -m 1` — one commit that restores the tree main had before the merge, never a
 force-push — and the run pushes it as `git push origin HEAD:main`, the one push to main the guard
 lets through, having checked in code that HEAD is exactly that revert. Then one Fix task at
