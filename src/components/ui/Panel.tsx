@@ -169,13 +169,17 @@ export function Panel({
         panel.setAttribute("popover", "auto");
         if (!panel.matches(":popover-open")) panel.showPopover();
       }
-      // §6: "The trigger is `visibility: hidden` for the panel's lifetime, its box
-      // reserved" — which is also what keeps a click that light-dismisses the panel from
-      // landing on the trigger and reopening it on the way back up.
-      trigger.style.visibility = "hidden";
+      // §6 hides the trigger for the panel's lifetime, its box reserved — which is also
+      // what keeps a click that light-dismisses the panel from landing on the trigger and
+      // reopening it on the way back up. Hidden by opacity and pointer-events, not by
+      // `visibility` (T0.37's Decision, answered *default*): in Chromium an anchor hidden
+      // by `visibility` stops its anchor-positioned panel taking pointer events under the
+      // default `position-visibility`, which §6 forbids setting.
+      trigger.style.opacity = "0";
+      trigger.style.pointerEvents = "none";
       // §6: focus is placed here, "straight after `showPopover()`", never deferred to
-      // `finished` — the hidden trigger loses focus at the next rendering update and a
-      // keystroke in the gap would go nowhere (C-17).
+      // `finished` — an opacity-hidden trigger keeps focus, so a keystroke in the gap
+      // would land on a trigger nobody can see (C-17).
       focusRef.current?.()?.focus();
     };
 
@@ -196,11 +200,11 @@ export function Panel({
   /**
    * Closing: instant on every path (§6), and the trigger comes back.
    *
-   * A layout effect, not an effect: the trigger is `visibility: hidden` while the panel
-   * is open and a hidden element cannot take focus, so the caller's focus-return (§11,
-   * "on close, focus returns to the opener") has to run after this and before the paint.
-   * React runs a child's layout effects before its parent's, so a caller that returns
-   * focus from its own layout effect is ordered behind this one by construction.
+   * A layout effect, not an effect: the trigger is hidden while the panel is open, and the
+   * caller's focus-return (§11, "on close, focus returns to the opener") has to land on a
+   * trigger that is already back, before the paint. React runs a child's layout effects
+   * before its parent's, so a caller that returns focus from its own layout effect is
+   * ordered behind this one by construction.
    */
   useLayoutEffect(() => {
     if (open) return;
@@ -209,7 +213,8 @@ export function Panel({
     skipRunningMorph();
     if (panel && supportsPopover() && panel.matches(":popover-open")) panel.hidePopover();
     if (trigger) {
-      trigger.style.visibility = "";
+      trigger.style.removeProperty("opacity");
+      trigger.style.removeProperty("pointer-events");
       trigger.style.removeProperty("anchor-name");
     }
   }, [open, triggerRef]);

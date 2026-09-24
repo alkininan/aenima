@@ -14,7 +14,7 @@
  *
  * The measurement that is easy to get wrong: the downward room is measured from the
  * trigger's **top** edge, not its bottom. The panel grows *out of* the trigger and covers
- * it (§6: the trigger is `visibility: hidden` for the panel's lifetime), so the box the
+ * it (§6: the trigger is hidden for the panel's lifetime), so the box the
  * panel needs starts where the trigger starts. Measuring from the bottom would flip
  * panels upward that have room to open down.
  */

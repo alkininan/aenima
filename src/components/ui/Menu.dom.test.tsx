@@ -101,3 +101,22 @@ describe("Menu keyboard", () => {
     expect(screen.getAllByRole("separator")).toHaveLength(1);
   });
 });
+
+/** C-30's menu clause: "Menus are `menu` and `menuitem`" — the panel and every row. */
+describe("C-30 · menu roles", () => {
+  it("names the panel `menu` and every row `menuitem`, labelled by the menu's label", async () => {
+    const user = userEvent.setup();
+    const { trigger } = harness();
+    await user.click(trigger);
+
+    const menu = screen.getByRole("menu", { name: "Item actions" });
+    const rows = items();
+    expect(rows.map((row) => row.textContent)).toEqual([
+      "Open",
+      "Unavailable",
+      "Duplicate",
+      "Delete",
+    ]);
+    expect(rows.every((row) => menu.contains(row))).toBe(true);
+  });
+});

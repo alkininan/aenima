@@ -87,22 +87,22 @@ test.describe("C-10 · a panel row is its own hit area", () => {
    * directly.
    */
   /**
-   * **Blocked on an open question, and red rather than wrong.** On the anchor-positioned
-   * path a panel does not receive pointer events at all, because §6 hides the trigger
-   * with `visibility: hidden` and Chromium's default `position-visibility` then treats
-   * the anchored panel as hidden for hit-testing — while §6 also forbids authoring
-   * `position-visibility`. Three of §6's own sentences cannot all hold in the one engine
-   * that ships anchor positioning; which one yields is the spec's call, and the ticket
-   * stopped at Decision on it (`docs/reports/T0.37.md`, and the thread on T0.37).
-   *
-   * The JS-positioner path is unaffected and passes today, which is what `?fallback=1`
-   * below measures. These two are `fixme` rather than deleted so that the answer, when it
-   * lands, is checked by the assertion that found the problem.
+   * **The press the Decision was about.** On the anchor-positioned path the panel once took
+   * no pointer events at all: §6 hid the trigger with `visibility: hidden`, and Chromium's
+   * default `position-visibility` then treats the anchored panel as hidden for hit-testing,
+   * while §6 also forbids authoring `position-visibility`. T0.37 stopped at Decision on it
+   * and the answer was *default* — the trigger hides by `opacity: 0` and
+   * `pointer-events: none` instead, which keeps anchor positioning and the prohibition both.
+   * These two are the assertions that found the problem, and `?fallback=1` below keeps the
+   * positioner path under the same press.
    */
-  test.fixme("takes a press at a menu row's own top and bottom edges", async ({ page }) => {
+  test("takes a press at a menu row's own top and bottom edges", async ({ page }) => {
     for (const edge of ["top", "bottom"] as const) {
       await page.goto(SINK);
       await openMenu(page);
+      // Past the morph, as the option-row check below explains: a raw press while the
+      // view transition runs falls through `:root::view-transition` to the page.
+      await page.waitForTimeout(400);
 
       const row = page.getByRole("menuitem", { name: "Duplicate" });
       const rect = await row.evaluate((node) => node.getBoundingClientRect().toJSON());
@@ -129,7 +129,7 @@ test.describe("C-10 · a panel row is its own hit area", () => {
     }
   });
 
-  test.fixme("takes a press at an option row's own edges", async ({ page }) => {
+  test("takes a press at an option row's own edges", async ({ page }) => {
     for (const edge of ["top", "bottom"] as const) {
       await page.goto(SINK);
       const field = page.getByLabel("empty — label at rest");

@@ -43,11 +43,11 @@ describe("C-17 · the stop on either side of a trigger", () => {
   });
 
   it("finds the stop around a trigger that is not itself one", () => {
-    // §6 hides the trigger for the panel's lifetime, so by the time Tab is
-    // pressed the trigger may no longer be tabbable itself.
+    // §6 hides the trigger for the panel's lifetime, and the trigger may be a
+    // wrapper that is not a stop at all.
     const at = page(`
       <button id="before">before</button>
-      <span id="wrap" style="visibility:hidden"><button id="trigger">t</button></span>
+      <span id="wrap" style="opacity:0;pointer-events:none"><button id="trigger">t</button></span>
       <button id="after">after</button>
     `);
     expect(tabStopAround(at("wrap"), false)).toBe(at("after"));

@@ -9,7 +9,7 @@
  * It cannot be left to the platform. §6 puts the panel in the top layer and hides the
  * trigger for the panel's lifetime, so at the moment Tab is pressed focus is inside a
  * popover that sits outside the trigger's place in the document's order, and the trigger
- * itself is no longer a stop. A bare Tab from there lands wherever the top layer happens
+ * is a stop nobody can see. A bare Tab from there lands wherever the top layer happens
  * to sit, which is not "the stop after the trigger" on any engine.
  *
  * So the order is read from the document: every stop in source order, the trigger's
