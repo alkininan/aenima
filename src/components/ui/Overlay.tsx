@@ -4,7 +4,9 @@ import { useEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { cx } from "@/lib/cx";
+import { pushOverlayHost } from "@/lib/overlay-host";
 
+import { useExitTransition } from "./useExit";
 import { useEscapeLayer, useFocusTrap } from "./useLayer";
 import { SCRIM_CLASSES } from "./variants";
 
@@ -42,6 +44,8 @@ export function Overlay({
   children,
 }: OverlayProps) {
   const surfaceRef = useRef<HTMLDivElement | null>(null);
+  // §6: the surface stays on the page until its exit transition has run (C-48).
+  const { present, leaving } = useExitTransition({ open, ref: surfaceRef });
   // The portal target only exists in the browser; the server renders nothing.
   const mounted = useSyncExternalStore(
     noopSubscribe,
@@ -51,6 +55,19 @@ export function Overlay({
 
   useEscapeLayer({ open, kind: "modal", onClose });
   useFocusTrap({ open, containerRef: surfaceRef });
+
+  /**
+   * §8.20 and §8.14: while this modal is open it is where a toast and a tooltip are
+   * hosted. The rest of the page is inert behind the scrim, so a floating layer rendered
+   * outside the modal paints above it and refuses the click (C-20). Registering the
+   * surface rather than the viewport keeps the portal inside the dialog's own subtree.
+   */
+  useEffect(() => {
+    if (!open) return;
+    const surface = surfaceRef.current;
+    if (!surface) return;
+    return pushOverlayHost(surface);
+  }, [open]);
 
   // A scrim that can be scrolled past is not a scrim.
   useEffect(() => {
@@ -62,13 +79,18 @@ export function Overlay({
     };
   }, [open]);
 
-  if (!open || !mounted) return null;
+  if (!present || !mounted) return null;
 
   return createPortal(
     <>
       {/* The scrim takes backdrop clicks; the viewport above it is a
           click-through frame so only the surface itself is solid. */}
-      <div className={cx(SCRIM_CLASSES, "fade-in")} onClick={onClose} aria-hidden="true" />
+      <div
+        className={cx(SCRIM_CLASSES, "overlay-fade")}
+        data-leaving={leaving ? "" : undefined}
+        onClick={onClose}
+        aria-hidden="true"
+      />
       <div className={viewportClassName}>
         <div
           ref={surfaceRef}
@@ -76,6 +98,7 @@ export function Overlay({
           aria-modal="true"
           aria-labelledby={labelledBy}
           tabIndex={-1}
+          data-leaving={leaving ? "" : undefined}
           className={surfaceClassName}
         >
           {children}

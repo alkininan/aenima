@@ -23,7 +23,7 @@ import {
   emptyStateClasses,
   menuPanelClasses,
   modalClasses,
-  panelClasses,
+  panelSurfaceClasses,
   panelRowClasses,
   sheetClasses,
   skeletonClasses,
@@ -31,7 +31,8 @@ import {
   toastClasses,
   toastDotClasses,
   toggleTrackClasses,
-  tooltipClasses,
+  tooltipBridgeClasses,
+  tooltipBubbleClasses,
 } from "@/components/ui/variants";
 import { TOAST_DISMISS_MS, TOAST_UNDO_DISMISS_MS } from "@/lib/motion";
 
@@ -41,11 +42,11 @@ const has = (classes: string, ...expected: string[]) => {
   return expected.every((token) => present.has(token));
 };
 
-describe("tooltipClasses", () => {
-  // design-spec.md §8: --surface-2, radius 8, ui-caption, pad 6/10,
-  // max-width 240, no arrow, z 600 (§4).
-  it("builds the §8 tooltip box", () => {
-    const classes = tooltipClasses();
+describe("tooltip", () => {
+  // design-spec.md §8.14: --surface-2, --r-xs, ui-caption, pad 6/10,
+  // max-width 240, no arrow. It stays solid — §5 keeps blur off it.
+  it("builds the §8.14 bubble", () => {
+    const classes = tooltipBubbleClasses();
     expect(
       has(
         classes,
@@ -55,57 +56,93 @@ describe("tooltipClasses", () => {
         "px-[10px]",
         "py-[6px]",
         "max-w-[240px]",
-        "z-[var(--z-tooltip)]",
       ),
     ).toBe(true);
+    expect(classes).not.toContain("glass");
   });
 
   it("takes its z from the §4 ladder, never a raw number", () => {
-    expect(tooltipClasses()).not.toMatch(/\bz-\d/);
+    expect(tooltipBridgeClasses()).toContain("z-[var(--z-tooltip)]");
+    expect(tooltipBridgeClasses()).not.toMatch(/\bz-\d/);
   });
 
-  it("flips the stand-off when it opens downwards", () => {
-    expect(has(tooltipClasses("top"), "bottom-full", "mb-[8px]")).toBe(true);
-    expect(has(tooltipClasses("bottom"), "top-full", "mt-[8px]")).toBe(true);
+  /**
+   * §8.14: a tooltip "stays while the pointer is over the trigger, the tooltip
+   * or the 8 between them". So the 8 is **padding on the bridge**, not a margin
+   * on the bubble: a margin sits outside the box, and a pointer crossing it has
+   * left the trigger's subtree — `mouseleave` fires and the tooltip hides
+   * halfway across the gap, which makes it unreachable by pointer.
+   */
+  it("carries the 8 as padding, so the gap is part of the hover", () => {
+    expect(has(tooltipBridgeClasses("bottom"), "top-full", "pt-[8px]")).toBe(true);
+    expect(has(tooltipBridgeClasses("top"), "bottom-full", "pb-[8px]")).toBe(true);
+    expect(tooltipBridgeClasses("bottom")).not.toContain("mt-[8px]");
   });
 
-  it("shows after the §8 delay", () => {
+  // §8.14 places it below and flips above; below is therefore the default.
+  it("opens below by default", () => {
+    expect(tooltipBridgeClasses()).toContain("top-full");
+  });
+
+  it("shows after the §8.14 delay", () => {
     expect(TOOLTIP_SHOW_DELAY_MS).toBe(500);
   });
 });
 
-describe("panelClasses", () => {
-  // §8: panel --surface-1, radius 12, dropdown shadow, 6px padding (all in
-  // `.panel`), max-height 320 with inner scroll, z 300 (§4).
-  it("caps the panel at the §8 max height with its own scrollbar", () => {
-    const classes = panelClasses();
-    expect(has(classes, "panel", "scroll-thin", "max-h-[320px]", "overflow-y-auto")).toBe(true);
+describe("panelSurfaceClasses", () => {
+  // §8.5 and §8.18: the glass recipe, --r-panel, --shadow-float, 6 padding (all
+  // in `.panel` and `.glass`), max-height 320 with inner scroll, z 300 (§4).
+  it("carries the glass recipe with its own scrollbar", () => {
+    const classes = panelSurfaceClasses();
+    expect(has(classes, "panel", "glass", "scroll-thin", "overflow-y-auto")).toBe(true);
     expect(PANEL_MAX_HEIGHT).toBe(320);
   });
 
+  // C-37: a panel is one of the three surfaces page content passes beneath
+  // unscrimmed, so it is one of the three that carries the blurred class.
+  it("is blurred, and lifts on the float shadow", () => {
+    expect(panelSurfaceClasses()).toContain("glass-blur");
+    expect(panelSurfaceClasses()).toContain("[--glass-elevation:var(--shadow-float)]");
+  });
+
   it("sits on the popover rung", () => {
-    expect(panelClasses()).toContain("z-[var(--z-popover)]");
-    expect(panelClasses()).not.toMatch(/\bz-\d/);
+    expect(panelSurfaceClasses()).toContain("z-[var(--z-popover)]");
+    expect(panelSurfaceClasses()).not.toMatch(/\bz-\d/);
   });
 
-  // §8: opens below, above if less than 320px of space.
-  it("hangs below by default and above when flipped", () => {
-    expect(has(panelClasses(), "top-full", "mt-[8px]")).toBe(true);
-    expect(has(panelClasses({ placement: "above" }), "bottom-full", "mb-[8px]")).toBe(true);
+  // §6 decides where a panel grows from, at open, from the room around the
+  // trigger — so no placement is baked into the class any more.
+  it("takes no placement of its own", () => {
+    const classes = panelSurfaceClasses();
+    expect(has(classes, "top-full")).toBe(false);
+    expect(has(classes, "bottom-full")).toBe(false);
+    expect(has(classes, "absolute")).toBe(false);
   });
 
-  it("lets a menu size to its content", () => {
-    expect(has(menuPanelClasses(), "w-max", "left-0")).toBe(true);
-    expect(has(menuPanelClasses({ align: "end" }), "right-0")).toBe(true);
+  // §8.18: min-width 200, max-width 280, and its content's width between them.
+  it("sizes a menu to its content within §8.18's two bounds", () => {
+    expect(has(menuPanelClasses(), "w-max", "min-w-[200px]", "max-w-[280px]")).toBe(true);
   });
 });
 
 describe("panelRowClasses", () => {
-  // §8: options 36h, ui-body, pad …/12; hover --surface-3.
-  it("builds the 36h row", () => {
+  /**
+   * §8.5 and §8.18: options ui-body, pad …/12, and **36 on pointer, 44 on
+   * touch** (C-09). The height is a custom property rather than a literal
+   * because the two values are one rule under §7's pointer query, and a row that
+   * carried its own media query would be that rule stated once per component.
+   * Which value `--panel-row-h` resolves to is a layout fact, so it is C-09's
+   * browser check that reads it; what is readable here is that the row defers.
+   *
+   * Hover is `--hover-overlay`, not a surface: §8.5 gives the reason — "the
+   * panel is already `--glass-fill`, so `--surface-3` would be its own colour"
+   * rather than a lightening of what is beneath it.
+   */
+  it("builds the row and takes its height from the panel", () => {
     const classes = panelRowClasses();
-    expect(has(classes, "h-[36px]", "type-ui-body", "px-[12px]")).toBe(true);
-    expect(classes).toContain("hover:bg-surface-3");
+    expect(has(classes, "h-[var(--panel-row-h)]", "type-ui-body", "px-[12px]")).toBe(true);
+    expect(classes).toContain("hover:bg-hover-overlay");
+    expect(classes).not.toContain("h-[36px]");
   });
 
   /**
@@ -133,9 +170,9 @@ describe("panelRowClasses", () => {
 
   // The keyboard cursor reuses hover — §8 gives it no separate treatment.
   it("gives the keyboard cursor the hover fill", () => {
-    expect(has(panelRowClasses({ active: true }), "bg-surface-3")).toBe(true);
+    expect(has(panelRowClasses({ active: true }), "bg-hover-overlay")).toBe(true);
     // Selection is the stronger signal and is not overpainted.
-    expect(has(panelRowClasses({ active: true, selected: true }), "bg-surface-3")).toBe(false);
+    expect(has(panelRowClasses({ active: true, selected: true }), "bg-hover-overlay")).toBe(false);
   });
 
   // §8 menus: destructive rows --danger text.
@@ -295,7 +332,9 @@ describe("modalClasses", () => {
   // §8: 480 wide, right slide-in, --r-lg on the leading corners only.
   it("builds the sheet on its leading corners", () => {
     const classes = sheetClasses();
-    expect(has(classes, "glass", "max-w-[480px]", "rounded-l-lg", "sheet-in", "h-full")).toBe(true);
+    expect(has(classes, "glass", "max-w-[480px]", "rounded-l-lg", "overlay-slide", "h-full")).toBe(
+      true,
+    );
     expect(classes).not.toContain("rounded-lg ");
   });
 });

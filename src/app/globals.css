@@ -515,17 +515,32 @@
  * §4 scrollbars. Same rule as above: every value is quoted from the spec.
  * ------------------------------------------------------------------------- */
 @layer components {
-  /* §5 glass recipe. The specular edge is mandatory (§0 law 5), so it is baked
-   * in; `--glass-elevation` is a second box-shadow slot that lets a floating
-   * layer add §5's drop shadow without restating the edge. */
+  /* §5 glass recipe, without its two backdrop-filter lines. The specular edge is
+   * mandatory (§0 law 5), so it is baked in; `--glass-elevation` is a second
+   * box-shadow slot that lets a floating layer add §5's drop shadow without
+   * restating the edge.
+   *
+   * §5 splits the recipe in two and C-37 checks the split: "Blur applies only
+   * where page content can pass beneath a surface unscrimmed: sticky bars,
+   * panels, toasts. Surfaces over `--bg-scrim` — modals, side sheets, bottom
+   * sheets — and in-flow glass (the pipeline strip) take the recipe without its
+   * two `backdrop-filter` lines." So the blur is not in `.glass`; it is in
+   * `.glass-blur`, which is the only class in the product that carries one. */
   .glass {
     --glass-elevation: 0 0 #0000;
     background-color: var(--glass-fill);
-    backdrop-filter: blur(var(--glass-blur));
     border: 1px solid var(--glass-border);
     box-shadow:
       inset 0 1px 0 var(--edge-highlight),
       var(--glass-elevation);
+  }
+
+  /* §5's blurred half — panels, toasts and sticky bars, and nothing else (C-37).
+   * The prefixed twin comes first, as §5 writes it, for the WebKit builds that
+   * still need it. */
+  .glass-blur {
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    backdrop-filter: blur(var(--glass-blur));
   }
 
   /* §5 — no-backdrop-filter fallback: solid, keep border + edge. */
@@ -533,6 +548,49 @@
     .glass {
       background-color: var(--glass-fallback);
     }
+  }
+
+  /* §13, C-49 — a person who has asked for less transparency, or for more
+   * contrast, gets the solid fill rather than the blur. `prefers-contrast: more`
+   * also takes the border up to `--n-secondary`: the glass border is a hairline
+   * that exists to separate one dark surface from another, and at more contrast
+   * separating them is the whole request. */
+  @media (prefers-reduced-transparency: reduce) {
+    .glass {
+      background-color: var(--glass-fallback);
+    }
+
+    .glass-blur {
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
+  }
+
+  @media (prefers-contrast: more) {
+    .glass {
+      background-color: var(--glass-fallback);
+      border-color: var(--n-secondary);
+    }
+
+    .glass-blur {
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
+  }
+
+  /* §17's preamble — the kitchen-sink route takes `data-force-fallback`, which
+   * forces "the solid `--glass-fallback` recipe" so the glass path a build
+   * normally reaches only on an engine without `backdrop-filter` runs in the
+   * engine the browser check drives. The other two switches it forces — the JS
+   * positioner and the bare open — are read in script (`morphPath`, and
+   * `Panel`'s `place()`); this is the half that is a paint. */
+  [data-force-fallback] .glass {
+    background-color: var(--glass-fallback);
+  }
+
+  [data-force-fallback] .glass-blur {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
 
   /* §8 select and menu panels: --surface-1, --r-panel, the float shadow, 6 pad.
@@ -544,10 +602,21 @@
    * panel is retuned. */
   .panel {
     --panel-pad: 6px;
-    background-color: var(--surface-1);
+    /* §7's input table gates every pointer rule on this query and calls
+     * everything else touch, at any width. §8.5 and §8.18 both give a row 36 on
+     * pointer and 44 on touch (C-09), and the row is the only geometry in the
+     * panel that moves, so the panel reads its height from here rather than each
+     * row carrying a media query of its own. */
+    --panel-row-h: 44px;
     border-radius: var(--r-panel);
     box-shadow: var(--shadow-float);
     padding: var(--panel-pad);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .panel {
+      --panel-row-h: 36px;
+    }
   }
 
   /* §2 dot grid: 2px dot on a 16px pitch over Base. */
@@ -798,13 +867,75 @@
  * Overlay motion — §6 puts panels and drawers on --t-med.
  * ------------------------------------------------------------------------- */
 @layer components {
-  /* §8 side sheet: right slide-in. */
-  .sheet-in {
-    animation: aenima-sheet-in var(--t-med) var(--ease);
+  /* §6 entrances and exits, as transitions rather than keyframes.
+   *
+   * "Entrances use `@starting-style`", and "every open and close except the
+   * morph is a CSS transition on `transform` and `opacity`, so a reversal
+   * mid-flight starts from where the surface is" — which a keyframe animation
+   * cannot do: it restarts from its own first frame.
+   *
+   * "Every exit runs one step faster than its entrance … a `--t-med` entrance
+   * over `--t-fast`. Exits never spring" (C-48). The leaving state is applied
+   * by `useExitTransition`, which keeps the surface mounted until the
+   * transition ends — a top-layer element leaves the top layer the moment it is
+   * hidden, and `overlay` is not in the baseline. */
+
+  /* §6: a modal "fades in with its scrim and rises 8"; a toast does the same. */
+  .overlay-rise {
+    opacity: 1;
+    transform: translateY(0);
+    transition:
+      opacity var(--t-med) var(--ease),
+      transform var(--t-med) var(--ease);
   }
 
-  .fade-in {
-    animation: aenima-fade-in var(--t-med) var(--ease);
+  @starting-style {
+    .overlay-rise {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+  }
+
+  .overlay-rise[data-leaving] {
+    opacity: 0;
+    transform: translateY(8px);
+    transition:
+      opacity var(--t-fast) var(--ease),
+      transform var(--t-fast) var(--ease);
+  }
+
+  /* The scrim fades and does not move. */
+  .overlay-fade {
+    opacity: 1;
+    transition: opacity var(--t-med) var(--ease);
+  }
+
+  @starting-style {
+    .overlay-fade {
+      opacity: 0;
+    }
+  }
+
+  .overlay-fade[data-leaving] {
+    opacity: 0;
+    transition: opacity var(--t-fast) var(--ease);
+  }
+
+  /* §6: "a side sheet or the overlay drawer slides its own width". */
+  .overlay-slide {
+    transform: translateX(0);
+    transition: transform var(--t-med) var(--ease);
+  }
+
+  @starting-style {
+    .overlay-slide {
+      transform: translateX(100%);
+    }
+  }
+
+  .overlay-slide[data-leaving] {
+    transform: translateX(100%);
+    transition: transform var(--t-fast) var(--ease);
   }
 }
 
@@ -820,12 +951,6 @@
 @keyframes aenima-spin {
   to {
     transform: rotate(360deg);
-  }
-}
-
-@keyframes aenima-sheet-in {
-  from {
-    transform: translateX(100%);
   }
 }
 
@@ -860,10 +985,28 @@
     transform: none;
   }
 
-  .shimmer,
-  .sheet-in,
-  .fade-in {
+  .shimmer {
     animation: none;
+  }
+
+  /* §6 (C-15): "every slide: drawers, sheets, modals and toasts appear in
+   * place". Killing the transition is what makes the surface arrive and leave
+   * at its final state in one frame; `useExitTransition`'s fallback is what
+   * takes it off the page afterwards, since no `transitionend` will fire. */
+  .overlay-rise,
+  .overlay-rise[data-leaving],
+  .overlay-fade,
+  .overlay-fade[data-leaving],
+  .overlay-slide,
+  .overlay-slide[data-leaving] {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  .overlay-rise[data-leaving],
+  .overlay-fade[data-leaving] {
+    opacity: 0;
   }
 
   /* §6 (v2.8): no sweep. The primary still lightens on hover — it just does not
@@ -883,5 +1026,146 @@
    * every meter rendered hollow, and a hollow meter has no fill to animate. */
   .meter-fill {
     transition: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * §6 Morph — the control becomes the surface.
+ *
+ * Every rule here is §6's mechanism paragraph, transcribed. The script half is
+ * `src/lib/morph.ts` (names and their lifecycle) and `src/lib/panel-placement.ts`
+ * (where the panel lands); this is the paint.
+ *
+ * "Every selector on these pseudo-elements starts at `:root` with no combinator
+ * before it, since they hang off the root element."
+ * ------------------------------------------------------------------------- */
+
+/* §6: "The root opts out (`:root { view-transition-name: none }`)" — without it
+ * the whole page is one snapshot and a streaming transcript stalls for a menu. */
+:root {
+  view-transition-name: none;
+}
+
+/* §6: "`:root::view-transition` takes `pointer-events: none`, so the page
+ * beneath keeps rendering … and keeps taking clicks." */
+:root::view-transition {
+  pointer-events: none;
+}
+
+/* §6: the group "keeps the engine's own size-and-position animation and is given
+ * only `animation-duration`, `animation-timing-function` and
+ * `backdrop-filter: none`". Nothing else is ever animated on it: "an author
+ * animation there replaces the engine's, and the box would jump to its final
+ * size on the first frame while only its corners moved." The `none` is what
+ * stops the engine copying the panel's blur onto the group as well as the
+ * image-pair, which would blur a square box behind round corners. */
+:root::view-transition-group(morph) {
+  animation-duration: var(--t-med);
+  animation-timing-function: var(--ease);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* §6: "`:root::view-transition-image-pair(morph)`, which fills the group,
+ * carries the glass recipe with `box-sizing: border-box`, `--shadow-float`, and
+ * a `border-radius` keyframe from `--morph-r0` … to `--r-panel` on the same
+ * duration and curve with `animation-fill-mode: forwards`."
+ *
+ * The glass recipe is written out rather than reached through `.glass`: a
+ * pseudo-element cannot carry a class. C-37 reads this as one of the two places
+ * `backdrop-filter` is allowed to appear — the image-pair is where the radius
+ * is, and the blur has to sit with it. */
+:root::view-transition-image-pair(morph) {
+  box-sizing: border-box;
+  background-color: var(--glass-fill);
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  box-shadow:
+    inset 0 1px 0 var(--edge-highlight),
+    var(--shadow-float);
+  animation-name: aenima-morph-radius;
+  animation-duration: var(--t-med);
+  animation-timing-function: var(--ease);
+  animation-fill-mode: forwards;
+}
+
+/* §6: "`:root::view-transition-old(morph)` and `:root::view-transition-new(morph)`
+ * are `display: none`, so nothing is stretched and the border stays 1px
+ * throughout." This is what makes the morph a box growing rather than a picture
+ * of a trigger being pulled out of shape. */
+:root::view-transition-old(morph),
+:root::view-transition-new(morph) {
+  display: none;
+}
+
+/* §6: "The container morphs; the contents fade." The contents carry a second
+ * name and "fade in over the last `--t-fast` of the open" — so the fade is
+ * `--t-fast` long and starts where that leaves it ending with the open. */
+:root::view-transition-new(morph-content) {
+  animation-name: aenima-fade-in;
+  animation-duration: var(--t-fast);
+  animation-timing-function: var(--ease);
+  animation-delay: calc(var(--t-med) - var(--t-fast));
+  animation-fill-mode: backwards;
+}
+
+:root::view-transition-old(morph-content) {
+  display: none;
+}
+
+/* The radius interpolates "from half the trigger's height to `--r-panel`".
+ * `--morph-r0` is set inline at open by `runMorph`; it is the one custom
+ * property the stylesheet does not declare, which is why §17 C-03 excepts it. */
+@keyframes aenima-morph-radius {
+  from {
+    border-radius: var(--morph-r0, var(--r-panel));
+  }
+  to {
+    border-radius: var(--r-panel);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * §6 Morph — placement.
+ *
+ * "Placement is CSS anchor positioning inside `@supports (anchor-name: --a)` —
+ * `anchor-name`, an explicit `position-anchor` and `anchor()` only, never
+ * `position-visibility`, whose values differ between engines — with a JS
+ * positioner writing `top`/`left` from the trigger's rect on open, scroll and
+ * resize where it is not supported; the two must be pixel-identical."
+ *
+ * Which side and which edge the panel grows from is decided once, in script, by
+ * `placePanel` — the same function on both paths, which is what makes them
+ * identical rather than merely similar. What differs is only who does the
+ * arithmetic afterwards: the engine from the live anchor, or the positioner from
+ * a rect it read. So these rules express the *decision* (`data-side`,
+ * `data-align`) and never re-take it.
+ * ------------------------------------------------------------------------- */
+@supports (anchor-name: --a) {
+  .panel-anchored {
+    position: fixed;
+    margin: 0;
+    max-height: var(--panel-max-h);
+  }
+
+  .panel-anchored[data-side="below"] {
+    top: anchor(top);
+    bottom: auto;
+  }
+
+  .panel-anchored[data-side="above"] {
+    bottom: anchor(bottom);
+    top: auto;
+  }
+
+  .panel-anchored[data-align="start"] {
+    left: anchor(left);
+    right: auto;
+  }
+
+  .panel-anchored[data-align="end"] {
+    right: anchor(right);
+    left: auto;
   }
 }
