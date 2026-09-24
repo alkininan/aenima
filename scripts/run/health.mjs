@@ -46,12 +46,11 @@ export const TIMEOUT_MS = 10_000;
 export const DEPLOY_WINDOW_MS = 5 * 60 * 1000;
 
 /**
- * `{ commit, checked, changed, outcome, ok, results, failed, unanswered }` (T0.39). Three
+ * `{ commit, checked, changed, outcome, results, failed, unanswered }` (T0.39). Three
  * outcomes: **up**, every check answered as expected; **down**, a check answered with the wrong
  * status; **unknown**, a check never answered and none answered wrongly. Only down reverts: a
  * merge cannot break a name lookup, so silence is no verdict on one. `failed` holds the wrong
- * answers alone, `unanswered` the silences. `outcome` and `ok` are null when nothing was asked;
- * `ok` is true for up, false for down and null for unknown.
+ * answers alone, `unanswered` the silences. `outcome` is null when nothing was asked.
  */
 export function assess({ commit = null, checked = null, results = [] } = {}) {
   const changed = commit !== null && commit !== checked;
@@ -64,14 +63,13 @@ export function assess({ commit = null, checked = null, results = [] } = {}) {
       : unanswered.length > 0
         ? "unknown"
         : "up";
-  const ok = outcome === "up" ? true : outcome === "down" ? false : null;
-  return { commit, checked, changed, outcome, ok, results, failed, unanswered };
+  return { commit, checked, changed, outcome, results, failed, unanswered };
 }
 
 /**
  * Each check's answer: `{ path, expected, status }`, status null when nothing answered twice.
- * One silence — a timeout, a DNS blip — is asked again before it counts: a revert on a blip is
- * a merge nobody wanted undone.
+ * One silence — a timeout, a DNS blip — is asked again before it is kept as no answer, which
+ * `assess` reads as unknown and never as down.
  */
 export async function probe(
   base,
@@ -140,7 +138,7 @@ export async function health({ cwd = process.cwd(), base = BASE, deps = {} } = {
     return {
       base,
       ...first,
-      ok: null,
+      outcome: null,
       waiting: true,
       why: `origin/main moved ${Math.round(age / 1000)} s ago and a deploy takes a few minutes; asked again next run`,
     };

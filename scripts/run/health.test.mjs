@@ -16,23 +16,19 @@ describe("assess", () => {
     { path: "/app", expected: 307, status: app },
   ];
 
-  it("is ok when every check answered what it should", () => {
-    const result = assess({ commit: "abc", checked: "old", results: results(200, 307) });
-    expect(result).toMatchObject({ changed: true, ok: true, failed: [] });
-  });
-
+  // T0.39 TC1 → AC1: the third outcome sits beside this one.
   it("is up when every check answered what it should", () => {
     const result = assess({ commit: "abc", checked: "old", results: results(200, 307) });
-    expect(result).toMatchObject({ outcome: "up", unanswered: [] });
+    expect(result).toMatchObject({ changed: true, outcome: "up", failed: [], unanswered: [] });
   });
 
   // T0.39 TC2 → AC2. A wrong status is down, and down is what reverts.
   it("is down on a wrong status, whether or not another check was silent", () => {
     const wrong = assess({ commit: "abc", checked: "old", results: results(500, 307) });
-    expect(wrong).toMatchObject({ outcome: "down", ok: false });
+    expect(wrong).toMatchObject({ outcome: "down" });
     expect(wrong.failed.map((f) => f.path)).toEqual(["/sign-in"]);
     const both = assess({ commit: "abc", checked: "old", results: results(500, null) });
-    expect(both).toMatchObject({ outcome: "down", ok: false });
+    expect(both).toMatchObject({ outcome: "down" });
     expect(both.failed.map((f) => f.path)).toEqual(["/sign-in"]);
     expect(both.unanswered.map((f) => f.path)).toEqual(["/app"]);
   });
@@ -40,15 +36,15 @@ describe("assess", () => {
   // T0.39 TC1 → AC1. Silence is not a wrong answer: a merge cannot break a name lookup.
   it("is unknown, never down, when a check never answered and none answered wrongly", () => {
     const silent = assess({ commit: "abc", checked: "old", results: results(200, null) });
-    expect(silent).toMatchObject({ changed: true, outcome: "unknown", ok: null, failed: [] });
+    expect(silent).toMatchObject({ changed: true, outcome: "unknown", failed: [] });
     expect(silent.unanswered.map((f) => f.path)).toEqual(["/app"]);
     const mute = assess({ commit: "abc", checked: "old", results: results(null, null) });
-    expect(mute).toMatchObject({ outcome: "unknown", ok: null, failed: [] });
+    expect(mute).toMatchObject({ outcome: "unknown", failed: [] });
   });
 
   it("checks nothing when main is the commit last checked, and says so", () => {
     const result = assess({ commit: "abc", checked: "abc", results: [] });
-    expect(result).toMatchObject({ changed: false, ok: null, outcome: null });
+    expect(result).toMatchObject({ changed: false, outcome: null });
   });
 
   it("checks nothing when main cannot be resolved", () => {
@@ -119,10 +115,10 @@ describe("health", () => {
     const record = join(dir, "checked");
     const fetch = async (url) => ({ status: url.endsWith("/app") ? 307 : 200 });
     const first = await health({ deps: { run: runner("c1"), recordPath: record, fetch } });
-    expect(first).toMatchObject({ commit: "c1", changed: true, ok: true });
+    expect(first).toMatchObject({ commit: "c1", changed: true, outcome: "up" });
     expect(readFileSync(record, "utf8").trim()).toBe("c1");
     const second = await health({ deps: { run: runner("c1"), recordPath: record, fetch } });
-    expect(second).toMatchObject({ commit: "c1", checked: "c1", changed: false, ok: null });
+    expect(second).toMatchObject({ commit: "c1", checked: "c1", changed: false, outcome: null });
   });
 
   // T0.39 TC2 → AC2
@@ -130,12 +126,12 @@ describe("health", () => {
     dir = mkdtempSync(join(tmpdir(), "aenima-health-"));
     const record = join(dir, "checked");
     const result = await health({ deps: { run: runner("c2"), recordPath: record, fetch: green } });
-    expect(result).toMatchObject({ outcome: "down", ok: false });
+    expect(result).toMatchObject({ outcome: "down" });
     expect(result.failed.map((f) => f.path)).toEqual(["/app"]);
     expect(result.failedText).toBe("/app answered 200 rather than 307");
     expect(readFileSync(record, "utf8").trim()).toBe("c2");
     const again = await health({ deps: { run: runner("c2"), recordPath: record, fetch: green } });
-    expect(again).toMatchObject({ changed: false, ok: null });
+    expect(again).toMatchObject({ changed: false, outcome: null });
   });
 
   // T0.39 TC1 → AC1, TC3 → AC3. The 2026-09-24 case: the machine could not look the site up.
@@ -148,13 +144,13 @@ describe("health", () => {
       throw new Error("getaddrinfo ENOTFOUND aeni.ma");
     };
     const first = await health({ deps: { run: runner("c5"), recordPath: record, fetch: silent } });
-    expect(first).toMatchObject({ commit: "c5", changed: true, outcome: "unknown", ok: null });
+    expect(first).toMatchObject({ commit: "c5", changed: true, outcome: "unknown" });
     expect(first.failed).toEqual([]);
     expect(first.why).toContain("could not be reached from this machine");
     expect(existsSync(record)).toBe(false);
     const fetch = async (url) => ({ status: url.endsWith("/app") ? 307 : 200 });
     const second = await health({ deps: { run: runner("c5"), recordPath: record, fetch } });
-    expect(second).toMatchObject({ commit: "c5", changed: true, outcome: "up", ok: true });
+    expect(second).toMatchObject({ commit: "c5", changed: true, outcome: "up" });
     expect(readFileSync(record, "utf8").trim()).toBe("c5");
     expect(asked).toBe(4);
   });
@@ -168,7 +164,7 @@ describe("health", () => {
     const result = await health({
       deps: { run: runner("c4", 1_700_000_000), recordPath: record, fetch, now },
     });
-    expect(result).toMatchObject({ commit: "c4", changed: true, ok: null, waiting: true });
+    expect(result).toMatchObject({ commit: "c4", changed: true, outcome: null, waiting: true });
     expect(result.why).toContain("60 s ago");
     expect(asked).toEqual([]);
     expect(existsSync(record)).toBe(false);

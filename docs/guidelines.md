@@ -470,9 +470,9 @@ has no effort control, and a repository setting would reach every session opened
                 since the last deploy check → ask the live site from outside (health.mjs):
                 /sign-in 200, /app 307; a wrong answer (down) reverts the merge at the tip
                 (revert.mjs, then the one push to main the guard lets through, HEAD:main),
-                and no answer (unknown) reverts nothing and is asked again next run,
                 files one Fix task at Backlog, puts the reverted ticket back at Backlog, one
-                comment · then refresh the Documents and Guidelines mirrors behind main
+                comment; no answer (unknown) reverts nothing, files nothing, records nothing
+                and is asked again next run · then refresh the Documents and Guidelines mirrors behind main
                 (mirror.mjs plans; the skill writes through the connector): a stopped refresh
                 first, each page header-last under a refresh-in-progress sentinel,
                 allow_async false on every write, a page whose header commit equals its
