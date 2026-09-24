@@ -73,7 +73,9 @@ hours, is a run that died, and `stale.mjs --recover <id>` keeps its branch as
 with the reason when that commit was refused — so the task can be claimed again from
 `origin/main` with one comment and no human. Then, once per commit of main, `health.mjs` asks
 the live site from outside — `/sign-in` 200, `/app` 307 — recording the commit it asked about
-beside the marker so one outage reverts one merge; a wrong answer has `revert.mjs` prepare the
+beside the marker so one outage reverts one merge. Its outcome is up, down or unknown (T0.39):
+a check that never answered, with none answering wrongly, is unknown, records nothing and is
+asked again next run, since silence is no verdict on a merge; a wrong answer has `revert.mjs` prepare the
 revert of the merge at `origin/main`'s tip on a detached HEAD, one commit restoring the tree
 before the merge, which the skill pushes as `HEAD:main` — the one push to main the guard lets
 through — before filing one Fix task, returning the reverted ticket to Backlog and posting one
