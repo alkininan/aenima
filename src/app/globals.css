@@ -773,8 +773,8 @@
 
   /* §8.2 (v2.21): error outranks focus. A focused field in error keeps the
    * --danger border and icon — the border by dropping the focus utility on an
-   * invalid pill, the icon here, after the focus rule at equal specificity so
-   * source order decides. Keyboard modality still adds the ring outside it. */
+   * invalid pill, the icon here, where `:has()` lends this selector the higher
+   * specificity. Keyboard modality still adds the ring outside it. */
   .field-pill:has(.field-input[aria-invalid]) .field-icon-leading {
     color: var(--danger);
   }
@@ -796,9 +796,12 @@
     top: 0;
     /* §8 (v2.7): the floated label hugs the field's left edge, sitting in a
      * label zone padded 8 a side. It no longer tracks the value's text inset,
-     * so a leading icon moves the value and leaves the label where it is. */
+     * so a leading icon moves the value and leaves the label where it is.
+     *
+     * The box is as wide as its text, never the zone's full width: at rest it
+     * is scaled 17/13 from its top-left, and a full-width box scaled that way
+     * overshoots the field by 30% of its width and pans a 375 page sideways. */
     left: 0;
-    right: 0;
     padding-inline: 8px;
     /* The zone is 24h and reserved; a label that wrapped would break that. */
     white-space: nowrap;

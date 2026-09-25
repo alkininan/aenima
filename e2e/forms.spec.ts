@@ -115,6 +115,15 @@ test.describe("C-08 · the field reserves everything it will ever show", () => {
     await page.waitForTimeout(250);
     const floated = await read();
 
+    // The scaled box must not overshoot: a 375 page never pans sideways, at rest or floated.
+    await page.setViewportSize({ width: 375, height: 812 });
+    await email.blur();
+    await page.waitForTimeout(250);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(375);
+    await email.focus();
+    await page.waitForTimeout(250);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(375);
+
     // §8.2: at rest the label is its floated self — ui-label, 13/18 Medium — scaled 17/13.
     for (const state of [rest, floated]) {
       expect(state.fontSize).toBe("13px");
@@ -182,12 +191,14 @@ test.describe("C-08 · the field reserves everything it will ever show", () => {
 });
 
 test.describe("C-08 · the step's geometry (§8.3)", () => {
-  for (const [height, top] of [
-    [900, 48],
-    [500, 16],
+  // §4: the column sits inside the mode's gutters — 16 in hand chrome, so 343 at 375.
+  for (const [width, height, top, column] of [
+    [1440, 900, 48, 400],
+    [1440, 500, 16, 400],
+    [375, 812, 48, 343],
   ] as const) {
-    test(`the mark sits ${top} below the top of a ${height} tall page`, async ({ page }) => {
-      await page.setViewportSize({ width: 1440, height });
+    test(`the mark sits ${top} below the top of a ${width}×${height} page`, async ({ page }) => {
+      await page.setViewportSize({ width, height });
       await page.goto("/sign-in");
       await settle(page);
 
@@ -210,7 +221,7 @@ test.describe("C-08 · the step's geometry (§8.3)", () => {
       expect(m.markSize).toBe(32);
       expect(m.markToTitle).toBe(24);
       expect(m.titleBlockToField).toBe(24);
-      expect(m.column).toBe(400);
+      expect(m.column).toBe(column);
     });
   }
 });

@@ -516,7 +516,13 @@ describe("sign-in forms to v2.21", () => {
 
   // C-18: a submit is never disabled for an incomplete form.
   it("leaves both submits pressable while their forms are incomplete", async () => {
-    render(<SignInForm />);
+    await arrive();
+    // The code step, no digits typed.
+    expect((screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement).disabled).toBe(
+      false,
+    );
+    await userEvent.setup().click(screen.getByRole("button", { name: "Back" }));
+    await userEvent.setup().clear(screen.getByLabelText("Email"));
     expect((screen.getByRole("button", { name: "Send code" }) as HTMLButtonElement).disabled).toBe(
       false,
     );

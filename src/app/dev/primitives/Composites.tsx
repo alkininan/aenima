@@ -264,6 +264,7 @@ function ResendDemo() {
 }
 
 function Composites() {
+  const t = getDictionary();
   const [type, setType] = useState<string | null>(null);
   const [long, setLong] = useState<string | null>("option-9");
   const [gapped, setGapped] = useState<string | null>(null);
@@ -387,7 +388,9 @@ function Composites() {
           <OtpInput
             label="Error"
             invalid
-            helper="That code didn't work"
+            // The product's wrong-code line: the string §8.2's two reserved
+            // lines are measured against.
+            helper={t.signIn.codeRejected}
             value="482913"
             onValueChange={() => {}}
           />
