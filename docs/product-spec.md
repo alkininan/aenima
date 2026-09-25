@@ -1,4 +1,4 @@
-# aenima — Product Specification v1.9
+# aenima — Product Specification v1.10
 
 <!-- Master document. Versioned in aenima's own ledger once the platform exists; until then, this file is the source of truth.
 v1.1: Linear removed from v1 scope (tasks push to Notion only; Linear moves to fast-follow). Notion promoted to a full intake source: comments, hand-created tasks, hand-written docs, property changes. Tickets land in an aenima-managed Development backlog database per product. Notion comments are read-only ingest in v1. Agent visual attribution and chat-as-command-palette aligned with design spec v2.0.
@@ -9,7 +9,8 @@ v1.5: Three rulings the build produced. A scoring run stamps **protocol version*
 v1.6: Six rulings from running aenima's own Development backlog on aenima itself (`docs/guidelines.md`), carried into the product. The backlog's tickets carry a named **status set** — Backlog · Ready · In progress · Decision · Review · Done — in which Backlog is the proposal state every ticket aenima writes is born in and Backlog→Ready is the one transition aenima never makes for itself: law 4 expressed as a status rather than a badge (§11, §8). **Decision is a ticket state**, not a decision-log row: a ticket that cannot proceed with one interpretation carries a Question · Where · Default section in its body, *Where* being §8's fault attribution, and where *Where* names a spec section the answer is a spec patch that cuts a new version before work resumes — Notion comments stay read-only ingest, so the question is written into the body and only the answer is read from a comment (§11, §13). Each human answer receives **exactly one assessment**, resolving the ticket to Ready or drawing one clarifying line, capped by §6's two rounds, after which aenima stops asking and waits without ever stopping reading (§11). The **version tuple is checked when work starts**, and drift is surfaced the way §8 surfaces a patch to a signer (§11). The no-orphan rule runs down to the ticket: every acceptance criterion names the test case that verifies it and every test case names its criterion, before the ticket is pushed (§7.5). And **agent run telemetry** — one row per run, for when aenima itself drives a coding agent from the backlog — is named post-v1, since v1 reads completion back and never runs the agent (§17).
 v1.7: Backlog→Ready gains its comment path. The confirm stays the human's — a click, or a reply on the ticket that resolves to *ready* — so a developer unblocks work from the thread they are already in, and aenima still never makes the move on its own reading of what the ticket needs. The three words a reply can carry are named — *ready* in v1, *apply* and *merge* once aenima drives a coding agent from the backlog (§17) — and each is verified against the backlog itself rather than against the model's account of the thread (§11). §8's ticket-generation clause is unchanged. Carried from `docs/guidelines.md`, where aenima's own Development backlog has run this path since its v1.9.
 v1.8: A condition may carry probes the way a check does. T2.7 and T2.8 scored one document eleven times on identical bytes and found the verdicts settle once a check carries probes, while §4's applicability answer still moved — `prd-15`'s condition held in three runs of eleven, `prd-20`'s layer in one run and not the next (build-log open question 22) — so a worse document could score higher on the run where a Must was never asked. §5's probe library sits behind each check; this says it sits behind a condition too, and that a probed condition is decided by its probes and by nothing else, so that the same document brings in the same checks on every run (§4). Nothing else moves: a condition is still one answer, the denominator is still arithmetic.
-v1.9: §9 delivers the constitution rather than mirroring it. The `CLAUDE.md` mirror goes — an instruction file loaded twice is context spent twice and two copies drift apart — and because which instruction files a coding agent loads changes from release to release, the channel is chosen at emission from what the repository already carries, measured rather than assumed, and a file the team owns is never rewritten, moved or appended to (§9, Appendix D). The report-back gains a fixed shape in the same ruling: six entries with fixed headings, read by code (§12) rather than as three prose headings, among them *departure* — a place the build left the pack, with its reason, read as evidence against the pack the way an open question already is (§8) — and *files touched*, which is what v1.1's ticket fence is enforced against, since aenima never sees the code and so asks the builder for the list rather than supplying one (§17). -->
+v1.9: §9 delivers the constitution rather than mirroring it. The `CLAUDE.md` mirror goes — an instruction file loaded twice is context spent twice and two copies drift apart — and because which instruction files a coding agent loads changes from release to release, the channel is chosen at emission from what the repository already carries, measured rather than assumed, and a file the team owns is never rewritten, moved or appended to (§9, Appendix D). The report-back gains a fixed shape in the same ruling: six entries with fixed headings, read by code (§12) rather than as three prose headings, among them *departure* — a place the build left the pack, with its reason, read as evidence against the pack the way an open question already is (§8) — and *files touched*, which is what v1.1's ticket fence is enforced against, since aenima never sees the code and so asks the builder for the list rather than supplying one (§17).
+v1.10: Appendix G, the vocabulary: for each term design-spec's C-34 names, the words the specs steer away from for it — in so many words, as §1 law 6 does, or by an argument the spec already makes, as §13's list that is not a board does — which C-34 greps the product's UI strings for. A word that is another concept's own term is not listed, since a grep cannot tell a misnaming from a correct use, and a term the specs name no word against carries a dash rather than an invented list (Appendix G). -->
 
 ## 0. What aenima is
 
@@ -474,6 +475,28 @@ Universal loanword seeds (EN kept inside TR/NL): sprint, backlog, event, endpoin
 ## F. Golden-set specification
 
 Core: 2 real anonymized Sociera PRDs (passing), 1 tech spec, 1 design file map, 5 intake fragments (incl. one multi-product transcript). Mutation classes: deleted Must content, blurred term (ambiguity), off-convention event name, missing state frame, wrong applicability, planted misuse gap, mistranslated variant. Target: 100–150 labeled checks, every Must across all seven types covered ≥2×, EN/TR/NL variants of the core PRD. Pass thresholds per task tier recorded per provider+model; a certification report is stored with every skill-pack release.
+
+## G. Vocabulary
+
+One term per concept (design-spec §0 law 8), for the concepts design-spec's C-34 names. Beside each term stand the words the specs steer away from for it — in so many words, or by an argument a section already makes — and C-34 greps the product's UI strings for them. A word that is another concept's own term is not listed even where a person might reach for it: a *task*, a *ticket* and a *story* are §2's, §8's and §7.5's own objects, a *bundle* is §9's and *archive* is §3's handed-over state, and a grep cannot tell a misnaming from a correct use of that other term. A dash means the specs name no word to steer away from: the term stands, and nothing is checked for it until a word is named here. A listed word matches whole, in any case, and with a plural or verb ending (*lanes*, *tested*).
+
+| Term | Steer away from | Why |
+|---|---|---|
+| item | — | |
+| check | — | |
+| Must | — | |
+| Should | — | |
+| gap | violation | §1 law 6: "never test / fail / violation" |
+| packet | — | |
+| pack | — | |
+| ceremony | — | |
+| walkthrough | test, quiz | §1 law 6 sets the walkthrough against a test, and a quiz is the register it refuses |
+| stage | — | |
+| bucket | lane, swimlane | §13: a prioritized list, not a board |
+| park | — | |
+| opportunity | — | |
+| artifact | — | |
+| version tuple | — | |
 
 ---
 

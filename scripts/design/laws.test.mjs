@@ -8,7 +8,9 @@ import {
   blurDeclarations,
   classUses,
   componentRules,
+  c34Terms,
   copyOffenders,
+  defaultOffenders,
   DANGER_ALLOWED,
   declarationLiteral,
   DOT_GRID_ALLOWED,
@@ -24,6 +26,8 @@ import {
   tokenUses,
   utilities,
   utilityLiteral,
+  vocabulary,
+  vocabularyOffenders,
 } from "./laws.mjs";
 
 const root = join(import.meta.dirname, "../..");
@@ -136,6 +140,45 @@ describe("C-06 and C-39 · no literal in a component stylesheet (T0.38)", () => 
 describe("C-33 · the UI strings (T0.38)", () => {
   it("are sentence case, carry no exclamation mark, and never say test, fail or violation", () => {
     expect(named(copyOffenders(root))).toEqual([]);
+  });
+
+  it("hold §12's defaults verbatim wherever their surface exists", () => {
+    expect(named(defaultOffenders(root))).toEqual([]);
+  });
+
+  it("reads a default by its shape, and names a key that holds another or is gone", () => {
+    const planted = [
+      { key: "signIn.codeSentTo", default: "Code sent to {}", as: "OTP step subtitle" },
+      { key: "signIn.codeSentTo", default: "A code went to {}", as: "OTP step subtitle" },
+      { key: "signIn.nowhere", default: "Anything", as: "a surface" },
+    ];
+    expect(defaultOffenders(root, planted).map((offender) => offender.context)).toEqual([
+      "signIn.codeSentTo",
+      "signIn.nowhere",
+    ]);
+  });
+});
+
+// TC3 → AC3. C-34, over product-spec Appendix G and the UI strings.
+describe("C-34 · one term per concept (T0.38)", () => {
+  it("finds a row for every term C-34 names, and no steered-away word in the UI strings", () => {
+    expect(named(vocabularyOffenders(root))).toEqual([]);
+  });
+
+  it("reads C-34's own term list from design-spec §17", () => {
+    const terms = c34Terms(readFileSync(join(root, "docs/design-spec.md"), "utf8"));
+    expect(terms).toContain("walkthrough");
+    expect(terms).toContain("version tuple");
+    expect(terms).toHaveLength(15);
+  });
+
+  it("reads Appendix G's table, a dash as no word, and fails with no appendix at all", () => {
+    const table = vocabulary(
+      "## G. Vocabulary\n\n| Term | Steer away from | Why |\n|---|---|---|\n" +
+        "| bucket | lane, swimlane | §13 |\n| item | — | |\n\n---\n",
+    );
+    expect(Object.fromEntries(table)).toEqual({ bucket: ["lane", "swimlane"], item: [] });
+    expect(vocabulary("## F. Golden-set specification\n")).toBeNull();
   });
 });
 

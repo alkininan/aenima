@@ -198,13 +198,14 @@ test.describe("at 1440", () => {
     await expect(page.locator('main a[href="/o/soc-2"]')).toHaveCount(1);
   });
 
-  // §0 law 4: anything the machine did is visibly the machine's.
-  test("renders an agent actor in --agent", async ({ page }) => {
+  // C-36: an activity entry is what happened, not a proposal waiting on a human, so the
+  // agent is named and never violet — --agent stands on proposal cards (T0.38).
+  test("names an agent actor, never in --agent", async ({ page }) => {
     const colour = await page
       .getByText("scorer", { exact: true })
       .evaluate((node) => getComputedStyle(node).color);
 
-    expect(colour).toBe(AGENT);
+    expect(colour).not.toBe(AGENT);
   });
 
   /**
@@ -809,7 +810,7 @@ test.describe("the meter's other states", () => {
     await page.evaluate(() => document.fonts.ready);
 
     const readiness = page.getByTestId("readiness");
-    await expect(readiness).toContainText("scored 4h ago — retrying");
+    await expect(readiness).toContainText("scored 4 h ago — retrying");
 
     // The dot is 8, like every system dot in the product, and it is --warning.
     const dot = readiness.locator("span[aria-hidden='true']").last();

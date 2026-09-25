@@ -16,7 +16,7 @@ export const en = {
     appName: "aenima",
     continue: "Continue",
     back: "Back",
-    retry: "Try again",
+    retry: "Retry",
     signOut: "Sign out",
   },
   signIn: {
@@ -379,10 +379,10 @@ export const en = {
   /** Relative time for the row's mono-readout. §12: calm, never exact-to-the-second. */
   relativeTime: {
     justNow: "just now",
-    minutes: (n: number) => `${n}m ago`,
-    hours: (n: number) => `${n}h ago`,
-    days: (n: number) => `${n}d ago`,
-    weeks: (n: number) => `${n}w ago`,
+    minutes: (n: number) => `${n} m ago`,
+    hours: (n: number) => `${n} h ago`,
+    days: (n: number) => `${n} d ago`,
+    weeks: (n: number) => `${n} w ago`,
   },
   workspace: {
     // First run: §16 defers real onboarding, so the workspace gets a plain name.
@@ -394,7 +394,7 @@ export const en = {
     // design-spec.md §10: one line, one action, never a stack trace.
     notFound: "That page isn't here.",
     unexpected: "Something went wrong on our side.",
-    backToApp: "Back to your workspace",
+    backToApp: "Back to dashboard",
   },
 } as const;
 

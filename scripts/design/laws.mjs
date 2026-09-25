@@ -8,7 +8,10 @@ import ts from "typescript";
  *
  *   C-06 no literal colour, radius, duration, shadow or z-index in a component stylesheet
  *   C-39 (its literal clause) no literal font-size or line-height in a component
- *   C-33 (its scan) UI strings in sentence case, no exclamation marks, never test/fail/violation
+ *   C-33 UI strings in sentence case, no exclamation marks, never test/fail/violation, and
+ *        §12's defaults verbatim wherever their surface exists
+ *   C-34 one term per concept: no word product-spec Appendix G steers away from, and a row
+ *        there for every term C-34 names — with no Appendix G the check fails
  *   C-35–C-38 the danger, violet, blur and dot-grid allowlists, and the page ground
  *   C-50 no element takes both `::-webkit-scrollbar` rules and the standard properties
  *
@@ -144,6 +147,19 @@ function isPlusChain(node) {
   );
 }
 
+/**
+ * A string as copy reads it: the parts joined exactly, and each interpolation a `{}` —
+ * `` `Code sent to ${email}` `` is `Code sent to {}`, which is how §12 writes a default with a
+ * slot in it once its name is taken out.
+ */
+function shapeOf(node) {
+  if (ts.isBinaryExpression(node)) return shapeOf(node.left) + shapeOf(node.right);
+  if (ts.isTemplateExpression(node))
+    return node.head.text + node.templateSpans.map((span) => `{}${span.literal.text}`).join("");
+  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return node.text;
+  return "{}";
+}
+
 function textOf(node) {
   if (ts.isBinaryExpression(node)) return `${textOf(node.left)} ${textOf(node.right)}`;
   if (ts.isTemplateExpression(node))
@@ -220,6 +236,7 @@ export function stringValues(path, text) {
     path,
     line: source.getLineAndCharacterOfPosition(node.getStart()).line + 1,
     value: textOf(node),
+    shape: shapeOf(node),
     ...contextOf(node),
   });
   visit(source);
@@ -491,13 +508,33 @@ export const AGENT_ALLOWED = [];
  * C-37: "`backdrop-filter` appears only in the glass recipe's blurred class, applied only to
  * sticky bars, panels and toasts, and in the morph's rules …; modals, sheets and the pipeline
  * strip carry the recipe's unblurred class, and nothing outside §5's list carries either."
- * The morph is not built, so the blurred class is the one rule that declares it.
+ * The blurred class declares it, and so do the morph's two rules §6 names: the image-pair
+ * carries the blurred recipe and the group is told `none`. The kitchen-sink route's forced
+ * fallback (§17's preamble) is the blurred class again, taking its blur away.
  */
-export const BLUR_ALLOWED = [{ path: GLOBALS, context: ".glass-blur", why: "the blurred class" }];
+export const BLUR_ALLOWED = [
+  { path: GLOBALS, context: ".glass-blur", why: "the blurred class" },
+  {
+    path: GLOBALS,
+    context: "[data-force-fallback] .glass-blur",
+    why: "the blurred class under §17's forced fallback, which sets it to none",
+  },
+  {
+    path: GLOBALS,
+    context: ":root::view-transition-image-pair(morph)",
+    why: "§6: the image-pair is the material and carries the blurred recipe",
+  },
+  {
+    path: GLOBALS,
+    context: ":root::view-transition-group(morph)",
+    why: "§6: the group is told none, so the engine does not copy the panel's blur onto it",
+  },
+];
 
 /** Where the blurred class may be applied: sticky bars, panels and toasts. */
 export const GLASS_BLUR_ALLOWED = [
   { path: "src/components/ui/variants.ts", context: "TOAST_BASE", why: "a toast" },
+  { path: "src/components/ui/variants.ts", context: "PANEL_BASE", why: "a menu or select panel" },
 ];
 
 /** Where the recipe may be applied at all: §5's list. */
@@ -725,5 +762,162 @@ export function copyOffenders(root) {
       }
     }
   }
+  return offenders;
+}
+
+// ---------------------------------------------------------------------------------------------
+// C-33 — the §12 defaults
+
+/**
+ * design-spec §12's microcopy defaults whose surface exists, each against the dictionary key
+ * that is that surface. A default whose surface is not built yet — the undo toast, the skip
+ * link, the shortcut sheet — has no key to hold it and is not listed; its ticket adds the row
+ * when it adds the key (T0.38's Decision: "only the defaults whose surface exists").
+ *
+ * A default is written as §12 writes it, a slot's name taken out: "Code sent to {}" is
+ * §12's "Code sent to {email}", and a key holding a function is read by its shape.
+ */
+export const DEFAULTS = [
+  { key: "item.gapAcceptSubmit", default: "Looks right", as: "confirm" },
+  {
+    key: "signIn.codeRejected",
+    default: "That code isn't right. Check it, or ask for a new one.",
+    as: "wrong code",
+  },
+  {
+    key: "signIn.codeExpired",
+    default: "That code has expired. Ask for a new one.",
+    as: "expired code",
+  },
+  {
+    key: "signIn.rateLimited",
+    default: "Too many requests. Wait a moment before asking for another code.",
+    as: "rate limit",
+  },
+  { key: "signIn.codeSentTo", default: "Code sent to {}", as: "OTP step subtitle" },
+  { key: "item.scoredRetrying", default: "scored {} — retrying", as: "provider retry readout" },
+  { key: "list.noScoring", default: "Connect AI to activate scoring", as: "no key" },
+  { key: "errors.backToApp", default: "Back to dashboard", as: "degraded pages" },
+  { key: "common.retry", default: "Retry", as: "degraded pages" },
+  { key: "relativeTime.minutes", default: "{} m ago", as: "row freshness" },
+  { key: "relativeTime.hours", default: "{} h ago", as: "row freshness" },
+  { key: "relativeTime.days", default: "{} d ago", as: "row freshness" },
+  { key: "relativeTime.weeks", default: "{} w ago", as: "row freshness" },
+];
+
+/** The English dictionary's strings by key path — `signIn.codeSentTo` — each with its shape. */
+export function dictionaryShapes(root, path = `${DICTIONARIES}/en.ts`) {
+  const shapes = new Map();
+  for (const string of stringValues(path, read(root, path))) {
+    // The context is the top-level declaration, then the keys: `en.signIn.codeSentTo`.
+    const key = string.context.split(".").slice(1).join(".");
+    if (!shapes.has(key)) shapes.set(key, { ...string });
+  }
+  return shapes;
+}
+
+/** Each listed default its key does not hold verbatim, or a key that is gone. */
+export function defaultOffenders(root, defaults = DEFAULTS) {
+  const shapes = dictionaryShapes(root);
+  const path = `${DICTIONARIES}/en.ts`;
+  const offenders = [];
+  for (const entry of defaults) {
+    const held = shapes.get(entry.key);
+    if (!held)
+      offenders.push({
+        path,
+        line: 0,
+        context: entry.key,
+        found: `no such key for §12's ${entry.as}`,
+      });
+    else if (held.shape !== entry.default)
+      offenders.push({
+        path,
+        line: held.line,
+        context: entry.key,
+        found: `§12's ${entry.as} is "${entry.default}", the key holds "${held.shape}"`,
+      });
+  }
+  return offenders;
+}
+
+// ---------------------------------------------------------------------------------------------
+// C-34 — one term per concept
+
+export const DESIGN_SPEC = "docs/design-spec.md";
+export const PRODUCT_SPEC = "docs/product-spec.md";
+
+/** The terms C-34 names, read from its own line in design-spec §17. */
+export function c34Terms(designSpec) {
+  const line = designSpec.split("\n").find((text) => text.startsWith("- C-34 "));
+  const list = line && /vocabulary: ([^(]+)\(/.exec(line);
+  if (!list) return null;
+  return list[1]
+    .split(",")
+    .map((term) => term.trim())
+    .filter(Boolean);
+}
+
+/**
+ * product-spec Appendix G's table: term → the words to steer away from, `[]` for a dash.
+ * Null when product-spec carries no Appendix G, which is C-34 failing by design.
+ */
+export function vocabulary(productSpec) {
+  const start = productSpec.search(/^## G\. Vocabulary$/m);
+  if (start < 0) return null;
+  const section = productSpec.slice(start).split(/\n(?=## |---\n)/)[0];
+  const table = new Map();
+  for (const row of section.split("\n")) {
+    const cells = /^\|([^|]*)\|([^|]*)\|/.exec(row);
+    if (!cells) continue;
+    const term = cells[1].trim();
+    if (term === "Term" || /^-+$/.test(term)) continue;
+    const words = cells[2].trim();
+    table.set(term, words === "—" ? [] : words.split(",").map((word) => word.trim()));
+  }
+  return table;
+}
+
+/** A listed word, whole, in any case, with a plural or verb ending. */
+function steeredWord(word) {
+  return new RegExp(`\\b${word}(?:s|es|d|ed|ing)?\\b`, "i");
+}
+
+/**
+ * What C-34 finds: no vocabulary to read, a term C-34 names that the vocabulary lacks, or a
+ * UI string that uses a word the vocabulary steers away from.
+ */
+export function vocabularyOffenders(root) {
+  const terms = c34Terms(read(root, DESIGN_SPEC)) ?? [];
+  const table = vocabulary(read(root, PRODUCT_SPEC));
+  if (!table)
+    return [
+      {
+        path: PRODUCT_SPEC,
+        line: 0,
+        context: "Appendix G",
+        found: "product-spec has no vocabulary list",
+      },
+    ];
+  const offenders = [];
+  for (const term of terms)
+    if (!table.has(term))
+      offenders.push({
+        path: PRODUCT_SPEC,
+        line: 0,
+        context: "Appendix G",
+        found: `no row for "${term}"`,
+      });
+  for (const path of dictionaryFiles(root))
+    for (const string of stringValues(path, read(root, path)))
+      for (const [term, words] of table)
+        for (const word of words)
+          if (steeredWord(word).test(string.value))
+            offenders.push({
+              path,
+              line: string.line,
+              context: string.context,
+              found: `"${word}" for ${term}: ${string.value}`,
+            });
   return offenders;
 }
