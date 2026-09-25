@@ -774,6 +774,12 @@ export function copyOffenders(root) {
  * link, the shortcut sheet — has no key to hold it and is not listed; its ticket adds the row
  * when it adds the key (T0.38's Decision: "only the defaults whose surface exists").
  *
+ * A surface here is the dictionary key, which is a looser thing than a rendered route: the
+ * degraded pages' "Back to dashboard" and "Retry" have keys and no route renders them yet,
+ * and they are listed so the words are right when one does. The reverse case — a surface
+ * that renders but has no key for a default, §12's "{n} y ago" rung — is not a string this
+ * table can check, and waits on the rung itself.
+ *
  * A default is written as §12 writes it, a slot's name taken out: "Code sent to {}" is
  * §12's "Code sent to {email}", and a key holding a function is read by its shape.
  */

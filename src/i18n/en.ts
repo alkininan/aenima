@@ -340,7 +340,6 @@ export const en = {
     gapMoveUnreadable: "That didn't arrive as a move, so nothing changed. Try it from the gap.",
     /** §5's three dispositions, as §5 names the moves that produce them. */
     gapOpen: "Open",
-    gapAccepted: "Accepted",
     /**
      * §8.9's accepted gap chip, reading priority and who took the debt: the name is what
      * says it was accepted, and the tag is what says how large a fact that is. §12's
