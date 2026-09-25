@@ -89,14 +89,29 @@ export type ButtonClassOptions = {
   variant?: ButtonVariant | undefined;
   /** §8 loading: spinner replaces the label, width stays locked. */
   loading?: boolean | undefined;
+  /**
+   * §8.4: a resend counting down is disabled in behaviour, but its label stays
+   * `--n-secondary` — it carries the only information on the step.
+   */
+  readableWhenDisabled?: boolean | undefined;
   fullWidth?: boolean | undefined;
   className?: string | undefined;
 };
+
+/** §8.4's exemption from §7's disabled text tone, on whichever variant carries it. */
+const disabledClasses = (variant: ButtonVariant, readable: boolean): string =>
+  readable
+    ? BUTTON_DISABLED_CLASSES[variant].replace(
+        "disabled:text-n-disabled",
+        "disabled:text-n-secondary",
+      )
+    : BUTTON_DISABLED_CLASSES[variant];
 
 export function buttonClasses({
   size = "md",
   variant = "primary",
   loading = false,
+  readableWhenDisabled = false,
   fullWidth = false,
   className,
 }: ButtonClassOptions = {}): string {
@@ -104,7 +119,7 @@ export function buttonClasses({
     BUTTON_BASE,
     BUTTON_SIZE_CLASSES[size],
     BUTTON_VARIANT_CLASSES[variant],
-    BUTTON_DISABLED_CLASSES[variant],
+    disabledClasses(variant, readableWhenDisabled),
     fullWidth && "w-full",
     // Loading is not disabled: the fill and label colour stay put so only the
     // spinner reads as new. Pointer events go so the press cannot re-fire.
@@ -121,16 +136,17 @@ const ICON_BUTTON_BASE =
   "control inline-flex shrink-0 items-center justify-center rounded-pill " +
   "[&_svg]:size-[var(--control-icon)] [&_svg]:shrink-0";
 
-// Square boxes from §8; icon sizes stay the button grammar's 18/20/24 so an
-// icon is the same size in both components. Padding therefore falls out as
-// 5/7/12 rather than the spec's approximate "quarter of the box".
+// §8.1: 28/34/48 square, icon 18/20/24 — the button grammar's, so an icon is
+// the same size in both components — and padding (box − icon) ÷ 2 = 5/7/12.
+// The padding is declared rather than left to centring, so the rule is written
+// where it can be read and measured (C-07).
 const ICON_BUTTON_SIZE_CLASSES: Record<ButtonSize, string> = {
-  sm: "size-[28px] [--control-icon:18px]",
-  md: "size-[34px] [--control-icon:20px]",
-  lg: "size-[48px] [--control-icon:24px]",
+  sm: "size-[28px] p-[5px] [--control-icon:18px]",
+  md: "size-[34px] p-[7px] [--control-icon:20px]",
+  lg: "size-[48px] p-[12px] [--control-icon:24px]",
 };
 
-export type IconButtonClassOptions = Omit<ButtonClassOptions, "fullWidth">;
+export type IconButtonClassOptions = Omit<ButtonClassOptions, "fullWidth" | "readableWhenDisabled">;
 
 export function iconButtonClasses({
   size = "md",
@@ -175,6 +191,8 @@ const INPUT_FIELD_BASE =
 // the modality attribute. `:focus-visible` cannot express them on its own — a
 // text input matches it on a mouse click, which is the double stroke §6 kills.
 // See src/lib/focus-modality.ts.
+//
+// §8.2: error outranks focus, so a field in error never takes the focus border.
 const INPUT_FIELD_FOCUS = "focus-within:border-prime";
 
 export function inputFieldClasses({
@@ -185,7 +203,7 @@ export function inputFieldClasses({
   return cx(
     INPUT_FIELD_BASE,
     invalid ? "border-danger" : "border-glass-border",
-    disabled ? "cursor-default opacity-40" : INPUT_FIELD_FOCUS,
+    disabled ? "cursor-default opacity-40" : !invalid && INPUT_FIELD_FOCUS,
     className,
   );
 }
@@ -270,16 +288,39 @@ const INPUT_HELPER_TONE_CLASSES: Record<InputHelperTone, string> = {
 };
 
 /**
- * The helper slot: ui-footnote, 8 below the field, one line (18h) reserved
- * under any field that can produce a state so an error never shifts layout.
+ * How many helper lines a field reserves — §8.2: as many as its longest message
+ * needs at 343 wide in the longest locale. One under an ordinary field, two
+ * under the OTP group, none under a field that can produce no state.
  */
-export function inputHelperClasses(tone?: InputHelperTone | undefined, reserved = true): string {
+export type HelperLines = 0 | 1 | 2;
+
+const HELPER_RESERVE_CLASSES: Record<HelperLines, string | null> = {
+  0: null,
+  1: "field-helper-reserved",
+  2: "field-helper-reserved-2",
+};
+
+/**
+ * The helper slot: ui-footnote, 8 below the field, its lines reserved so an
+ * error never shifts layout and a message never truncates.
+ */
+export function inputHelperClasses(
+  tone?: InputHelperTone | undefined,
+  lines: HelperLines = 1,
+): string {
   return cx(
     "type-ui-footnote mt-[8px] block",
-    reserved ? "field-helper-reserved" : null,
+    HELPER_RESERVE_CLASSES[lines],
     tone ? INPUT_HELPER_TONE_CLASSES[tone] : null,
   );
 }
+
+/**
+ * §8.2's request-level message — a rate limit, a send that failed — in one slot
+ * under the step's last control: ui-footnote `--n-secondary`, centred, wrapping.
+ * It is not about any field's value, so it never wears a field's error tone.
+ */
+export const REQUEST_MESSAGE_CLASSES = "type-ui-footnote block text-center text-n-secondary";
 
 /* -------------------------------------------------------------------------- */
 /* Chip — §8 "Chips & badges"                                                 */
@@ -850,12 +891,10 @@ export function skeletonClasses(shape: SkeletonShape = "block", className?: stri
 /** §12: six-digit codes. */
 export const OTP_BOX_COUNT = 6;
 
-// §8: "OTP: 6 boxes 52×52, radius 27, gap 16, special-otp centered; filled box
-// border --prime." Radius 27 is the resolved value, not the proportional rule:
-// a 52h pill clamps to half its height at 26, and the spec wrote 27 — one past
-// the clamp, so the box is unambiguously a pill however it is measured.
+// §8.2: 6 boxes, special-otp centred, filled box border --prime; 52×52 gap 16,
+// both sizes `--r-pill` (v2.21), which clamps to half the box.
 //
-// v2.4 steps the group down below 768: 44×44, radius 22, gap 8. Six 52s with
+// v2.4 steps the group down below 768: 44×44, gap 8. Six 52s with
 // five 16 gaps need 392px, which does not fit a 375 viewport — the boxes ran off
 // the screen. 6×44 + 5×8 = 304 does. `md` is Tailwind's 768, which is exactly
 // §4's breakpoint, so the step happens where the spec puts it. The OTP stays
@@ -865,8 +904,9 @@ export const OTP_BOX_COUNT = 6;
 // centred in the content width.
 export const OTP_GROUP_CLASSES = "flex justify-center gap-[8px] md:gap-[16px]";
 
+// §8.2 (v2.21): both sizes are `--r-pill`, which clamps to half the box.
 const OTP_BOX_BASE =
-  "otp-box size-[44px] rounded-[22px] md:size-[52px] md:rounded-[27px] " +
+  "otp-box size-[44px] rounded-pill md:size-[52px] " +
   "border bg-surface-1 text-center type-special-otp " +
   "text-n-primary caret-prime transition-[border-color,box-shadow] " +
   "duration-[var(--t-fast)] ease-brand focus:outline-none " +

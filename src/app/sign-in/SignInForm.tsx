@@ -10,7 +10,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/Input";
 import { OtpInput } from "@/components/ui/OtpInput";
 import { ArrowLeftIcon, MailIcon } from "@/components/ui/icons";
-import { OTP_BOX_COUNT, inputHelperClasses } from "@/components/ui/variants";
+import { OTP_BOX_COUNT, REQUEST_MESSAGE_CLASSES } from "@/components/ui/variants";
 import { useCooldown, formatCountdown } from "@/components/ui/useCooldown";
 import { useFieldValidation } from "@/components/ui/useFieldValidation";
 import { hasCodeExpired, isValidEmail, isValidOtp } from "@/lib/auth/otp";
@@ -44,24 +44,24 @@ export function SignInForm() {
   const [notice, setNotice] = useState<string | null>(null);
 
   /**
-   * Two sources, one helper line. The hook speaks about the shape of what was
-   * typed and clears itself; a rate limit or an outage is the server's word
-   * about a value that may be perfectly well-formed, so it is held separately
-   * and cleared by the next keystroke. Folding them into one state would let
-   * the hook's clear-fast rule wipe an outage message the moment the address
-   * parses, which is not what it is for.
+   * The server's word that the address itself is malformed. Held apart from the
+   * hook's own message so the hook's clear-fast rule cannot wipe it, and cleared
+   * by the next keystroke instead.
    */
   const [serverError, setServerError] = useState<string | null>(null);
 
   /**
-   * §8 (v2.10): the resend's failures are the resend's. A helper line carries
-   * only errors about its own field's value, so a rate limit — which is about
-   * the request, not about the six digits being typed — surfaces at the control
-   * that made it. This used to land on `codeError` and paint the OTP boxes red
-   * for something the person entering the code had not done.
+   * §8.2 (v2.21): a request-level message — a rate limit, an outage, a send
+   * that failed — is about no field's value, so it renders in one slot under
+   * the step's last control and never on a helper line. One slot per step:
+   * the send's, the verify's and the resend's failures all land here.
    */
-  const [resendError, setResendError] = useState<string | null>(null);
+  const [requestMessage, setRequestMessage] = useState<string | null>(null);
   const resendCooldown = useCooldown();
+
+  /** §8.2: submit scrolls to the first error, so the field has to be reachable. */
+  const emailRef = useRef<HTMLInputElement>(null);
+  const codeRef = useRef<HTMLDivElement>(null);
 
   /**
    * When the code on screen went out, in epoch ms.
@@ -87,8 +87,13 @@ export function SignInForm() {
   const onEmailSubmit = (event: FormEvent) => {
     event.preventDefault();
     setServerError(null);
-    // §8: submit validates regardless of the pause or the length floor.
-    if (!emailField.validateNow()) return;
+    setRequestMessage(null);
+    // §8: submit validates regardless of the pause or the length floor, and
+    // scrolls to the first error — here the only field there is.
+    if (!emailField.validateNow()) {
+      emailRef.current?.scrollIntoView({ block: "nearest" });
+      return;
+    }
 
     startTransition(async () => {
       const result = await requestCode(email);
@@ -98,11 +103,11 @@ export function SignInForm() {
         return;
       }
       if (result.status === "rate-limited") {
-        setServerError(t.signIn.rateLimited);
+        setRequestMessage(t.signIn.rateLimited);
         return;
       }
       if (result.status === "unavailable") {
-        setServerError(t.signIn.unavailable);
+        setRequestMessage(t.signIn.unavailable);
         return;
       }
 
@@ -111,7 +116,7 @@ export function SignInForm() {
       emailField.clear();
       setCode("");
       setCodeError(null);
-      setResendError(null);
+      setRequestMessage(null);
       setNotice(t.signIn.codeSentTo(email));
       codeSentAt.current = Date.now();
       /**
@@ -126,8 +131,10 @@ export function SignInForm() {
   };
 
   const submitCode = (value: string) => {
+    setRequestMessage(null);
     if (!isValidOtp(value)) {
       setCodeError(t.signIn.codeIncomplete);
+      codeRef.current?.scrollIntoView({ block: "nearest" });
       return;
     }
 
@@ -143,11 +150,11 @@ export function SignInForm() {
       }
 
       if (result.status === "rate-limited") {
-        setCodeError(t.signIn.rateLimited);
+        setRequestMessage(t.signIn.rateLimited);
         return;
       }
       if (result.status === "unavailable") {
-        setCodeError(t.signIn.unavailable);
+        setRequestMessage(t.signIn.unavailable);
         return;
       }
 
@@ -175,7 +182,7 @@ export function SignInForm() {
     setCode("");
     setCodeError(null);
     setServerError(null);
-    setResendError(null);
+    setRequestMessage(null);
     // The cooldown deliberately survives the step change: it tracks the
     // provider's window, and that window does not close because someone stepped
     // back. Coming forward sends a new code, which starts a new one.
@@ -187,7 +194,7 @@ export function SignInForm() {
    * succeed yet is disabled, never merely apologised for.
    */
   const resend = () => {
-    setResendError(null);
+    setRequestMessage(null);
     // A press is a send, so it starts the window like any other.
     resendCooldown.start();
 
@@ -201,21 +208,34 @@ export function SignInForm() {
         return;
       }
 
-      setResendError(
+      setRequestMessage(
         result.status === "rate-limited" ? t.signIn.rateLimited : t.signIn.unavailable,
       );
     });
   };
 
+  /**
+   * §8.2: the step's one request-level slot, under its last control. `status`
+   * because it arrives after a press with focus still elsewhere — unannounced,
+   * nobody driving by keyboard would hear it. Unreserved: it is the last thing
+   * on the step, so nothing beneath it can shift.
+   */
+  const requestSlot = requestMessage ? (
+    <span role="status" className={REQUEST_MESSAGE_CLASSES}>
+      {requestMessage}
+    </span>
+  ) : null;
+
   return (
     <div className="flex w-full max-w-[400px] flex-col gap-[24px]">
-      {/* §8 (v2.7) multi-step: the Æ mark is centered above every step. A step
-          with no back button centers its title and subtitle beneath the mark; a
-          step with one uses the header grammar instead, where the title block
-          left-aligns to itself beside the back control rather than centering.
+      {/* §8.3 multi-step: the Æ mark 32 is centered above every step, 24 above
+          the title block, and the title block sits 24 above the first label
+          zone. A step with no back button centers its title and subtitle
+          beneath the mark; a step with one uses the header grammar instead,
+          where the title block left-aligns to itself beside the back control.
           Step changes are instant — no slide between the two. */}
-      <div className="flex flex-col gap-[8px]">
-        <AeMark size={32} className="mb-[8px] self-center text-n-primary" />
+      <div className="flex flex-col gap-[24px]">
+        <AeMark size={32} className="self-center text-n-primary" />
         {/* Back on the left whenever a previous step exists, gap 12, the title
             block beside it. Back and title share a first line; `items-start` is
             what keeps them sharing it once the title block is two lines tall. */}
@@ -259,6 +279,7 @@ export function SignInForm() {
       {step === "email" ? (
         <form className="flex flex-col gap-[16px]" onSubmit={onEmailSubmit} noValidate>
           <Input
+            ref={emailRef}
             type="email"
             name="email"
             autoComplete="email"
@@ -274,16 +295,22 @@ export function SignInForm() {
               // The hook clears its own message; what the server said about the
               // last address is only cleared by typing a different one.
               if (serverError !== null) setServerError(null);
+              if (requestMessage !== null) setRequestMessage(null);
             }}
             onBlur={emailField.onBlur}
           />
 
-          {/* §8: the primary fills the content width alone. */}
-          {providers.includes("email") ? (
-            <Button type="submit" size="lg" fullWidth loading={pending}>
-              {t.signIn.sendCode}
-            </Button>
-          ) : null}
+          {/* §8: the primary fills the content width alone. §8.2: it is never
+              disabled for an incomplete form — pressing it is how the person
+              learns what is missing. */}
+          <div className="flex flex-col gap-[8px]">
+            {providers.includes("email") ? (
+              <Button type="submit" size="lg" fullWidth loading={pending}>
+                {t.signIn.sendCode}
+              </Button>
+            ) : null}
+            {requestSlot}
+          </div>
         </form>
       ) : (
         <form
@@ -294,57 +321,60 @@ export function SignInForm() {
           }}
           noValidate
         >
-          <OtpInput
-            autoFocus
-            label={t.signIn.codeLabel}
-            helper={codeError ?? undefined}
-            invalid={codeError !== null}
-            disabled={pending}
-            value={code}
-            onValueChange={(next) => {
-              setCode(next);
-              if (codeError !== null && next.length < OTP_BOX_COUNT) setCodeError(null);
-            }}
-            onComplete={submitCode}
-          />
+          <div ref={codeRef}>
+            <OtpInput
+              autoFocus
+              label={t.signIn.codeLabel}
+              helper={codeError ?? undefined}
+              invalid={codeError !== null}
+              disabled={pending}
+              value={code}
+              onValueChange={(next) => {
+                setCode(next);
+                if (codeError !== null && next.length < OTP_BOX_COUNT) setCodeError(null);
+              }}
+              onComplete={submitCode}
+            />
+          </div>
 
           {/* §8 (v2.5): back lives in the step header now, so the primary fills
               the width alone. Back is still the whole escape hatch — there is no
-              "use a different email" link saying the same thing in words. */}
-          <Button type="submit" size="lg" fullWidth loading={pending}>
-            {t.common.continue}
-          </Button>
+              "use a different email" link saying the same thing in words.
+              §8.3: 8 from the primary to the tertiary. */}
+          <div className="flex flex-col items-center gap-[8px]">
+            <Button type="submit" size="lg" fullWidth loading={pending}>
+              {t.common.continue}
+            </Button>
 
-          {/* §8: one tertiary action per step, beneath the primary, centred.
-              §8 (v2.10): it disables itself for 60s after each use and counts
-              down in its own label, returning to its normal label at zero. */}
-          <div className="flex flex-col items-center">
+            {/* §8.3: one tertiary action per step, beneath the primary, centred,
+                Neutral md — the same variant as back, so the two read as one
+                family, and ghost would vanish exactly when a disabled,
+                counting-down tertiary has the most to say. §8.4: disabled for
+                60s from the send, counting down in its own label; the label
+                stays --n-secondary and the time is a mono-readout span. */}
             <Button
               type="button"
-              // §8 (v2.12): neutral, the same variant as back. They are the same
-              // tier of chrome on one step and read as one family — and ghost
-              // vanishes exactly when a disabled, counting-down tertiary has the
-              // most to say.
               variant="neutral"
-              size="sm"
+              size="md"
+              readableWhenDisabled
               disabled={pending || resendCooldown.active}
               onClick={resend}
             >
-              {resendCooldown.active
-                ? t.signIn.resendIn(formatCountdown(resendCooldown.remainingMs))
-                : t.signIn.resend}
+              {resendCooldown.active ? (
+                // One inline run, so the Button's flex row does not pull the parts
+                // apart with its gap.
+                <span>
+                  {t.signIn.resendIn(
+                    <span key="clock" className="type-mono-readout">
+                      {formatCountdown(resendCooldown.remainingMs)}
+                    </span>,
+                  )}
+                </span>
+              ) : (
+                t.signIn.resend
+              )}
             </Button>
-
-            {/* §8 (v2.10): a failure belonging to this control surfaces at this
-                control. `role="status"` because it arrives after the press,
-                with focus still on the OTP boxes — unannounced, it would be a
-                message nobody driving by keyboard ever hears. Unreserved: it is
-                the last thing on the step, so nothing above it can shift. */}
-            {resendError ? (
-              <span role="status" className={inputHelperClasses("error", false)}>
-                {resendError}
-              </span>
-            ) : null}
+            {requestSlot}
           </div>
         </form>
       )}
