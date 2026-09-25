@@ -87,8 +87,8 @@ test("a field does not shift as it goes from rest to focused to errored", async 
 });
 
 /**
- * §8 (v2.4): the OTP group steps to 44×44 / r22 / gap 8 below 768 and back to
- * 52×52 / r27 / gap 16 above it. §4 puts the breakpoint at 768, which is where
+ * §8 (v2.4): the OTP group steps to 44×44 / gap 8 below 768 and back to
+ * 52×52 / gap 16 above it, --r-pill at both (v2.21). §4 puts the breakpoint at 768, which is where
  * Tailwind's `md` sits.
  *
  * The step exists because six 52s with five 16 gaps need 392px and a 375
@@ -108,7 +108,8 @@ test.describe("OTP geometry", () => {
 
     expect(Math.round(size?.width ?? 0)).toBe(44);
     expect(Math.round(size?.height ?? 0)).toBe(44);
-    expect(await first.evaluate((el) => getComputedStyle(el).borderRadius)).toBe("22px");
+    // §8.2 (v2.21): --r-pill, which clamps to half the box.
+    expect(await first.evaluate((el) => getComputedStyle(el).borderRadius)).toBe("999px");
     expect(await first.evaluate((el) => getComputedStyle(el.parentElement!).gap)).toBe("8px");
 
     // The point of the whole change: the row of boxes now fits. The group is a
@@ -137,7 +138,7 @@ test.describe("OTP geometry", () => {
 
     expect(Math.round(size?.width ?? 0)).toBe(52);
     expect(Math.round(size?.height ?? 0)).toBe(52);
-    expect(await first.evaluate((el) => getComputedStyle(el).borderRadius)).toBe("27px");
+    expect(await first.evaluate((el) => getComputedStyle(el).borderRadius)).toBe("999px");
     expect(await first.evaluate((el) => getComputedStyle(el.parentElement!).gap)).toBe("16px");
   });
 

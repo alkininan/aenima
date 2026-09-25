@@ -23,7 +23,7 @@ type OtpInputProps = {
 const DIGITS = /^\d+$/;
 
 /**
- * Six-box one-time code (design-spec.md §8) — 52×52 boxes, radius 27, gap 16,
+ * Six-box one-time code (design-spec.md §8) — 52×52 boxes, `--r-pill`, gap 16,
  * special-otp centred, and a `--prime` border once a box is filled.
  *
  * One `<input>` per box rather than one field styled to look like six: it is
@@ -171,9 +171,10 @@ export function OtpInput({
         })}
       </div>
 
-      {/* §8 (v2.3): state-only, and the line is reserved so an error appearing
-          under the boxes does not move the action row beneath it. */}
-      <span id={helperId} className={inputHelperClasses(invalid ? "error" : undefined)}>
+      {/* §8.2 (v2.21): state-only, and two lines are reserved — the wrong-code
+          string crosses onto a second line at 343 under §12's +30% — so an
+          error appearing under the boxes moves nothing beneath it. */}
+      <span id={helperId} className={inputHelperClasses(invalid ? "error" : undefined, 2)}>
         {helper}
       </span>
     </div>

@@ -45,11 +45,14 @@ export const en = {
     resend: "Send a new code",
     /**
      * §8 (v2.10): the cooldown counts down inside the control's own label. One
-     * string with the clock interpolated rather than a label plus a separate
-     * counter — §12 reserves +30% for TR/NL and the parenthetical does not sit
-     * in the same place in every language.
+     * sentence with the clock placed by the locale rather than a label plus a
+     * separate counter — §12 reserves +30% for TR/NL and the parenthetical does
+     * not sit in the same place in every language.
+     *
+     * §8.4 (v2.21) sets the time in its own mono-readout span, so the clock is
+     * handed in already rendered and the sentence comes back as its parts.
      */
-    resendIn: (clock: string) => `Send a new code (${clock})`,
+    resendIn: <Clock>(clock: Clock) => ["Send a new code (", clock, ")"] as const,
     // §12 (v2.10): states the cause and stops there. The old line — "that's a
     // few codes in a short while" — implied the person had been excessive, when
     // the product was the one that left the button live between attempts.
