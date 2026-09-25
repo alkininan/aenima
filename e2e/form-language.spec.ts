@@ -108,7 +108,14 @@ test.describe("OTP geometry", () => {
 
     expect(Math.round(size?.width ?? 0)).toBe(44);
     expect(Math.round(size?.height ?? 0)).toBe(44);
-    expect(await first.evaluate((el) => getComputedStyle(el).borderRadius)).toBe("22px");
+    // §8.2: "`--r-pill`, which clamps to half the box" — the token, not the half.
+    expect(
+      await first.evaluate(
+        (el) =>
+          getComputedStyle(el).borderRadius ===
+          getComputedStyle(document.documentElement).getPropertyValue("--r-pill").trim(),
+      ),
+    ).toBe(true);
     expect(await first.evaluate((el) => getComputedStyle(el.parentElement!).gap)).toBe("8px");
 
     // The point of the whole change: the row of boxes now fits. The group is a
@@ -137,7 +144,14 @@ test.describe("OTP geometry", () => {
 
     expect(Math.round(size?.width ?? 0)).toBe(52);
     expect(Math.round(size?.height ?? 0)).toBe(52);
-    expect(await first.evaluate((el) => getComputedStyle(el).borderRadius)).toBe("27px");
+    // §8.2: "`--r-pill`, which clamps to half the box" — the token, not the half.
+    expect(
+      await first.evaluate(
+        (el) =>
+          getComputedStyle(el).borderRadius ===
+          getComputedStyle(document.documentElement).getPropertyValue("--r-pill").trim(),
+      ),
+    ).toBe(true);
     expect(await first.evaluate((el) => getComputedStyle(el.parentElement!).gap)).toBe("16px");
   });
 

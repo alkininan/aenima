@@ -84,8 +84,9 @@ export function PipelineStrip({
   return (
     <nav
       aria-label={t.list.title}
-      // §5's glass recipe, via the shared class: fill + blur + border + the
-      // mandatory specular edge.
+      // §5's glass recipe, via the shared class: fill + border + the mandatory
+      // specular edge, and no blur — the strip is in-flow glass, with nothing
+      // passing beneath it (C-37).
       // The padding is a custom property because each segment's radius is
       // derived from it (§5's nested rule, above). One number, one place.
       style={{ "--strip-pad": "4px" } as CSSProperties}
