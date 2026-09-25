@@ -6,7 +6,7 @@ import { cx } from "@/lib/cx";
 import type { GapMoveClaim } from "@/lib/gap-move";
 import { gapAnchor } from "@/lib/routes";
 
-import { GapMoves } from "./GapMoves";
+import { actorWords, GapMoves } from "./GapMoves";
 
 export type GapView = {
   id: string;
@@ -171,12 +171,12 @@ export function GapList({
     <ul data-testid="gap-list" className="flex flex-col gap-[8px]">
       {ordered.map((gap) => {
         const settled = gap.disposition !== "open";
-        const label =
-          gap.disposition === "accepted"
-            ? t.item.gapAccepted
-            : gap.disposition === "excluded"
-              ? t.item.gapExcluded
-              : t.item.gapOpen;
+        const accepted = gap.disposition === "accepted";
+        const label = accepted
+          ? t.item.gapAcceptedBy[gap.tag](actorWords(gap.resolvedBy, t))
+          : gap.disposition === "excluded"
+            ? t.item.gapExcluded
+            : t.item.gapOpen;
 
         return (
           // The anchor `gapOutcomeHref` targets, so a move scrolls its own card
@@ -195,10 +195,10 @@ export function GapList({
                 </Chip>
                 {/* The tag stays visible once a gap is settled. An open gap's
                     chip already carries it — §8 tones open Must and open Should
-                    differently — but a settled chip says only how it was
-                    settled, and a Must that someone accepted is a larger fact
-                    than a Should, not a smaller one. */}
-                {settled ? (
+                    differently — and so does an accepted one, §8.9's "Must ·
+                    {accepter}"; an excluded chip says only how it was settled,
+                    and a Must set aside is a larger fact than a Should. */}
+                {settled && !accepted ? (
                   <span className="type-mono-micro text-n-secondary">
                     {gap.tag === "must" ? t.item.gapMust : t.item.gapShould}
                   </span>

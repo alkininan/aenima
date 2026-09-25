@@ -70,10 +70,11 @@ describe("GapList", () => {
       />,
     );
 
-    expect(screen.getByText(t.item.gapAccepted)).not.toBeNull();
+    // §8.9: the accepted chip reads priority and accepter, "Must · {accepter}".
+    expect(screen.getByText(t.item.gapAcceptedBy.must(t.item.actorSelf))).not.toBeNull();
     expect(screen.getByText(/Accepted for V1/)).not.toBeNull();
-    // The accepter, as far as the schema can honestly name them.
-    expect(screen.getByText(new RegExp(t.item.actorSelf))).not.toBeNull();
+    // The accepter, as far as the schema can honestly name them — on the chip and the stamp.
+    expect(screen.getByText(new RegExp(`^${t.item.settledBy(t.item.actorSelf)}`))).not.toBeNull();
   });
 
   it("keeps an excluded gap visible too", () => {
@@ -107,7 +108,8 @@ describe("GapList", () => {
     render(
       <GapList
         gaps={[
-          gap({ id: "g2", disposition: "accepted", tag: "must", resolvedBy: { kind: "self" } }),
+          gap({ id: "g2", disposition: "excluded", tag: "must", resolvedBy: { kind: "self" } }),
+          gap({ id: "g3", disposition: "accepted", tag: "should", resolvedBy: { kind: "other" } }),
         ]}
         t={t}
         itemKey="soc-12"
@@ -117,6 +119,7 @@ describe("GapList", () => {
     );
 
     expect(screen.getByText(t.item.gapMust)).not.toBeNull();
+    expect(screen.getByText(t.item.gapAcceptedBy.should(t.item.actorOther))).not.toBeNull();
   });
 
   // §13 reads top-down: what is owed first, what is settled after.

@@ -799,6 +799,8 @@ export const DEFAULTS = [
   { key: "item.gapReopen", default: "Reopen", as: "reopen" },
   { key: "item.checkUnclear.must", default: "Must · unclear", as: "gap chip" },
   { key: "item.checkUnclear.should", default: "Should · unclear", as: "gap chip" },
+  { key: "item.gapAcceptedBy.must", default: "Must · {}", as: "accepted gap chip" },
+  { key: "item.gapAcceptedBy.should", default: "Should · {}", as: "accepted gap chip" },
   { key: "list.noScoring", default: "Connect AI to activate scoring", as: "no key" },
   { key: "errors.backToApp", default: "Back to dashboard", as: "degraded pages" },
   { key: "common.retry", default: "Retry", as: "degraded pages" },

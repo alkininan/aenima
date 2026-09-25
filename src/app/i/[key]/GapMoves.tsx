@@ -68,7 +68,7 @@ export type MoveableGap = {
 /** What the URL says came of the last move on *this* gap, if it was this one. */
 export type GapMoveState = GapMoveClaim | null;
 
-function actorWords(actor: Actor | null, t: Dictionary): string {
+export function actorWords(actor: Actor | null, t: Dictionary): string {
   if (!actor) return t.item.actorOther;
   if (actor.kind === "agent") return actor.name;
   return actor.kind === "self" ? t.item.actorSelf : t.item.actorOther;
