@@ -253,13 +253,13 @@ test.describe("at 1440", () => {
         .getByTestId("freshness-dot")
         .evaluate((node) => getComputedStyle(node).backgroundColor);
 
-    await expect(rows.filter({ hasText: "soc-12" })).toContainText("scored 6h ago — retrying");
+    await expect(rows.filter({ hasText: "soc-12" })).toContainText("scored 6 h ago — retrying");
     expect(await dotColour("soc-12")).toBe(WARNING);
 
-    await expect(rows.filter({ hasText: "soc-4" })).toContainText("scored 2d ago");
+    await expect(rows.filter({ hasText: "soc-4" })).toContainText("scored 2 d ago");
     expect(await dotColour("soc-4")).toBe(PRIME);
 
-    await expect(rows.filter({ hasText: "aur-1" })).toContainText("updated 3h ago");
+    await expect(rows.filter({ hasText: "aur-1" })).toContainText("updated 3 h ago");
     expect(await dotColour("aur-1")).toBe(PRIME);
   });
 

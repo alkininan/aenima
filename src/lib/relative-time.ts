@@ -2,7 +2,7 @@
  * How long ago, in the row's mono-readout — design-spec.md §8's freshness
  * timestamp.
  *
- * Deliberately coarse. §12 asks for a calm voice, and "updated 3d ago" is what
+ * Deliberately coarse. §12 asks for a calm voice, and "updated 3 d ago" is what
  * someone scanning a list needs; "updated 3 days, 4 hours and 12 minutes ago" is
  * noise pretending to be precision. The units stop at weeks because §13's list
  * is active work — anything older has a staleness problem the buckets are
@@ -14,7 +14,7 @@
  *
  * The strings live in `src/i18n`, so this returns a unit and a count rather than
  * text — TR and NL do not pluralise or order these the way English does, and a
- * formatter that returned "3d ago" would have baked one language in.
+ * formatter that returned "3 d ago" would have baked one language in.
  */
 
 export type RelativeTime =

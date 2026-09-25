@@ -16,7 +16,7 @@ export const en = {
     appName: "aenima",
     continue: "Continue",
     back: "Back",
-    retry: "Try again",
+    retry: "Retry",
     signOut: "Sign out",
   },
   signIn: {
@@ -161,7 +161,11 @@ export const en = {
     /** §12: calm vocabulary. A check that passed was answered, not "passed". */
     checkPassed: "Answered",
     /** §12 verbatim: "this section was unclear" — never test, fail, violation. */
-    checkUnclear: "Unclear",
+    /**
+     * §8's Unclear state is the §8.9 gap chip, reading priority and state: the word, not the
+     * warmth, is what says a Must blocks (§13, C-32). §12's gap-chip defaults, keyed by tag.
+     */
+    checkUnclear: { must: "Must · unclear", should: "Should · unclear" },
     /** §4: the check left the denominator. Not a pass, and not a failure. */
     checkNotAsked: "Not asked",
     /**
@@ -286,7 +290,7 @@ export const en = {
      * §1 law 4's "always undoable", as a standing control rather than a toast.
      * A debt can be handed back at any time by anyone who could have taken it.
      */
-    gapReopen: "Reopen this gap",
+    gapReopen: "Reopen",
     /**
      * What came of a move — §5's outcomes, one sentence each, **per move**.
      *
@@ -336,7 +340,15 @@ export const en = {
     gapMoveUnreadable: "That didn't arrive as a move, so nothing changed. Try it from the gap.",
     /** §5's three dispositions, as §5 names the moves that produce them. */
     gapOpen: "Open",
-    gapAccepted: "Accepted",
+    /**
+     * §8.9's accepted gap chip, reading priority and who took the debt: the name is what
+     * says it was accepted, and the tag is what says how large a fact that is. §12's
+     * "Must · {accepter}", keyed by tag.
+     */
+    gapAcceptedBy: {
+      must: (accepter: string) => `Must · ${accepter}`,
+      should: (accepter: string) => `Should · ${accepter}`,
+    },
     gapExcluded: "Excluded",
     /** §5's two tags. Only a Must blocks handover; a Should is advisory. */
     gapMust: "Must",
@@ -379,10 +391,10 @@ export const en = {
   /** Relative time for the row's mono-readout. §12: calm, never exact-to-the-second. */
   relativeTime: {
     justNow: "just now",
-    minutes: (n: number) => `${n}m ago`,
-    hours: (n: number) => `${n}h ago`,
-    days: (n: number) => `${n}d ago`,
-    weeks: (n: number) => `${n}w ago`,
+    minutes: (n: number) => `${n} m ago`,
+    hours: (n: number) => `${n} h ago`,
+    days: (n: number) => `${n} d ago`,
+    weeks: (n: number) => `${n} w ago`,
   },
   workspace: {
     // First run: §16 defers real onboarding, so the workspace gets a plain name.
@@ -394,7 +406,7 @@ export const en = {
     // design-spec.md §10: one line, one action, never a stack trace.
     notFound: "That page isn't here.",
     unexpected: "Something went wrong on our side.",
-    backToApp: "Back to your workspace",
+    backToApp: "Back to dashboard",
   },
 } as const;
 

@@ -66,7 +66,7 @@ const BUTTON_VARIANT_CLASSES: Record<ButtonVariant, string> = {
   // The brightened value is §7's glass hover border.
   secondary:
     "control-edge-none border border-glass-border bg-transparent text-n-primary " +
-    "hover:not-disabled:border-[rgba(120,126,136,.72)]",
+    "hover:not-disabled:border-glass-border-hover",
   // §8: text-only, --n-secondary → --n-primary on hover.
   ghost: "control-edge-none bg-transparent text-n-secondary hover:not-disabled:text-n-primary",
   // §8: --danger-deep fill, white label.
@@ -230,12 +230,12 @@ export const INPUT_CONTROL_CLASSES =
 /**
  * The floating label — §8, §13.
  *
- * Sizes and positions come from globals.css, because both states and the
- * transition between them are one rule; splitting them across Tailwind
- * utilities would leave the at-rest geometry expressible only as a magic
- * number here.
+ * The type is ui-label in both states (§8.2, v2.22); the position and the
+ * at-rest scale come from globals.css, because both states and the transition
+ * between them are one rule; splitting them across Tailwind utilities would
+ * leave the at-rest geometry expressible only as a magic number here.
  */
-export const INPUT_LABEL_CLASSES = "field-label";
+export const INPUT_LABEL_CLASSES = "field-label type-ui-label";
 
 /** §8 icon slots are 24 square, leading and trailing. */
 const INPUT_ICON_SLOT_BASE =
@@ -698,7 +698,8 @@ export const SCRIM_CLASSES = "fixed inset-0 z-[var(--z-modal)] bg-bg-scrim";
 export const MODAL_VIEWPORT_CLASSES =
   "pointer-events-none fixed inset-0 z-[var(--z-modal)] flex items-center justify-center p-[24px]";
 
-// §8: glass recipe, --r-md, modal shadow. Padding 20 and the 8px footer gap are
+// §8: glass recipe — its unblurred class, since a modal stands over the scrim
+// (§5, C-37) — --r-md, modal shadow. Padding 20 and the 8px footer gap are
 // the ticket-confirmed overlay spacing; the max height is the viewport less
 // §4's gutter top and bottom.
 const MODAL_BASE =
@@ -714,7 +715,8 @@ export function modalClasses(width: ModalWidth = "confirm", className?: string):
   return cx(MODAL_BASE, MODAL_WIDTH_CLASSES[width], className);
 }
 
-// §8 side sheets: 480 wide, right slide-in --t-med, glass recipe, --r-lg on the
+// §8 side sheets: 480 wide, right slide-in --t-med, the unblurred glass recipe
+// (over the scrim, as a modal is — C-37), --r-lg on the
 // leading corners only. §5 lists a shadow for modals and dropdowns but not for
 // sheets; a sheet is a modal-class layer, so it takes the modal shadow.
 export const SHEET_VIEWPORT_CLASSES =
@@ -850,12 +852,11 @@ export function skeletonClasses(shape: SkeletonShape = "block", className?: stri
 /** §12: six-digit codes. */
 export const OTP_BOX_COUNT = 6;
 
-// §8: "OTP: 6 boxes 52×52, radius 27, gap 16, special-otp centered; filled box
-// border --prime." Radius 27 is the resolved value, not the proportional rule:
-// a 52h pill clamps to half its height at 26, and the spec wrote 27 — one past
-// the clamp, so the box is unambiguously a pill however it is measured.
+// §8.2: "Two sizes: ≥768 52×52, gap 16 · <768 44×44, gap 8; both `--r-pill`,
+// which clamps to half the box." The token, not the half it clamps to: a
+// literal radius here is what C-06 refuses.
 //
-// v2.4 steps the group down below 768: 44×44, radius 22, gap 8. Six 52s with
+// v2.4 steps the group down below 768. Six 52s with
 // five 16 gaps need 392px, which does not fit a 375 viewport — the boxes ran off
 // the screen. 6×44 + 5×8 = 304 does. `md` is Tailwind's 768, which is exactly
 // §4's breakpoint, so the step happens where the spec puts it. The OTP stays
@@ -866,7 +867,7 @@ export const OTP_BOX_COUNT = 6;
 export const OTP_GROUP_CLASSES = "flex justify-center gap-[8px] md:gap-[16px]";
 
 const OTP_BOX_BASE =
-  "otp-box size-[44px] rounded-[22px] md:size-[52px] md:rounded-[27px] " +
+  "otp-box size-[44px] rounded-pill md:size-[52px] " +
   "border bg-surface-1 text-center type-special-otp " +
   "text-n-primary caret-prime transition-[border-color,box-shadow] " +
   "duration-[var(--t-fast)] ease-brand focus:outline-none " +

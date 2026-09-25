@@ -15,10 +15,10 @@ import { expect, test } from "@playwright/test";
  */
 
 // §2 tokens, resolved.
-const AGENT = "rgb(167, 139, 255)";
 const SURFACE_1 = "rgb(21, 23, 28)";
 const PRIME = "rgb(33, 184, 220)";
 const WARNING = "rgb(235, 169, 47)";
+const PRIMARY_TEXT = "rgb(224, 229, 235)";
 
 for (const width of [1440, 768, 375] as const) {
   test.describe(`at ${width}`, () => {
@@ -198,13 +198,14 @@ test.describe("at 1440", () => {
     await expect(page.locator('main a[href="/o/soc-2"]')).toHaveCount(1);
   });
 
-  // §0 law 4: anything the machine did is visibly the machine's.
-  test("renders an agent actor in --agent", async ({ page }) => {
+  // C-36: an activity entry is what happened, not a proposal waiting on a human, so the
+  // agent is named and never violet — --agent stands on proposal cards (T0.38).
+  test("names an agent actor in --n-primary, never --agent", async ({ page }) => {
     const colour = await page
       .getByText("scorer", { exact: true })
       .evaluate((node) => getComputedStyle(node).color);
 
-    expect(colour).toBe(AGENT);
+    expect(colour).toBe(PRIMARY_TEXT);
   });
 
   /**
@@ -280,7 +281,7 @@ test.describe("at 1440", () => {
     // `prd-5`, `prd-14` and `prd-17` are unclear with no gap in the fixture, and
     // offer nothing — the control follows the debt, not the check.
     await expect(content.getByText("Accept this risk")).toHaveCount(3);
-    await expect(content.getByRole("button", { name: "Reopen this gap" })).toHaveCount(1);
+    await expect(content.getByRole("button", { name: "Reopen" })).toHaveCount(1);
 
     // One reason field per accept form, and no other input on the page. DOM
     // locators rather than roles: a closed `<details>` keeps its contents out of
@@ -371,7 +372,7 @@ test.describe("at 1440", () => {
   test("keeps an accepted gap named, dimmed and reversible", async ({ page }) => {
     const card = page.getByTestId("gap-list").getByRole("listitem").filter({ hasText: "prd-16" });
 
-    await expect(card.getByRole("button", { name: "Reopen this gap" })).toBeVisible();
+    await expect(card.getByRole("button", { name: "Reopen" })).toBeVisible();
     const opacity = await card
       .locator("> *")
       .first()
@@ -809,7 +810,7 @@ test.describe("the meter's other states", () => {
     await page.evaluate(() => document.fonts.ready);
 
     const readiness = page.getByTestId("readiness");
-    await expect(readiness).toContainText("scored 4h ago — retrying");
+    await expect(readiness).toContainText("scored 4 h ago — retrying");
 
     // The dot is 8, like every system dot in the product, and it is --warning.
     const dot = readiness.locator("span[aria-hidden='true']").last();
