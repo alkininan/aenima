@@ -742,7 +742,7 @@ export function copyOffenders(root) {
   for (const path of dictionaryFiles(root)) {
     for (const string of stringValues(path, read(root, path))) {
       const text = NAMES.reduce(
-        (out, name) => out.replaceAll(name, name.split(" ")[0]),
+        (out, name) => out.replaceAll(name, name.toLowerCase()),
         string.value,
       );
       const report = (found) =>
@@ -796,6 +796,9 @@ export const DEFAULTS = [
   },
   { key: "signIn.codeSentTo", default: "Code sent to {}", as: "OTP step subtitle" },
   { key: "item.scoredRetrying", default: "scored {} — retrying", as: "provider retry readout" },
+  { key: "item.gapReopen", default: "Reopen", as: "reopen" },
+  { key: "item.checkUnclear.must", default: "Must · unclear", as: "gap chip" },
+  { key: "item.checkUnclear.should", default: "Should · unclear", as: "gap chip" },
   { key: "list.noScoring", default: "Connect AI to activate scoring", as: "no key" },
   { key: "errors.backToApp", default: "Back to dashboard", as: "degraded pages" },
   { key: "common.retry", default: "Retry", as: "degraded pages" },
@@ -880,7 +883,7 @@ export function vocabulary(productSpec) {
 
 /** A listed word, whole, in any case, with a plural or verb ending. */
 function steeredWord(word) {
-  return new RegExp(`\\b${word}(?:s|es|d|ed|ing)?\\b`, "i");
+  return new RegExp(`\\b${word}(?:s|es|zes|d|ed|ing)?\\b`, "i");
 }
 
 /**

@@ -161,7 +161,11 @@ export const en = {
     /** §12: calm vocabulary. A check that passed was answered, not "passed". */
     checkPassed: "Answered",
     /** §12 verbatim: "this section was unclear" — never test, fail, violation. */
-    checkUnclear: "Unclear",
+    /**
+     * §8's Unclear state is the §8.9 gap chip, reading priority and state: the word, not the
+     * warmth, is what says a Must blocks (§13, C-32). §12's gap-chip defaults, keyed by tag.
+     */
+    checkUnclear: { must: "Must · unclear", should: "Should · unclear" },
     /** §4: the check left the denominator. Not a pass, and not a failure. */
     checkNotAsked: "Not asked",
     /**
@@ -286,7 +290,7 @@ export const en = {
      * §1 law 4's "always undoable", as a standing control rather than a toast.
      * A debt can be handed back at any time by anyone who could have taken it.
      */
-    gapReopen: "Reopen this gap",
+    gapReopen: "Reopen",
     /**
      * What came of a move — §5's outcomes, one sentence each, **per move**.
      *
