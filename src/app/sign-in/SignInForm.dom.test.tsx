@@ -508,6 +508,30 @@ describe("sign-in forms to v2.21", () => {
     expect(resend.className).not.toContain("disabled:text-n-disabled");
   });
 
+  // §8.4's exemption is for the countdown alone: a verify in flight disables the
+  // resend for a reason that carries no information, so it takes §7's tone.
+  it("gives the resend §7's disabled tone while a verify is in flight", async () => {
+    const user = await arrive();
+    await act(async () => {
+      vi.advanceTimersByTime(RESEND_COOLDOWN_MS);
+    });
+    // Held open for the assertion, then settled: React entangles async
+    // transitions, so one left pending would hold every later test's pending too.
+    let settle!: (value: { status: "unavailable" }) => void;
+    verifyCode.mockReturnValue(new Promise((resolve) => (settle = resolve)));
+
+    try {
+      const boxes = within(screen.getByRole("group")).getAllByRole("textbox");
+      await user.type(boxes[0]!, "482913");
+
+      const resend = screen.getByRole("button", { name: "Send a new code" }) as HTMLButtonElement;
+      expect(resend.disabled).toBe(true);
+      expect(resend.className).toContain("disabled:text-n-disabled");
+    } finally {
+      await act(async () => settle({ status: "unavailable" }));
+    }
+  });
+
   // §8.3: the tertiary is Neutral md.
   it("draws the resend at md", async () => {
     await arrive();

@@ -389,7 +389,7 @@ describe("forms to v2.21", () => {
   // §8.2: two lines under the OTP group, whose wrong-code string wraps at 343.
   it("reserves two helper lines when asked", () => {
     expect(has(inputHelperClasses("error", 2), "field-helper-reserved-2")).toBe(true);
-    expect(inputHelperClasses("error", 2)).not.toContain("field-helper-reserved ");
+    expect(inputHelperClasses("error", 2).split(" ")).not.toContain("field-helper-reserved");
   });
 
   // §8.4: the countdown's label stays readable while the control is disabled.

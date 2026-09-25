@@ -356,7 +356,8 @@ export function SignInForm() {
               type="button"
               variant="neutral"
               size="md"
-              readableWhenDisabled
+              // §8.4: readable while it counts down — not while a verify is in flight.
+              readableWhenDisabled={resendCooldown.active}
               disabled={pending || resendCooldown.active}
               onClick={resend}
             >
