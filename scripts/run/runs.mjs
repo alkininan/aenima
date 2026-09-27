@@ -35,9 +35,20 @@
  *     and Done are Done, Decision is Decision, anything else Stopped;
  *   - findings are counted from the reviewer subagent's replies, `Must` and `Should` tags;
  *   - a subagent's transcript is written beside the session's, under
- *     `<transcript dir>/<session id>/subagents/agent-*.jsonl`, every line a sidechain; its
- *     usage and model count towards the run's — the reviewer is half a real run's spend — and
- *     nothing else in it does, since its first user message is the ticket path, not `/ticket`.
+ *     `<transcript dir>/<session id>/subagents/agent-*.jsonl`, every line a sidechain, with the
+ *     agent's name in `agent-*.meta.json` beside it (`agentType`); its usage and model count
+ *     towards the run's — the reviewer is half a real run's spend. Since T0.44 the closer is a
+ *     subagent too and writes the board at close, so the closer's Status writes and merges are
+ *     read as the orchestrator's are; nothing else in any subagent's transcript is, since its
+ *     first user message is the ticket path, not `/ticket`;
+ *   - the tokens per phase (T0.44): the orchestrator writes the phase into the marker with
+ *     `phase.mjs` before it invokes each phase agent, and that command is read off its Bash
+ *     calls with its timestamp. A subagent's usage is its phase's by the agent's name —
+ *     planner, builder, reviewer, gatekeeper, closer, at either effort — and the
+ *     orchestrator's own, or a subagent's the table does not name, is the phase the marker
+ *     named when the message was written; before the first phase, preflight and claim, it is
+ *     Plan's. Every message lands in exactly one phase, so the five sum to Tokens. The route is
+ *     the last `--route` the orchestrator set.
  *
  * `parseTranscript` is pure over the lines; `post` takes the client injected so a test never
  * reaches the network. Tokens are input + output, cache reads and cache writes excluded, as
@@ -74,6 +85,25 @@ export const OUTCOMES = { Review: "Done", Done: "Done", Decision: "Decision" };
 /** The outcome of a run that wrote no Review, Done or Decision — an idle run, a killed one. */
 export const STOPPED = "Stopped";
 
+/** The phases a run's tokens are split across, as the Runs row names its columns (T0.44). */
+export const PHASE_COLUMNS = { plan: "Plan", build: "Build", review: "Review", gate: "Gate", close: "Close" };
+
+/** The subagents whose Status writes and merges are the run's: the closer writes the board. */
+const BOARD_WRITERS = new Set(["closer"]);
+
+/**
+ * The phase a subagent's usage belongs to, by the agent's name — `builder` and `builder-medium`
+ * alike — or null for an agent the table does not name.
+ */
+export function phaseOfAgent(agent) {
+  const base = String(agent ?? "").replace(/-(?:medium|low|high|xhigh|max)$/, "");
+  return (
+    { planner: "plan", builder: "build", reviewer: "review", gatekeeper: "gate", closer: "close" }[
+      base
+    ] ?? null
+  );
+}
+
 /**
  * The claims and merges a Bash command runs, in order, read with the guard's own parser — the
  * same reading it gives a command before letting `gh pr merge` through — so the words inside a
@@ -84,7 +114,12 @@ export function runsIn(command) {
   const found = [];
   for (const { argv } of parse(command)) {
     const { name, rest } = target(argv);
-    if (name === "node" && basename(rest[0] ?? "") === "claim.mjs") {
+    if (name === "node" && basename(rest[0] ?? "") === "phase.mjs") {
+      // A route's name is never a phase's, so the phase is the first word that names one.
+      const i = rest.indexOf("--route");
+      const phase = rest.slice(1).find((word) => Object.hasOwn(PHASE_COLUMNS, word)) ?? null;
+      if (phase) found.push({ phase, route: i === -1 ? null : (rest[i + 1] ?? null) });
+    } else if (name === "node" && basename(rest[0] ?? "") === "claim.mjs") {
       const value = (flag) => rest[rest.indexOf(flag) + 1] ?? null;
       const task = rest.includes("--task") ? value("--task") : null;
       const page = rest.includes("--page") ? value("--page") : null;
@@ -186,8 +221,9 @@ export function countFindings(text) {
 /**
  * Read a transcript's lines into what the row needs.
  *
- * Returns `{ session, run, started, ended, durationMin, turns, models, model, tokens, task,
- * page, statuses, outcome, findings }`. `run` is false when no user message carries the
+ * Returns `{ session, run, started, ended, durationMin, turns, models, model, tokens, phases,
+ * route, task, page, statuses, outcome, findings }`. `sidechains` are the subagents'
+ * transcripts, `{ agent, lines }` each, `agent` the name their meta file gives. `run` is false when no user message carries the
  * run prompt — a session that was not a `/ticket`, which gets no row.
  */
 export function parseTranscript(lines, sidechains = []) {
@@ -196,10 +232,13 @@ export function parseTranscript(lines, sidechains = []) {
       .map((line) => (typeof line === "string" ? parseLine(line) : line))
       .filter((event) => event !== null && typeof event === "object");
   const events = readLines(lines).filter((event) => !event.isSidechain);
-  // A subagent's lines: usage and model only. Its prompt is the ticket path, its statuses none.
-  const side = sidechains
-    .flatMap((raw) => readLines(raw))
-    .filter((event) => event.type === "assistant");
+  // A subagent's lines, `{ agent, lines }` each: usage and model, and — the closer's alone — the
+  // board writes and merges. Its prompt is the ticket path, never the run's.
+  const agents = sidechains.map(({ agent = null, lines: raw = [] }) => ({
+    agent,
+    events: readLines(raw).filter((event) => event.type === "assistant"),
+  }));
+  const side = agents.flatMap(({ agent, events: own }) => own.map((event) => ({ agent, event })));
 
   const timestamps = events
     .map((event) => event.timestamp)
@@ -221,21 +260,52 @@ export function parseTranscript(lines, sidechains = []) {
 
   // One API message, one usage — whatever the number of content blocks it was written as. The
   // subagents' messages count here and nowhere else.
+  // The orchestrator's phase commands, in the order written: when each phase began, and the
+  // route it took.
+  const phaseMarks = [];
+  let route = null;
+  for (const event of assistants) {
+    for (const block of blocksOf(event.message?.content)) {
+      if (block?.type !== "tool_use" || block.name !== "Bash") continue;
+      for (const step of runsIn(String(block.input?.command ?? ""))) {
+        if (!step.phase) continue;
+        phaseMarks.push({ at: event.timestamp ?? "", phase: step.phase });
+        if (step.route) route = step.route;
+      }
+    }
+  }
+  const phaseAt = (stamp) =>
+    phaseMarks.filter((mark) => typeof stamp === "string" && mark.at <= stamp).at(-1)?.phase ??
+    "plan";
+
   const messages = new Map();
-  for (const event of [...assistants, ...side]) {
+  for (const event of assistants) {
     const id = event.message?.id ?? event.uuid;
-    messages.set(id, event.message);
+    messages.set(id, { message: event.message, phase: phaseAt(event.timestamp) });
+  }
+  for (const { agent, event } of side) {
+    const id = event.message?.id ?? event.uuid;
+    messages.set(id, { message: event.message, phase: phaseOfAgent(agent) ?? phaseAt(event.timestamp) });
   }
   let input = 0;
   let output = 0;
   const families = [];
-  for (const message of messages.values()) {
+  const phases = Object.fromEntries(Object.keys(PHASE_COLUMNS).map((phase) => [phase, 0]));
+  for (const { message, phase } of messages.values()) {
+    const spent = (message?.usage?.input_tokens ?? 0) + (message?.usage?.output_tokens ?? 0);
     input += message?.usage?.input_tokens ?? 0;
     output += message?.usage?.output_tokens ?? 0;
+    phases[phase] += spent;
     families.push(modelFamily(message?.model));
   }
 
-  const toolUses = assistants.flatMap((event) =>
+  // The tool calls whose claims, Status writes and merges are the run's: the orchestrator's and
+  // the closer's, in the order they were made.
+  const writers = [
+    ...assistants,
+    ...side.filter(({ agent }) => BOARD_WRITERS.has(agent)).map(({ event }) => event),
+  ].sort((a, b) => String(a.timestamp ?? "").localeCompare(String(b.timestamp ?? "")));
+  const toolUses = writers.flatMap((event) =>
     blocksOf(event.message?.content).filter((block) => block?.type === "tool_use"),
   );
   const toolResults = new Map();
@@ -282,7 +352,7 @@ export function parseTranscript(lines, sidechains = []) {
 
   let findings = 0;
   for (const use of toolUses) {
-    if (use.name !== "Agent" || use.input?.subagent_type !== "reviewer") continue;
+    if (use.name !== "Agent" || phaseOfAgent(use.input?.subagent_type) !== "review") continue;
     findings += countFindings(toolResults.get(use.id) ?? "");
   }
 
@@ -296,6 +366,8 @@ export function parseTranscript(lines, sidechains = []) {
     models: [...new Set(families.filter(Boolean))],
     model: modelLabel(families),
     tokens: { input, output, total: input + output },
+    phases,
+    route,
     task,
     page,
     statuses,
@@ -373,6 +445,11 @@ export function rowProperties(summary, number) {
   if (summary.durationMin !== null) properties.Duration = { number: summary.durationMin };
   if (summary.model) properties.Model = { select: { name: summary.model } };
   if (summary.page) properties.Task = { relation: [{ id: summary.page }] };
+  // The tokens each phase spent, which sum to Tokens, and the route the run took (T0.44).
+  for (const [phase, column] of Object.entries(PHASE_COLUMNS)) {
+    properties[column] = { number: summary.phases?.[phase] ?? 0 };
+  }
+  if (summary.route) properties.Route = { select: { name: summary.route } };
   return properties;
 }
 
@@ -421,11 +498,24 @@ export function sidechainsOf(path) {
     .map((name) => join(dir, name));
 }
 
+/** The agent a subagent transcript belongs to, from the meta file beside it, or null. */
+export function agentOf(file) {
+  try {
+    const meta = JSON.parse(readFileSync(file.replace(/\.jsonl$/, ".meta.json"), "utf8"));
+    return typeof meta?.agentType === "string" ? meta.agentType : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Read a transcript file, and the subagent transcripts beside it, into its summary. */
 export function summarize(path) {
   return parseTranscript(
     readFileSync(path, "utf8").split("\n"),
-    sidechainsOf(path).map((file) => readFileSync(file, "utf8").split("\n")),
+    sidechainsOf(path).map((file) => ({
+      agent: agentOf(file),
+      lines: readFileSync(file, "utf8").split("\n"),
+    })),
   );
 }
 
