@@ -714,7 +714,9 @@ route — written by `scripts/run/phase.mjs` before the orchestrator invokes eac
 guard's rule (j) reads it: a push, a `gh` call, a merge or a board write outside `close` is
 refused, an Edit or a Write outside `build` is refused — in `close` everything but a write under
 `docs/` — and a hook call while the marker names no phase is judged by the other rules alone, as
-before. The refusal names the phase and the rule. The phase is a tripwire the orchestrator sets,
+before. The phase is the run's: the marker is one file for every checkout, so a call from another
+session — you in the primary checkout while a scheduled run builds — is judged as though no phase
+were set, and a phase agent, a subagent of the run's own session, is held to it. The refusal names the phase and the rule. The phase is a tripwire the orchestrator sets,
 not a wall between agents: a phase agent that ran `phase.mjs` itself would move it, which is why
 each agent's file says what its phase may do.
 A stale run recovers by default because the branch is preserved: a wrong guess costs nothing.

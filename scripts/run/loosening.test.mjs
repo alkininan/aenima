@@ -127,6 +127,8 @@ describe("the corpus", () => {
     expect(phased.map((entry) => entry.name)).toEqual([
       "push from the build phase",
       "gh from the build phase",
+      "merge from the build phase",
+      "pull from the build phase",
       "board write from the build phase",
       "Edit from the review phase",
       "Write from the plan phase",

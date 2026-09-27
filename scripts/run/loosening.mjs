@@ -217,6 +217,18 @@ export const GUARD_CORPUS = [
     deps: { phase: () => "build" },
   },
   {
+    name: "merge from the build phase",
+    rule: "j",
+    input: bash("git merge origin/main"),
+    deps: { phase: () => "build" },
+  },
+  {
+    name: "pull from the build phase",
+    rule: "j",
+    input: bash("git pull origin t0-1"),
+    deps: { phase: () => "build" },
+  },
+  {
     name: "board write from the build phase",
     rule: "j",
     input: connector("create-comment", { page_id: "p", markdown: "⟡ I took a default" }),

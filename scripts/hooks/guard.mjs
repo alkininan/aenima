@@ -1298,6 +1298,22 @@ export function phaseRefusal(phase, act, { docs = false } = {}) {
 }
 
 /**
+ * The phase a marker holds a hook call to, or null. The marker is one file for every checkout of
+ * the repository, so a phase is the run's alone: a call from another session — you in the
+ * primary checkout while a scheduled run builds in a worktree — is judged as though no phase were
+ * set (review pass 2, Must 1). A phase agent is a subagent of the run's own session and carries
+ * its id. A marker or a call that names no session cannot be told apart, and is held to the phase:
+ * the stricter reading of what cannot be read.
+ */
+export function runPhase(marker, session) {
+  const phase = marker?.phase ?? null;
+  if (phase === null) return null;
+  const owner = marker.session ?? null;
+  if (owner !== null && session !== null && owner !== session) return null;
+  return phase;
+}
+
+/**
  * True for a path inside `dir`'s own `docs/` — relative paths read from `cwd`. A `docs/`
  * anywhere else on the disk, or `src/docs/`, is not the repository's documents.
  */
@@ -1553,8 +1569,15 @@ export function decide(input, deps = {}) {
     }
 
     // (j) a push, a merge and any gh call are the close phase's alone (T0.44).
+    // A pull is a fetch and a merge, and is the merge's.
     const act =
-      git?.verb === "push" ? "push" : git?.verb === "merge" ? "merge" : name === "gh" ? "gh" : null;
+      git?.verb === "push"
+        ? "push"
+        : git?.verb === "merge" || git?.verb === "pull"
+          ? "merge"
+          : name === "gh"
+            ? "gh"
+            : null;
     if (act !== null) {
       const refused = phaseRefusal(phase(), act);
       if (refused !== null) return refused;
@@ -1609,7 +1632,7 @@ export async function judge(input, { dir = resolveDir(input), deps = {} } = {}) 
         })
       : null;
   // The phase the orchestrator wrote into the marker (T0.44); no marker, no phase.
-  const phase = deps.phase ?? (() => readMarker(dir)?.phase ?? null);
+  const phase = deps.phase ?? (() => runPhase(readMarker(dir), input?.session_id ?? null));
   return decide(input, {
     phase,
     permission: (word) => answers[word] ?? UNREAD,

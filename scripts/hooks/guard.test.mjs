@@ -1630,6 +1630,7 @@ describe("T0.44 — rule (j) the phase the marker names", () => {
       "gh pr create --fill --base main",
       "gh pr view t0-44 --json url",
       "git merge origin/main",
+      "git pull origin t0-44",
     ]) {
       const reason = decide(sh(command), at("build"));
       expect(reason).toContain("in the build phase is refused");
@@ -1725,6 +1726,33 @@ describe("T0.44 — rule (j) the phase the marker names", () => {
       git(repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "base");
     });
     afterAll(() => rmSync(repo, { recursive: true, force: true }));
+
+    // Review pass 2, Must 1: the marker is one file for every checkout, and the phase is the run's.
+    it("holds the run's own session to the phase, and no other session", async () => {
+      const call = (session_id) => ({
+        tool_name: "Bash",
+        tool_input: { command: "git push -u origin t0-44" },
+        cwd: repo,
+        session_id,
+      });
+      claim({ task: "T0.44", page: "p", branch: "t0-44" }, { cwd: repo, env });
+      const { setPhase } = await import("../run/phase.mjs");
+      setPhase({ phase: "build" }, { cwd: repo, env });
+      expect(await judge(call("sess-j"))).toContain("in the build phase is refused");
+      expect(await judge(call("someone-else"))).toBeNull();
+      // A call that names no session cannot be told from the run's, and is held to it.
+      expect(await judge(call(undefined))).toContain("in the build phase is refused");
+      release({ session: "sess-j" }, { cwd: repo });
+    });
+
+    it("reads a marker with no session as the phase's for every call", async () => {
+      const { runPhase } = await import("./guard.mjs");
+      expect(runPhase({ phase: "build", session: null }, "anyone")).toBe("build");
+      expect(runPhase({ phase: "build", session: "a" }, "b")).toBeNull();
+      expect(runPhase({ phase: "build", session: "a" }, "a")).toBe("build");
+      expect(runPhase({ session: "a" }, "a")).toBeNull();
+      expect(runPhase(null, "a")).toBeNull();
+    });
 
     it("refuses from the phase the marker names, and judges as before once it names none", async () => {
       const push = {
