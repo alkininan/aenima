@@ -1,4 +1,9 @@
-<!-- guidelines.md · v1.29 · in the repo · a migration takes one word (T0.26):
+<!-- guidelines.md · v1.30 · in the repo · the deploy check reads the deployment when the
+     domain does not resolve (T0.43): §5's deploy check asks the addresses `deploy` in
+     .claude/board.json names — aeni.ma, then the deployment's own Vercel address — skipping a
+     name that does not resolve and Vercel's login, and takes its outcome from the first that
+     answers; step 0 says the same.
+     v1.29 · in the repo · a migration takes one word (T0.26):
      §4 the ticket carrying an applied migration merges itself, with the spending read off the
      thread — your `apply`, then the run's own `applied` note naming that tag — so another
      ticket's word ungates nothing; §2, §3 and §5 steps 6 and 9 say the gate the same way.
@@ -478,7 +483,8 @@ has no effort control, and a repository setting would reach every session opened
                 hours, is stale: keep its branch as t<id>-stale-<HHMM>, post one comment,
                 re-claim it from origin/main and continue — no human needed · main moved
                 since the last deploy check → ask the live site from outside (health.mjs):
-                /sign-in 200, /app 307; a wrong answer (down) reverts the merge at the tip
+                /sign-in 200, /app 307, from aeni.ma or, when that name does not resolve,
+                the deployment's own Vercel address; a wrong answer (down) reverts the merge at the tip
                 (revert.mjs, then the one push to main the guard lets through, HEAD:main),
                 files one Fix task at Backlog, puts the reverted ticket back at Backlog, one
                 comment; no answer (unknown) reverts nothing, files nothing, records nothing
@@ -632,7 +638,16 @@ machine could not look up — and none answered wrongly. Only down reverts. A me
 name lookup, so silence is no verdict on one: on 2026-09-24 the machine running the schedule could
 not resolve aeni.ma, the check read that as down, and only the run's own judgement kept it from
 reverting a healthy merge. Unknown leaves the commit unrecorded, so the next run asks again, and
-the report line says the site could not be reached from this machine. A wrong answer reverts: `revert.mjs` detaches at `origin/main` and reverts its tip with
+the report line says the site could not be reached from this machine, naming each address tried
+and what it returned. The addresses are `deploy` in `.claude/board.json`, in order (T0.43): the
+domain, then the deployment's own production address, `https://aenima-ae-nima.vercel.app`. A name
+that does not resolve is skipped and never counted, and the outcome is the first address's that
+answers at all — so while aeni.ma does not resolve, the check reads the deployment rather than the
+DNS. Vercel keeps its own addresses behind a login: from outside, every path there redirects to
+Vercel's login at vercel.com, which is Vercel answering and not the deployment, so it is skipped
+too and never read as down. `VERCEL_AUTOMATION_BYPASS_SECRET` in `.env.local` — Vercel's
+Protection Bypass for Automation — lets the check through; it is sent to a `vercel.app` address
+alone, never to the domain, and never printed. A wrong answer reverts: `revert.mjs` detaches at `origin/main` and reverts its tip with
 `git revert -m 1` — one commit that restores the tree main had before the merge, never a
 force-push — and the run pushes it as `git push origin HEAD:main`, the one push to main the guard
 lets through, having checked in code that HEAD is exactly that revert. Then one Fix task at
