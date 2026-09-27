@@ -204,8 +204,12 @@ live site from outside:
 
 `changed: false` → main is the commit last checked; go on. `waiting: true` → the commit is
 younger than the deploy window and the previous deployment would answer for it; say so in the
-report line and go on. `ok: true` → say so in the report line and go on. `ok: false` → the merge
-at the tip is reverted, no human needed:
+report line and go on. Otherwise `outcome` is one of three. `outcome: up` → say so in the report
+line and go on. `outcome: unknown` → a check never answered and none answered wrongly: the site
+could not be reached from this machine, which is no verdict on the merge, so unknown never
+reverts — the commit is left unrecorded and the next run asks again; quote its `why` in the report
+line and go on. `outcome: down` → a check answered with the wrong status, and the merge at the
+tip is reverted, no human needed:
 
     node scripts/run/revert.mjs
     git push origin HEAD:main
@@ -312,6 +316,20 @@ cites something that is not there — say so in the ticket file rather than inli
 A body with an `# Addendum` section is a task sent back from Review by a reply: the ticket
 file already exists, so add an `## Addendum` section to it with the reply, and the addendum
 is what this round builds — the Criteria it names, or the reply read as one.
+
+Then read the names the ticket claims against the repo. Most tickets are cut in chat, away
+from the code, so every backticked path and identifier in them is a claim nobody checked:
+
+    node scripts/run/claims.mjs docs/tickets/<id>.md
+
+`absent` is every one of them `origin/main` lacks — paths looked up as files, identifiers with
+`git grep`; commands, flags, placeholders and code fragments are never looked up, and the
+`## Cited` section is left to the document it quotes. **The script finds the names; what a
+missing one means is yours.** Each is either something this ticket creates — the common case,
+and nothing to do — or drift: a file that moved, a function that was renamed. Drift goes by
+§4 like any other gap: take the default and say it in the claim's one `default` comment where
+a wrong guess is cheap, set `Decision` where it is expensive. Say in the report which absent
+names were which.
 
 ## 3 Branch
 
@@ -439,6 +457,15 @@ Tickets done from this directory:
     node scripts/run/log-index.mjs
 
 Never edit either block by hand; their test refuses a stale copy.
+
+Then file the rules this ticket established, where the next session will meet them. A rule
+that binds **one area of the code** goes as one line in that area's `.claude/rules/<area>.md`,
+ending in `` `docs/log/<id>.md` `` — the file loads only when a session opens code its `paths:`
+list matches, so the rule arrives with the code it is about. A rule that binds **everywhere**
+is not written into `CLAUDE.md` by a run: that file is the contract and the edit is the
+human's, so it goes in the report's open questions instead. A ticket that established no rule
+files none — `scripts/rules.mjs` refuses a line with no source, and an invented one is worse
+than an absent one.
 
 ## 9 Close
 

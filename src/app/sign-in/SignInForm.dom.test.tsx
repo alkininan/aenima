@@ -120,13 +120,10 @@ describe("sign-in step header", () => {
 
     expect(primary().className).not.toContain("flex-1");
 
-    // Direct siblings, not descendants: the form is a column, so "its row" is
-    // the set of elements sitting at the primary's own level. The resend lives
-    // in a wrapper below and is deliberately not counted.
-    const onItsRow = [...primary().parentElement!.children].filter(
-      (element) => element.tagName === "BUTTON",
-    );
-    expect(onItsRow).toEqual([primary()]);
+    // §8.3 (v2.21): the primary and the tertiary share a column, 8 apart, so
+    // the primary's siblings stack beneath it and none sits on its row.
+    expect(primary().className).toContain("w-full");
+    expect(primary().parentElement!.className).toContain("flex-col");
   });
 
   // §8: back means "previous step", and it is the whole escape hatch — there is
@@ -149,7 +146,12 @@ describe("sign-in step header", () => {
     // §8 (v2.11): it opens counting down, so the label carries a clock and an
     // exact name would not match it. Where it sits is what this test is about.
     const resend = screen.getByRole("button", { name: /Send a new code/ });
-    expect(resend.parentElement).not.toBe(primary().parentElement);
+    expect(
+      primary().compareDocumentPosition(resend) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    // §8.3: 8 from the primary to the tertiary, in one column.
+    expect(resend.parentElement).toBe(primary().parentElement);
+    expect(resend.parentElement!.className).toContain("gap-[8px]");
   });
 });
 
@@ -465,5 +467,143 @@ describe("sign-in code errors", () => {
     expect(screen.getByText("Sign-in is unavailable right now.")).not.toBeNull();
     expect(screen.queryByText(WRONG)).toBeNull();
     expect(screen.queryByText(EXPIRED)).toBeNull();
+  });
+});
+
+/**
+ * T0.42 — design-spec v2.21 §8.2 and §8.4 on the sign-in step: C-18's submit half, C-19's
+ * label shape, and where a request-level message lands.
+ */
+describe("sign-in forms to v2.21", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
+    requestCode.mockReset();
+    verifyCode.mockReset();
+  });
+  afterEach(() => vi.useRealTimers());
+
+  async function arrive() {
+    requestCode.mockResolvedValue({ status: "sent" });
+    const user = userEvent.setup();
+    render(<SignInForm />);
+    await user.type(screen.getByLabelText("Email"), "someone@example.com");
+    await user.click(screen.getByRole("button", { name: "Send code" }));
+    screen.getByRole("heading", { name: "Enter your code" });
+    return user;
+  }
+
+  const cooling = () =>
+    screen.getByRole("button", { name: /^Send a new code \(\d:\d\d\)$/ }) as HTMLButtonElement;
+
+  // C-19: the one changing thing on the step stays readable, its time in a mono span.
+  it("counts down in a readable label with the time in a mono-readout span", async () => {
+    await arrive();
+
+    const resend = cooling();
+    expect(resend.disabled).toBe(true);
+    const clock = resend.querySelector(".type-mono-readout");
+    expect(clock?.textContent).toBe("1:00");
+    // §8.4: the label stays --n-secondary while the control is disabled.
+    expect(resend.className).toContain("disabled:text-n-secondary");
+    expect(resend.className).not.toContain("disabled:text-n-disabled");
+  });
+
+  // §8.4's exemption is for the countdown alone: a verify in flight disables the
+  // resend for a reason that carries no information, so it takes §7's tone.
+  it("gives the resend §7's disabled tone while a verify is in flight", async () => {
+    const user = await arrive();
+    await act(async () => {
+      vi.advanceTimersByTime(RESEND_COOLDOWN_MS);
+    });
+    // Held open for the assertion, then settled: React entangles async
+    // transitions, so one left pending would hold every later test's pending too.
+    let settle!: (value: { status: "unavailable" }) => void;
+    verifyCode.mockReturnValue(new Promise((resolve) => (settle = resolve)));
+
+    try {
+      const boxes = within(screen.getByRole("group")).getAllByRole("textbox");
+      await user.type(boxes[0]!, "482913");
+
+      const resend = screen.getByRole("button", { name: "Send a new code" }) as HTMLButtonElement;
+      expect(resend.disabled).toBe(true);
+      expect(resend.className).toContain("disabled:text-n-disabled");
+    } finally {
+      await act(async () => settle({ status: "unavailable" }));
+    }
+  });
+
+  // §8.3: the tertiary is Neutral md.
+  it("draws the resend at md", async () => {
+    await arrive();
+    expect(cooling().className).toContain("h-[34px]");
+  });
+
+  // C-18: a submit is never disabled for an incomplete form.
+  it("leaves both submits pressable while their forms are incomplete", async () => {
+    await arrive();
+    // The code step, no digits typed.
+    expect((screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement).disabled).toBe(
+      false,
+    );
+    await userEvent.setup().click(screen.getByRole("button", { name: "Back" }));
+    await userEvent.setup().clear(screen.getByLabelText("Email"));
+    expect((screen.getByRole("button", { name: "Send code" }) as HTMLButtonElement).disabled).toBe(
+      false,
+    );
+  });
+
+  // C-18: submit validates the empty field too, and scrolls to the first error.
+  it("flags an empty field on submit and scrolls to it", async () => {
+    const scrolled = vi.fn();
+    Element.prototype.scrollIntoView = scrolled;
+    const user = userEvent.setup();
+    render(<SignInForm />);
+
+    await user.click(screen.getByRole("button", { name: "Send code" }));
+
+    const email = screen.getByLabelText("Email");
+    expect(email.getAttribute("aria-invalid")).toBe("true");
+    expect(requestCode).not.toHaveBeenCalled();
+    expect(scrolled.mock.contexts).toContain(email);
+  });
+
+  // §8.2: a request-level message is not about the field's value.
+  it("puts a failed send under the step's last control, never on the field", async () => {
+    requestCode.mockResolvedValue({ status: "unavailable" });
+    const user = userEvent.setup();
+    render(<SignInForm />);
+
+    await user.type(screen.getByLabelText("Email"), "someone@example.com");
+    await user.click(screen.getByRole("button", { name: "Send code" }));
+
+    const message = screen.getByRole("status");
+    expect(message.textContent).toBe("Sign-in is unavailable right now.");
+    expect(message.className).toContain("text-n-secondary");
+    expect(message.className).toContain("text-center");
+    expect(screen.getByLabelText("Email").hasAttribute("aria-invalid")).toBe(false);
+    // Under the last control: the primary comes before it in the document.
+    const primary = screen.getByRole("button", { name: "Send code" });
+    expect(
+      primary.compareDocumentPosition(message) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("puts a rate limit on the code step under the last control, not on the boxes", async () => {
+    const user = await arrive();
+    verifyCode.mockResolvedValue({ status: "rate-limited" });
+
+    const boxes = within(screen.getByRole("group")).getAllByRole("textbox");
+    await user.type(boxes[0]!, "482913");
+
+    const message = screen.getByRole("status");
+    expect(message.textContent).toBe(
+      "Too many requests. Wait a moment before asking for another code.",
+    );
+    expect(message.className).toContain("text-n-secondary");
+    const after = within(screen.getByRole("group")).getAllByRole("textbox");
+    expect(after.some((box) => box.hasAttribute("aria-invalid"))).toBe(false);
+    expect(
+      cooling().compareDocumentPosition(message) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 });

@@ -3,11 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ToastProvider, useToast, type ToastOptions } from "@/components/ui/Toast";
 
-function Trigger({ options }: { options: ToastOptions }) {
+function Trigger({ options, label = "fire" }: { options: ToastOptions; label?: string }) {
   const { toast } = useToast();
   return (
     <button type="button" onClick={() => toast(options)}>
-      fire
+      {label}
     </button>
   );
 }
@@ -94,7 +94,14 @@ describe("Toast", () => {
     expect(screen.queryByRole("status")).toBeNull();
   });
 
-  it("stacks and clears each toast on its own clock", () => {
+  /**
+   * §8.20 (v2.21), and C-20's "a new toast replaces the one showing, undo or
+   * not". The rule reversed here: until v2.19 toasts stacked, each on its own
+   * clock. §8.20 gives the reason for the reversal and it is about meaning
+   * rather than room — "queuing it would leave an Undo on screen that means an
+   * earlier move than the one just made".
+   */
+  it("shows one at a time, the newest replacing the one showing", () => {
     render(
       <ToastProvider>
         <Trigger options={{ message: "First" }} />
@@ -105,11 +112,59 @@ describe("Toast", () => {
     fireEvent.click(fire);
     tick(2000);
     fireEvent.click(fire);
-    expect(screen.getAllByRole("status")).toHaveLength(2);
+    expect(screen.getAllByRole("status")).toHaveLength(1);
 
+    // The replacement brought its own full clock with it, so three more
+    // seconds — which would have finished the first — leave it standing.
     tick(3000);
     expect(screen.getAllByRole("status")).toHaveLength(1);
     tick(2000);
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  // §8.20: "A failure dismisses its own move's undo at once." With one toast at
+  // a time the failure is the dismissal, and the shortcut goes with the button.
+  it("lets a failure take the place of its move's undo", () => {
+    const onAction = vi.fn();
+    render(
+      <ToastProvider>
+        <Trigger options={{ message: "Parked", action: { label: "Undo", onAction } }} />
+        <Trigger label="fail" options={{ message: "Could not park", tone: "warning" }} />
+      </ToastProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "fire" }));
+    expect(screen.getByRole("button", { name: "Undo" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "fail" }));
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+    expect(screen.getByRole("status").textContent).toContain("Could not park");
+  });
+
+  /**
+   * §8.20: "While an undo shows, `Cmd/Ctrl+Z` triggers it when focus is not in a
+   * text field." Inside one the keystroke is the platform's own undo and taking
+   * it would silently discard what someone typed (§11).
+   */
+  it("fires a showing undo on Cmd/Ctrl+Z, and stays quiet inside a text field", () => {
+    const onAction = vi.fn();
+    render(
+      <ToastProvider>
+        <input aria-label="note" />
+        <Trigger options={{ message: "Parked", action: { label: "Undo", onAction } }} />
+      </ToastProvider>,
+    );
+
+    const field = screen.getByLabelText("note");
+    fireEvent.click(screen.getByRole("button", { name: "fire" }));
+
+    field.focus();
+    fireEvent.keyDown(document, { key: "z", metaKey: true });
+    expect(onAction).not.toHaveBeenCalled();
+
+    field.blur();
+    fireEvent.keyDown(document, { key: "z", metaKey: true });
+    expect(onAction).toHaveBeenCalledOnce();
     expect(screen.queryByRole("status")).toBeNull();
   });
 
@@ -117,5 +172,39 @@ describe("Toast", () => {
   it("paints nothing in danger", () => {
     show({ message: "Parked", tone: "warning" });
     expect(screen.getByRole("status").outerHTML).not.toContain("danger");
+  });
+});
+
+/**
+ * §8.20's undo is one reversal. A toast leaving over its `--t-fast` exit is still on the
+ * page and its button still takes a press, so the undo has to go quiet the moment it has
+ * run — or a second press, or a `Cmd/Ctrl+Z` in the exit's window, reverses the move twice.
+ * The exit is declared the way a browser reports it, since the DOM emulator has no
+ * stylesheet and would otherwise leave on the frame it was dismissed.
+ */
+describe("Toast undo while the toast is leaving", () => {
+  it("runs once, however it is pressed again during the exit", () => {
+    const real = window.getComputedStyle.bind(window);
+    const style = vi.spyOn(window, "getComputedStyle").mockImplementation((node, pseudo) => {
+      const computed = real(node, pseudo);
+      if (!(node instanceof HTMLElement) || node.getAttribute("role") !== "status") return computed;
+      return new Proxy(computed, {
+        get: (target, key) =>
+          key === "transitionDuration" ? "0.12s" : Reflect.get(target, key, target),
+      });
+    });
+    try {
+      const onAction = vi.fn();
+      show({ message: "Parked", action: { label: "Undo", onAction } });
+
+      fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+      expect(screen.queryByRole("status")).not.toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+      fireEvent.keyDown(document, { key: "z", metaKey: true });
+      expect(onAction).toHaveBeenCalledOnce();
+    } finally {
+      style.mockRestore();
+    }
   });
 });

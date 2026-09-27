@@ -274,7 +274,7 @@ describe("inputHelperClasses", () => {
   // so an error appearing never shifts layout.
   it("reserves its line by default and gives it up only on request", () => {
     expect(has(inputHelperClasses(), "field-helper-reserved")).toBe(true);
-    expect(inputHelperClasses(undefined, false)).not.toContain("field-helper-reserved");
+    expect(inputHelperClasses(undefined, 0)).not.toContain("field-helper-reserved");
   });
 });
 
@@ -291,9 +291,8 @@ describe("otp geometry", () => {
    */
   it("steps down below 768 and back up above it", () => {
     const box = otpBoxClasses();
-    expect(has(box, "size-[44px]", "rounded-[22px]", "md:size-[52px]", "md:rounded-[27px]")).toBe(
-      true,
-    );
+    // §8.2 (v2.21): both sizes are --r-pill, which clamps to half the box.
+    expect(has(box, "size-[44px]", "rounded-pill", "md:size-[52px]")).toBe(true);
     expect(has(OTP_GROUP_CLASSES, "gap-[8px]", "md:gap-[16px]")).toBe(true);
   });
 
@@ -382,5 +381,30 @@ describe("spinnerClasses", () => {
   it("sets no colour when told to inherit", () => {
     expect(spinnerClasses({ tone: "inherit" })).not.toContain("text-");
     expect(SPINNER_TONES).toContain("inherit");
+  });
+});
+
+/** T0.42 — design-spec v2.21 §8.2 and §8.4 in the class grammar. */
+describe("forms to v2.21", () => {
+  // §8.2: two lines under the OTP group, whose wrong-code string wraps at 343.
+  it("reserves two helper lines when asked", () => {
+    expect(has(inputHelperClasses("error", 2), "field-helper-reserved-2")).toBe(true);
+    expect(inputHelperClasses("error", 2).split(" ")).not.toContain("field-helper-reserved");
+  });
+
+  // §8.4: the countdown's label stays readable while the control is disabled.
+  it("keeps a counting-down label --n-secondary, on every variant", () => {
+    for (const variant of ["primary", "soft", "neutral", "secondary", "ghost", "danger"] as const) {
+      const readable = buttonClasses({ variant, readableWhenDisabled: true });
+      expect(readable).toContain("disabled:text-n-secondary");
+      expect(readable).not.toContain("disabled:text-n-disabled");
+      expect(buttonClasses({ variant })).toContain("disabled:text-n-disabled");
+    }
+  });
+
+  // §8.2: error outranks focus — the field in error never takes the focus border.
+  it("drops the focus border from a field in error", () => {
+    expect(inputFieldClasses({ invalid: true })).not.toContain("focus-within:border-prime");
+    expect(inputFieldClasses({})).toContain("focus-within:border-prime");
   });
 });

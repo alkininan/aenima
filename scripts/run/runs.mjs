@@ -10,6 +10,14 @@
  * path and the script reads the JSONL Claude Code wrote, with no model in the loop and no
  * claim the session could have made about itself.
  *
+ * One run, one row: SessionEnd is not the once-per-session event it reads as, and the same
+ * transcript reaches this script more than once — every copy repeated its original's tokens and
+ * findings to the digit, which is a second read of one transcript and not a second run. The
+ * count as the board stood at T0.30 and the rows it names are in `docs/reports/T0.30.md`; what
+ * fires the hook again is not established there or here. The row is keyed on the task and the
+ * minute the run started instead, so a second post finds its own key and writes nothing
+ * whatever fired it (T0.30).
+ *
  * What the transcript holds and how it is read:
  *   - one line per event, each with a `type` and most with a `timestamp`; the first and the
  *     last timestamp are the session's span;
@@ -317,6 +325,39 @@ export function nextNumber(titles) {
   return max + 1;
 }
 
+/**
+ * The minute `value` names, as UTC ISO — the precision a Notion date property keeps.
+ *
+ * A row is written with the transcript's first timestamp, seconds and milliseconds and all, and
+ * reads back as the minute alone. Comparing the two as strings would find no match and write the
+ * copy this key exists to prevent, so both sides are cut to the minute here. Null for a value
+ * that is not a timestamp.
+ */
+export function startMinute(value) {
+  const ms = Date.parse(String(value ?? ""));
+  if (!Number.isFinite(ms)) return null;
+  return new Date(Math.floor(ms / 60000) * 60000).toISOString();
+}
+
+/**
+ * The key one run is recorded under: the task it claimed and the minute it started (T0.30).
+ *
+ * The same transcript reaches `post` more than once — what fires SessionEnd again is not
+ * established, but the copies are exact, token for token and finding for finding, which no
+ * second run would be. Keying the row on what identifies the run, rather than on when the row
+ * happened to be written, makes every read after the first a no-op without having to know what
+ * caused it. `page` is the claimed task's page id, dashes and all or none; a run that claimed
+ * nothing keys on the minute alone.
+ *
+ * Null when there is no start to key on — a transcript with no timestamps. Such a row cannot be
+ * told from any other and is written rather than dropped: losing a run is the worse failure.
+ */
+export function runKey(page, started) {
+  const minute = startMinute(started);
+  if (minute === null) return null;
+  return `${String(page ?? "").replaceAll("-", "")}@${minute}`;
+}
+
 /** The page the API creates for one row: properties in the shapes the Runs schema holds. */
 export function rowProperties(summary, number) {
   const properties = {
@@ -325,6 +366,9 @@ export function rowProperties(summary, number) {
     Tokens: { number: summary.tokens.total },
     Findings: { number: summary.findings },
   };
+  // The timestamp as the transcript carried it (T0.12). Notion keeps a date to the minute, so
+  // this is not what reads back — which is the key's problem and not this function's: `runKey`
+  // floors both sides, and writing the minute here would only move the same truncation earlier.
   if (summary.started) properties.Started = { date: { start: summary.started } };
   if (summary.durationMin !== null) properties.Duration = { number: summary.durationMin };
   if (summary.model) properties.Model = { select: { name: summary.model } };
@@ -333,9 +377,10 @@ export function rowProperties(summary, number) {
 }
 
 /**
- * Post one row for `summary`. Effects injected: `token`, `board`, `client`. Returns
- * `{ posted, name, why }` — a missing token or a refused request posts nothing and says why,
- * because a hook that throws at session end helps nobody.
+ * Post one row for `summary`, unless the board already holds this run. Effects injected:
+ * `token`, `board`, `client`. Returns `{ posted, name, why }` — a missing token, a refused
+ * request or a run already recorded posts nothing and says why, because a hook that throws at
+ * session end helps nobody.
  */
 export async function post(summary, { dir = process.cwd(), deps = {} } = {}) {
   const token = deps.token ? deps.token() : readToken(dir);
@@ -348,7 +393,15 @@ export async function post(summary, { dir = process.cwd(), deps = {} } = {}) {
   const board = deps.board ? deps.board() : readBoard(dir);
   const api = deps.client ?? client(token, { fetch: deps.fetch });
   try {
-    const existing = await api.tasks(board.runs_ds);
+    const existing = await api.runs(board.runs_ds);
+    const key = runKey(summary.page, summary.started);
+    const already =
+      key === null
+        ? undefined
+        : existing.find((row) => runKey(row.Task?.[0] ?? null, row.Started) === key);
+    if (already) {
+      return { posted: false, name: already.Name, why: "this run is already recorded" };
+    }
     const number = nextNumber(existing.map((row) => row.Name));
     const properties = rowProperties(summary, number);
     const created = await api.createPage(board.runs_ds, properties);

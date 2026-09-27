@@ -17,3 +17,4 @@ Every way a green suite has lied here, one line each. `CLAUDE.md` already requir
 - A guard test for a memoized read asserts request counts, not returned values: the value was correct throughout and only the traffic was wrong. — "request counts, not returned values"
 - A db test skips loudly without `DATABASE_URL` rather than quietly, because a green suite is not proof that the isolation boundary holds. — "a green suite is not proof that the isolation boundary holds"
 - A test whose name promises more than it delivers is worse than no test: rename it to what it catches, or replace it with one that holds. — "A test whose name promises what it cannot deliver is worse than no test."
+- A test that holds a server action open to observe an in-flight state settles it in a `finally`: React 19 entangles async transitions, so one left pending keeps every later test's `isPending` true. — `docs/log/T0.42.md`

@@ -28,6 +28,7 @@ import { Select, type SelectOption } from "@/components/ui/Select";
 import { Sheet } from "@/components/ui/Sheet";
 import { Skeleton, SkeletonText } from "@/components/ui/Skeleton";
 import { Tabs } from "@/components/ui/Tabs";
+import { dockChanged } from "@/lib/anchor-change";
 import { ToastProvider, useToast } from "@/components/ui/Toast";
 import { Toggle } from "@/components/ui/Toggle";
 import { Tooltip } from "@/components/ui/Tooltip";
@@ -35,7 +36,7 @@ import { MailIcon, SearchIcon } from "@/components/ui/icons";
 import { AVATAR_SIZES, SKELETON_SHAPES, TOAST_TONES } from "@/components/ui/variants";
 import { VALIDATION_MIN_LENGTH, useFieldValidation } from "@/components/ui/useFieldValidation";
 import { formatCountdown, useCooldown } from "@/components/ui/useCooldown";
-import { inputHelperClasses } from "@/components/ui/variants";
+import { REQUEST_MESSAGE_CLASSES } from "@/components/ui/variants";
 import { getDictionary } from "@/i18n";
 
 import { BucketSection } from "@/app/app/BucketSection";
@@ -102,15 +103,26 @@ const DISABLED_OPTIONS: readonly SelectOption[] = [
   { value: "three", label: "Walkable again" },
 ];
 
-const MENU_ENTRIES: readonly MenuEntry[] = [
-  { kind: "section", label: "Item" },
-  { kind: "item", label: "Open", onSelect: () => {} },
-  { kind: "item", label: "Duplicate", onSelect: () => {} },
-  { kind: "item", label: "Unavailable", onSelect: () => {}, disabled: true },
-  { kind: "separator" },
-  { kind: "section", label: "Danger" },
-  { kind: "item", label: "Delete", onSelect: () => {}, destructive: true },
-];
+/**
+ * The entries report what was chosen, the way the tabs report the active tab.
+ *
+ * Not decoration: a menu row's only other effect is closing the menu, and a press
+ * that *misses* the panel closes it too — light dismiss. A check that watched the
+ * menu close would pass whether or not the press landed, which is the shape of
+ * green-suite lie this repo keeps finding. A readout only a real activation moves
+ * is what makes C-10's press measurable.
+ */
+function menuEntries(onChoose: (label: string) => void): readonly MenuEntry[] {
+  return [
+    { kind: "section", label: "Item" },
+    { kind: "item", label: "Open", onSelect: () => onChoose("Open") },
+    { kind: "item", label: "Duplicate", onSelect: () => onChoose("Duplicate") },
+    { kind: "item", label: "Unavailable", onSelect: () => onChoose("Unavailable"), disabled: true },
+    { kind: "separator" },
+    { kind: "section", label: "Danger" },
+    { kind: "item", label: "Delete", onSelect: () => onChoose("Delete"), destructive: true },
+  ];
+}
 
 const TAB_ITEMS = [
   { value: "overview", label: "Overview" },
@@ -214,24 +226,35 @@ function ResendDemo() {
     <div className="flex flex-col items-center gap-[16px]">
       <OtpInput label={t.signIn.codeLabel} value={code} onValueChange={setCode} />
 
-      <div className="flex flex-col items-center">
+      <div className="flex flex-col items-center gap-[8px]">
         <Button
           type="button"
           variant="neutral"
-          size="sm"
+          size="md"
+          readableWhenDisabled
           disabled={cooldown.active}
           onClick={() => {
             cooldown.start();
             setError(t.signIn.rateLimited);
           }}
         >
-          {cooldown.active
-            ? t.signIn.resendIn(formatCountdown(cooldown.remainingMs))
-            : t.signIn.resend}
+          {cooldown.active ? (
+            // One inline run, so the Button's flex row does not pull the parts
+            // apart with its gap.
+            <span>
+              {t.signIn.resendIn(
+                <span key="clock" className="type-mono-readout">
+                  {formatCountdown(cooldown.remainingMs)}
+                </span>,
+              )}
+            </span>
+          ) : (
+            t.signIn.resend
+          )}
         </Button>
 
         {error ? (
-          <span role="status" className={inputHelperClasses("error", false)}>
+          <span role="status" className={REQUEST_MESSAGE_CLASSES}>
             {error}
           </span>
         ) : null}
@@ -241,10 +264,12 @@ function ResendDemo() {
 }
 
 function Composites() {
+  const t = getDictionary();
   const [type, setType] = useState<string | null>(null);
   const [long, setLong] = useState<string | null>("option-9");
   const [gapped, setGapped] = useState<string | null>(null);
   const [tab, setTab] = useState("overview");
+  const [chosen, setChosen] = useState("nothing yet");
   const [otp, setOtp] = useState("");
   const [otpFilled, setOtpFilled] = useState("48291");
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -254,12 +279,14 @@ function Composites() {
   return (
     <div className="flex flex-col gap-[48px]">
       <Section label="Tooltip">
-        <Row label="top · bottom · on a chip">
+        {/* §8.14 places a tooltip below and flips it above at the viewport's edge, so
+            the first of these takes the measured side and the second pins the flip. */}
+        <Row label="below by default · pinned above · on a chip">
           <Tooltip content="500ms in, instant out">
-            <Button variant="secondary">tooltip above</Button>
+            <Button variant="secondary">tooltip default</Button>
           </Tooltip>
-          <Tooltip side="bottom" content="Opens below the trigger instead">
-            <Button variant="secondary">tooltip below</Button>
+          <Tooltip side="top" content="Pinned above the trigger instead">
+            <Button variant="secondary">tooltip above</Button>
           </Tooltip>
           <Tooltip content="Tooltips wrap at 240 and never grow an arrow — this line is long enough to prove it">
             <Chip interactive>long tooltip</Chip>
@@ -349,7 +376,7 @@ function Composites() {
       <Section label="OTP">
         {/* §8 (v2.3): state-only helper lines, so what these demos demonstrate
             is described here rather than under the boxes. §8 (v2.4): the group
-            steps to 44/r22/gap 8 below 768 and back to 52/r27/gap 16 above it —
+            steps to 44/gap 8 below 768 and back to 52/gap 16 above it —
             narrow the window to see it. */}
         <p className="type-ui-footnote text-n-secondary">
           Type, paste, or walk the boxes with the arrow keys. A filled box takes a prime border. The
@@ -361,7 +388,9 @@ function Composites() {
           <OtpInput
             label="Error"
             invalid
-            helper="That code didn't work"
+            // The product's wrong-code line: the string §8.2's two reserved
+            // lines are measured against.
+            helper={t.signIn.codeRejected}
             value="482913"
             onValueChange={() => {}}
           />
@@ -497,18 +526,28 @@ function Composites() {
       </Section>
 
       <Section label="Menu">
-        <Row label="aligned to the trigger's start · end">
+        {/* §6's last paragraph: an open panel closes "when the docked dock opens or
+            closes, which moves every anchor in the content column without a viewport
+            change". The dock is T3.2's and does not exist yet, so this button is the
+            signal's other end until it does — `dockChanged()` is the seam the dock
+            will call, and C-28 needs something to press. */}
+        <Row label="the dock's signal, until the dock exists">
+          <Button variant="secondary" size="sm" onClick={() => dockChanged()}>
+            toggle dock
+          </Button>
+        </Row>
+        <Row label="grown from the trigger's nearest corner">
           <Menu
             label="Item actions"
-            entries={MENU_ENTRIES}
+            entries={menuEntries(setChosen)}
             trigger={<IconButton variant="secondary" label="Open menu" icon={<DotsIcon />} />}
           />
           <Menu
-            label="Item actions, end aligned"
-            align="end"
-            entries={MENU_ENTRIES}
+            label="Item actions, second"
+            entries={menuEntries(setChosen)}
             trigger={<Button variant="secondary">overflow</Button>}
           />
+          <span className="type-ui-footnote text-n-secondary">chose: {chosen}</span>
         </Row>
       </Section>
 

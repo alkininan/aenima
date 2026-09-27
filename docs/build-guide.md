@@ -1,6 +1,12 @@
-<!-- build-guide.md · v2.8 · in the repo · the hooks paragraph: a migration takes
+<!-- build-guide.md · v2.10 · in the repo · the hooks paragraph: a migration takes
      one word and it is `apply` — the ticket carrying it merges itself once that word has been
      spent on the thread (T0.26); your word stays for a diff that weakens a restraint.
+     Cut as v2.8, which main left free for it; numbered past v2.9, main's newest, when this
+     branch took main in a second time.
+     v2.9 · in the repo · §2 names where a rule goes: one area of the
+     code to .claude/rules/<area>.md, everywhere to CLAUDE.md, which a run never edits (T0.34).
+     An open branch carries a v2.8 of this file, so this change took v2.9; the title line,
+     left at v2.5 since v2.6, is corrected here.
      v2.7 · in the repo · the hooks paragraph: your word is left for one
      sentence — a migration, or a diff that weakens a restraint, measured on both sides.
      v2.6 · in the repo · the hooks paragraph: a finished ticket merges itself
@@ -16,7 +22,7 @@
      v2.0 was a rewrite rather than a revision: v1.0 was written before ticket 0.1 and proposed a
      stack, a setup script and a set of habits, all of which the build has since replaced. -->
 
-# aenima — build guide v2.8
+# aenima — build guide v2.10
 
 How to run a ticket on aenima with Claude Code.
 
@@ -133,9 +139,12 @@ attempting a fourth time.
 
 **Answer the report-back's open questions in the spec, not in chat.** Every ticket ends with "ACs
 implemented, tests written, open questions", and the open questions are the valuable part — they
-are the spec gaps the agent hit. If the answer changes a rule, it goes in `CLAUDE.md`, the product
-spec or the design spec, where the next session will read it. A question answered only in a chat
-transcript is a question that gets asked again.
+are the spec gaps the agent hit. If the answer changes a rule, it goes where the next session will
+read it: a rule about **one area of the code** as one line in that area's `.claude/rules/<area>.md`,
+which loads only when a session opens code its `paths:` list matches, so the rule arrives with the
+code it governs; a rule for **everywhere** in `CLAUDE.md`, which is loaded into every session and
+which a run never edits on its own; a product or design decision in the product spec or the design
+spec. A question answered only in a chat transcript is a question that gets asked again.
 
 **A stopgap is legal only when the build log records it as an open question with a phase owner.**
 An unrecorded stopgap is a bug. This is also the escape hatch for a fix that is correct but larger

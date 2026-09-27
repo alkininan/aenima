@@ -86,3 +86,40 @@ describe("Tooltip", () => {
     expect(screen.getByRole("tooltip").id).toBe(describedBy);
   });
 });
+
+/**
+ * §8.14's flip: below by default, above only where the bubble does not fit beneath. The
+ * bridge's height already holds the 8 it stands off by — it is the bridge's own padding —
+ * so the room needed below is that height and nothing added to it.
+ */
+describe("Tooltip flip", () => {
+  it("stays below when the bridge, gap included, fits the room beneath", () => {
+    const bridgeHeight = 40;
+    const room = 44;
+    const offset = vi
+      .spyOn(HTMLElement.prototype, "offsetHeight", "get")
+      .mockReturnValue(bridgeHeight);
+    const rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      top: window.innerHeight - room - 32,
+      bottom: window.innerHeight - room,
+      left: 0,
+      right: 80,
+      width: 80,
+      height: 32,
+      x: 0,
+      y: window.innerHeight - room - 32,
+      toJSON: () => ({}),
+    });
+    try {
+      const trigger = harness();
+      fireEvent.mouseOver(trigger);
+      tick(500);
+      const bridge = screen.getByRole("tooltip").parentElement!;
+      expect(bridge.className).toContain("top-full");
+      expect(bridge.className).not.toContain("bottom-full");
+    } finally {
+      offset.mockRestore();
+      rect.mockRestore();
+    }
+  });
+});

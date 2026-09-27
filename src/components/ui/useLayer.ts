@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, type RefObject } from "react";
+import { useEffect, useId, useRef, type RefObject } from "react";
 
 import { getFocusableElements, nextTrapTarget } from "@/lib/focus";
 import { isTopLayer, pushLayer, removeLayer, type LayerKind } from "@/lib/layer-stack";
@@ -144,25 +144,4 @@ export function useOutsideDismiss({ open, refs, onDismiss }: OutsideDismissOptio
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [open, onDismissRef, refsRef]);
-}
-
-/**
- * §8: a select "opens below (above if <320px space)". Measured against the
- * trigger at the moment of opening, not on every scroll — the panel is
- * dismissed by any outside interaction anyway.
- */
-export function usePanelPlacement(
-  triggerRef: RefObject<HTMLElement | null>,
-  maxHeight: number,
-): (open: boolean) => "below" | "above" {
-  return useCallback(
-    (open: boolean) => {
-      if (!open) return "below";
-      const trigger = triggerRef.current;
-      if (!trigger) return "below";
-      const below = window.innerHeight - trigger.getBoundingClientRect().bottom;
-      return below < maxHeight ? "above" : "below";
-    },
-    [triggerRef, maxHeight],
-  );
 }

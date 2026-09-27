@@ -72,11 +72,33 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-export default function PrimitivesPage() {
+/**
+ * design-spec.md §17's preamble: "The kitchen-sink route takes
+ * `data-force-fallback`, which forces the JS positioner, the bare open without
+ * `startViewTransition` and the solid `--glass-fallback` recipe, so both
+ * placement paths, both transition paths and both glass paths run in one
+ * engine."
+ *
+ * A query parameter rather than a toggle in the page: C-14 drives both paths
+ * and compares the rects they produce, and a URL is what lets it load the page
+ * twice rather than click something and hope the first path has finished. The
+ * attribute goes on `<main>`, which is above every panel and every toast, and
+ * is read from there — `closest("[data-force-fallback]")` in script, a
+ * descendant selector in the stylesheet.
+ */
+export default async function PrimitivesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   devOnly();
+  const forceFallback = (await searchParams)["fallback"] !== undefined;
 
   return (
-    <main className="mx-auto flex w-full max-w-[1200px] flex-col gap-[48px] px-[24px] py-[48px]">
+    <main
+      {...(forceFallback ? { "data-force-fallback": "" } : {})}
+      className="mx-auto flex w-full max-w-[1200px] flex-col gap-[48px] px-[24px] py-[48px]"
+    >
       <header className="flex flex-wrap items-end gap-[16px]">
         <AeMark size={32} className="text-n-primary" />
         <AeMark size={24} className="text-n-primary" />

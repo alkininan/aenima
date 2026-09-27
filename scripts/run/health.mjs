@@ -45,17 +45,31 @@ export const TIMEOUT_MS = 10_000;
  */
 export const DEPLOY_WINDOW_MS = 5 * 60 * 1000;
 
-/** `{ commit, checked, changed, ok, results, failed }`; `ok` is null when nothing was asked. */
+/**
+ * `{ commit, checked, changed, outcome, results, failed, unanswered }` (T0.39). Three
+ * outcomes: **up**, every check answered as expected; **down**, a check answered with the wrong
+ * status; **unknown**, a check never answered and none answered wrongly. Only down reverts: a
+ * merge cannot break a name lookup, so silence is no verdict on one. `failed` holds the wrong
+ * answers alone, `unanswered` the silences. `outcome` is null when nothing was asked.
+ */
 export function assess({ commit = null, checked = null, results = [] } = {}) {
   const changed = commit !== null && commit !== checked;
-  const failed = results.filter((result) => result.status !== result.expected);
-  return { commit, checked, changed, ok: changed ? failed.length === 0 : null, results, failed };
+  const failed = results.filter(({ status, expected }) => status !== null && status !== expected);
+  const unanswered = results.filter(({ status }) => status === null);
+  const outcome = !changed
+    ? null
+    : failed.length > 0
+      ? "down"
+      : unanswered.length > 0
+        ? "unknown"
+        : "up";
+  return { commit, checked, changed, outcome, results, failed, unanswered };
 }
 
 /**
  * Each check's answer: `{ path, expected, status }`, status null when nothing answered twice.
- * One silence — a timeout, a DNS blip — is asked again before it counts: a revert on a blip is
- * a merge nobody wanted undone.
+ * One silence — a timeout, a DNS blip — is asked again before it is kept as no answer, which
+ * `assess` reads as unknown and never as down.
  */
 export async function probe(
   base,
@@ -95,7 +109,8 @@ const git = (cwd) => (args) => spawnSync("git", args, { cwd, encoding: "utf8" })
 
 /**
  * Fetch, read origin/main, and probe the site when that commit has not been checked. The
- * commit is recorded once asked, whatever the answer.
+ * commit is recorded once the site answered, up or down; an unknown records nothing, so the
+ * next run asks about the same commit again.
  */
 export async function health({ cwd = process.cwd(), base = BASE, deps = {} } = {}) {
   const run = deps.run ?? git(cwd);
@@ -123,19 +138,27 @@ export async function health({ cwd = process.cwd(), base = BASE, deps = {} } = {
     return {
       base,
       ...first,
-      ok: null,
+      outcome: null,
       waiting: true,
       why: `origin/main moved ${Math.round(age / 1000)} s ago and a deploy takes a few minutes; asked again next run`,
     };
   }
 
   const results = await probe(base, CHECKS, { fetch: deps.fetch });
+  const result = assess({ commit, checked, results });
+  if (result.outcome === "unknown") {
+    return {
+      base,
+      ...result,
+      failedText: "",
+      why: `${describeFailed(result.unanswered)}: the site could not be reached from this machine, which is no verdict on the merge; asked again next run`,
+    };
+  }
   try {
     if (recordPath !== null) writeFileSync(recordPath, `${commit}\n`);
   } catch {
     // A check that cannot record itself still answers; it will ask again next run.
   }
-  const result = assess({ commit, checked, results });
   return { base, ...result, failedText: describeFailed(result.failed) };
 }
 

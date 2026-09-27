@@ -15,6 +15,8 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: ButtonVariant;
   /** §8: the spinner replaces the label and the width stays locked. */
   loading?: boolean;
+  /** §8.4: disabled in behaviour, label still `--n-secondary` — the resend's countdown. */
+  readableWhenDisabled?: boolean;
   leadingIcon?: ReactNode;
   trailingIcon?: ReactNode;
   fullWidth?: boolean;
@@ -32,6 +34,7 @@ export function Button({
   size = "md",
   variant = "primary",
   loading = false,
+  readableWhenDisabled = false,
   leadingIcon,
   trailingIcon,
   fullWidth = false,
@@ -43,7 +46,14 @@ export function Button({
   return (
     <button
       type={type}
-      className={buttonClasses({ size, variant, loading, fullWidth, className })}
+      className={buttonClasses({
+        size,
+        variant,
+        loading,
+        readableWhenDisabled,
+        fullWidth,
+        className,
+      })}
       aria-busy={loading || undefined}
       aria-disabled={loading || undefined}
       {...rest}

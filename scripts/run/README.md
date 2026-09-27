@@ -73,7 +73,9 @@ hours, is a run that died, and `stale.mjs --recover <id>` keeps its branch as
 with the reason when that commit was refused — so the task can be claimed again from
 `origin/main` with one comment and no human. Then, once per commit of main, `health.mjs` asks
 the live site from outside — `/sign-in` 200, `/app` 307 — recording the commit it asked about
-beside the marker so one outage reverts one merge; a wrong answer has `revert.mjs` prepare the
+beside the marker so one outage reverts one merge. Its outcome is up, down or unknown (T0.39):
+a check that never answered, with none answering wrongly, is unknown, records nothing and is
+asked again next run, since silence is no verdict on a merge; a wrong answer has `revert.mjs` prepare the
 revert of the merge at `origin/main`'s tip on a detached HEAD, one commit restoring the tree
 before the merge, which the skill pushes as `HEAD:main` — the one push to main the guard lets
 through — before filing one Fix task, returning the reverted ticket to Backlog and posting one
@@ -133,7 +135,12 @@ and a one-line body is expanded into the seven sections of guidelines §2.
 `spec-sections.mjs` returns every cited section verbatim from the repo, and the run writes
 `docs/tickets/<id>.md`: the seven sections, then a Cited section holding that text. This
 file is the whole of what the reviewer reads, so a section the script reports missing is
-said to be missing in the file rather than silently left out.
+said to be missing in the file rather than silently left out. `claims.mjs` then reads that
+file back and reports every backticked path and identifier in the ticket's own sections that
+`origin/main` lacks — paths as files, identifiers with `git grep`, commands and flags and
+fragments never looked up, and the Cited section left to the document it quotes; whether an
+absent name is something the ticket creates or drift is the skill's reading, since only a
+reader of the ticket can tell those apart.
 
 ## 3 Branch
 
@@ -258,4 +265,6 @@ the session fell back), input plus output tokens counted once per API message wi
 writes excluded, the outcome from the last Status the run wrote on its task before any later claim
 — a Decision set after the release included (Review and Done are Done, Decision is Decision,
 anything else is Stopped) — and the reviewer's findings counted from its replies. A session that
-was not a `/ticket` writes no row.
+was not a `/ticket` writes no row, and a run the board already holds writes no second one: the
+same transcript reaches the script more than once, so the row is keyed on its task and the minute
+it started and a post that finds its own key does nothing (T0.30).

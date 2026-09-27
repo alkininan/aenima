@@ -10,8 +10,10 @@ import {
   parseTranscript,
   post,
   rowProperties,
+  runKey,
   runName,
   sidechainsOf,
+  startMinute,
   STOPPED,
   summarize,
 } from "./runs.mjs";
@@ -544,7 +546,10 @@ describe("post", () => {
   it("numbers the row after the rows the board holds and creates it in the Runs data source", async () => {
     const created = [];
     const api = {
-      tasks: async (ds) => (ds === "runs-ds" ? [{ Name: "R-0041 T0.11" }] : []),
+      runs: async (ds) =>
+        ds === "runs-ds"
+          ? [{ Name: "R-0041 T0.11", Task: ["other-page"], Started: "2026-09-12T09:00:00.000Z" }]
+          : [],
       createPage: async (ds, properties) => (created.push({ ds, properties }), { url: "u" }),
     };
     const result = await post(parseTranscript(transcript()), {
@@ -557,7 +562,7 @@ describe("post", () => {
 
   it("reports a refused request rather than throwing at session end", async () => {
     const api = {
-      tasks: async () => {
+      runs: async () => {
         throw new Error("Notion API POST /data_sources/x/query answered 401");
       },
     };
@@ -566,6 +571,120 @@ describe("post", () => {
     });
     expect(result.posted).toBe(false);
     expect(result.why).toContain("401");
+  });
+
+  // T0.30 TC1 → AC1. A board that keeps what it is given, and reads a row's Started back to the
+  // minute as Notion does — the row is written with seconds and comes back without them, which
+  // is the round trip the key has to survive.
+  const boardOf = (rows = []) => {
+    const held = [...rows];
+    return {
+      held,
+      runs: async () => held.map((row) => ({ ...row })),
+      createPage: async (ds, properties) => {
+        held.push({
+          Name: properties.Name.title[0].text.content,
+          Task: (properties.Task?.relation ?? []).map((page) => page.id),
+          Started: properties.Started.date.start.replace(/:\d\d\.\d+Z$/, ":00.000Z"),
+        });
+        return { url: `u${held.length}` };
+      },
+    };
+  };
+
+  // The row is written with seconds and Notion keeps none, so the key is what has to survive
+  // the round trip. The first post's own Started never matches itself as a string.
+  it("matches a row written with seconds against the minute the board reads back", () => {
+    const props = rowProperties(parseTranscript(transcript()), 1);
+    expect(props.Started.date.start).toBe("2026-09-13T11:22:30.000Z");
+    expect(runKey(null, props.Started.date.start)).toBe(runKey(null, "2026-09-13T11:22:00.000Z"));
+  });
+
+  // The same transcript reaches the script more than once, whatever fires SessionEnd again.
+  // The second post is the duplicate R-0055, R-0057, R-0058 and R-0061 are: same task, same
+  // minute, every figure repeated. It writes nothing and says the run is already recorded.
+  it("writes one row for a run posted twice, and names the row that already holds it", async () => {
+    const api = boardOf();
+    const summary = parseTranscript(transcript());
+    const first = await post(summary, { deps: { token: () => "t", board, client: api } });
+    const second = await post(summary, { deps: { token: () => "t", board, client: api } });
+    expect(first).toEqual({ posted: true, name: "R-0001 T0.96", url: "u1" });
+    expect(second).toEqual({
+      posted: false,
+      name: "R-0001 T0.96",
+      why: "this run is already recorded",
+    });
+    expect(api.held).toHaveLength(1);
+  });
+
+  // A later firing reads a longer transcript — more turns, more tokens, a further status — but
+  // the same task and the same first timestamp. That is the copy, not a second run.
+  it("writes nothing for a longer read of the same session", async () => {
+    const api = boardOf();
+    await post(parseTranscript(transcript({ statuses: ["In progress"] })), {
+      deps: { token: () => "t", board, client: api },
+    });
+    const later = await post(
+      parseTranscript(transcript({ statuses: ["In progress", "Review"], review: "1. Must — x" })),
+      { deps: { token: () => "t", board, client: api } },
+    );
+    expect(later.posted).toBe(false);
+    expect(api.held).toHaveLength(1);
+  });
+
+  // The key is the task and the minute together. Two runs that start in one minute on different
+  // tasks are two runs, and a run that claimed nothing is keyed on its minute alone.
+  it("writes a second row for another task started in the same minute", async () => {
+    const api = boardOf([
+      { Name: "R-0001 T0.11", Task: ["other-page"], Started: "2026-09-13T11:22:00.000Z" },
+    ]);
+    const result = await post(parseTranscript(transcript()), {
+      deps: { token: () => "t", board, client: api },
+    });
+    expect(result.posted).toBe(true);
+    expect(api.held).toHaveLength(2);
+  });
+
+  it("writes nothing for a second read of an idle run, which claimed no task at all", async () => {
+    const api = boardOf();
+    const summary = parseTranscript(transcript({ withTask: false, statuses: [] }));
+    expect((await post(summary, { deps: { token: () => "t", board, client: api } })).posted).toBe(
+      true,
+    );
+    expect((await post(summary, { deps: { token: () => "t", board, client: api } })).posted).toBe(
+      false,
+    );
+    expect(api.held).toHaveLength(1);
+  });
+});
+
+// T0.30 TC1 → AC1. The key itself: a task and a minute, both sides cut to the minute Notion keeps.
+describe("startMinute and runKey", () => {
+  it("cuts a timestamp to its minute, in UTC", () => {
+    expect(startMinute("2026-09-13T11:22:30.874Z")).toBe("2026-09-13T11:22:00.000Z");
+    expect(startMinute("2026-09-13T11:22:00.000Z")).toBe("2026-09-13T11:22:00.000Z");
+    expect(startMinute("2026-09-13T13:22:30+02:00")).toBe("2026-09-13T11:22:00.000Z");
+    expect(startMinute(null)).toBeNull();
+    expect(startMinute("not a time")).toBeNull();
+  });
+
+  it("keys the row written with seconds and the row read back without them alike", () => {
+    expect(runKey("3d679daf-d42e-813f-af58-f5f053219a57", "2026-09-13T11:22:30.874Z")).toBe(
+      runKey("3d679daf-d42e-813faf58f5f053219a57", "2026-09-13T11:22:00.000Z"),
+    );
+  });
+
+  it("separates two tasks in one minute, and joins an idle run to its own copy", () => {
+    expect(runKey("a", "2026-09-13T11:22:30.000Z")).not.toBe(
+      runKey("b", "2026-09-13T11:22:30.000Z"),
+    );
+    expect(runKey(null, "2026-09-13T11:22:30.000Z")).toBe(runKey(null, "2026-09-13T11:22:41.000Z"));
+  });
+
+  // A transcript with no timestamps cannot be told from any other; losing a run is the worse
+  // failure, so it has no key and is written.
+  it("has no key for a run with no start", () => {
+    expect(runKey("a", null)).toBeNull();
   });
 });
 

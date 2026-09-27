@@ -1,9 +1,24 @@
-<!-- guidelines.md · v1.25 · in the repo · a migration takes one word (T0.26):
+<!-- guidelines.md · v1.29 · in the repo · a migration takes one word (T0.26):
      §4 the ticket carrying an applied migration merges itself, with the spending read off the
      thread — your `apply`, then the run's own `applied` note naming that tag — so another
      ticket's word ungates nothing; §2, §3 and §5 steps 6 and 9 say the gate the same way.
-     Numbered v1.25 rather than the v1.21 this branch held: main reached v1.24 while the branch
-     waited, so the line takes the first number free above it.
+     Cut as v1.21 and held as v1.25 while this branch waited; renumbered past v1.28, main's
+     newest, when the branch took main in a second time.
+     v1.28 · in the repo · the deploy check reverts on a wrong answer and
+     never on silence (T0.39): §5's deploy check reads three outcomes, up, down and unknown,
+     and only down reverts; unknown leaves the commit unrecorded and the next run asks again.
+     Numbered past v1.27, main's newest, and past v1.25, which t0-26 is holding.
+     v1.27 · in the repo · a ticket's names are checked and its rules are
+     filed (T0.34): §5 step 2 reads the paths and identifiers a ticket claims against
+     origin/main (claims.mjs) and §4 decides what an absent one means, step 8 files a rule
+     that binds one area as a line in .claude/rules/<area>.md and sends a rule for everywhere
+     to the open questions; §6 a ticket's Rules section carries only what is not already
+     standing. Cut as v1.23 and renumbered past main's newest when this branch took main in;
+     v1.25 is t0-26's, and v1.13 records its own renumbering the same way.
+     v1.26 · in the repo · one run is one Runs row (T0.30): §2 says the
+     row is keyed on its Task and the minute of its Started, since the same transcript reaches
+     the script more than once and every copy repeated its original's Tokens and Findings.
+     Numbered past v1.24, main's newest, and past v1.25, which t0-26 is holding.
      v1.24 · in the repo · a branch takes main before it merges (T0.36):
      §5 steps 0 and 9 merge origin/main into the ticket branch first (premerge.mjs), and a
      conflict confined to the build log's generated sections settles itself — main's copy,
@@ -220,7 +235,9 @@ Done, Decision is Decision, anything else is Stopped, an idle run included), Fin
 reviewer's replies. A subagent's transcript — the reviewer's passes, written beside the session's
 under `<session>/subagents/` — counts towards Tokens and Model and nothing else, since the reviewer
 is about half of what a real run spends. A run that claimed nothing of its own is `R-nnnn` alone
-with no Task. A session that was not a `/ticket` writes no row.
+with no Task. A session that was not a `/ticket` writes no row. One run is one row: the same
+transcript reaches the script more than once, so the row is keyed on its Task and the minute of
+its Started, and a post that finds its own key writes nothing (T0.30).
 
 ### Documents
 
@@ -461,10 +478,12 @@ has no effort control, and a repository setting would reach every session opened
                 hours, is stale: keep its branch as t<id>-stale-<HHMM>, post one comment,
                 re-claim it from origin/main and continue — no human needed · main moved
                 since the last deploy check → ask the live site from outside (health.mjs):
-                /sign-in 200, /app 307; a wrong answer reverts the merge at the tip
+                /sign-in 200, /app 307; a wrong answer (down) reverts the merge at the tip
                 (revert.mjs, then the one push to main the guard lets through, HEAD:main),
                 files one Fix task at Backlog, puts the reverted ticket back at Backlog, one
-                comment · then refresh the Documents and Guidelines mirrors behind main
+                comment; no answer (unknown) reverts nothing, files nothing, records nothing
+                and is asked again next run
+                · then refresh the Documents and Guidelines mirrors behind main
                 (mirror.mjs plans; the skill writes through the connector): a stopped refresh
                 first, each page header-last under a refresh-in-progress sentinel,
                 allow_async false on every write, a page whose header commit equals its
@@ -492,7 +511,14 @@ has no effort control, and a repository setting would reach every session opened
                 that met a red in step 0 files one Fix task at Backlog (draft.mjs) and exits;
                 one that met nothing writes nothing else
 2  Inline       read every cited section · write docs/tickets/<id>.md — the pack the reviewer
-                reads · an addendum round adds the reply as its own section
+                reads · then check the names the ticket claims against origin/main
+                (claims.mjs): every backticked path and identifier in the ticket's own
+                sections, commands, flags and fragments never looked up, the Cited section
+                left to the document it quotes · an absent name is either something the
+                ticket creates or drift, and telling those apart is the skill's reading and
+                not the script's; drift goes by §4 — the default taken and said in the
+                claim's one default comment where a wrong guess is cheap, Decision where it
+                is expensive · an addendum round adds the reply as its own section
 3  Branch       branch t<id> off origin/main, or check out origin's copy when the branch is
                 already there — an addendum round, a ticket continuing after its migration —
                 with its pull request · plan mode before any file changes · a primary
@@ -537,7 +563,12 @@ has no effort control, and a repository setting would reach every session opened
                 carrying PASS or FINDINGS — then mirror it
                 into the body Report section: ACs implemented (each with its test) · tests
                 written · open questions · write docs/log/<id>.md and regenerate the build
-                log's list from the directory (log-index.mjs)
+                log's list from the directory (log-index.mjs) · a rule the ticket established
+                that binds one area of the code is filed as one line in that area's
+                .claude/rules/<area>.md, ending in docs/log/<id>.md, so the next session
+                working there meets it; a rule that binds everywhere is not written into
+                CLAUDE.md by a run — that file is the contract and the edit is yours, so it
+                goes in the report's open questions
 9  Close        commit, take main into the branch (premerge.mjs), push branch, open the PR
                 unless the branch has one → Review · a diff
                 that weakens no restraint and adds no migration your `apply` is still owed on
@@ -594,7 +625,14 @@ once per commit of main the next run asks the live site two questions from outsi
 The commit last asked about is recorded beside the run marker (`aenima-deploy-checked`), so a
 site down for a reason of its own reverts the merge at the tip once and not every merge after
 it; a commit younger than five minutes is not asked about yet — Vercel may still be building it
-and the previous deployment would answer for it — and the next run asks. A wrong answer reverts: `revert.mjs` detaches at `origin/main` and reverts its tip with
+and the previous deployment would answer for it — and the next run asks. The answer is one of
+three outcomes (T0.39): **up**, every check answered as expected; **down**, at least one check
+answered with the wrong status; **unknown**, a check never answered — a timeout, a name this
+machine could not look up — and none answered wrongly. Only down reverts. A merge cannot break a
+name lookup, so silence is no verdict on one: on 2026-09-24 the machine running the schedule could
+not resolve aeni.ma, the check read that as down, and only the run's own judgement kept it from
+reverting a healthy merge. Unknown leaves the commit unrecorded, so the next run asks again, and
+the report line says the site could not be reached from this machine. A wrong answer reverts: `revert.mjs` detaches at `origin/main` and reverts its tip with
 `git revert -m 1` — one commit that restores the tree main had before the merge, never a
 force-push — and the run pushes it as `git push origin HEAD:main`, the one push to main the guard
 lets through, having checked in code that HEAD is exactly that revert. Then one Fix task at
@@ -750,7 +788,11 @@ matches no rule.
   table" is.
 - Every Criteria line has a Tests line naming it. No orphans either way.
 - Reference spec by section. The run inlines at claim; the body stays short.
-- Rules carry only what cost something to learn. Route is the model's; destination is yours.
+- Rules carry only what cost something to learn **and is not already standing**: a rule that
+  loads by path out of `.claude/rules/` arrives on its own when the ticket's code is opened, and
+  restating it in the ticket is a second copy that can disagree with the first. *Rules* here is
+  the ticket's section; `.claude/rules/` is the directory — keep the two apart in the prose.
+  Route is the model's; destination is yours.
 - Mirror experiments go to a scratch page. Admin is written by the pipeline; a page you are
   trying something on is not a page it should find.
 
