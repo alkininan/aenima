@@ -40,18 +40,26 @@ describe("gateOf", () => {
 
 describe("landedOnMain", () => {
   const run =
-    (answers: Record<string, { status: number | null; error?: Error }>) => (argv: string[]) =>
-      answers[argv[0] ?? ""] ?? { status: 1 };
+    (answers: Record<string, { status: number | null; stdout?: string; error?: Error }>) =>
+    (argv: string[]) =>
+      answers[argv[0] ?? ""] ?? { status: 128, stdout: "" };
 
   it("is true when the file is in origin/main's tree", () => {
     expect(
-      landedOnMain(args.file, run({ "rev-parse": { status: 0 }, "cat-file": { status: 0 } })),
+      landedOnMain(
+        args.file,
+        run({ "rev-parse": { status: 0 }, "ls-tree": { status: 0, stdout: `${args.file}\n` } }),
+      ),
     ).toBe(true);
   });
 
   it("is false when origin/main resolves and does not carry the file", () => {
+    // What `git ls-tree` answers for an absent path: success, and nothing listed.
     expect(
-      landedOnMain(args.file, run({ "rev-parse": { status: 0 }, "cat-file": { status: 1 } })),
+      landedOnMain(
+        args.file,
+        run({ "rev-parse": { status: 0 }, "ls-tree": { status: 0, stdout: "" } }),
+      ),
     ).toBe(false);
   });
 
@@ -68,8 +76,20 @@ describe("landedOnMain", () => {
         args.file,
         run({
           "rev-parse": { status: 0 },
-          "cat-file": { status: null, error: new Error("no git") },
+          "ls-tree": { status: null, error: new Error("no git") },
         }),
+      ),
+    ).toBe(true);
+  });
+
+  it("is true when the lookup fails after the ref resolved — a fatal is not an absence", () => {
+    // `git cat-file -e` answered 128 for an absent path and for any fatal alike, so a failed
+    // lookup read as "not on main" and bought a skip. Only a lookup that succeeded and listed
+    // nothing may say the file has not landed.
+    expect(
+      landedOnMain(
+        args.file,
+        run({ "rev-parse": { status: 0 }, "ls-tree": { status: 128, stdout: "" } }),
       ),
     ).toBe(true);
   });

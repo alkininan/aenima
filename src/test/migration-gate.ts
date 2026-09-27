@@ -27,22 +27,28 @@ export const MAIN = "origin/main";
 /** What the gate decided, and the one sentence it wants said about it. */
 export type Gate = { skip: boolean; why: string | null };
 
-/** How a git command answers: `spawnSync`'s status, and its error when it never ran. */
-export type GitRun = (argv: string[]) => { status: number | null; error?: Error | undefined };
+/** How a git command answers: `spawnSync`'s status and output, and its error when it never ran. */
+export type GitRun = (argv: string[]) => {
+  status: number | null;
+  stdout?: string | undefined;
+  error?: Error | undefined;
+};
 
 const git: GitRun = (argv) => spawnSync("git", argv, { encoding: "utf8" });
 
 /**
  * Whether `file` is in `origin/main`'s tree. True whenever that cannot be established — the
  * ref missing, git absent, the lookup itself failing — because the false answer is the one
- * that buys a skip and nothing unproven may buy one.
+ * that buys a skip and nothing unproven may buy one. `git ls-tree` is the lookup because it
+ * tells the two apart: an absent path is a success that lists nothing, and anything else is a
+ * failure. `git cat-file -e` answers 128 for both, so a fatal would read as an absence.
  */
 export function landedOnMain(file: string, run: GitRun = git): boolean {
   const ref = run(["rev-parse", "--verify", "--quiet", `${MAIN}^{commit}`]);
   if (ref.error || ref.status !== 0) return true;
-  const blob = run(["cat-file", "-e", `${MAIN}:${file}`]);
-  if (blob.error) return true;
-  return blob.status === 0;
+  const listed = run(["ls-tree", "--name-only", MAIN, "--", file]);
+  if (listed.error || listed.status !== 0) return true;
+  return (listed.stdout ?? "").trim() !== "";
 }
 
 /**
