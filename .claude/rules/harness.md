@@ -16,3 +16,4 @@ protocol is `docs/guidelines.md`; this is what was learned writing the code unde
 - A name out of a document reaches a child process as an argument in an array and never as a shell line. — `docs/log/T0.34.md`
 - A probe that got no answer has learned nothing about what it probes: silence is its own outcome, never read as a failure, and it records nothing so the question is asked again. — `docs/log/T0.39.md`
 - A module read through the TypeScript compiler API is parsed as the script kind its extension names, never TSX for all: as TSX a `.ts` generic arrow `<T>(` opens a JSX tag and hides the rest of the file. — `docs/log/T0.38.md`
+- An address that answers with its host's login rather than the site — Vercel's 302 to vercel.com with `_vercel_sso_nonce` — has not answered for the deployment: skip it and name it, never read its status as the site's. — `docs/log/T0.43.md`

@@ -3,7 +3,8 @@
  * `pnpm board:ids` — the keys of `.claude/board.json`, one per line.
  *
  * The file is the dev board's identity (docs/guidelines.md §1): the ids of the Admin page
- * and its databases, and the prefix every comment the pipeline writes begins with. This
+ * and its databases, the prefix every comment the pipeline writes begins with, and the
+ * addresses the deploy check asks (§5, T0.43). This
  * prints what is configured, never what it is set to — keys, not values — so a shell
  * transcript that runs it carries no id. The file is read from the repository root wherever
  * the command is run from, a worktree or a subdirectory included.
