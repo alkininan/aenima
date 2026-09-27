@@ -459,7 +459,7 @@ export const ITEM_RUN: RunView = composeRunView(featurePrdPack, GHOST_MODE_RUN);
 
 /**
  * The same run with §5's queue holding a retry — §10's warning dot and
- * "scored 4h ago — retrying".
+ * "scored 4 h ago — retrying".
  *
  * A provider outage cannot be staged in a browser test, and it is the one
  * freshness state that must never read as an error. So it is a fixture, reached

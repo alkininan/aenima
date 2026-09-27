@@ -17,8 +17,10 @@ export default function AppLoading() {
   return (
     <main className="mx-auto flex w-full max-w-[1200px] flex-col gap-[24px] px-[24px] py-[32px]">
       <header className="flex flex-col gap-[8px]">
-        <span className="type-display-xl block h-[38px] w-[240px] animate-pulse rounded-xs bg-surface-2" />
-        <span className="block h-[22px] w-[320px] animate-pulse rounded-xs bg-surface-2" />
+        {/* §6's shimmer, the one skeleton motion: its loop is --t-skeleton, where
+            Tailwind's pulse would bring a 2s of its own (C-06). */}
+        <span className="shimmer block h-[38px] w-[240px] rounded-xs" />
+        <span className="shimmer block h-[22px] w-[320px] rounded-xs" />
       </header>
 
       {/* The strip's own height: 8 padding either side of a 2-line segment. */}

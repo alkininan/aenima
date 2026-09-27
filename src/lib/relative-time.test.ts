@@ -26,7 +26,7 @@ describe("relativeTime", () => {
     expect(ago(WEEK)).toEqual({ unit: "weeks", value: 1 });
   });
 
-  // Rounds down: an item touched 90 minutes ago is "1h ago", not "2h ago". The
+  // Rounds down: an item touched 90 minutes ago is "1 h ago", not "2 h ago". The
   // list must never report something as older than it is.
   it("rounds down, never up", () => {
     expect(ago(90 * MINUTE)).toEqual({ unit: "hours", value: 1 });
