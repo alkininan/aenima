@@ -214,10 +214,12 @@ function contextOf(node) {
 
 /**
  * Every string value in a module, a `+` chain read as one string. Each carries its line,
- * its context, and the JSX tag whose attribute it is.
+ * its context, and the JSX tag whose attribute it is. A `.ts` module is read as TypeScript,
+ * not TSX: there a generic arrow's `<T>(` would open a JSX tag and swallow the rest.
  */
 export function stringValues(path, text) {
-  const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const kind = path.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
+  const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, kind);
   const found = [];
   const visit = (node) => {
     if (isPlusChain(node) && !isPlusChain(node.parent)) {

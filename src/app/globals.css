@@ -192,6 +192,26 @@
   /* §3 — root 16px. Every px value in the design spec is read against it. */
   html {
     font-size: 16px;
+    /* §7 / C-27: no tap flash on touch. Inherited, so set once at the root. */
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* §7 / C-27: every control is `touch-action: manipulation` — no double-tap
+   * zoom on a control and no tap delay. Pinch stays available on content. */
+  button,
+  a[href],
+  input,
+  textarea,
+  select,
+  label,
+  summary,
+  [role="button"],
+  [role="option"],
+  [role="menuitem"],
+  [role="tab"],
+  [role="switch"],
+  [role="combobox"] {
+    touch-action: manipulation;
   }
 
   body {
@@ -753,15 +773,16 @@
     transition: color var(--t-fast) var(--ease);
   }
 
-  .field-pill:has(.field-input[aria-invalid]) .field-icon-leading {
-    color: var(--danger);
-  }
-
-  /* Focus outranks error, the same way `focus-within:border-prime` outranks
-   * `border-danger` on the pill: what you are touching is what you are told
-   * about. Equal specificity to the rule above, so source order decides. */
   .field-pill:focus-within .field-icon-leading {
     color: var(--prime);
+  }
+
+  /* §8.2 (v2.21): error outranks focus. A focused field in error keeps the
+   * --danger border and icon — the border by dropping the focus utility on an
+   * invalid pill, the icon here, where `:has()` lends this selector the higher
+   * specificity. Keyboard modality still adds the ring outside it. */
+  .field-pill:has(.field-input[aria-invalid]) .field-icon-leading {
+    color: var(--danger);
   }
 
   /* Highest specificity of the four, and rightly: a disabled field cannot be
@@ -781,9 +802,12 @@
     top: 0;
     /* §8 (v2.7): the floated label hugs the field's left edge, sitting in a
      * label zone padded 8 a side. It no longer tracks the value's text inset,
-     * so a leading icon moves the value and leaves the label where it is. */
+     * so a leading icon moves the value and leaves the label where it is.
+     *
+     * The box is as wide as its text, never the zone's full width: at rest it
+     * is scaled 17/13 from its text's top-left, and a full-width box scaled that way
+     * overshoots the field by 30% of its width and pans a 375 page sideways. */
     left: 0;
-    right: 0;
     padding-inline: 8px;
     /* The zone is 24h and reserved; a label that wrapped would break that. */
     white-space: nowrap;
@@ -812,8 +836,11 @@
      * is 9. §8 (v2.10): the border counts, it is not a rounding error.
      *
      * §8.2 (v2.22): at rest the label is ui-label scaled by 17/13, so it reads at
-     * input size. Scaled, its 18 line is 18 × 17/13 tall, and the translate
-     * centres that line in the pill: the 24 zone plus (48 − the scaled line) / 2. */
+     * input size. The scale runs from the text's own top-left (the origin above),
+     * so the 8 of zone padding does not scale and the glyphs stay at 1 + 16 from
+     * the pill with no x correction. Scaled, its 18 line is 18 × 17/13 tall, and
+     * the translate centres that line in the pill: the 24 zone plus
+     * (48 − the scaled line) / 2. */
     transform: translate(var(--field-label-rest-x, 9px), calc(24px + (48px - 18px * 17 / 13) / 2))
       scale(calc(17 / 13));
   }
@@ -846,6 +873,12 @@
    * an error appearing never shifts layout. ui-footnote is 13/18. */
   .field-helper-reserved {
     min-height: 18px;
+  }
+
+  /* §8.2 (v2.21): two lines (36h) under the OTP group, whose wrong-code string
+   * measures 305 at 343 and crosses onto a second line under §12's +30%. */
+  .field-helper-reserved-2 {
+    min-height: 36px;
   }
 
   /* §6/§7/§8 (v2.5) — the focus split, keyboard half.

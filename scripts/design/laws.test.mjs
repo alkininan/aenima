@@ -128,6 +128,15 @@ describe("C-06 and C-39 · no literal in a component stylesheet (T0.38)", () => 
     ]);
   });
 
+  it("reads a .ts file as TypeScript: a generic arrow is not a JSX tag that swallows the rest", () => {
+    const text = 'const d = { a: <C>(c: C) => ["x (", c, ")"] as const, b: "Retry" };';
+    expect(stringValues("d.ts", text).map((value) => [value.context, value.value])).toEqual([
+      ["d.a", "x ("],
+      ["d.a", ")"],
+      ["d.b", "Retry"],
+    ]);
+  });
+
   it("does not read the token layer as a component: :root, @theme, the §3 type scale", () => {
     const selectors = componentRules(globals).map((rule) => rule.selector);
     expect(selectors).not.toContain(":root");

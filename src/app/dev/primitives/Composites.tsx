@@ -36,7 +36,7 @@ import { MailIcon, SearchIcon } from "@/components/ui/icons";
 import { AVATAR_SIZES, SKELETON_SHAPES, TOAST_TONES } from "@/components/ui/variants";
 import { VALIDATION_MIN_LENGTH, useFieldValidation } from "@/components/ui/useFieldValidation";
 import { formatCountdown, useCooldown } from "@/components/ui/useCooldown";
-import { inputHelperClasses } from "@/components/ui/variants";
+import { REQUEST_MESSAGE_CLASSES } from "@/components/ui/variants";
 import { getDictionary } from "@/i18n";
 
 import { BucketSection } from "@/app/app/BucketSection";
@@ -226,24 +226,35 @@ function ResendDemo() {
     <div className="flex flex-col items-center gap-[16px]">
       <OtpInput label={t.signIn.codeLabel} value={code} onValueChange={setCode} />
 
-      <div className="flex flex-col items-center">
+      <div className="flex flex-col items-center gap-[8px]">
         <Button
           type="button"
           variant="neutral"
-          size="sm"
+          size="md"
+          readableWhenDisabled
           disabled={cooldown.active}
           onClick={() => {
             cooldown.start();
             setError(t.signIn.rateLimited);
           }}
         >
-          {cooldown.active
-            ? t.signIn.resendIn(formatCountdown(cooldown.remainingMs))
-            : t.signIn.resend}
+          {cooldown.active ? (
+            // One inline run, so the Button's flex row does not pull the parts
+            // apart with its gap.
+            <span>
+              {t.signIn.resendIn(
+                <span key="clock" className="type-mono-readout">
+                  {formatCountdown(cooldown.remainingMs)}
+                </span>,
+              )}
+            </span>
+          ) : (
+            t.signIn.resend
+          )}
         </Button>
 
         {error ? (
-          <span role="status" className={inputHelperClasses("error", false)}>
+          <span role="status" className={REQUEST_MESSAGE_CLASSES}>
             {error}
           </span>
         ) : null}
@@ -253,6 +264,7 @@ function ResendDemo() {
 }
 
 function Composites() {
+  const t = getDictionary();
   const [type, setType] = useState<string | null>(null);
   const [long, setLong] = useState<string | null>("option-9");
   const [gapped, setGapped] = useState<string | null>(null);
@@ -364,7 +376,7 @@ function Composites() {
       <Section label="OTP">
         {/* §8 (v2.3): state-only helper lines, so what these demos demonstrate
             is described here rather than under the boxes. §8 (v2.4): the group
-            steps to 44/r22/gap 8 below 768 and back to 52/r27/gap 16 above it —
+            steps to 44/gap 8 below 768 and back to 52/gap 16 above it —
             narrow the window to see it. */}
         <p className="type-ui-footnote text-n-secondary">
           Type, paste, or walk the boxes with the arrow keys. A filled box takes a prime border. The
@@ -376,7 +388,9 @@ function Composites() {
           <OtpInput
             label="Error"
             invalid
-            helper="That code didn't work"
+            // The product's wrong-code line: the string §8.2's two reserved
+            // lines are measured against.
+            helper={t.signIn.codeRejected}
             value="482913"
             onValueChange={() => {}}
           />
