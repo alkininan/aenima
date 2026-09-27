@@ -1641,7 +1641,11 @@ describe("T0.44 — rule (j) the phase the marker names", () => {
     const writes = [
       board("create-comment", { page_id: "p", markdown: "⟡ I took a default" }),
       board("update-page", { page_id: "p", properties: { Status: "Review" } }),
-      board("update-page", { page_id: "p", command: "update_properties", properties: { Commit: "abc" } }),
+      board("update-page", {
+        page_id: "p",
+        command: "update_properties",
+        properties: { Commit: "abc" },
+      }),
       board("create-pages", { pages: [{ properties: { Status: "Backlog" } }] }),
     ];
     for (const input of writes) {
@@ -1677,12 +1681,16 @@ describe("T0.44 — rule (j) the phase the marker names", () => {
   it("lets the build phase edit source, and the close phase write under docs/ and nowhere else", () => {
     expect(decide(write("Edit", "/repo/src/a.ts"), at("build"))).toBeNull();
     expect(decide(write("Write", "/repo/docs/reports/T0.44.md"), at("close"))).toBeNull();
-    expect(decide(write("Write", "/repo/src/a.ts"), at("close"))).toContain("close phase writes only under docs/");
+    expect(decide(write("Write", "/repo/src/a.ts"), at("close"))).toContain(
+      "close phase writes only under docs/",
+    );
     expect(decide(write("Write", "/repo/src/docs/a.ts"), at("close"))).toContain("rule (j)");
   });
 
   it("holds a phase it does not know to the strictest of them", () => {
-    expect(decide(sh("git push origin t0-44"), at("ship"))).toContain("in the ship phase is refused");
+    expect(decide(sh("git push origin t0-44"), at("ship"))).toContain(
+      "in the ship phase is refused",
+    );
     expect(decide(write("Write", "/repo/src/a.ts"), at("ship"))).toContain("rule (j)");
   });
 
@@ -1719,7 +1727,11 @@ describe("T0.44 — rule (j) the phase the marker names", () => {
     afterAll(() => rmSync(repo, { recursive: true, force: true }));
 
     it("refuses from the phase the marker names, and judges as before once it names none", async () => {
-      const push = { tool_name: "Bash", tool_input: { command: "git push -u origin t0-44" }, cwd: repo };
+      const push = {
+        tool_name: "Bash",
+        tool_input: { command: "git push -u origin t0-44" },
+        cwd: repo,
+      };
       expect(await judge(push)).toBeNull();
       claim({ task: "T0.44", page: "p", branch: "t0-44" }, { cwd: repo, env });
       expect(await judge(push)).toBeNull();

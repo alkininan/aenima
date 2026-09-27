@@ -145,7 +145,8 @@ describe("report-check", () => {
 
     it("is the table the skill's step 8 tells a run to write", () => {
       const skill = readFileSync(
-        join(import.meta.dirname, "..", "..", ".claude/skills/ticket/SKILL.md"),
+        // Since T0.44 step 8 is the closer's, moved out of the skill verbatim.
+        join(import.meta.dirname, "..", "..", ".claude/agents/closer.md"),
         "utf8",
       );
       const step8 = skill.match(/^## 8 Report\n[\s\S]*?(?=^## 9 )/m)?.[0] ?? "";

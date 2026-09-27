@@ -750,7 +750,13 @@ describe.skipIf(T010.some(({ worktree, id }) => session(worktree, id) === null))
 describe("T0.44 — the receipts per phase", () => {
   const usage = (input, output) => ({ input_tokens: input, output_tokens: output });
   const bashAt = (id, command, stamp, spent) =>
-    assistant(id, "claude-fable-5-1", spent, [{ type: "tool_use", id: `tu_${id}`, name: "Bash", input: { command } }], stamp);
+    assistant(
+      id,
+      "claude-fable-5-1",
+      spent,
+      [{ type: "tool_use", id: `tu_${id}`, name: "Bash", input: { command } }],
+      stamp,
+    );
   const side = (id, stamp, spent, blocks = [{ type: "text", text: "x" }]) =>
     assistant(id, "claude-fable-5-1", spent, blocks, stamp).map((l) =>
       l.replace('"type":"assistant"', '"isSidechain":true,"type":"assistant"'),
@@ -761,18 +767,43 @@ describe("T0.44 — the receipts per phase", () => {
   function orchestrated() {
     const main = [
       PROMPT,
-      ...bashAt("m_claim", `node scripts/run/claim.mjs --task T0.96 --page ${PAGE} --branch t0-96`, at(23, 0), usage(10, 100)),
+      ...bashAt(
+        "m_claim",
+        `node scripts/run/claim.mjs --task T0.96 --page ${PAGE} --branch t0-96`,
+        at(23, 0),
+        usage(10, 100),
+      ),
       ...bashAt("m_plan", "node scripts/run/phase.mjs plan", at(24, 0), usage(1, 10)),
-      ...bashAt("m_build", "node scripts/run/phase.mjs build --route medium", at(26, 0), usage(2, 20)),
-      ...bashAt("m_review", "node scripts/run/phase.mjs review --route medium", at(30, 0), usage(3, 30)),
+      ...bashAt(
+        "m_build",
+        "node scripts/run/phase.mjs build --route medium",
+        at(26, 0),
+        usage(2, 20),
+      ),
+      ...bashAt(
+        "m_review",
+        "node scripts/run/phase.mjs review --route medium",
+        at(30, 0),
+        usage(3, 30),
+      ),
       ...assistant(
         "m_agent",
         "claude-fable-5-1",
         usage(4, 40),
-        [{ type: "tool_use", id: "tu_rev", name: "Agent", input: { subagent_type: "reviewer-medium", prompt: "docs/tickets/T0.96.md pass 1" } }],
+        [
+          {
+            type: "tool_use",
+            id: "tu_rev",
+            name: "Agent",
+            input: { subagent_type: "reviewer-medium", prompt: "docs/tickets/T0.96.md pass 1" },
+          },
+        ],
         at(30, 30),
       ),
-      user([{ type: "tool_result", tool_use_id: "tu_rev", content: "1. Should — a name\n\nPASS" }], at(33, 0)),
+      user(
+        [{ type: "tool_result", tool_use_id: "tu_rev", content: "1. Should — a name\n\nPASS" }],
+        at(33, 0),
+      ),
       ...bashAt("m_close", "node scripts/run/phase.mjs close", at(34, 0), usage(5, 50)),
     ];
     const sidechains = [
@@ -783,7 +814,12 @@ describe("T0.44 — the receipts per phase", () => {
       {
         agent: "closer",
         lines: side("s_close", at(35, 0), usage(400, 4000), [
-          { type: "tool_use", id: "tu_st", name: "mcp__abc__notion-update-page", input: { page_id: PAGE, properties: { Status: "Review" } } },
+          {
+            type: "tool_use",
+            id: "tu_st",
+            name: "mcp__abc__notion-update-page",
+            input: { page_id: PAGE, properties: { Status: "Review" } },
+          },
         ]),
       },
       // An agent the table does not name is the phase the marker named when it wrote.

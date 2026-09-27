@@ -8,12 +8,18 @@ const verdict = (pass, body, last) =>
 // T0.44 TC3 → AC3: the cap is a count the run reads off the verdict file.
 describe("the review cap", () => {
   it("reads the pass, the verdict and the tags", () => {
-    const text = verdict(2, ["1. Must — a wrong result", "2. **Should** — a name", "3. Should: a test"], "FINDINGS");
+    const text = verdict(
+      2,
+      ["1. Must — a wrong result", "2. **Should** — a name", "3. Should: a test"],
+      "FINDINGS",
+    );
     expect(readVerdict(text)).toEqual({ pass: 2, verdict: "FINDINGS", musts: 1, shoulds: 2 });
   });
 
   it("closes on a PASS, and counts the Shoulds the closer files as one task", () => {
-    expect(nextStep(verdict(2, ["1. Should — a name", "2. Should — a test"], "PASS"))).toMatchObject({
+    expect(
+      nextStep(verdict(2, ["1. Should — a name", "2. Should — a test"], "PASS")),
+    ).toMatchObject({
       next: "close",
       shoulds: 2,
     });
@@ -21,8 +27,14 @@ describe("the review cap", () => {
   });
 
   it("sends Musts in pass 1 or 2 back to the builder for the next pass", () => {
-    expect(nextStep(verdict(1, ["1. Must — x"], "FINDINGS"))).toMatchObject({ next: "build", pass: 1 });
-    expect(nextStep(verdict(2, ["1. Must — x"], "FINDINGS"))).toMatchObject({ next: "build", pass: 2 });
+    expect(nextStep(verdict(1, ["1. Must — x"], "FINDINGS"))).toMatchObject({
+      next: "build",
+      pass: 1,
+    });
+    expect(nextStep(verdict(2, ["1. Must — x"], "FINDINGS"))).toMatchObject({
+      next: "build",
+      pass: 2,
+    });
   });
 
   it("stops at Decision on a Must in pass 3, and there is no pass 4", () => {

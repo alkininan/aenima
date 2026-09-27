@@ -86,7 +86,13 @@ export const OUTCOMES = { Review: "Done", Done: "Done", Decision: "Decision" };
 export const STOPPED = "Stopped";
 
 /** The phases a run's tokens are split across, as the Runs row names its columns (T0.44). */
-export const PHASE_COLUMNS = { plan: "Plan", build: "Build", review: "Review", gate: "Gate", close: "Close" };
+export const PHASE_COLUMNS = {
+  plan: "Plan",
+  build: "Build",
+  review: "Review",
+  gate: "Gate",
+  close: "Close",
+};
 
 /** The subagents whose Status writes and merges are the run's: the closer writes the board. */
 const BOARD_WRITERS = new Set(["closer"]);
@@ -285,7 +291,10 @@ export function parseTranscript(lines, sidechains = []) {
   }
   for (const { agent, event } of side) {
     const id = event.message?.id ?? event.uuid;
-    messages.set(id, { message: event.message, phase: phaseOfAgent(agent) ?? phaseAt(event.timestamp) });
+    messages.set(id, {
+      message: event.message,
+      phase: phaseOfAgent(agent) ?? phaseAt(event.timestamp),
+    });
   }
   let input = 0;
   let output = 0;

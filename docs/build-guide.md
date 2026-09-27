@@ -1,4 +1,8 @@
-<!-- build-guide.md · v2.10 · in the repo · the hooks paragraph: a migration takes
+<!-- build-guide.md · v2.11 · in the repo · §2 says how a phase is run by hand: a run is an
+     orchestrator and four phase agents (T0.44), and a person driving a ticket can run any one
+     of them the same way — the phase set in the marker, the agent handed paths, the files the
+     handoff.
+     v2.10 · in the repo · the hooks paragraph: a migration takes
      one word and it is `apply` — the ticket carrying it merges itself once that word has been
      spent on the thread (T0.26); your word stays for a diff that weakens a restraint.
      Cut as v2.8, which main left free for it; numbered past v2.9, main's newest, when this
@@ -107,6 +111,22 @@ says each test was seen red first, runs the suite, and returns `PASS` or numbere
 cannot edit: `Edit`, `Write` and `NotebookEdit` are denied, so a finding is always a sentence and
 never a commit. Its whole value is that it did not write the code, so give it the diff and let it
 disagree with the summary — a briefing that tells it what is true has thrown away the review.
+
+**A run is phases, and so is a ticket run by hand.** Since T0.44 `/ticket` is an orchestrator and
+four subagents — the planner (step 2), the builder (steps 3 and 4), the reviewer (step 5) and the
+closer (steps 6 to 9) — each in `.claude/agents/`, each with its own slice of `docs/guidelines.md`
+§5 (§5, *Phases*). Running one by hand is the same move the orchestrator makes. Claim first
+(`node scripts/run/claim.mjs --task <id> --page <page id> --branch t<id>`), then set the phase —
+`node scripts/run/phase.mjs build`, and `--route` from `node scripts/run/route.mjs
+docs/tickets/<id>.md` for the builder and the reviewer — then invoke the agent with the paths its
+file asks for and nothing else: the planner with `docs/tickets/<id>.md`, the builder with that and
+the branch, the reviewer with that and `pass <n>`, the closer with the ticket path and the branch.
+From a terminal that is `claude -p --agent <name> "<the paths>"`; from a session, the Agent tool in
+the foreground. Read its last line and nothing else, and hand the next phase the files, never a
+summary. The guard holds each phase to its reach while the marker names it (rule (j)): a push, a
+`gh` call, a merge or a board write only in `close`, an edit only in `build`. After each review,
+`node scripts/run/review-cap.mjs docs/reviews/<id>.md` says what comes next — three passes and no
+more. Release the marker when you are done (`node scripts/run/release.mjs`).
 
 **The rules that cost something are hooks, not sentences.** `.claude/settings.json` wires two.
 `scripts/hooks/guard.mjs` runs before every `Bash`, `Edit` and `Write`, and refuses a schema push,

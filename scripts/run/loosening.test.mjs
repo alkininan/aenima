@@ -132,7 +132,10 @@ describe("the corpus", () => {
       "Write from the plan phase",
       "Write to source from the close phase",
     ]);
-    const unphased = phased.map((entry) => ({ ...entry, deps: { ...entry.deps, phase: () => null } }));
+    const unphased = phased.map((entry) => ({
+      ...entry,
+      deps: { ...entry.deps, phase: () => null },
+    }));
     const answers = refusals(decide, unphased);
     for (const entry of unphased) expect(answers[entry.name], entry.name).toBe(false);
   });

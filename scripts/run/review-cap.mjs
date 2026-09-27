@@ -39,7 +39,10 @@ const PASS_LINE = /^\s*\**\s*pass\s+(\d+)\s*\**\s*$/im;
  */
 export function readVerdict(text) {
   const body = String(text ?? "");
-  const lines = body.split("\n").map((line) => line.trim()).filter(Boolean);
+  const lines = body
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
   const last = lines.at(-1) ?? "";
   const verdict = last === "PASS" || last === "FINDINGS" ? last : null;
   const pass = Number.parseInt(body.match(PASS_LINE)?.[1] ?? "", 10);
@@ -58,7 +61,13 @@ export function readVerdict(text) {
  */
 export function nextStep(text) {
   if (text === null) {
-    return { next: "decision", pass: null, musts: 0, shoulds: 0, why: "no verdict file was written" };
+    return {
+      next: "decision",
+      pass: null,
+      musts: 0,
+      shoulds: 0,
+      why: "no verdict file was written",
+    };
   }
   const read = readVerdict(text);
   if (read.pass === null) {
@@ -78,9 +87,17 @@ export function nextStep(text) {
     };
   }
   if (read.pass >= MAX_PASSES) {
-    return { next: "decision", ...read, why: `pass ${read.pass} still finds a Must, and there is no pass ${read.pass + 1}` };
+    return {
+      next: "decision",
+      ...read,
+      why: `pass ${read.pass} still finds a Must, and there is no pass ${read.pass + 1}`,
+    };
   }
-  return { next: "build", ...read, why: `pass ${read.pass} found Musts; pass ${read.pass + 1} reads the fixes` };
+  return {
+    next: "build",
+    ...read,
+    why: `pass ${read.pass} found Musts; pass ${read.pass + 1} reads the fixes`,
+  };
 }
 
 /** CLI: `node review-cap.mjs docs/reviews/<id>.md`. */

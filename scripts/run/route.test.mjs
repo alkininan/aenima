@@ -19,7 +19,11 @@ describe("the route", () => {
   });
 
   it("runs a Fix at xhigh the moment it names a migration, scripts/ or .claude/", () => {
-    for (const path of ["drizzle/0020_x.sql", "scripts/run/runs.mjs", ".claude/agents/builder.md"]) {
+    for (const path of [
+      "drizzle/0020_x.sql",
+      "scripts/run/runs.mjs",
+      ".claude/agents/builder.md",
+    ]) {
       expect(route({ type: "Fix", paths: [path] }, TABLE)).toMatchObject({
         route: "xhigh",
         agents: { builder: "builder", reviewer: "reviewer" },

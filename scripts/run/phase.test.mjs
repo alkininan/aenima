@@ -46,14 +46,16 @@ describe("the marker's phase", () => {
 
   it("refuses a phase or a route it does not know", () => {
     expect(() => setPhase({ phase: "ship" }, { cwd, env })).toThrow("no phase called");
-    expect(() => setPhase({ phase: "build", route: "low" }, { cwd, env })).toThrow("no route called");
+    expect(() => setPhase({ phase: "build", route: "low" }, { cwd, env })).toThrow(
+      "no route called",
+    );
     expect(readMarker(cwd).phase).toBeUndefined();
   });
 
   it("refuses another session's marker, and a repository with none", () => {
-    expect(() => setPhase({ phase: "close" }, { cwd, env: { CLAUDE_CODE_SESSION_ID: "other" } })).toThrow(
-      "another session's run: T0.44",
-    );
+    expect(() =>
+      setPhase({ phase: "close" }, { cwd, env: { CLAUDE_CODE_SESSION_ID: "other" } }),
+    ).toThrow("another session's run: T0.44");
     rmSync(join(cwd, ".git", "aenima-run-active"));
     expect(() => setPhase({ phase: "close" }, { cwd, env })).toThrow("no run marker");
   });

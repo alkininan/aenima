@@ -90,7 +90,14 @@ describe("T0.44 — phases as subagents", () => {
         expect.arrayContaining(["Edit", "Write"]),
       );
     }
-    for (const name of ["planner", "builder", "builder-medium", "reviewer", "reviewer-medium", "closer"]) {
+    for (const name of [
+      "planner",
+      "builder",
+      "builder-medium",
+      "reviewer",
+      "reviewer-medium",
+      "closer",
+    ]) {
       expect(parts(agent(name)).front.name).toBe(name);
     }
   });
@@ -123,7 +130,8 @@ describe("T0.44 — phases as subagents", () => {
     for (const type of ["Fix", "Feature", null]) {
       for (const paths of [[], ["scripts/run/x.mjs"]]) {
         const { agents } = route({ type, paths }, table);
-        for (const name of Object.values(agents)) expect(existsSync(join(root, agent(name)))).toBe(true);
+        for (const name of Object.values(agents))
+          expect(existsSync(join(root, agent(name)))).toBe(true);
       }
     }
   });
@@ -146,7 +154,9 @@ describe("T0.44 — phases as subagents", () => {
     for (const [heading, home] of Object.entries(homes)) {
       expect(skill, heading).not.toContain(`${heading}\n`);
       for (const name of ["planner", "builder", "closer"]) {
-        expect(read(agent(name)).includes(`${heading}\n`), `${heading} in ${name}`).toBe(name === home);
+        expect(read(agent(name)).includes(`${heading}\n`), `${heading} in ${name}`).toBe(
+          name === home,
+        );
       }
     }
     for (const phase of ["plan", "build", "review", "close"]) {
@@ -160,7 +170,10 @@ describe("T0.44 — phases as subagents", () => {
 
   // TC1 → AC1, and the Rules: a phase's protocol text moves, it is not rewritten.
   it("moved every paragraph of the old steps 2 to 9 verbatim, bar the ones the ticket rewrote", () => {
-    const old = execFileSync("git", ["show", `${BEFORE}:${SKILL}`], { cwd: root, encoding: "utf8" });
+    const old = execFileSync("git", ["show", `${BEFORE}:${SKILL}`], {
+      cwd: root,
+      encoding: "utf8",
+    });
     const from = old.indexOf("## 2 Inline");
     expect(from).toBeGreaterThan(0);
     const now = fold(
@@ -206,5 +219,59 @@ describe("T0.44 — phases as subagents", () => {
     expect(read(agent("builder"))).toMatch(/`built <commit>`.*`stopped <reason>`/s);
     expect(read(agent("reviewer"))).toMatch(/`PASS`, or `FINDINGS <n>`/);
     expect(read(agent("closer"))).toMatch(/`closed <commit>`.*`stopped <reason>`/s);
+  });
+});
+
+// T0.44 TC6 → AC6: the documents say what the run now is, and say they changed.
+describe("T0.44 — the documents", () => {
+  const section = (text, heading, next) => {
+    const start = text.indexOf(heading);
+    const end = next ? text.indexOf(next, start + heading.length) : -1;
+    return text.slice(start, end === -1 ? undefined : end);
+  };
+  const guidelines = read("docs/guidelines.md");
+  const guide = read("docs/build-guide.md");
+
+  it("names the Runs row's phase columns and its route in guidelines §2", () => {
+    const runs = section(guidelines, "### Runs", "### Documents");
+    expect(runs).toContain("| Plan · Build · Review · Gate · Close | number |");
+    expect(runs).toContain("| Route | select | medium · xhigh · fallback |");
+    expect(runs).toContain("the five sum to Tokens");
+  });
+
+  it("says the phases, the marker's phase, the cap and the route in guidelines §5", () => {
+    const five = section(guidelines, "## 5. Run protocol", "## 6. Cutting tickets");
+    for (const words of [
+      "**Phases.**",
+      "planner",
+      "builder",
+      "closer",
+      "rule (j)",
+      "scripts/run/phase.mjs",
+      "three passes maximum, counted in code",
+      "a Must pass 3 still finds stops at Decision",
+      "`Shoulds from <id>`",
+      "**The route**",
+      "`builder-medium`",
+      "`fallback` at xhigh",
+    ]) {
+      expect(five, words).toContain(words);
+    }
+  });
+
+  it("says in build-guide §2 how a phase is run by hand", () => {
+    const two = section(guide, "## 2. How to run a ticket", "## 3.");
+    expect(two).toContain("**A run is phases, and so is a ticket run by hand.**");
+    expect(two).toContain("node scripts/run/phase.mjs build");
+    expect(two).toContain("node scripts/run/review-cap.mjs");
+  });
+
+  it("bumps both documents' versions and notes the change in their headers", () => {
+    expect(guidelines.slice(0, 600)).toMatch(
+      /^<!-- guidelines\.md · v1\.31 · in the repo · phases as subagents \(T0\.44\)/,
+    );
+    expect(guide.slice(0, 600)).toMatch(
+      /^<!-- build-guide\.md · v2\.11 · in the repo · .*\(T0\.44\)/s,
+    );
   });
 });

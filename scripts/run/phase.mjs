@@ -36,10 +36,14 @@ export const ROUTES = ["medium", "xhigh", "fallback"];
  */
 export function setPhase({ phase, route = null }, { cwd = process.cwd(), env = process.env } = {}) {
   if (!PHASES.includes(phase)) {
-    throw new Error(`no phase called ${JSON.stringify(phase)}; the phases are ${PHASES.join(", ")}`);
+    throw new Error(
+      `no phase called ${JSON.stringify(phase)}; the phases are ${PHASES.join(", ")}`,
+    );
   }
   if (route !== null && !ROUTES.includes(route)) {
-    throw new Error(`no route called ${JSON.stringify(route)}; the routes are ${ROUTES.join(", ")}`);
+    throw new Error(
+      `no route called ${JSON.stringify(route)}; the routes are ${ROUTES.join(", ")}`,
+    );
   }
   const found = readMarker(cwd);
   if (found === null) throw new Error("no run marker: claim first");
