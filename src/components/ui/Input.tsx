@@ -152,7 +152,7 @@ export function Input({
       </label>
 
       {reserveHelper || helper ? (
-        <span id={helperId} className={inputHelperClasses(tone, reserveHelper)}>
+        <span id={helperId} className={inputHelperClasses(tone, reserveHelper ? 1 : 0)}>
           {helper}
         </span>
       ) : null}
