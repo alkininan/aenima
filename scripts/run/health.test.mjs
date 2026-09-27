@@ -278,6 +278,7 @@ describe("the fallback address", () => {
     const result = await health({
       addresses: both,
       deps: {
+        bypass: null,
         run: runner("d1"),
         recordPath: record,
         lookup: domainGone,
@@ -298,6 +299,7 @@ describe("the fallback address", () => {
     const result = await health({
       addresses: both,
       deps: {
+        bypass: null,
         run: runner("d2"),
         recordPath: record,
         lookup: domainGone,
@@ -315,7 +317,13 @@ describe("the fallback address", () => {
     const record = setup();
     const result = await health({
       addresses: both,
-      deps: { run: runner("d3"), recordPath: record, lookup: domainGone, fetch: site({}) },
+      deps: {
+        bypass: null,
+        run: runner("d3"),
+        recordPath: record,
+        lookup: domainGone,
+        fetch: site({}),
+      },
     });
     expect(result).toMatchObject({ outcome: "unknown", base: null, failed: [] });
     expect(result.why).toContain(`${DOMAIN} does not resolve`);
@@ -325,7 +333,13 @@ describe("the fallback address", () => {
 
     const none = await health({
       addresses: both,
-      deps: { run: runner("d3"), recordPath: record, lookup: nothingResolves, fetch: site({}) },
+      deps: {
+        bypass: null,
+        run: runner("d3"),
+        recordPath: record,
+        lookup: nothingResolves,
+        fetch: site({}),
+      },
     });
     expect(none).toMatchObject({ outcome: "unknown", base: null });
     expect(none.why).toContain(`${DOMAIN} does not resolve`);
@@ -340,6 +354,7 @@ describe("the fallback address", () => {
     const result = await health({
       addresses: both,
       deps: {
+        bypass: null,
         run: runner("d4"),
         recordPath: record,
         lookup: domainGone,
@@ -351,6 +366,24 @@ describe("the fallback address", () => {
     expect(existsSync(record)).toBe(false);
     // Asked once each: a login is an answer from Vercel, not a blip to ask again.
     expect(asked).toHaveLength(2);
+
+    // The 401 page some clients are served instead reads the same way.
+    const page = async () => ({
+      status: 401,
+      headers: new Headers({ "set-cookie": "_vercel_sso_nonce=n; Path=/; Secure; HttpOnly" }),
+    });
+    const other = await health({
+      addresses: both,
+      deps: {
+        bypass: null,
+        run: runner("d4"),
+        recordPath: record,
+        lookup: domainGone,
+        fetch: page,
+      },
+    });
+    expect(other).toMatchObject({ outcome: "unknown", failed: [] });
+    expect(existsSync(record)).toBe(false);
   });
 
   // T0.43 TC5 → AC1. With the bypass secret the wall lets the check through — and the secret
@@ -387,6 +420,7 @@ describe("the fallback address", () => {
     const result = await health({
       addresses: both,
       deps: {
+        bypass: null,
         run: runner("d6"),
         recordPath: join(dir, "checked"),
         lookup: async () => ({ address: "76.76.21.21", family: 4 }),
@@ -397,7 +431,8 @@ describe("the fallback address", () => {
     expect(asked.every(([url]) => url.startsWith(DOMAIN))).toBe(true);
   });
 
-  it("names Vercel's login by its host, and nothing else", () => {
+  // T0.43 TC7 → AC3. The wall by the shapes Vercel answers with, and the site's own redirects not.
+  it("names Vercel's login by its nonce or a redirect to vercel.com, and nothing else", () => {
     const at = (status, location) => ({
       status,
       headers: new Headers(location ? { location } : {}),
@@ -407,8 +442,18 @@ describe("the fallback address", () => {
     expect(isVercelLogin(at(307, "https://aeni.ma/sign-in"))).toBe(false);
     expect(isVercelLogin(at(200))).toBe(false);
     expect(isVercelLogin({ status: 302 })).toBe(false);
+    const nonce = (status) => ({
+      status,
+      headers: new Headers({ "set-cookie": "_vercel_sso_nonce=n; Max-Age=3600; Path=/; Secure" }),
+    });
+    expect(isVercelLogin(nonce(401))).toBe(true);
+    expect(isVercelLogin(nonce(302))).toBe(true);
+    expect(
+      isVercelLogin({ status: 200, headers: new Headers({ "set-cookie": "sb-auth=x; Path=/" }) }),
+    ).toBe(false);
   });
 
+  // T0.43 TC8 → AC3. The unknown line names each address and what it returned.
   it("says what each address returned, in one line", () => {
     expect(
       describeTried([
@@ -427,7 +472,7 @@ describe("the fallback address", () => {
     );
   });
 
-  // T0.43 Build 1 → AC1. The addresses live in the board file, the domain first.
+  // T0.43 TC9 → AC1 (Build 1). The addresses live in the board file, the domain first.
   it("reads the addresses from .claude/board.json, the domain first and the deployment second", () => {
     expect(readAddresses(root)).toEqual([DOMAIN, VERCEL]);
   });
@@ -455,8 +500,11 @@ describe("the deploy check's three outcomes, as the skill and the guidelines sta
     expect(section).toContain("asks again");
   });
 
-  // T0.43 Build 3 → AC1. The fallback is written where a run reads it.
+  // T0.43 TC10 → AC1 (Build 3). The fallback is written where a run reads it: step 0's row and
+  // the deploy-check paragraph.
   it("the guidelines' deploy check asks the deployment's address when the domain does not resolve", () => {
+    const step0 = guidelines.match(/^0 {2}Preflight[\s\S]*?(?=^1 {2}Claim)/m)?.[0] ?? "";
+    expect(step0).toMatch(/when that name does not resolve,\s+the deployment's own Vercel address/);
     expect(section).toContain("does not resolve");
     expect(section).toContain("aenima-ae-nima.vercel.app");
     expect(section).toContain("Vercel's login");

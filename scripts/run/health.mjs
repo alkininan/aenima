@@ -65,14 +65,23 @@ export function readBypass(dir = process.cwd()) {
   }
 }
 
+/** The cookie Vercel's login sets on the response it answers with in the deployment's place. */
+export const LOGIN_COOKIE = "_vercel_sso_nonce";
+
 /**
- * A response that is Vercel's login rather than the deployment: a redirect to vercel.com. The
- * site's own redirects — `/app` to `/sign-in` — stay on the site's host.
+ * A response that is Vercel's login rather than the deployment: one that sets Vercel's login
+ * nonce, whatever its status, or a redirect to vercel.com. Measured on 2026-09-28, Node's
+ * `fetch` gets a 302 to `https://vercel.com/sso-api?…` carrying the nonce for every path; the
+ * cookie also covers the 401 page Vercel serves some clients instead. The site's own redirects —
+ * `/app` to `/sign-in` — stay on the site's host and set no nonce.
  */
 export function isVercelLogin(response) {
+  const headers = response?.headers;
+  const cookie = headers?.get?.("set-cookie") ?? "";
+  if (cookie.split(/[;,]\s*/).some((part) => part.startsWith(`${LOGIN_COOKIE}=`))) return true;
   const status = response?.status;
   if (typeof status !== "number" || status < 300 || status >= 400) return false;
-  const location = response?.headers?.get?.("location") ?? null;
+  const location = headers?.get?.("location") ?? null;
   if (!location) return false;
   try {
     return new URL(location).hostname === "vercel.com";
