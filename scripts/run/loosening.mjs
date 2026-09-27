@@ -88,6 +88,8 @@ export const PROBE_DEPS = {
   // and no script is main's own.
   readScript: () => null,
   mainScript: () => null,
+  // No marker names a phase unless an entry says so: rule (j) is measured by its own entries.
+  phase: () => null,
 };
 
 const bash = (command) => ({ tool_name: "Bash", tool_input: { command } });
@@ -199,6 +201,44 @@ export const GUARD_CORPUS = [
     rule: "i",
     input: bash("bash ready.sh"),
     deps: { readScript: () => "curl -X PATCH https://api.notion.com/v1/pages/p -d @s.json\n" },
+  },
+  // Rule (j), T0.44. Each entry is refused by the phase alone: the push is to the ticket's own
+  // branch and the comment is one the thread would take, so dropping (j) lets it through.
+  {
+    name: "push from the build phase",
+    rule: "j",
+    input: bash("git push -u origin t0-1"),
+    deps: { phase: () => "build" },
+  },
+  {
+    name: "gh from the build phase",
+    rule: "j",
+    input: bash("gh pr create --fill --base main"),
+    deps: { phase: () => "build" },
+  },
+  {
+    name: "board write from the build phase",
+    rule: "j",
+    input: connector("create-comment", { page_id: "p", markdown: "⟡ I took a default" }),
+    deps: { phase: () => "build", posting: () => ({ ok: true }) },
+  },
+  {
+    name: "Edit from the review phase",
+    rule: "j",
+    input: { tool_name: "Edit", tool_input: { file_path: "docs/tickets/T0.1.md" } },
+    deps: { phase: () => "review" },
+  },
+  {
+    name: "Write from the plan phase",
+    rule: "j",
+    input: { tool_name: "Write", tool_input: { file_path: "src/a.ts" } },
+    deps: { phase: () => "plan" },
+  },
+  {
+    name: "Write to source from the close phase",
+    rule: "j",
+    input: { tool_name: "Write", tool_input: { file_path: "src/a.ts" } },
+    deps: { phase: () => "close" },
   },
 ];
 
@@ -314,7 +354,7 @@ export const PATH_CORPUS = [
 
 /** The rule letters a guard source marks, in the order met. */
 export function ruleLetters(source) {
-  return [...new Set(String(source ?? "").matchAll(RULE_MARKER))].map((m) => m[1]).sort();
+  return [...new Set([...String(source ?? "").matchAll(RULE_MARKER)].map((m) => m[1]))].sort();
 }
 
 /** Rule letters with no corpus entry — the check the ticket's Rules ask for. */
