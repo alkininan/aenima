@@ -476,9 +476,12 @@ Answers given inside an interactive Code tab session follow the same rule, appli
 One run is `/ticket`: fresh session, Fable, hooks as the boundary. A Desktop scheduled task types
 it once an hour; a person can still type it from any checkout. Everything countable in the steps
 below is a script under `scripts/run/` with a test; the skill holds the judgment and nothing else.
-A run and every review pass run at `xhigh` effort, set by `effort: xhigh` in the frontmatter of
-`.claude/skills/ticket/SKILL.md` and of `.claude/agents/reviewer.md` — the scheduled task's form
-has no effort control, and a repository setting would reach every session opened here (T0.27).
+A run runs at `xhigh` effort, set by `effort: xhigh` in the frontmatter of
+`.claude/skills/ticket/SKILL.md` — the scheduled task's form has no effort control, and a
+repository setting would reach every session opened here (T0.27). Each phase agent carries its
+own effort in its own frontmatter: the planner and the closer at `xhigh`, and the builder and the
+reviewer at the effort the route names — `xhigh` by default, `medium` for a Fix or a Content
+ticket that touches no migration and nothing under `scripts/` or `.claude/` (T0.44, *The route*).
 
 ```
 0  Preflight    stamp this worktree as a run's and remove the ones earlier runs left (prune.mjs) ·

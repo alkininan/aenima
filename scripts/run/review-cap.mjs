@@ -27,8 +27,13 @@ import { emit, isMain } from "./cli.mjs";
 /** The last pass there is. */
 export const MAX_PASSES = 3;
 
-/** A finding's tag at the head of its line: `1. Must — …`, `**2. Should** …`, `- Must: …`. */
-const TAGGED = /^\s*(?:[-*]\s*|\d+\.\s*)?\**\s*(?:\d+\.\s*)?\**\s*(Must|Should)\b/gim;
+/**
+ * A finding's tag at the head of its line — `1. Must — …`, `**2. Should** …`, `- Must: …`,
+ * `**1. Must (uncertain) — …**` — capitalised, and followed by the separator a tag carries
+ * rather than by a word, so a wrapped line of prose that begins "Should the closer…" is not one.
+ */
+const TAGGED =
+  /^\s*(?:[-*]\s*|\d+\.\s*)?\**\s*(?:\d+\.\s*)?\**\s*(Must|Should)\b(?=\**\s*(?:—|–|-|:|\(|\*|$))/gm;
 
 /** `pass 2` on a line of its own, bold or not. */
 const PASS_LINE = /^\s*\**\s*pass\s+(\d+)\s*\**\s*$/im;
@@ -49,7 +54,7 @@ export function readVerdict(text) {
   let musts = 0;
   let shoulds = 0;
   for (const match of body.matchAll(TAGGED)) {
-    if (match[1].toLowerCase() === "must") musts += 1;
+    if (match[1] === "Must") musts += 1;
     else shoulds += 1;
   }
   return { pass: Number.isInteger(pass) ? pass : null, verdict, musts, shoulds };

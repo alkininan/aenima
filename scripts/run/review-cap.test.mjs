@@ -16,6 +16,21 @@ describe("the review cap", () => {
     expect(readVerdict(text)).toEqual({ pass: 2, verdict: "FINDINGS", musts: 1, shoulds: 2 });
   });
 
+  // Review pass 1, Should 11: a wrapped line of prose is not a tag.
+  it("counts a tag and not a line of prose that begins with the same word", () => {
+    const text = verdict(
+      2,
+      [
+        "1. **Must (uncertain)** — a wrong result, and",
+        "Should the closer file it, the task names it.",
+        "Must be read twice.",
+        "- Should: a name",
+      ],
+      "FINDINGS",
+    );
+    expect(readVerdict(text)).toMatchObject({ musts: 1, shoulds: 1 });
+  });
+
   it("closes on a PASS, and counts the Shoulds the closer files as one task", () => {
     expect(
       nextStep(verdict(2, ["1. Should — a name", "2. Should — a test"], "PASS")),

@@ -213,6 +213,16 @@ describe("T0.44 — phases as subagents", () => {
     expect(JSON.stringify(hooks.PreToolUse)).not.toContain("gate.mjs");
   });
 
+  // TC1 → AC1, review pass 1 Must 1: a fix round does not run step 3 again, whose branch.mjs
+  // would fail on the local branch and read as a stop.
+  it("starts a fix round at the fix, not at the branch", () => {
+    for (const name of ["builder", "builder-medium"]) {
+      expect(fold(read(agent(name)))).toContain(
+        "the branch is already checked out, so step 3 is not run again — start at the fix.",
+      );
+    }
+  });
+
   // TC1 → AC1, Build 2: each phase hands back one typed last line.
   it("names each phase's typed last line in its own file", () => {
     expect(read(agent("planner"))).toMatch(/`planned`.*`stopped <reason>`/s);

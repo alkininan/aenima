@@ -75,5 +75,9 @@ describe("the route", () => {
     expect(ticketType(text)).toBe("Fix");
     expect(ticketPaths(text)).toEqual(["src/lib/a.ts"]);
     expect(ticketType("no header")).toBeNull();
+    // Review pass 1, Should 12: a command span names its path too.
+    expect(ticketPaths("## Build\n\nRun `node scripts/run/x.mjs --dry-run`.")).toEqual([
+      "scripts/run/x.mjs",
+    ]);
   });
 });

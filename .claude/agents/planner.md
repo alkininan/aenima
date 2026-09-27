@@ -30,6 +30,9 @@ and hand back `stopped <reason>`. The closer reads that file and does the rest.
 - `## Out of scope` — a finding or a gap that belongs to another ticket, in its own words. The
   closer files it at Backlog.
 
+Say under `## Changed since cut` in `docs/reports/<id>.md` anything `version-drift.mjs` reports
+drifted, and which absent names were drift: the closer's report carries it.
+
 **Your last line is one of two, alone:** `planned` once the ticket file is written and its names
 are read, or `stopped <reason>` when step 2's reading of an absent name is a Decision.
 

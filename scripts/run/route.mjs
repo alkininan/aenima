@@ -65,9 +65,15 @@ export function ticketType(text) {
   return String(text ?? "").match(/·\s*Type\s+([A-Z][a-z]+)\b/)?.[1] ?? null;
 }
 
-/** The paths a ticket's own sections name: code spans with a slash in them, `## Cited` left out. */
+/**
+ * The paths a ticket's own sections name, `## Cited` left out: every word with a slash in it, of
+ * every code span — so `node scripts/run/x.mjs` names `scripts/run/x.mjs` as surely as
+ * `scripts/run/x.mjs` alone does.
+ */
 export function ticketPaths(text) {
-  return codeSpans(ownSections(text)).filter((span) => span.includes("/") && !/\s/.test(span));
+  return codeSpans(ownSections(text)).flatMap((span) =>
+    span.split(/\s+/).filter((word) => word.includes("/")),
+  );
 }
 
 /** The paths the branch changes against origin/main, none when there is no diff to read. */

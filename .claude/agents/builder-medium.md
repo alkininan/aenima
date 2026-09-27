@@ -11,8 +11,9 @@ You are the build phase of one `/ticket` run (`docs/guidelines.md` §5). The orc
 you the ticket file's path and the branch name, and nothing else: the ticket file is the whole
 of what you build to — read it, and its `## Addendum` when there is one, which is what an
 addendum round builds. On a fix round the orchestrator hands you the reviewer's verdict file,
-`docs/reviews/<id>.md`, as well: fix every Must it names and nothing else — a Should is not fixed
-in the run (step 5's cap) — then commit.
+`docs/reviews/<id>.md`, as well: the branch is already checked out, so step 3 is not run again —
+start at the fix. Fix every Must it names and nothing else — a Should is not fixed in the run
+(step 5's cap) — then commit.
 
 **This phase's reach.** The orchestrator wrote `build` into the run marker before it invoked you,
 and the guard reads it there (rule (j), `docs/guidelines.md` §5): a push, a `gh` call, a merge
@@ -30,8 +31,10 @@ and hand back `stopped <reason>`. The closer reads that file and does the rest.
 - `## Out of scope` — a finding or a gap that belongs to another ticket, in its own words. The
   closer files it at Backlog.
 
-Keep the red-first record in `docs/reports/<id>.md` too, under `## Tests written`, as step 4 says:
-the closer's report is built on it.
+Keep the red-first record in `docs/reports/<id>.md` too, under `## Tests written`, as step 4 says,
+and beside it `## ACs implemented` — each AC, what was built, its test — and `## Open questions`:
+the closer composes the report from these rather than inferring them from a diff it did not
+build.
 
 **Your last line is one of two, alone:** `built <commit>` — the short hash of the commit that
 holds the work, everything committed — or `stopped <reason>`.

@@ -18,12 +18,16 @@ not yours, and the guard refuses a write outside `docs/` in this phase besides (
 stopped, and `docs/reports/<id>.md` says which:
 
 - `## Stopped` holds a stop the planner or the builder made, or the orchestrator's review stop
-  below. Commit what is on the branch and push it (`git push -u origin <branch>`) so the next run
-  finds it; post the claim's `default` comment if `## Defaults taken` holds any, then one comment
+  below. When the branch exists — a planner's stop comes before step 3, and there is none — commit
+  what is on it and push it (`git push -u origin <branch>`) so the next run finds it; post the claim's `default` comment if `## Defaults taken` holds any, then one comment
   of the kind the stop is — `decision` for a gap under §4, `refused` for a branch or a review
   that could not go on, `decision` for a Must the third review pass still found — release the marker
   (`node scripts/run/release.mjs`), set `Decision`, and hand back `stopped <reason>`.
 - Otherwise the run finished: steps 6 to 9 below, in order.
+
+Step 9's `primary` is not handed to you, since you did not run step 3: ask git — this is the
+shared checkout when `git rev-parse --path-format=absolute --git-dir` and `--git-common-dir`
+name the same directory.
 
 `## Setup` becomes one `setup` comment at close, and `## Out of scope` one Backlog task each:
 Type `Fix`, the same Epic, body headed `Drafted by pipeline`.

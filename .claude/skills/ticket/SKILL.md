@@ -346,7 +346,10 @@ closer with the ticket path and the branch. The stop's words are already in
 `docs/reports/<id>.md`; the closer pushes, comments, releases and sets `Decision`. A phase that
 comes back with neither of its lines — an error, or a note that it stopped at its turn limit — is
 a stop too: write `## Stopped` into `docs/reports/<id>.md` yourself, through Bash, with what came
-back verbatim, and hand it to the closer the same way.
+back verbatim, and hand it to the closer the same way. The closer is handed a stop once: if the
+closer itself comes back with neither line, do its stop yourself — the marker still names
+`close` — one `refused` comment with what came back, `node scripts/run/release.mjs`, set
+`Decision`, and exit.
 
 **The review loop is capped at three passes, counted in code.** Pass 1 reads the whole diff; pass
 2 reads the fixes; pass 3 reads only pass 2's Musts. After each pass:
@@ -381,8 +384,8 @@ and nothing else, a fresh session with no briefing; only the model changes. `sto
 review did not run, and a ticket never closes unreviewed: write `## Stopped` — the review of this
 ticket, its `why` and then its `detail` in quotes, and what would settle it — and hand it to the
 closer, which posts it as one `refused` comment. Whichever model a pass ran on, the report names
-it (step 8): write it under `## Reviewer passes` in `docs/reports/<id>.md` — pass, commit, model,
-resumed, verdict — as each pass comes back.
+it (step 8): write it under `## Reviewer passes` in `docs/reports/<id>.md`, through Bash —
+pass, commit, model, resumed, verdict — as each pass comes back.
 
 **A pass that stops at its turn limit** comes back as a result, not an error: Claude Code's note
 that the agent *stopped at its 30-turn limit before finishing*, over no report or a partial one.
@@ -398,8 +401,8 @@ briefing — *Continue from where you stopped, and write the verdict file.* — 
 the pass resumed. If it stops at the limit again, ask again with `"resumed":1`: `stop: true` → the
 review did not run, and the stop is the one above.
 
-**Once the closer hands back its line, exit.** It released the marker on every path. If step 3
-said `primary` — the builder's `branch.mjs` prints it — `git checkout main`.
+**Once the closer hands back its line, exit.** It released the marker on every path, and returned
+the shared checkout to `main` when this is the one.
 
 **Never merge on your own word.** The two doors are the guard's, read in code: the human's
 *merge* on the task at Review, or the reviewer's `PASS` on file over a diff that weakens no
