@@ -1,4 +1,9 @@
-<!-- build-guide.md · v2.9 · in the repo · §2 names where a rule goes: one area of the
+<!-- build-guide.md · v2.10 · in the repo · the hooks paragraph: a migration takes
+     one word and it is `apply` — the ticket carrying it merges itself once that word has been
+     spent on the thread (T0.26); your word stays for a diff that weakens a restraint.
+     Cut as v2.8, which main left free for it; numbered past v2.9, main's newest, when this
+     branch took main in a second time.
+     v2.9 · in the repo · §2 names where a rule goes: one area of the
      code to .claude/rules/<area>.md, everywhere to CLAUDE.md, which a run never edits (T0.34).
      An open branch carries a v2.8 of this file, so this change took v2.9; the title line,
      left at v2.5 since v2.6, is corrected here.
@@ -17,7 +22,7 @@
      v2.0 was a rewrite rather than a revision: v1.0 was written before ticket 0.1 and proposed a
      stack, a setup script and a set of habits, all of which the build has since replaced. -->
 
-# aenima — build guide v2.9
+# aenima — build guide v2.10
 
 How to run a ticket on aenima with Claude Code.
 
@@ -111,9 +116,12 @@ shape, a merge with `main` checked out, and any write to a `.env` file except th
 rule stands a credential a run cannot migrate with: `.env.local`'s `DATABASE_URL` reads and
 writes rows and cannot change schema, and the admin URL in `.env.migrate` is read by
 `pnpm db:migrate` alone and never copied into a worktree (`docs/guidelines.md` §5). A diff that
-adds a migration sets Decision and waits for one word from you on the task's thread, `apply`;
-a pull request that adds one, or that **weakens a restraint** — a guard rule, the gated list, a
-hook, the Stop gate, a test — merges on the word `merge` at Review, and any other merges at close
+adds a migration sets Decision and waits for one word from you on the task's thread, `apply` —
+and that is the whole of a migration's permission: once the word is spent the ticket merges
+itself at close, and until then the pull request waits, since code reading a column nobody has
+created is code main should not carry (T0.26). A pull request that **weakens a restraint** — a
+guard rule, the gated list, a hook, the Stop gate, a test — merges on the word `merge` at Review,
+and any other merges at close
 on the reviewer's `PASS` in `docs/reviews/<id>.md`, read by the guard at the pushed commit — the
 pull request's head must be the checkout's HEAD, so the file and the weakening check are the ones
 on the commit that merges (`docs/guidelines.md` §4, T0.16, T0.21). The weakening is a measurement

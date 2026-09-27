@@ -1330,6 +1330,42 @@ describe("judge — reads the marker and the token file, then the thread", () =>
     );
   });
 
+  // T0.26 TC1 → AC1 and TC2 → AC2, from the hook's entry: the thread `verify` already read
+  // for the word is where the spent applies come from, so the second door judges the diff
+  // against the migration the human has already decided about — and against no migration at
+  // all when the thread carries no spent apply.
+  it("hands the thread's spent applies to the reviewer's door", async () => {
+    const seen = [];
+    const base = (comments) => ({
+      board: () => ({ prefix: "\u27e1 " }),
+      comments: async () => comments,
+      page: async () => ({ Name: "T0.96 Smoke D", Status: "Review" }),
+      verdict: () => "# T0.96 \u2014 review\n\nPASS\n",
+      diff: (applied) => {
+        seen.push(applied);
+        return { files: [], gated: [], ok: true };
+      },
+      gate: () => ({ green: "h", tree: "h" }),
+      prBranch: () => "t0-96",
+      prHead: () => "abc",
+      localHead: () => "abc",
+    });
+    const spent = [
+      {
+        text: "\u27e1 This change adds a migration, drizzle/0015_x.sql, and applying it to the shared database is your call.",
+        created_time: "2026-09-13T09:00:00Z",
+      },
+      { text: "apply", created_time: "2026-09-13T10:00:00Z" },
+      {
+        text: "\u27e1 Applied 0015_x (idx 15) to the shared database. The ticket picks up from where it stopped.",
+        created_time: "2026-09-13T11:00:00Z",
+      },
+    ];
+    expect(await judge(merge(worktree), { deps: base(spent) })).toBeNull();
+    expect(await judge(merge(worktree), { deps: base([]) })).toBeNull();
+    expect(seen).toEqual([["0015_x"], []]);
+  });
+
   it("refuses again once the word is consumed by the pipeline's own reply", async () => {
     const thread = async () => [
       { text: "merge", created_time: "2026-09-13T11:00:00Z" },

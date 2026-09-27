@@ -3,6 +3,7 @@ import { afterAll, describe, expect, it, vi } from "vitest";
 
 import { roundCount } from "@/lib/authoring/rounds";
 import { parseSections, sectionHash } from "@/lib/authoring/sections";
+import { migrationGate } from "@/test/migration-gate";
 import type { RoundWrite } from "@/lib/authoring/loop";
 
 vi.mock("server-only", () => ({}));
@@ -26,9 +27,14 @@ vi.mock("server-only", () => ({}));
  * runs `writeRun`: the shared client is mocked to hand it a handle whose
  * `begin` is a savepoint, and the outer transaction is discarded.
  *
- * **Until migration 0015 is applied this file skips, and says so.** The run that
- * wrote it holds a credential that cannot apply a migration (guidelines §5, the
- * capability boundary); the table exists once the human answers `apply`.
+ * **While a migration of this table is still on a branch this file skips, and
+ * says so.** `migrationGate` is the rule (src/test/migration-gate.ts, T0.26):
+ * the run that writes a migration holds a credential that cannot apply one
+ * (guidelines §5, the capability boundary), so the table exists once the human
+ * answers `apply`. Once the file is on `origin/main` the licence ends and a
+ * missing table is a real failure rather than a ticket in flight. Two
+ * migrations gate this suite, so each is asked about on its own: only the one
+ * that is missing says whether this is a ticket in flight.
  */
 
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -39,39 +45,38 @@ const sql = OFFLINE ? null : postgres(DATABASE_URL, { max: 1, prepare: false, on
 /**
  * The table *and* the cycle T3.2's AA1 keys it by. A database holding 0015 but
  * not 0017 has a round ledger with no cycle, and every assertion below is about
- * the cycle's ledger — so the gate reads the column, not only the table.
+ * the cycle's ledger — so the gate reads the column, not only the table, and
+ * asks about each migration on its own.
  */
 const APPLIED = sql
   ? (
-      await sql<{ present: boolean }[]>`
-        select to_regclass('public.refinement_round') is not null
-           and exists (select 1 from information_schema.columns
+      await sql<{ table: boolean; cycle: boolean }[]>`
+        select to_regclass('public.refinement_round') is not null as "table",
+               exists (select 1 from information_schema.columns
                         where table_schema = 'public'
                           and table_name = 'refinement_round'
-                          and column_name = 'cycle_no') as present`
-    )[0]!.present
-  : false;
+                          and column_name = 'cycle_no') as cycle`
+    )[0]!
+  : { table: false, cycle: false };
 
-if (sql && !APPLIED) {
-  process.stderr.write(
-    [
-      "",
-      "[33m  ============================================================[0m",
-      "[33m  SKIPPED: refinement_round tests did not run.[0m",
-      "",
-      "  The table or its cycle column is not on this database:",
-      "  drizzle/0015_refinement_round.sql or",
-      "  drizzle/0017_refinement_cycles.sql has not been applied. The",
-      "  round ledger's key, shape, append-only guarantee and RLS were",
-      "  NOT verified by this run.",
-      "[33m  ============================================================[0m",
-      "",
-      "",
-    ].join("\n"),
-  );
-}
+const SUBJECT = "the round ledger's key, shape, append-only guarantee and RLS";
 
-const SKIP = OFFLINE || !APPLIED;
+const GATES = sql
+  ? [
+      migrationGate({
+        file: "drizzle/0015_refinement_round.sql",
+        present: APPLIED.table,
+        subject: SUBJECT,
+      }),
+      migrationGate({
+        file: "drizzle/0017_refinement_cycles.sql",
+        present: APPLIED.cycle,
+        subject: SUBJECT,
+      }),
+    ]
+  : [];
+
+const SKIP = OFFLINE || GATES.some((gate) => gate.skip);
 
 type Tx = postgres.TransactionSql;
 

@@ -1,6 +1,8 @@
 import postgres from "postgres";
 import { afterAll, describe, expect, it } from "vitest";
 
+import { migrationGate } from "@/test/migration-gate";
+
 /**
  * Opportunity keys, against a real Postgres — `item-key.db.test.ts` one table
  * over, because the whole rule lives in a trigger and a trigger is not
@@ -21,15 +23,14 @@ import { afterAll, describe, expect, it } from "vitest";
  * and the isolation boundary is `rls.db.test.ts`'s subject. Every test runs in a
  * transaction that is rolled back.
  *
- * **These tests wait for `drizzle/0016` to be applied, and say so when it has
- * not been.** A migration is applied by a human, in a later run than the one
- * that wrote it (docs/guidelines.md §5 step 6), so between those two runs the
- * column this file is about does not exist. Failing hard there would redden
- * every run in the repo until someone applied it — a suite that says "you have
- * not applied a migration" by breaking is one nobody can read. It skips loudly
- * instead, on the same reasoning as the offline skip below, and starts checking
- * for real the moment the column lands. Nothing here is conditional on what the
- * trigger *does*: the assertions are the real ones or the file is silent.
+ * **While this migration is still on a branch these tests skip, and say so.**
+ * `migrationGate` is the rule (src/test/migration-gate.ts, T0.26): a migration
+ * is applied by a human in a later run than the one that wrote it
+ * (docs/guidelines.md §5 step 6), so between those two runs the column this
+ * file is about does not exist anywhere. Once the file is on `origin/main` that
+ * licence ends and a missing column is a real failure — a database behind the
+ * code, not a ticket in flight. Nothing here is conditional on what the trigger
+ * *does*: the assertions are the real ones or the file is silent.
  */
 
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -48,7 +49,13 @@ async function keyColumnExists(): Promise<boolean> {
   return rows[0]?.exists === true;
 }
 
-const APPLIED = await keyColumnExists();
+const gate = OFFLINE
+  ? { skip: false }
+  : migrationGate({
+      file: "drizzle/0016_opportunity_keys.sql",
+      present: await keyColumnExists(),
+      subject: "the trigger, the per-product counter and the refusal of a client-supplied key",
+    });
 
 if (OFFLINE) {
   // Straight to stderr: vitest hides console.* behind a reporter flag, and an
@@ -57,14 +64,6 @@ if (OFFLINE) {
     "\nopportunity-key.db.test.ts skipped: no DATABASE_URL. The key trigger, the\n" +
       "per-product counter and the refusal of a client-supplied key are unverified\n" +
       "in this run.\n\n",
-  );
-} else if (!APPLIED) {
-  process.stderr.write(
-    "\n[33mopportunity-key.db.test.ts skipped: drizzle/0016_opportunity_keys.sql is not\n" +
-      "applied to this database.[0m `opportunity.key` does not exist yet, so the trigger,\n" +
-      "the per-product counter and the refusal of a client-supplied key are unverified\n" +
-      "in this run — and `/o/<key>` cannot resolve anything. Apply it with `pnpm db:migrate`\n" +
-      "from a checkout that has .env.migrate, then rerun.\n\n",
   );
 }
 
@@ -133,7 +132,7 @@ async function addOpportunity(
   return rows[0]!.key;
 }
 
-describe.skipIf(OFFLINE || !APPLIED)("opportunity keys", () => {
+describe.skipIf(OFFLINE || gate.skip)("opportunity keys", () => {
   it("numbers from one, without gaps", async () => {
     await rolledBack(async (tx) => {
       const { workspaceId, sociera } = await twoProducts(tx);
