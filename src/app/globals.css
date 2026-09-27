@@ -397,7 +397,7 @@
     isolation: isolate;
     cursor: pointer;
     --control-edge: inset 0 1px 0 var(--edge-highlight);
-    --control-glow: 0 0 #0000;
+    --control-glow: 0 0 transparent;
     box-shadow: var(--control-edge), var(--control-glow);
     transition:
       /* §6 (v2.8): the release springs — --t-med on --ease-spring, which
@@ -418,7 +418,7 @@
     content: "";
     position: absolute;
     inset: 0;
-    z-index: -1;
+    z-index: calc(var(--z-content) - 1); /* one below §4's content rung, inside the control */
     border-radius: inherit;
     background-color: transparent;
     pointer-events: none;
@@ -457,7 +457,7 @@
   }
 
   .control:disabled {
-    --control-edge: 0 0 #0000;
+    --control-edge: 0 0 transparent;
   }
 
   /* §8 (v2.8) primary button — a 1px --edge-highlight top specular. The bespoke
@@ -487,7 +487,7 @@
     content: "";
     position: absolute;
     inset: 0;
-    z-index: -1;
+    z-index: calc(var(--z-content) - 1); /* one below §4's content rung, inside the control */
     border-radius: inherit;
     pointer-events: none;
     background-image: linear-gradient(100deg, transparent 40%, var(--sweep) 50%, transparent 60%);
@@ -508,7 +508,7 @@
 
   /* §8 states the specular edge for Primary only; the quiet variants opt out. */
   .control-edge-none {
-    --control-edge: 0 0 #0000;
+    --control-edge: 0 0 transparent;
   }
 
   /* §8 spinner — 2px stroke, one turn on --t-spin, colour from currentColor. */
@@ -547,7 +547,7 @@
    * two `backdrop-filter` lines." So the blur is not in `.glass`; it is in
    * `.glass-blur`, which is the only class in the product that carries one. */
   .glass {
-    --glass-elevation: 0 0 #0000;
+    --glass-elevation: 0 0 transparent;
     background-color: var(--glass-fill);
     border: 1px solid var(--glass-border);
     box-shadow:
@@ -563,9 +563,10 @@
     backdrop-filter: blur(var(--glass-blur));
   }
 
-  /* §5 — no-backdrop-filter fallback: solid, keep border + edge. */
+  /* §5 — no-backdrop-filter fallback: solid, keep border + edge. Only the
+   * blurred form has a blur to lose. */
   @supports not (backdrop-filter: blur(1px)) {
-    .glass {
+    .glass-blur {
       background-color: var(--glass-fallback);
     }
   }
@@ -648,9 +649,14 @@
 
   /* §4 scrollbars — 8px thin, thumb --surface-2 brightening to --glass-border,
    * transparent track. Applied to the inner-scroll surfaces this ticket adds. */
-  .scroll-thin {
-    scrollbar-width: thin;
-    scrollbar-color: var(--surface-2) transparent;
+  /* The standard properties only where the engine has no `::-webkit-scrollbar`:
+   * one that honours them discards every webkit rule on the same element, so
+   * the two never meet (§4, C-50). Firefox gets no hover colour. */
+  @supports not selector(::-webkit-scrollbar) {
+    .scroll-thin {
+      scrollbar-width: thin;
+      scrollbar-color: var(--surface-2) transparent;
+    }
   }
 
   .scroll-thin::-webkit-scrollbar {
@@ -799,7 +805,7 @@
      * so a leading icon moves the value and leaves the label where it is.
      *
      * The box is as wide as its text, never the zone's full width: at rest it
-     * is scaled 17/13 from its top-left, and a full-width box scaled that way
+     * is scaled 17/13 from its text's top-left, and a full-width box scaled that way
      * overshoots the field by 30% of its width and pans a 375 page sideways. */
     left: 0;
     padding-inline: 8px;
@@ -807,14 +813,12 @@
     white-space: nowrap;
     margin: 0;
     color: var(--n-secondary);
-    font-family: var(--font-ui);
-    /* ui-label (§3) in both states. §8.2 (v2.21): the label floats on
-     * `transform` alone — at rest it is its floated self, scaled — so nothing
-     * here changes between the two and the text is never re-laid out. */
-    font-size: 13px;
-    font-weight: 500;
-    line-height: 18px;
-    transform-origin: top left;
+    /* §8.2 (v2.22): the label is ui-label in both states — its type comes from
+     * the `type-ui-label` class it carries — and floats on `transform` alone,
+     * never `font-size`, which would re-lay the text out on every frame. The
+     * origin is the text's own top-left, inside the 8 of zone padding, so the
+     * scale at rest grows the glyphs without moving where they start. */
+    transform-origin: 8px 0;
     /* The label is a hit target for the input beneath it only via `for`; it
      * must never eat a click meant for the field. */
     pointer-events: none;
@@ -831,15 +835,13 @@
      * that border, so the border is part of the offset: 17 - 8 of zone padding
      * is 9. §8 (v2.10): the border counts, it is not a rounding error.
      *
-     * §8.2 (v2.21): scaled 17/13 from its top-left so it reads at input size.
-     * The scale applies first, from the box's top-left, so the 8 of zone
-     * padding scales with the text; the x offset gives that growth back, which
-     * keeps the glyphs at 1 + 16 from the pill. Vertically the scaled 18 line is centred
-     * in the pill: the 24 zone plus (48 − 18 × 17/13) ÷ 2. */
-    transform: translate(
-        calc(var(--field-label-rest-x, 9px) - 8px * (17 / 13 - 1)),
-        calc(24px + (48px - 18px * 17 / 13) / 2)
-      )
+     * §8.2 (v2.22): at rest the label is ui-label scaled by 17/13, so it reads at
+     * input size. The scale runs from the text's own top-left (the origin above),
+     * so the 8 of zone padding does not scale and the glyphs stay at 1 + 16 from
+     * the pill with no x correction. Scaled, its 18 line is 18 × 17/13 tall, and
+     * the translate centres that line in the pill: the 24 zone plus
+     * (48 − the scaled line) / 2. */
+    transform: translate(var(--field-label-rest-x, 9px), calc(24px + (48px - 18px * 17 / 13) / 2))
       scale(calc(17 / 13));
   }
 

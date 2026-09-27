@@ -90,7 +90,7 @@ describe("CheckList", () => {
     );
 
     expect(screen.getByText(evidence)).not.toBeNull();
-    expect(screen.getByText(t.item.checkUnclear)).not.toBeNull();
+    expect(screen.getByText(t.item.checkUnclear.must)).not.toBeNull();
   });
 
   /**
@@ -166,7 +166,8 @@ describe("CheckList", () => {
     );
 
     expect(screen.queryByText(t.item.checkPassed)).toBeNull();
-    expect(screen.queryByText(t.item.checkUnclear)).toBeNull();
+    expect(screen.queryByText(t.item.checkUnclear.must)).toBeNull();
+    expect(screen.queryByText(t.item.checkUnclear.should)).toBeNull();
   });
 
   /**
@@ -206,14 +207,14 @@ describe("CheckList", () => {
     const contained = (node: HTMLElement) =>
       /(?:^|\s)(?:bg-|border(?:$|\s|-))/.test(node.className);
 
-    expect(contained(labelIn(rows[1]!, t.item.checkUnclear))).toBe(true);
+    expect(contained(labelIn(rows[1]!, t.item.checkUnclear.must))).toBe(true);
     expect(contained(labelIn(rows[0]!, t.item.checkPassed))).toBe(false);
     expect(contained(labelIn(rows[2]!, t.item.checkNotAsked))).toBe(false);
 
     // And the chip's own geometry sits on the unclear label alone: §8 gives a
     // chip a pill and 10px of horizontal padding, which is the shape of a
     // container rather than the colour of one.
-    expect(labelIn(rows[1]!, t.item.checkUnclear).className).toContain("rounded-pill");
+    expect(labelIn(rows[1]!, t.item.checkUnclear.must).className).toContain("rounded-pill");
     expect(labelIn(rows[0]!, t.item.checkPassed).className).not.toContain("rounded-pill");
     expect(labelIn(rows[2]!, t.item.checkNotAsked).className).not.toContain("rounded-pill");
   });
@@ -261,8 +262,8 @@ describe("CheckList", () => {
     );
 
     const rows = screen.getAllByRole("listitem");
-    const must = within(rows[0]!).getByText(t.item.checkUnclear);
-    const should = within(rows[1]!).getByText(t.item.checkUnclear);
+    const must = within(rows[0]!).getByText(t.item.checkUnclear.must);
+    const should = within(rows[1]!).getByText(t.item.checkUnclear.should);
 
     expect(must.className).toContain("warning");
     expect(should.className).not.toContain("warning");

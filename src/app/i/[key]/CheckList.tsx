@@ -312,7 +312,7 @@ function stateLabel(check: CheckLine, t: Dictionary) {
     // Should is `--surface-2`. Only a Must is warm, because only a Must blocks.
     return (
       <Chip variant="gap" tone={check.tag}>
-        {t.item.checkUnclear}
+        {t.item.checkUnclear[check.tag]}
       </Chip>
     );
   }

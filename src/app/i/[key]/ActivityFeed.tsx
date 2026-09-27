@@ -63,16 +63,11 @@ export function ActivityFeed({
 
         return (
           <li key={entry.id} className="flex flex-wrap items-baseline gap-[8px]">
-            {/* §0 law 4: the machine is visibly the machine. */}
-            <span
-              className={
-                entry.actor.kind === "agent"
-                  ? "type-ui-body text-agent"
-                  : "type-ui-body text-n-primary"
-              }
-            >
-              {actor}
-            </span>
+            {/* The agent is named, never violet: an entry is what happened, not a
+                proposal waiting on a human, and C-36 keeps --agent to proposal
+                cards, the agent spinner, the stream caret and a chart's agent
+                series. */}
+            <span className="type-ui-body text-n-primary">{actor}</span>
             <span className="type-mono-readout text-n-secondary">{entry.action}</span>
             <span className="type-mono-readout text-n-secondary">{when}</span>
           </li>
