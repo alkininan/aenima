@@ -18,6 +18,10 @@
  * with a note to continue it, not as an error, and what it holds is partial — never a verdict.
  * It is resumed once, in the same session on the model it ran on; a second stop at the limit
  * is a stop like any review that could not run.
+ *
+ * Since T0.46 the gatekeeper is pinned the same way, and its refused or limit-stopped call is
+ * read here too: the chain's head is whichever agent file the run names as `agent` — the
+ * gatekeeper's, `.claude/agents/gatekeeper.md` — and the reviewer's when it names none.
  */
 
 import { readFileSync } from "node:fs";
@@ -54,10 +58,17 @@ export function reviewChain({ agent, settings }) {
   );
 }
 
-/** The chain as this checkout configures it. */
-export function readChain(root = process.cwd(), read = (path) => readFileSync(path, "utf8")) {
+/**
+ * The chain as this checkout configures it, headed by the model `agentFile` pins — the
+ * reviewer's definition unless the run names another, the gatekeeper's (T0.46).
+ */
+export function readChain(
+  root = process.cwd(),
+  read = (path) => readFileSync(path, "utf8"),
+  agentFile = AGENT_FILE,
+) {
   return reviewChain({
-    agent: read(join(root, AGENT_FILE)),
+    agent: read(join(root, agentFile)),
     settings: read(join(root, SETTINGS_FILE)),
   });
 }
@@ -151,12 +162,16 @@ export function nextReviewer({ chain = [], tried = [], error, resumed = 0 }) {
   return { chain, cause, stop: false, resume: false, model, why: null, detail };
 }
 
-/** CLI: `echo '{"tried":["fable"],"error":"…","resumed":0}' | node review-model.mjs`. */
+/**
+ * CLI: `echo '{"tried":["fable"],"error":"…","resumed":0}' | node review-model.mjs`, with
+ * `"agent":".claude/agents/gatekeeper.md"` when the call that came back was the gatekeeper's.
+ */
 async function main() {
   const input = JSON.parse((await readStdin()) || "{}");
+  const agentFile = typeof input.agent === "string" && input.agent ? input.agent : AGENT_FILE;
   emit(
     nextReviewer({
-      chain: readChain(),
+      chain: readChain(process.cwd(), undefined, agentFile),
       tried: input.tried ?? [],
       error: input.error,
       resumed: Number(input.resumed ?? 0),

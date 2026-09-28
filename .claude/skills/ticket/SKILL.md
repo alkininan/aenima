@@ -339,9 +339,31 @@ gatekeeper again; the round counts toward the three corrections by the reviewer'
 migration` → a migration that destroys or rewrites data waits: write its `reasons` under `##
 Held` in `docs/reports/<id>.md`, through Bash, and hand the closer the ticket path and the
 branch — it posts one `gated` comment and sets Decision, and the human's `apply` there carries
-the ticket on. `next: decision` → the third HOLD: write its `why` and its `reasons` under `##
-Stopped` and hand it to the closer, one `decision` comment quoting the reasons. There is no
-fourth round.
+the ticket on. `next: decision` → the third HOLD, or a `MERGE` over a migration the script
+found waiting and the gatekeeper's word did not cover — only `MERGE APPLY` applies it, and a
+merge without the apply would land code reading a column nobody created: write its `why` and
+its `reasons` under `## Stopped` and hand it to the closer, one `decision` comment quoting the
+reasons. There is no fourth round.
+
+**The gatekeeper's model** is the same kind of chain as the reviewer's below: the model
+`.claude/agents/gatekeeper.md` pins, then `.claude/settings.json`'s `fallbackModel` — never a
+model you pick. Invoke it without `model`, so each round starts again at the pinned model. When
+the call comes back an error rather than a verdict, or as Claude Code's note that it stopped at
+its turn limit, ask the same script as for a reviewer pass, naming the gatekeeper's file as
+`agent` so the chain is read from its own pin:
+
+    node scripts/run/review-model.mjs <<'EOF'
+    {"agent":".claude/agents/gatekeeper.md","tried":["<the pinned model>"],"error":"<the error or the note>","resumed":0}
+    EOF
+
+`stop: false` and a `model` → the call was refused for credits or availability: `phase.mjs
+gate` again and the gatekeeper with `model` set to it and the same message, the ticket path
+alone, a fresh session with no briefing. `resume: true` → the turn limit: continue that same
+session once, `SendMessage` with one line — *Continue from where you stopped, and write the
+verdict file.* — and ask again with `"resumed":1` if it stops there a second time. `stop: true`
+→ the gate did not run, and nothing merges without its verdict: write `## Stopped` — the gate of
+this ticket, its `why` and then its `detail` in quotes, and what would settle it — and hand it
+to the closer, which posts it as one `refused` comment and sets Decision.
 
 **A `stopped` line from any phase** goes straight to the close phase: `phase.mjs close`, then the
 closer with the ticket path and the branch. The stop's words are already in

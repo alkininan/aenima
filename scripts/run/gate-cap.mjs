@@ -20,6 +20,11 @@
  *   a destructive migration    → migration: whatever the verdict, a migration that destroys
  *   that waits                   or rewrites data is the human's `apply` (Build 3, Rules) —
  *                                 the diff is gated, Decision, the migration question.
+ *   MERGE, a migration waits   → decision: the script found a migration the gatekeeper's word
+ *                                 did not. Only MERGE APPLY opens the apply door
+ *                                 (`permission.mjs` `applyGranted`), and a merge on MERGE
+ *                                 alone would land code reading a column nobody created —
+ *                                 so the verdict cannot be acted on as written.
  *
  * A file with no verdict, no commit, or none at all answers `decision`: a verdict nobody can
  * read is not one anybody enforced.
@@ -76,8 +81,24 @@ export function nextAfterGate({ gate = null, review = null, diff = null } = {}) 
       why: `${named} destroys or rewrites data, and a migration that does is applied on your word alone — Decision, and the migration question`,
     };
   }
-  if (read.verdict === GATE_MERGE)
+  if (read.verdict === GATE_MERGE) {
+    // The script's answer, never the model's: a migration that waits is applied on MERGE APPLY
+    // alone, and a merge without the apply lands code reading a column nobody created.
+    const waiting = (diff?.migrations ?? []).filter((each) => each.waits);
+    if (waiting.length > 0) {
+      const named = waiting.map((each) => each.path).join(", ");
+      return {
+        next: "decision",
+        ...base,
+        reasons: waiting.map(
+          (each) =>
+            `${each.path} waits — migration-safety.mjs reads it as ${each.safety ?? "additive"} — and the gatekeeper's ${GATE_MERGE} does not say apply; only ${GATE_MERGE_APPLY} does, and the guard applies on that word alone.`,
+        ),
+        why: `the gatekeeper says ${GATE_MERGE} over ${named}, a migration the script found waiting and the gatekeeper's word did not cover: only ${GATE_MERGE_APPLY} applies it, and a merge without the apply would land code reading a column nobody created`,
+      };
+    }
     return { next: "merge", ...base, why: "the gatekeeper says merge" };
+  }
   if (read.verdict === GATE_MERGE_APPLY) {
     return { next: "apply", ...base, why: "the gatekeeper says apply, then merge" };
   }

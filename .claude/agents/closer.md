@@ -29,9 +29,10 @@ stopped, and `docs/reports/<id>.md` says which:
 - `## Stopped` holds a stop the planner or the builder made, or the orchestrator's review stop
   below, or the gatekeeper's third HOLD. When the branch exists — a planner's stop comes before step 3, and there is none — commit
   what is on it and push it (`git push -u origin <branch>`) so the next run finds it; post the claim's `default` comment if `## Defaults taken` holds any, then one comment
-  of the kind the stop is — `decision` for a gap under §4, `refused` for a branch or a review
-  that could not go on, `decision` for a Must the third review pass still found or a HOLD the
-  third gatekeeper round still gave, quoting its reasons — release the marker
+  of the kind the stop is — `decision` for a gap under §4, `refused` for a branch, a review or
+  a gate that could not run, `decision` for a Must the third review pass still found, a HOLD
+  the third gatekeeper round still gave, or a `MERGE` the gatekeeper wrote over a migration
+  that waits, which only `MERGE APPLY` applies — quoting its reasons — release the marker
   (`node scripts/run/release.mjs`), set `Decision`, and hand back `stopped <reason>`.
 - `## Held` holds the reasons the gatekeeper's HOLD gave for a migration that destroys or
   rewrites data — `scripts/run/gate-cap.mjs` said `migration`. The branch is already pushed:
@@ -162,9 +163,9 @@ One ticket, one pull request: a reused branch already has one, and the push upda
 `gh` → put the compare URL in the report instead. Set the task's Commit to the short hash and
 Status to `Review`. A `premerge.mjs` that said `ok: false` stops here: post one `refused`
 comment with its `files` and what would settle them, release the marker, and exit — the work is
-on origin with its pull request, and the next run's close, once the conflict is gone, lands it.
-A branch left unpushed would have neither, and the Commit on the board would name a commit
-nobody can fetch. Otherwise the reviewer's last verdict file ends in `PASS` — the reviewer's
+on origin with its pull request, and the task waits at `Review` as *A refusal on either leg*
+below says. A branch left unpushed would have neither, and the Commit on the board would name a
+commit nobody can fetch. Otherwise the reviewer's last verdict file ends in `PASS` — the reviewer's
 word that no Must stands — and the gatekeeper reads next. First the gate, main's copy as the
 hooks run it, on the pushed tree, so its green is on record where the guard reads it:
 
@@ -190,8 +191,8 @@ never the gatekeeper's — and refuses otherwise with the reason. `ok: true` →
 comment, its `file` the `tag` and `idx` of every entry of `applied`, or no `file` at all when
 `applied` is empty. `ok: false` is the apply itself answering no — the database's own error, or
 a migration drizzle would pass over in silence (T0.24): post one `refused` comment with its
-`why`, release the marker, leave the task at `Review`, and hand back `stopped <reason>`; the
-next run's close makes the attempt again. Then, on either verdict:
+`why`, release the marker, leave the task at `Review`, and hand back `stopped <reason>` — the
+task then waits as *A refusal on either leg* below says. Then, on either verdict:
 
     git checkout --detach
     git branch -D <branch>
@@ -217,6 +218,17 @@ run's step 0e checks the deploy.
 
 Either way, release the marker: `node scripts/run/release.mjs`. If step 3 said `primary`,
 `git checkout main`. Hand back `merged <commit>` — the merge commit's short hash — and exit.
+
+**A refusal on either leg leaves the task at `Review`, and nothing lands it on its own.** A
+`premerge.mjs` conflict, the guard's binding of the head to the verdict files, GitHub turning
+the merge down, an apply the database refused: each is one `refused` comment and the task at
+`Review` with the branch and its pull request on origin — and no step claims a Review task that
+has no new reply, since T0.46 took the human's `merge` away and put nothing in its place. What
+moves it is a reply on the thread that asks for a change: the next run's step 0 folds it in as
+an addendum and sets Ready, and the claim reuses the branch and the pull request, builds,
+reviews, closes and gates again — or a merge by hand on GitHub, which the next run's step 0
+reads as Done. Say which in the `refused` comment's `settle`, so the human knows the refusal
+waits on them and not on the next hour.
 
 **Never merge on your own word.** The door is the guard's, read in code: the reviewer's `PASS`
 and the gatekeeper's `MERGE` on file, both for the pushed commit, over a diff that adds no

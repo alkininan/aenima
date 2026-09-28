@@ -394,12 +394,17 @@ the reply was read. What the assessment can be depends on where the task sits:
 - **A refusal always reports**, cap or no cap. A merge the guard let through that GitHub refused
   posts one comment naming the files in conflict and what would settle them; so does an apply
   that failed, and a claim that could not go on. And **a refusal consumes nothing**: it reports
-  an attempt that failed, it answers nothing you asked, so the word that granted the attempt is
-  still granted and the next run makes it again once the thing in the way is settled. You say
-  `apply` once; a conflict or a Postgres error is not you taking it back (T0.24).
+  an attempt that failed, it answers nothing you asked, so a word that granted the attempt is
+  still granted — you say `apply` once, and a Postgres error is not you taking it back
+  (T0.24) — and the next run makes that attempt again once the thing in the way is settled.
+  But a merge or an apply refused at Review on the gatekeeper's verdict has no word to be made
+  again on, and no step claims a Review task that has no new reply (T0.46): the task waits at
+  Review with the refusal on its thread, and what moves it is a reply from you asking for a
+  change — folded in as an addendum, built, reviewed and gated again on the same branch and
+  pull request — or a merge by hand, which the next run's step 0 reads as Done.
   What does not repeat is the sentence: a `refused` the thread already carries word for word
-  waits, whatever claim it is from — the attempt is made again each run, and saying so again
-  each hour tells you nothing.
+  waits, whatever claim it is from — an attempt a word still grants is made again each run,
+  and saying so again each hour tells you nothing.
 - Uncapped is not unlimited: **one comment of a kind per claim**. A run that takes two defaults
   says both in its one default comment, posted once the claim's defaults are all in — when it
   stops or closes.
@@ -478,7 +483,8 @@ closer and the gatekeeper all read it there.
 **The gatekeeper replaces the word.** Nothing merges without two verdicts on the same commit
 (T0.46). The reviewer answers "is this good"; the gatekeeper — `.claude/agents/gatekeeper.md`,
 a subagent in a fresh context at medium effort, pinned to the newest model with T0.22's
-fallback, denied Edit and Write — answers "may this land unattended". It reads the pushed
+fallback, `review-model.mjs` reading the chain from its own file when its call is refused or
+stops at its turn limit, denied Edit and Write — answers "may this land unattended". It reads the pushed
 commit cold: the ticket, `git diff origin/main...HEAD`, the reviewer's verdict, `gated.mjs`'s
 loosenings and migrations, every migration the diff adds. Five questions and no others: does
 the diff do only what the ticket's Build asks; is every loosening named in the reviewer's

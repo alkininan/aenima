@@ -324,6 +324,57 @@ describe("T0.46 — the gatekeeper", () => {
     );
   });
 
+  // Review pass 1 Must 3: a gatekeeper call refused for credits or availability, or stopped at
+  // its turn limit, is read by review-model.mjs as the reviewer's is, from the gatekeeper's
+  // own file — never a model the run picks — and a chain with no model left is a stop.
+  it("has the skill read a refused or limit-stopped gatekeeper call with review-model.mjs from the gatekeeper's file", () => {
+    const skill = read(SKILL);
+    const gate = skill.slice(
+      skill.indexOf("**The gatekeeper decides the merge**"),
+      skill.indexOf("**A `stopped` line from any phase**"),
+    );
+    expect(gate).toContain("node scripts/run/review-model.mjs <<'EOF'");
+    expect(gate).toContain('"agent":".claude/agents/gatekeeper.md"');
+    expect(gate).toContain('"resumed":0');
+    expect(fold(gate)).toContain("`stop: true` → the gate did not run");
+    expect(gate).toContain("## Stopped");
+    const four = read("docs/guidelines.md").slice(
+      read("docs/guidelines.md").indexOf("**The gatekeeper replaces the word.**"),
+    );
+    expect(fold(four)).toContain(
+      "pinned to the newest model with T0.22's fallback, `review-model.mjs` reading the chain from its own file",
+    );
+  });
+
+  // Review pass 1 Must 1: a MERGE over a migration that waits is a verdict the run cannot act
+  // on, and the skill and the closer say where it goes.
+  it("sends a MERGE over a waiting migration to Decision in the skill and the closer", () => {
+    expect(fold(read(SKILL))).toContain(
+      "`next: decision` → the third HOLD, or a `MERGE` over a migration the script found waiting",
+    );
+    expect(fold(read(agent("closer")))).toContain(
+      "or a `MERGE` the gatekeeper wrote over a migration that waits",
+    );
+  });
+
+  // Review pass 1 Must 2: a merge leg refused — a conflict, the guard's binding, GitHub, the
+  // apply — leaves the task at Review, and nothing re-lands it on its own; the closer and §4
+  // say what moves it rather than promising a next run's close that no step makes.
+  it("says a refused merge leg waits at Review for a change reply or a hand merge, and promises no re-land", () => {
+    const closer = fold(read(agent("closer")));
+    expect(closer).not.toContain("the next run's close, once the conflict is gone, lands it");
+    expect(closer).not.toContain("the next run's close makes the attempt again");
+    expect(closer).toContain("**A refusal on either leg leaves the task at `Review`");
+    expect(closer).toContain("no step claims a Review task that has no new reply");
+    const four = fold(read("docs/guidelines.md"));
+    expect(four).toContain(
+      "a merge or an apply refused at Review on the gatekeeper's verdict has no word to be made again on",
+    );
+    expect(four).not.toContain(
+      "the word that granted the attempt is still granted and the next run makes it again once the thing in the way is settled",
+    );
+  });
+
   it("splits the closer into a close leg and a merge leg, and reads `## Held`", () => {
     const closer = fold(read(agent("closer")));
     expect(closer).toContain("**The merge leg** — handed `docs/tickets/<id>.md <branch> merge`.");

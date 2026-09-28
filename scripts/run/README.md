@@ -205,7 +205,9 @@ models tried out of the chain's order is a stop, because a review that did not r
 pass. A pass that stops at its turn limit comes back as Claude Code's note rather than an error,
 and `review-model.mjs` reads that too (T0.23): what it holds is never a verdict, so the pass is
 resumed once in its own session on the model it ran on, marked resumed in the report, and a
-second stop at the limit is a stop. Since T0.44 the loop is capped at three passes, counted in code: the orchestrator hands the
+second stop at the limit is a stop. Since T0.46 the gatekeeper's call is read the same way, the
+chain headed by the model its own file pins — `"agent":".claude/agents/gatekeeper.md"` on the
+script's input. Since T0.44 the loop is capped at three passes, counted in code: the orchestrator hands the
 reviewer the pass with the ticket path, the reviewer writes it into its verdict file as `pass
 <n>`, and `review-cap.mjs` reads that file after each pass — `close` on a PASS, `build` on
 FINDINGS in pass 1 or 2, `decision` on FINDINGS in pass 3, which stops the run at Decision, or on a
@@ -283,7 +285,9 @@ gatekeeper writes `docs/gates/<id>.md`, last line `MERGE`, `MERGE APPLY` or `HOL
 reasons, naming the commit, and `gate-cap.mjs` reads it beside the reviewer's file: `merge` and
 `apply` go to the closer's merge leg, `build` is a HOLD fixed and re-gated with the round counted
 by the reviewer's pass, `migration` is a destructive migration waiting for your `apply` and
-`decision` the third HOLD. The merge leg applies the migrations on `MERGE APPLY` through
+`decision` the third HOLD — or a `MERGE` over a migration the script found waiting, which only
+`MERGE APPLY` applies, so a merge on it would land code reading a column nobody created. The
+merge leg applies the migrations on `MERGE APPLY` through
 `apply.mjs` — the guard's apply door (`permission.mjs` `applyGranted`) reading that file for this
 commit and the script's additive — then merges with `gh pr merge --merge --delete-branch` from
 the pushed commit, and the task is Done with its Release row in the same run; the guard's door

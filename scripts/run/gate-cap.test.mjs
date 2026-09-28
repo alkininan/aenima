@@ -60,6 +60,38 @@ describe("the gate cap", () => {
     expect(third.why).toContain("pass 3");
   });
 
+  // TC3 → AC3, review pass 1 Must 1: a MERGE over a migration that waits would land code
+  // reading a column nobody created — the script found a migration the gatekeeper's word did
+  // not, and only MERGE APPLY opens the apply door — so it is a verdict the run cannot act on.
+  it("stops at Decision on a MERGE over an additive migration that waits, naming it", () => {
+    const additive = {
+      ok: true,
+      reasons: [],
+      migrations: [
+        { path: "drizzle/0022_x.sql", safety: "additive", waits: true },
+        { path: "drizzle/0021_y.sql", safety: "additive", waits: false, applied: true },
+      ],
+    };
+    const result = nextAfterGate({ gate: gate("MERGE"), review: review(1), diff: additive });
+    expect(result).toMatchObject({ next: "decision", verdict: "MERGE", commit: "abc1234" });
+    expect(result.why).toContain("drizzle/0022_x.sql");
+    expect(result.why).not.toContain("drizzle/0021_y.sql");
+    expect(result.why).toContain("MERGE APPLY");
+    expect(result.reasons).toHaveLength(1);
+    expect(result.reasons[0]).toContain("drizzle/0022_x.sql");
+    // The same diff under MERGE APPLY is the apply leg, and once applied a MERGE is a merge.
+    expect(
+      nextAfterGate({ gate: gate("MERGE APPLY"), review: review(1), diff: additive }).next,
+    ).toBe("apply");
+    const applied = {
+      ...additive,
+      migrations: additive.migrations.map((m) => ({ ...m, waits: false })),
+    };
+    expect(nextAfterGate({ gate: gate("MERGE"), review: review(1), diff: applied }).next).toBe(
+      "merge",
+    );
+  });
+
   // TC3 → AC3: a destructive migration that waits is the human's apply, whatever the verdict.
   it("goes to Decision with the migration question when a destructive migration waits", () => {
     for (const verdict of ["HOLD", "MERGE", "MERGE APPLY"]) {
