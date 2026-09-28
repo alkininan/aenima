@@ -6,6 +6,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { Menu } from "@/components/ui/Menu";
 import { OverflowIcon } from "@/components/ui/icons";
 import { getDictionary } from "@/i18n";
+import { rememberReturn, routeKey } from "@/lib/return-focus";
 
 /**
  * §8's item-row overflow menu.
@@ -57,7 +58,20 @@ export function ItemRowMenu({
         />
       }
       entries={[
-        { kind: "item", label: t.list.openItem, onSelect: () => router.push(href) },
+        {
+          kind: "item",
+          label: t.list.openItem,
+          onSelect: () => {
+            // §11: the way back "focuses the row that was opened" — opened from here as much
+            // as from its name. The name's link records its place through `RouteFocus`'s
+            // click listener; this row is not that link, so it records the same place itself.
+            rememberReturn(routeKey(window.location.pathname, window.location.search), {
+              row: itemKey,
+              scrollY: window.scrollY,
+            });
+            router.push(href);
+          },
+        },
         {
           kind: "item",
           label: t.list.copyKey,

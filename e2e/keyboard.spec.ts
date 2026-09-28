@@ -151,6 +151,38 @@ test.describe("C-42 · the way back restores the place", () => {
     });
   }
 
+  test("an item opened from the row's overflow menu is the opened row too: Back focuses it and restores the scroll", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 400 });
+    await page.goto(LIST);
+
+    const row = page.locator("[data-row-link='soc-7']");
+    // The row's overflow trigger, opened and chosen from the keyboard so the walk stays under
+    // keyboard modality; the menu places focus on its first row, "Open", as it opens.
+    const trigger = page.getByRole("button", {
+      name: "Actions for Can we diff Figma frames by node id?",
+    });
+    await trigger.focus();
+    const left = await page.evaluate(() => window.scrollY);
+    expect(left).toBeGreaterThan(0);
+
+    await page.keyboard.press("Enter");
+    const open = page.getByRole("menuitem", { name: "Open" });
+    await expect(open).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(ITEM);
+    await expect(page.locator("main")).toBeFocused();
+
+    await page.goBack();
+    await expect(page).toHaveURL(/\/dev\/list$/);
+    await expect(row).toBeFocused();
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(left);
+    expect(await page.locator("main").evaluate((node) => node === document.activeElement)).toBe(
+      false,
+    );
+  });
+
   test("a list reached with nothing to return to focuses the main region, not a row", async ({
     page,
   }) => {
