@@ -7,7 +7,6 @@ import { SIDEBAR_ROW_CLASSES } from "@/components/ui/variants";
 import { getDictionary } from "@/i18n";
 import { cx } from "@/lib/cx";
 
-import { usePromise } from "./usePromise";
 import { useSignOut } from "./useSignOut";
 
 /**
@@ -19,14 +18,13 @@ import { useSignOut } from "./useSignOut";
  * "Identity is something you check and change, not something you navigate between, and the
  * top-left position belongs to the things that move you around."
  *
- * The address arrives with the session read (§4 chrome before data): the row is drawn at
- * once with no address and no skeleton, its menu already open to a press, and the address
- * fills in when the read resolves (`usePromise`).
+ * The address is the session's — a cookie check the layout awaits before the shell — so it
+ * arrives with the chrome (§4 chrome before data), and the row is interactive from the
+ * first paint.
  */
-export function AccountMenu({ address: read }: { address: Promise<string> }) {
+export function AccountMenu({ address }: { address: string }) {
   const t = getDictionary();
   const { form, signOut } = useSignOut();
-  const address = usePromise(read, "");
 
   return (
     <>

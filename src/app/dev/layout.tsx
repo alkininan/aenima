@@ -4,6 +4,15 @@ import { devOnly } from "./dev-only";
 import { DEV_ADDRESS, DEV_DASHBOARD, DEV_PRODUCTS } from "./frame-fixture";
 
 /**
+ * Dynamic, and said so. Every route under this frame reads cookies or search params, and
+ * the frame's own switcher reads `useSearchParams()`, which a static prerender cannot do
+ * without a Suspense boundary; `/app` was dynamic by its cookie read before the layout
+ * stopped awaiting anything, and this keeps it that way rather than adding a boundary that
+ * exists only to satisfy the prerenderer.
+ */
+export const dynamic = "force-dynamic";
+
+/**
  * DELETE BEFORE LAUNCH, along with everything else under /dev.
  *
  * The segment-level half of the gate: it covers /dev/* as a whole, so a
@@ -22,7 +31,7 @@ export default function DevLayout({ children }: LayoutProps<"/dev">) {
   return (
     <Frame
       products={Promise.resolve(DEV_PRODUCTS)}
-      address={Promise.resolve(DEV_ADDRESS)}
+      address={DEV_ADDRESS}
       dashboardHref={DEV_DASHBOARD}
     >
       {children}

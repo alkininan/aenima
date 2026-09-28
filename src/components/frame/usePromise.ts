@@ -5,9 +5,9 @@ import { useEffect, useState } from "react";
 /**
  * A value a Server Component started reading, in a client island that must not wait for it.
  *
- * design-spec §4 ("Chrome renders before data") and C-40: the switcher's rows and the
- * account's address "arrive when their reads resolve, without a skeleton", and the chrome
- * around them is interactive from the first paint. A `<Suspense>` slot cannot give that:
+ * design-spec §4 ("Chrome renders before data") and C-40: the switcher's rows "arrive when
+ * their reads resolve, without a skeleton", and the chrome around them is interactive from
+ * the first paint. A `<Suspense>` slot cannot give that:
  * React leaves a still-pending boundary's fallback un-hydrated, so a switcher rendered as
  * one is inert for exactly as long as its read takes. So the layout hands the island the
  * promise itself — React streams a promise from a Server Component to a client one — and

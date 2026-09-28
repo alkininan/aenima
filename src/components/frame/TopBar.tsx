@@ -19,9 +19,9 @@ import { TopBarMenu } from "./TopBarMenu";
  *
  * The scrim is its own non-interactive layer directly behind the bar, ten-sevenths of the
  * bar's height so it runs three-sevenths past the content edge (§4). The `chat-bubble`
- * IconButton §4 puts beside the menu is the dock's. The same two data slots as the sidebar
- * — the switcher's rows and the account's address — take the reads as promises and fill in
- * when they resolve, interactive from the first paint (`usePromise`).
+ * IconButton §4 puts beside the menu is the dock's. As in the sidebar, the switcher takes
+ * the products read as a promise and fills its rows when it resolves, interactive from the
+ * first paint (`usePromise`); the address is the session's and arrives with the shell.
  */
 export function TopBar({
   t,
@@ -32,7 +32,7 @@ export function TopBar({
   t: Dictionary;
   dashboardHref: string;
   products: Promise<readonly SwitcherProduct[]>;
-  address: Promise<string>;
+  address: string;
 }) {
   return (
     <header data-testid="top-bar" className={TOP_BAR_CLASSES}>

@@ -20,11 +20,11 @@ import { TopBar } from "./TopBar";
  * under the three px breakpoints, and never on `:root` (C-05); a test reads it, and the dock
  * will. Which chrome stands is CSS before hydration and the DOM after it (`ChromeGate`).
  *
- * **Chrome before data.** The two reads the chrome needs — the products for the switcher,
- * the address for the account slot — arrive as promises the layout started and did not
- * await, so the frame streams at once and each slot fills when its read resolves (C-40).
- * A layout that awaited them, as `/app`'s once did, would hold every route's chrome for
- * the slowest of them.
+ * **Chrome before data.** The products for the switcher arrive as a promise the layout
+ * started and did not await, so the frame streams at once and the switcher's rows fill when
+ * the read resolves (C-40); the address is the session's, a cookie check the layout does
+ * await, since it is also the 307 an anonymous visitor gets. A layout that awaited the
+ * workspace read, as `/app`'s once did, held every route's chrome for it.
  *
  * `dashboardHref` is where the lockup and the Dashboard row go: `/app`, or the fixture
  * list under `/dev`, whose frame is the same component over fixture reads.
@@ -36,7 +36,7 @@ export function Frame({
   children,
 }: {
   products: Promise<readonly SwitcherProduct[]>;
-  address: Promise<string>;
+  address: string;
   dashboardHref?: string;
   children: ReactNode;
 }) {

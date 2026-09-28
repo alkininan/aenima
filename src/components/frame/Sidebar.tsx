@@ -20,11 +20,11 @@ import { ProductSwitcher, type SwitcherProduct } from "./ProductSwitcher";
  * icon to label, 40 on pointer and 44 on touch — "flush rows cannot extend a hit area, so
  * on touch they grow for real"; the account slot is a 56 row pinned to the bottom.
  *
- * **Chrome before data** (§4, C-40): the static rows render from the route alone. The two
- * that carry data — the switcher's rows and the account's address — are handed the reads
- * the layout started as promises and fill in when they resolve, never a skeleton and never
- * a Suspense slot, whose pending fallback React leaves inert: the switcher opens and the
- * nav navigates before the first request resolves.
+ * **Chrome before data** (§4, C-40): the static rows render from the route alone. The
+ * switcher's rows are handed the read the layout started as a promise and fill in when it
+ * resolves, never a skeleton and never a Suspense slot, whose pending fallback React leaves
+ * inert: the switcher opens and the nav navigates before the first request resolves. The
+ * address is the session's and arrives with the shell.
  *
  * **Unbuilt destinations render as disabled, not as links.** A link that answers 404 is
  * worse than a control that says "not yet"; §7's disabled treatment says it. `NAV` in
@@ -42,7 +42,7 @@ export function Sidebar({
   dashboardHref: string;
   products: Promise<readonly SwitcherProduct[]>;
   /** §4's account slot: the signed-in address, truncating. */
-  address: Promise<string>;
+  address: string;
 }) {
   return (
     <aside data-testid="sidebar" className={SIDEBAR_CLASSES}>

@@ -10,17 +10,29 @@ import { readAddress, readProducts } from "../frame-reads";
  * chrome-free: a landing page carrying a product sidebar would be offering navigation to
  * someone who cannot use it.
  *
- * **Nothing here is awaited.** The session and the products are started and handed to the
- * frame as promises, so the chrome streams before either resolves (§4 "Chrome renders
- * before data", C-40) and the two islands that need them fill in when they arrive. The
- * anonymous redirect is the page's, as it is on `/i` and `/o`.
+ * **Only the session is awaited** — a signature check on the cookie, which is also what
+ * turns an anonymous visitor away with a 307 before anything streams. The products are
+ * started and handed to the frame as a promise, so the chrome streams before the workspace
+ * read resolves (§4 "Chrome renders before data", C-40) and the switcher fills its rows
+ * when it does.
  *
  * **The frame does not receive the filters.** A layout gets no `searchParams` — it does
  * not re-render when they change — so the switcher reads them from the client instead.
  */
-export default function AppLayout({ children }: LayoutProps<"/app">) {
+/**
+ * Dynamic, and said so. Every route under this frame reads cookies or search params, and
+ * the frame's own switcher reads `useSearchParams()`, which a static prerender cannot do
+ * without a Suspense boundary; `/app` was dynamic by its cookie read before the layout
+ * stopped awaiting anything, and this keeps it that way rather than adding a boundary that
+ * exists only to satisfy the prerenderer.
+ */
+export const dynamic = "force-dynamic";
+
+export default async function AppLayout({ children }: LayoutProps<"/app">) {
+  const address = await readAddress();
+
   return (
-    <Frame products={readProducts()} address={readAddress()}>
+    <Frame products={readProducts()} address={address}>
       {children}
     </Frame>
   );

@@ -10,7 +10,6 @@ import { getDictionary } from "@/i18n";
 import { NAV } from "@/lib/routes";
 
 import { NAV_ICONS } from "./nav-icons";
-import { usePromise } from "./usePromise";
 import { useSignOut } from "./useSignOut";
 
 /**
@@ -23,17 +22,10 @@ import { useSignOut } from "./useSignOut";
  * button is the dock's. An unbuilt row is a disabled `menuitem`, named for a screen reader as
  * the sidebar names its dimmed rows.
  */
-export function TopBarMenu({
-  address: read,
-  dashboardHref,
-}: {
-  address: Promise<string>;
-  dashboardHref: string;
-}) {
+export function TopBarMenu({ address, dashboardHref }: { address: string; dashboardHref: string }) {
   const t = getDictionary();
   const router = useRouter();
   const { form, signOut } = useSignOut();
-  const address = usePromise(read, "");
 
   const entries: MenuEntry[] = [
     ...NAV.map((entry): MenuEntry => {
