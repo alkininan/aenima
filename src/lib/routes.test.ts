@@ -9,12 +9,30 @@ describe("routes", () => {
 
   /**
    * The nav must never render a link to a page that does not exist — an
-   * unbuilt destination is visibly inactive, not a 404. Only the list is built
-   * in T1.2, and this is what would catch someone flipping a flag before the
+   * unbuilt destination is visibly inactive, not a 404. Only the dashboard is
+   * built, and this is what would catch someone flipping a flag before the
    * page exists.
    */
-  it("marks only the list as built", () => {
+  it("marks only the dashboard as built", () => {
     expect(NAV.filter((entry) => entry.built).map((entry) => entry.href)).toEqual([ROUTES.app]);
+  });
+
+  /**
+   * design-spec §4 (T0.48): the nav is Dashboard, Triage, Graveyard, Settings, in that order.
+   * Graveyard has no URL until its ticket — `ROUTES` holds every URL the product has, and a
+   * route is a public surface nobody invents to fill a row — and Analytics left the nav while
+   * its `/an` stays reserved.
+   */
+  it("is §4's four rows, Graveyard without a route and Analytics gone", () => {
+    expect(NAV.map((entry) => entry.label)).toEqual([
+      "dashboard",
+      "triage",
+      "graveyard",
+      "settings",
+    ]);
+    expect(NAV.find((entry) => entry.label === "graveyard")?.href).toBeNull();
+    expect(NAV.some((entry) => entry.href === ROUTES.analytics)).toBe(false);
+    expect(ROUTES.analytics).toBe("/an");
   });
 });
 

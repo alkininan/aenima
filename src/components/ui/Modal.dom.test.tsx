@@ -151,10 +151,44 @@ describe("Sheet", () => {
     const dialog = screen.getByRole("dialog");
     expect(dialog.className).toContain("max-w-[480px]");
     expect(dialog.className).toContain("rounded-l-lg");
+    // §8.21 (T0.48): the sheet's 56 header carries the close, so it is the first stop
+    // inside the trap; the field is the next.
+    const close = screen.getByRole("button", { name: "Close" });
+    expect(document.activeElement).toBe(close);
+    await user.tab();
     expect(document.activeElement).toBe(screen.getByLabelText("Note"));
 
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(document.activeElement).toBe(opener);
+  });
+
+  /**
+   * §8.21: "A side sheet carries no footer and instead a 56 header — title display-md, a
+   * Neutral 34 close IconButton (`xmark`)"; and "every modal carries [a footer], at least
+   * a Neutral md 'Close'". Both are one element at every width (T0.48).
+   */
+  it("closes from its header, and a modal without a footer still has a Close", async () => {
+    const user = userEvent.setup();
+    render(<SheetHarness />);
+    await user.click(screen.getByRole("button", { name: "Open sheet" }));
+    const close = screen.getByRole("button", { name: "Close" });
+    expect(close.className).toContain("size-[34px]");
+    await user.click(close);
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    function Bare() {
+      const [open, setOpen] = useState(true);
+      return (
+        <Modal open={open} onClose={() => setOpen(false)} title="Bare">
+          nothing to confirm
+        </Modal>
+      );
+    }
+    render(<Bare />);
+    const modalClose = screen.getByRole("button", { name: "Close" });
+    expect(modalClose.className).toContain("h-[34px]");
+    await user.click(modalClose);
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });

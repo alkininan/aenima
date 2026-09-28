@@ -20,6 +20,7 @@ import { Panel } from "./Panel";
 import {
   MENU_SECTION_CLASSES,
   MENU_SEPARATOR_CLASSES,
+  MENU_STATIC_ROW_CLASSES,
   menuPanelClasses,
   panelRowClasses,
 } from "./variants";
@@ -43,7 +44,15 @@ export type MenuEntry =
       destructive?: boolean;
       disabled?: boolean;
     }
-  | { kind: "section"; label: string }
+  | {
+      kind: "section";
+      /**
+       * A string is §8.18's section title, mono-micro `--n-secondary`. A node is a static
+       * row "standing where a section title would" — §4's account row in the hand-chrome
+       * nav menu, avatar 24 + address — which is not a `menuitem` and takes ui-body.
+       */
+      label: ReactNode;
+    }
   | { kind: "separator" };
 
 type TriggerProps = {
@@ -163,7 +172,9 @@ export function Menu({ trigger, entries, label, className }: MenuProps) {
           call a closure that reads refs is exactly what React's render-purity
           rules forbid. The click bubbles here from the button either way, and
           the trigger still gets the aria state it owes assistive tech. */}
-      <span ref={triggerRef} className="inline-flex" onClick={toggle}>
+      {/* `flex-1` so a menu given the full width — §4's switcher and account rows — hands
+          it to its trigger; a menu left at its content's width is unchanged by it. */}
+      <span ref={triggerRef} className="inline-flex min-w-0 flex-1" onClick={toggle}>
         {cloneElement(trigger, { "aria-expanded": open, "aria-haspopup": "menu" })}
       </span>
 
@@ -187,7 +198,12 @@ export function Menu({ trigger, entries, label, className }: MenuProps) {
             }
             if (entry.kind === "section") {
               return (
-                <div key={`${baseId}-section-${index}`} className={MENU_SECTION_CLASSES}>
+                <div
+                  key={`${baseId}-section-${index}`}
+                  className={
+                    typeof entry.label === "string" ? MENU_SECTION_CLASSES : MENU_STATIC_ROW_CLASSES
+                  }
+                >
                   {entry.label}
                 </div>
               );

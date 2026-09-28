@@ -2,6 +2,9 @@
 
 import { useId, type ReactNode } from "react";
 
+import { getDictionary } from "@/i18n";
+
+import { Button } from "./Button";
 import { Overlay } from "./Overlay";
 import {
   MODAL_BODY_CLASSES,
@@ -20,7 +23,10 @@ type ModalProps = {
   /** §8: max 400 (confirm) / 640 (content). */
   width?: ModalWidth;
   children: ReactNode;
-  /** §8: footer buttons right, primary last. Pass them in that order. */
+  /**
+   * §8: footer buttons right, primary last. Pass them in that order. Left out, the footer
+   * is §8.21's floor — a Neutral md Close — "so the scrim is never its only way out".
+   */
   footer?: ReactNode;
   className?: string;
 };
@@ -31,7 +37,13 @@ type ModalProps = {
  * buttons right with the primary last.
  *
  * The body scrolls and the footer stays put, so the confirming action is
- * reachable however long the content runs.
+ * reachable however long the content runs. **Every modal carries a footer**
+ * (§8.21): at least a Neutral md Close, and below 768 — where the modal is a
+ * bottom sheet — the footer is lg, full width and stacked, from the same
+ * element at every width.
+ *
+ * It reads its own copy for the Close: a client component is never handed the
+ * dictionary, whose formatters cannot cross the boundary.
  */
 export function Modal({
   open,
@@ -42,6 +54,7 @@ export function Modal({
   footer,
   className,
 }: ModalProps) {
+  const t = getDictionary();
   const titleId = useId();
 
   return (
@@ -56,7 +69,13 @@ export function Modal({
         {title}
       </h2>
       <div className={`${MODAL_BODY_CLASSES} mt-[16px] text-n-primary`}>{children}</div>
-      {footer ? <div className={MODAL_FOOTER_CLASSES}>{footer}</div> : null}
+      <div className={MODAL_FOOTER_CLASSES}>
+        {footer ?? (
+          <Button variant="neutral" size="md" onClick={onClose}>
+            {t.common.close}
+          </Button>
+        )}
+      </div>
     </Overlay>
   );
 }

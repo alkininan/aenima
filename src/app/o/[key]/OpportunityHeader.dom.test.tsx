@@ -12,7 +12,8 @@ const header = (overrides: Partial<OpportunityHeaderData> = {}): OpportunityHead
 });
 
 /**
- * §4's topbar for an opportunity.
+ * §4's topbar for an opportunity — since T0.48 a `PageTopbar`: the key leads the title
+ * row and the summary takes the subtitle slot.
  *
  * The one branch worth holding is the summary: §2 makes it nullable, so an
  * opportunity carrying only a title is a legal one, and the header has to say
@@ -40,21 +41,14 @@ describe("OpportunityHeader", () => {
    * defect this guards against would pass a text-absence check while painting
    * the 8px gap and the line box §4's subtitle slot reserves. The text query is
    * here too, saying what the count means.
+   *
+   * The subtitle is the topbar's only `<p>`: the product line the header once
+   * carried is the page's eyebrow now, as the item page's taxonomy is.
    */
   it("renders no summary line when there is none", () => {
     const { container } = render(<OpportunityHeader opportunity={header({ summary: null })} />);
 
     expect(screen.queryByText("Retention drops sharply between day 3 and day 7.")).toBeNull();
-
-    // One `<p>` remains — the product eyebrow — and it is not the summary slot.
-    const paragraphs = container.querySelectorAll("p");
-    expect(paragraphs).toHaveLength(1);
-    expect(paragraphs[0]?.textContent).toBe("Sociera");
-  });
-
-  it("places the opportunity in its product", () => {
-    render(<OpportunityHeader opportunity={header()} />);
-
-    expect(screen.getByText("Sociera")).toBeTruthy();
+    expect(container.querySelectorAll("p")).toHaveLength(0);
   });
 });

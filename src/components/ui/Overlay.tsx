@@ -8,7 +8,7 @@ import { pushOverlayHost } from "@/lib/overlay-host";
 
 import { useExitTransition } from "./useExit";
 import { useEscapeLayer, useFocusTrap } from "./useLayer";
-import { SCRIM_CLASSES } from "./variants";
+import { OVERLAY_GRABBER_CLASSES, SCRIM_CLASSES } from "./variants";
 
 /** Never resubscribes: the answer to "is there a document" cannot change. */
 const noopSubscribe = () => () => {};
@@ -34,6 +34,13 @@ type OverlayProps = {
  * Rendered into `document.body` so an ancestor's transform or filter can never
  * turn `position: fixed` into something relative and drop the layer out of the
  * ladder.
+ *
+ * **Below 768 both are bottom sheets** (§8.21, C-26), and the shape of that is
+ * in the class strings the callers pass plus one thing that is the same for
+ * both: the grabber, "36×4, `--n-disabled`, `--r-pill`, 8 from the top", drawn
+ * on touch and not on pointer. It is decoration here — the finger-follow and
+ * the velocity release are C-23's — so it carries `aria-hidden` and no handler;
+ * the sheet still closes by its footer or header, the scrim or Esc.
  */
 export function Overlay({
   open,
@@ -69,7 +76,8 @@ export function Overlay({
     return pushOverlayHost(surface);
   }, [open]);
 
-  // A scrim that can be scrolled past is not a scrim.
+  // A scrim that can be scrolled past is not a scrim — and §8.21: "the page
+  // behind never scrolling" under a bottom sheet.
   useEffect(() => {
     if (!open) return;
     const previous = document.body.style.overflow;
@@ -101,6 +109,7 @@ export function Overlay({
           data-leaving={leaving ? "" : undefined}
           className={surfaceClassName}
         >
+          <span aria-hidden="true" data-testid="grabber" className={OVERLAY_GRABBER_CLASSES} />
           {children}
         </div>
       </div>

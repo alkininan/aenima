@@ -1,10 +1,14 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
+import { CHAT_COLUMN_CLASSES, ITEM_GRID_CLASSES } from "@/app/i/[key]/item-grid";
+import { PaintMark } from "@/components/frame/PaintMark";
+import { MAIN_CLASSES } from "@/components/ui/variants";
 import { getOpportunityByKey } from "@/db/queries/opportunity";
 import { getSessionUser } from "@/db/queries/session";
 import { getCurrentWorkspace } from "@/db/queries/workspace";
 import { getDictionary } from "@/i18n";
+import { PAINT_MARKS } from "@/lib/layout";
 import { ROUTES } from "@/lib/routes";
 
 import { ItemsSection } from "./ItemsSection";
@@ -43,12 +47,23 @@ export default async function OpportunityPage({ params }: PageProps<"/o/[key]">)
   if (!opportunity) notFound();
 
   return (
-    <main className="mx-auto w-full max-w-[1200px] px-[24px] py-[32px]">
-      {/* §4: content 1fr / chat 380, as the item page holds it. The chat column
-          is reserved from the start and built later — adding it then fills a
-          column rather than reflowing the page. */}
-      <div className="grid grid-cols-1 gap-[24px] lg:grid-cols-[1fr_380px]">
+    <main className={MAIN_CLASSES}>
+      <OpportunityHeader
+        opportunity={{
+          key: opportunity.key,
+          title: opportunity.title,
+          summary: opportunity.summary,
+          productName: opportunity.productName,
+        }}
+      />
+
+      {/* §4: content 1fr / chat 380 from 1280, as the item page holds it. The
+          chat column is reserved from the start and built later — adding it
+          then fills a column rather than reflowing the page. */}
+      <div className={ITEM_GRID_CLASSES}>
         <div className="flex min-w-0 flex-col gap-[32px]">
+          <PaintMark name={PAINT_MARKS.content} />
+
           <Link
             href={ROUTES.app}
             className="type-ui-body w-fit text-n-secondary hover:text-n-primary"
@@ -56,21 +71,16 @@ export default async function OpportunityPage({ params }: PageProps<"/o/[key]">)
             {t.opportunity.backToList}
           </Link>
 
-          <OpportunityHeader
-            opportunity={{
-              key: opportunity.key,
-              title: opportunity.title,
-              summary: opportunity.summary,
-              productName: opportunity.productName,
-            }}
-          />
+          {/* The product, as §3's eyebrow — the line the item page gives its
+              taxonomy, one object up the §2 tree. */}
+          <p className="type-mono-micro text-n-secondary">{opportunity.productName}</p>
 
           <ItemsSection items={opportunity.items} t={t} />
         </div>
 
         {/* §4's 380 chat column, reserved and empty — the item page's seam, held
             here too so both pages reflow the same way when the dock arrives. */}
-        <aside aria-hidden="true" className="hidden lg:block" />
+        <aside aria-hidden="true" className={CHAT_COLUMN_CLASSES} />
       </div>
     </main>
   );

@@ -1,20 +1,26 @@
 import { BucketSection } from "@/app/app/BucketSection";
 import { PipelineStrip } from "@/app/app/PipelineStrip";
-import { Sidebar } from "@/app/app/Sidebar";
+import { PageTopbar } from "@/components/frame/PageTopbar";
+import { PaintMark } from "@/components/frame/PaintMark";
+import { GUTTER_CLASSES, MAIN_CLASSES } from "@/components/ui/variants";
 import { getDictionary } from "@/i18n";
 import { BUCKETS } from "@/lib/buckets";
+import { cx } from "@/lib/cx";
+import { PAINT_MARKS } from "@/lib/layout";
 
 import { devOnly } from "../dev-only";
+import { holdContent } from "../frame-fixture";
 import { LIST_COUNTS, LIST_FIXTURE, LIST_NOW } from "../list-fixture";
 
 /**
  * DELETE BEFORE LAUNCH, along with everything else under /dev.
  *
  * **The list surface rendered the way `/app` renders it: from a Server
- * Component.** `/dev/primitives` already previews the same components, but it
- * previews them from a client root — `Composites` carries `"use client"`, so
- * everything below it is a client component and the server/client boundary
- * `/app` has does not exist there at all.
+ * Component**, inside the frame the segment layout draws. `/dev/primitives`
+ * already previews the same components, but it previews them from a client
+ * root — `Composites` carries `"use client"`, so everything below it is a
+ * client component and the server/client boundary `/app` has does not exist
+ * there at all.
  *
  * That difference shipped a production 500. `Sidebar` handed the i18n dictionary
  * to `ProductSwitcher` and `ItemRow` handed it to `ItemRowMenu`; the dictionary
@@ -26,7 +32,9 @@ import { LIST_COUNTS, LIST_FIXTURE, LIST_NOW } from "../list-fixture";
  *
  * So this page exists to be that render. It is deliberately thin — the same
  * fixture, no client wrapper — and its whole job is to fail when a value that
- * cannot cross the boundary is passed across it.
+ * cannot cross the boundary is passed across it. Its rows lead to `/dev/item`,
+ * the fixture the frame's route changes are driven between (C-45), and
+ * `?delay=` holds its content so the chrome can be observed ahead of it (C-40).
  */
 /**
  * Dynamic, like `/app`, and for the same reason it is dynamic there.
@@ -41,22 +49,19 @@ import { LIST_COUNTS, LIST_FIXTURE, LIST_NOW } from "../list-fixture";
  */
 export const dynamic = "force-dynamic";
 
-export default function DevListPage() {
+export default async function DevListPage({ searchParams }: PageProps<"/dev/list">) {
   devOnly();
 
   const t = getDictionary();
+  await holdContent(await searchParams);
 
   return (
-    <div className="flex min-h-dvh">
-      {/* The other half of the boundary: Sidebar is a Server Component and
-          ProductSwitcher is a client one. */}
-      <Sidebar
-        t={t}
-        products={[{ slug: "sociera", name: "Sociera" }]}
-        email="someone@example.com"
-      />
+    <main className={MAIN_CLASSES}>
+      <PageTopbar title={t.list.title} subtitle={t.list.subtitle} />
 
-      <main className="mx-auto flex w-full max-w-[1200px] flex-col gap-[24px] px-[24px] py-[32px]">
+      <div className={cx(GUTTER_CLASSES, "flex flex-col gap-[24px] py-[32px]")}>
+        <PaintMark name={PAINT_MARKS.content} />
+
         <PipelineStrip counts={LIST_COUNTS} active="define" product={undefined} total={6} t={t} />
 
         {BUCKETS.map((bucket) => (
@@ -66,9 +71,10 @@ export default function DevListPage() {
             items={LIST_FIXTURE.filter((row) => row.bucket === bucket)}
             t={t}
             now={LIST_NOW}
+            linkTo={() => "/dev/item"}
           />
         ))}
-      </main>
-    </div>
+      </div>
+    </main>
   );
 }

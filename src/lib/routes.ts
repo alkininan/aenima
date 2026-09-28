@@ -112,19 +112,29 @@ export function gapOutcomeHref(
  */
 export const gapAnchor = (gapId: string) => `gap-${gapId}` as const;
 
-/** §4's sidebar nav, in order. `built` gates whether it is a link at all. */
+/**
+ * §4's nav, in order — "Dashboard `dashboard-dots` · Triage `mail-in` · Graveyard `archive` ·
+ * Settings `settings`". `built` gates whether an entry is a link at all.
+ *
+ * **Graveyard carries no route.** It is product-spec's parked list, and `ROUTES` holds every
+ * URL the product has: a URL is a public surface, so the row waits for its ticket rather than
+ * being given a path here to make the nav tidy. Analytics is not in §4's nav; §15's `/an`
+ * stays reserved in `ROUTES` above.
+ */
 export type NavEntry = {
-  href: string;
+  /** Null while the destination has no URL at all — an unbuilt row with nothing to link to. */
+  href: string | null;
   /** Key into `t.nav` — §12 keeps every label in i18n. */
-  label: "list" | "triage" | "analytics" | "settings";
+  label: "dashboard" | "triage" | "graveyard" | "settings";
   built: boolean;
 };
 
 export const NAV: readonly NavEntry[] = [
-  { href: ROUTES.app, label: "list", built: true },
-  // Phase 4 builds the router that fills this. Phase 6 builds these two.
+  { href: ROUTES.app, label: "dashboard", built: true },
+  // Phase 4 builds the router that fills this.
   { href: ROUTES.triage, label: "triage", built: false },
-  { href: ROUTES.analytics, label: "analytics", built: false },
+  { href: null, label: "graveyard", built: false },
+  // Phase 6.
   { href: ROUTES.settings, label: "settings", built: false },
 ];
 

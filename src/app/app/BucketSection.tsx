@@ -39,11 +39,14 @@ export function BucketSection({
   items,
   t,
   now,
+  linkTo,
 }: {
   bucket: Bucket;
   items: readonly ItemRowData[];
   t: Dictionary;
   now: number;
+  /** A row's destination by key — see `ItemRow`'s `href`. Absent, a row goes to `/i/<key>`. */
+  linkTo?: (key: string) => string;
 }) {
   if (items.length === 0) return null;
 
@@ -78,7 +81,14 @@ export function BucketSection({
         )}
       >
         {items.map((item) => (
-          <ItemRow key={item.key} item={item} t={t} now={now} className="bg-surface-1" />
+          <ItemRow
+            key={item.key}
+            item={item}
+            t={t}
+            now={now}
+            className="bg-surface-1"
+            {...(linkTo ? { href: linkTo(item.key) } : {})}
+          />
         ))}
       </div>
     </section>

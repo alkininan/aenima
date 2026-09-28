@@ -17,19 +17,22 @@
  * width and height in CSS, which beats Iconoir's 24×24 attributes.
  */
 import {
+  Archive,
   ArrowLeft,
   Check,
-  GraphUp,
+  DashboardDots,
   List,
   LogOut,
   Mail,
+  MailIn,
+  Menu,
   MoreHoriz,
   NavArrowDown,
   NavArrowRight,
   Plus,
-  Reports,
   Search,
   Settings,
+  Xmark,
 } from "iconoir-react";
 
 type IconProps = { className?: string };
@@ -75,25 +78,40 @@ export function ChevronRightIcon({ className }: IconProps) {
   return <NavArrowRight className={className} aria-hidden="true" focusable="false" />;
 }
 
-/* §4 sidebar nav, at 20. One glyph per destination in `src/lib/routes.ts`. */
+/* §4's nav, at 20 — its four glyphs by Iconoir's own names (§8.11): `dashboard-dots`,
+   `mail-in`, `archive`, `settings`. One glyph per row in `src/lib/routes.ts`. */
 
-/** §13's list surface — the three buckets. */
+/** §13's list surface — the empty state's glyph. */
 export function ListIcon({ className }: IconProps) {
   return <List className={className} aria-hidden="true" focusable="false" />;
 }
 
-/** §10's intake triage inbox. */
-export function TriageIcon({ className }: IconProps) {
-  return <Reports className={className} aria-hidden="true" focusable="false" />;
+export function DashboardIcon({ className }: IconProps) {
+  return <DashboardDots className={className} aria-hidden="true" focusable="false" />;
 }
 
-/** §15's analytics views. */
-export function AnalyticsIcon({ className }: IconProps) {
-  return <GraphUp className={className} aria-hidden="true" focusable="false" />;
+/** §10's intake triage inbox. */
+export function TriageIcon({ className }: IconProps) {
+  return <MailIn className={className} aria-hidden="true" focusable="false" />;
+}
+
+/** product-spec's parked list. */
+export function GraveyardIcon({ className }: IconProps) {
+  return <Archive className={className} aria-hidden="true" focusable="false" />;
 }
 
 export function SettingsIcon({ className }: IconProps) {
   return <Settings className={className} aria-hidden="true" focusable="false" />;
+}
+
+/** §4's hand top bar: the `menu` IconButton that morphs into the nav menu. */
+export function MenuIcon({ className }: IconProps) {
+  return <Menu className={className} aria-hidden="true" focusable="false" />;
+}
+
+/** §8.21: the side sheet's header close, `xmark`. */
+export function CloseIcon({ className }: IconProps) {
+  return <Xmark className={className} aria-hidden="true" focusable="false" />;
 }
 
 /**

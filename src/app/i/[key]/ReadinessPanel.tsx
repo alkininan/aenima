@@ -2,7 +2,6 @@ import { Meter } from "@/components/ui/Meter";
 import { ChevronDownIcon, ChevronRightIcon } from "@/components/ui/icons";
 import type { Dictionary } from "@/i18n";
 import type { GapMoveClaim } from "@/lib/gap-move";
-import { relativeTime } from "@/lib/relative-time";
 import type { RunView } from "@/lib/scoring/run-view";
 
 import { CheckList, type NoLongerApplicable } from "./CheckList";
@@ -48,7 +47,6 @@ import type { MoveableGap } from "./GapMoves";
 export function ReadinessPanel({
   run,
   t,
-  now,
   itemKey,
   gapsByCheck,
   noLongerApplicable,
@@ -56,7 +54,6 @@ export function ReadinessPanel({
 }: {
   run: RunView | null;
   t: Dictionary;
-  now: number;
   /**
    * The four below are the expansion's, not the meter's — this component only
    * carries them across. §5's moves belong to the checks inside `CheckList`,
@@ -138,14 +135,11 @@ export function ReadinessPanel({
           <ChevronDownIcon className="hidden size-[16px] shrink-0 group-open:block" />
         </span>
 
-        <span className="flex flex-wrap items-center gap-x-[8px] gap-y-[4px]">
-          {/* §4's renormalized denominator. The not-asked lines below are why
-              it is 99 and not 100, but only once it is on screen to be asked
-              about. */}
-          <span>{t.item.pointsOf(run.earned, run.denominator)}</span>
-          <span aria-hidden="true">·</span>
-          {freshness(run, t, now)}
-        </span>
+        {/* §4's renormalized denominator. The not-asked lines below are why
+            it is 99 and not 100, but only once it is on screen to be asked
+            about. The run's freshness stood beside it until T0.48 moved it to
+            the page topbar's readout slot, where §4 puts it. */}
+        <span>{t.item.pointsOf(run.earned, run.denominator)}</span>
       </summary>
 
       <div className="flex flex-col gap-[16px] p-[8px] pt-[16px]">
@@ -185,36 +179,5 @@ export function ReadinessPanel({
         </p>
       </div>
     </details>
-  );
-}
-
-/**
- * When this was scored, and whether §5's queue is holding a retry.
- *
- * §10: "Provider outage / retry: freshness shows `--warning` dot + mono-readout
- * 'scored 6 h ago — retrying'; no banners." The dot and the sentence are the
- * whole of what a person is told — §12 keeps the voice calm and §0 law 1 keeps
- * Danger off anything that is not destructive. A queued retry is the system
- * working, not an error, and it never reddens.
- *
- * Every system dot in the product is 8 (§8).
- */
-function freshness(run: RunView, t: Dictionary, now: number) {
-  const elapsed = relativeTime(Date.parse(run.provenance.scoredAt), now);
-  const relative =
-    elapsed.unit === "justNow"
-      ? t.relativeTime.justNow
-      : t.relativeTime[elapsed.unit](elapsed.value);
-
-  const retrying = run.provenance.nextScoringAttemptAt !== null;
-
-  return (
-    <span className="flex items-center gap-[6px]">
-      <span
-        aria-hidden="true"
-        className={`size-[8px] shrink-0 rounded-pill ${retrying ? "bg-warning" : "bg-prime"}`}
-      />
-      <span>{retrying ? t.item.scoredRetrying(relative) : t.item.scoredAt(relative)}</span>
-    </span>
   );
 }

@@ -557,6 +557,14 @@ export function menuPanelClasses(className?: string): string {
 /** §8 menus: section titles mono-micro --n-secondary. */
 export const MENU_SECTION_CLASSES = "px-[12px] py-[8px] type-mono-micro text-n-secondary";
 
+/**
+ * §4's account row in the hand-chrome nav menu: "static, not a `menuitem`, avatar 24 +
+ * address truncating, standing where a section title would". The title's padding, a row's
+ * type — and no hover, since it is not a row anyone can take.
+ */
+export const MENU_STATIC_ROW_CLASSES =
+  "flex items-center gap-[8px] px-[12px] py-[8px] type-ui-body text-n-primary";
+
 // §8 menus: separators 1px --glass-border. The 6px margin is the panel's own
 // padding, so a separator breathes the same distance the panel edge does.
 export const MENU_SEPARATOR_CLASSES = "my-[6px] h-[1px] bg-glass-border";
@@ -735,9 +743,30 @@ export const MODAL_WIDTHS: readonly ModalWidth[] = ["confirm", "content"];
 // §8 scrim --bg-scrim; §4 puts scrim and modal together on rung 400.
 export const SCRIM_CLASSES = "fixed inset-0 z-[var(--z-modal)] bg-bg-scrim";
 
-/** The centring frame. 24px is §4's gutter. */
+/**
+ * §8.21's below-768 geometry, shared by the modal and the side sheet: "Below 768 a modal and
+ * a side sheet are both bottom sheets … `env(safe-area-inset-bottom)` padded", "at most 90%
+ * of the viewport tall" (§4 Height). `overlay-bottom` is the class globals.css reads for the
+ * top-corners-only radius and the rise from the bottom edge; the padding here is the surface's
+ * 20 plus the inset. `max-md` is Tailwind's `width < 768px`, §4's 768 line exactly.
+ */
+const BOTTOM_SHEET_SURFACE =
+  "overlay-bottom max-md:max-h-[90dvh] max-md:max-w-none " +
+  "max-md:pb-[calc(20px+env(safe-area-inset-bottom))]";
+
+/**
+ * §8.21: "a grabber — 36×4, `--n-disabled`, `--r-pill`, 8 from the top — above the content",
+ * drawn on touch below 768 and never on pointer, "where a grabber would invite a drag it
+ * refuses". Its finger-follow and velocity release are C-23's, not this ticket's.
+ */
+export const OVERLAY_GRABBER_CLASSES =
+  "hidden touch:max-md:block absolute top-[calc(8px-1px)] left-1/2 h-[4px] w-[36px] " +
+  "-translate-x-1/2 rounded-pill bg-n-disabled";
+
+/** The centring frame. 24px is §4's gutter. Below 768 the sheet sits on the bottom edge. */
 export const MODAL_VIEWPORT_CLASSES =
-  "pointer-events-none fixed inset-0 z-[var(--z-modal)] flex items-center justify-center p-[24px]";
+  "pointer-events-none fixed inset-0 z-[var(--z-modal)] flex items-center justify-center " +
+  "p-[24px] max-md:items-end max-md:p-0";
 
 // §8: glass recipe — its unblurred class, since a modal stands over the scrim
 // (§5, C-37) — --r-md, modal shadow. Padding 20 and the 8px footer gap are
@@ -745,7 +774,8 @@ export const MODAL_VIEWPORT_CLASSES =
 // §4's gutter top and bottom.
 const MODAL_BASE =
   "glass overlay-rise pointer-events-auto relative flex max-h-[calc(100vh_-_48px)] w-full " +
-  "flex-col rounded-md p-[20px] [--glass-elevation:var(--shadow-modal)]";
+  "flex-col rounded-md p-[20px] [--glass-elevation:var(--shadow-modal)] " +
+  BOTTOM_SHEET_SURFACE;
 
 const MODAL_WIDTH_CLASSES: Record<ModalWidth, string> = {
   confirm: "max-w-[400px]",
@@ -759,13 +789,16 @@ export function modalClasses(width: ModalWidth = "confirm", className?: string):
 // §8 side sheets: 480 wide, right slide-in --t-med, the unblurred glass recipe
 // (over the scrim, as a modal is — C-37), --r-lg on the
 // leading corners only. §5 lists a shadow for modals and dropdowns but not for
-// sheets; a sheet is a modal-class layer, so it takes the modal shadow.
+// sheets; a sheet is a modal-class layer, so it takes the modal shadow. Below
+// 768 it is a bottom sheet like the modal (§8.21); at 768–1023 it keeps its 480.
 export const SHEET_VIEWPORT_CLASSES =
-  "pointer-events-none fixed inset-0 z-[var(--z-modal)] flex justify-end";
+  "pointer-events-none fixed inset-0 z-[var(--z-modal)] flex justify-end " +
+  "max-md:items-end max-md:justify-center";
 
 const SHEET_BASE =
   "glass overlay-slide pointer-events-auto relative flex h-full w-full max-w-[480px] flex-col " +
-  "rounded-l-lg p-[20px] [--glass-elevation:var(--shadow-modal)]";
+  "rounded-l-lg p-[20px] [--glass-elevation:var(--shadow-modal)] max-md:h-auto " +
+  BOTTOM_SHEET_SURFACE;
 
 export function sheetClasses(className?: string): string {
   return cx(SHEET_BASE, className);
@@ -774,11 +807,125 @@ export function sheetClasses(className?: string): string {
 /** §8: title display-lg. */
 export const MODAL_TITLE_CLASSES = "type-display-lg text-n-primary";
 
-/** §8: footer buttons right, primary last. Sticky so a scrolling body keeps it. */
+/**
+ * §8: footer buttons right, primary last. Sticky so a scrolling body keeps it. Every modal
+ * carries one — at least a Neutral md Close (§8.21) — and `overlay-footer` is what
+ * globals.css reads below 768 to make it lg, full width and stacked.
+ */
 export const MODAL_FOOTER_CLASSES =
-  "sticky bottom-0 mt-[16px] flex shrink-0 items-center justify-end gap-[8px]";
+  "overlay-footer sticky bottom-0 mt-[16px] flex shrink-0 items-center justify-end gap-[8px]";
+
+/**
+ * §8.21: a side sheet "carries no footer and instead a 56 header — title display-md, a
+ * Neutral 34 close IconButton (`xmark`) at the right — at every width". Pinned, and it
+ * "carries no material of its own" (§5): glass on glass.
+ */
+export const SHEET_HEADER_CLASSES =
+  "sticky top-0 flex h-[56px] shrink-0 items-center justify-between gap-[8px]";
+
+export const SHEET_TITLE_CLASSES = "type-display-md min-w-0 truncate text-n-primary";
 
 export const MODAL_BODY_CLASSES = "scroll-thin min-h-0 flex-1 overflow-y-auto type-ui-body";
+
+/* -------------------------------------------------------------------------- */
+/* Frame — §4 "Layout, z-order, chrome" (T0.48)                               */
+/* -------------------------------------------------------------------------- */
+
+/** §4: the content column's gutters — 24, and 16 in hand chrome. */
+export const GUTTER_CLASSES = "px-[16px] lg:px-[24px]";
+
+/**
+ * The frame: the sidebar or the top bar, then the content column. It says its mode in
+ * `--layout-mode` — hand below 1024, desk from `lg` (1024), standard from `xl` (1280), wide
+ * from the `wide` variant (1440) — declared here and never on `:root` (C-05), so a test and,
+ * later, the dock read one signal. `--nav-row-h` is §4's nav row: 44 on touch, 40 on pointer
+ * (§7's one gate), read by `NAV_ROW_CLASSES`.
+ */
+export const FRAME_CLASSES =
+  "frame flex min-h-dvh flex-col lg:flex-row " +
+  "[--layout-mode:hand] lg:[--layout-mode:desk] xl:[--layout-mode:standard] " +
+  "wide:[--layout-mode:wide] [--nav-row-h:44px] pointer:[--nav-row-h:40px]";
+
+/** The column beside the sidebar or under the top bar. */
+export const CONTENT_COLUMN_CLASSES = "flex min-w-0 flex-1 flex-col";
+
+/** §4's grid: content column max 1200, centred; the gutters are the page's (`GUTTER_CLASSES`). */
+export const MAIN_CLASSES = "mx-auto flex w-full max-w-[1200px] flex-col";
+
+// §4 Sidebar: `--bg-base`, "the sidebar pads 16 inline", a column of three zones —
+// lockup, nav, account — the account pinned to the bottom.
+export const SIDEBAR_CLASSES =
+  "flex w-[240px] shrink-0 flex-col justify-between border-r border-glass-border " +
+  "bg-bg-base px-[16px]";
+
+/** §4: "the lockup and the switcher are 56 rows, the bar height; the account slot is a 56 row". */
+export const SIDEBAR_ROW_CLASSES = "flex h-[56px] w-full items-center";
+
+/**
+ * §4 nav items: 40 on pointer and 44 on touch — "flush rows cannot extend a hit area, so on
+ * touch they grow for real" — "flush with 12 inline padding and 8 from icon to label", icon
+ * 20 + ui-body, active `--prime-soft` pill + `--n-primary`.
+ */
+export const NAV_ROW_CLASSES =
+  "flex h-[var(--nav-row-h)] w-full items-center gap-[8px] rounded-pill px-[12px] " +
+  "type-ui-body [&_svg]:size-[20px] [&_svg]:shrink-0";
+
+/**
+ * §4 Top bar (hand): "56h plus `env(safe-area-inset-top)`, sticky, glass recipe with
+ * `--scrim-top`". The outer element is the sticky stacking context on rung 100; the scrim
+ * paints behind the material as its own layer (`SCRIM_TOP_CLASSES`), and the surface is the
+ * blurred recipe (C-37 — a sticky bar is one of §5's three blurred surfaces) with the
+ * inset added above its 56.
+ */
+export const TOP_BAR_CLASSES = "top-bar sticky top-0 z-[var(--z-sticky)]";
+
+export const TOP_BAR_SURFACE_CLASSES =
+  "glass glass-blur relative flex h-[calc(56px+env(safe-area-inset-top))] items-center " +
+  "gap-[12px] border-x-0 border-t-0 px-[16px] pt-[env(safe-area-inset-top)]";
+
+/**
+ * §4: "A sticky bar's scrim is its own non-interactive layer directly behind the bar, the
+ * bar's width, running from the bar's outer edge to three-sevenths of the bar's height
+ * beyond its content-side edge — `calc(<bar height> * 3 / 7)`": the bar's height and
+ * three-sevenths again is ten-sevenths of it. One rung below the content inside the bar's
+ * own stacking context, so it paints behind the in-flow material.
+ */
+export const SCRIM_TOP_CLASSES =
+  "scrim-top pointer-events-none absolute inset-x-0 top-0 h-[calc(100%*10/7)] " +
+  "bg-[image:var(--scrim-top)] z-[calc(var(--z-content)-1)]";
+
+/**
+ * §4 Topbar per page: "56 tall … growing by 30 when it carries a subtitle, inline padding
+ * the mode's gutter". Sticky glass with the scrim from `lg` up; in hand chrome globals.css
+ * strips the material and the scrim, since it scrolls with the page there. The vertical
+ * padding is what makes 56: display-xl's 38 line inside 9 + 8 and the 1px bottom border,
+ * and in hand chrome display-lg's 28 inside 14 + 13 and the border. A subtitle adds its 22
+ * line and the 8 above it — 30.
+ */
+export const PAGE_TOPBAR_CLASSES = "page-topbar relative lg:sticky lg:top-0 lg:z-[var(--z-sticky)]";
+
+export const PAGE_TOPBAR_SURFACE_CLASSES =
+  "glass glass-blur relative flex flex-col gap-[8px] border-x-0 border-t-0 " +
+  "pt-[14px] pb-[13px] lg:pt-[9px] lg:pb-[8px] " +
+  GUTTER_CLASSES;
+
+/** The title row: eyebrow, title, then the readout and the one action at the trailing edge. */
+export const PAGE_TOPBAR_ROW_CLASSES = "flex items-center gap-[12px]";
+
+/**
+ * §4: "display-xl title (display-lg in hand chrome)". `page-title` is what the type scale
+ * reads to step the token down below 1024 — see globals.css beside `.type-display-xl`. Never
+ * truncated: at 200% zoom every string stays whole (§13, C-44), so a long title wraps and the
+ * bar grows.
+ */
+export const PAGE_TITLE_CLASSES = "type-display-xl page-title min-w-0 flex-1 text-n-primary";
+
+/** §4's subtitle slot: ui-body, `--n-secondary`, one line, truncating rather than wrapping. */
+export const PAGE_SUBTITLE_CLASSES = "type-ui-body truncate text-n-secondary";
+
+/** §4: mono-readout freshness beside the title; §3 puts IDs in the same face. */
+export const PAGE_READOUT_CLASSES =
+  "type-mono-readout flex shrink-0 items-center gap-[6px] text-n-secondary";
 
 /* -------------------------------------------------------------------------- */
 /* Avatar — §8 "Avatars"                                                      */

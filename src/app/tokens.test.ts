@@ -305,4 +305,32 @@ describe("C-39 · every §3 type token is in the scale", () => {
       expect(applied.get("text-transform"), "case").toBe(row.uppercase ? "uppercase" : undefined);
     },
   );
+
+  /**
+   * §4: "The page title steps down to display-lg" in hand chrome (T0.48). The step-down is a
+   * rule in the scale — `.type-display-xl.page-title` under the hand query — written with
+   * display-lg's numbers, and this is what keeps them display-lg's: the rule's weight, size
+   * and line are read back and held equal to §3's row, so a change to display-lg that left
+   * the step-down behind would fail here.
+   */
+  it("steps the page title down to display-lg's row in hand chrome", () => {
+    const stepDown = new Map<string, string>();
+    for (const rule of stripComments(globals).matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const selectors = (rule[1] ?? "").split(",").map((one) => one.trim());
+      if (!selectors.includes(".type-display-xl.page-title")) continue;
+      for (const line of (rule[2] ?? "").split(";")) {
+        const match = /([\w-]+)\s*:\s*(.+)/.exec(line.trim());
+        if (match?.[1] && match[2]) stepDown.set(match[1], match[2].trim());
+      }
+    }
+    const displayLg = rows.find((row) => row.token === "display-lg");
+    expect(displayLg).toBeDefined();
+    expect(stepDown.get("font-weight")).toBe(String(displayLg?.weight));
+    expect(stepDown.get("font-size")).toBe(displayLg?.size);
+    expect(stepDown.get("line-height")).toBe(displayLg?.line);
+    // Under the hand query, and only there: the rule's own at-rule is what scopes it.
+    const at = stripComments(globals).indexOf(".type-display-xl.page-title");
+    const before = stripComments(globals).slice(Math.max(0, at - 120), at);
+    expect(before).toContain("@media (max-width: 1023px)");
+  });
 });

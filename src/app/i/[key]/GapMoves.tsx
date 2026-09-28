@@ -1,3 +1,4 @@
+import { WriteGate } from "@/components/frame/WriteGate";
 import { Button } from "@/components/ui/Button";
 import {
   INPUT_CONTROL_CLASSES,
@@ -53,6 +54,12 @@ import { settleGap } from "./actions";
  * reaching nobody. Every `MoveMessage` on this surface is a sibling of the
  * disclosure, never a child, and the disclosure decides only whether the *form*
  * is open.
+ *
+ * **Both moves are writes, and sit inside a `WriteGate`** (design-spec §4, C-25): below the
+ * read-only line — 768 on touch, 600 on pointer — neither the disclosure nor the reopen is
+ * in the DOM at all, "so nothing invites a tap it will refuse". The stamp and the sentence
+ * stay: they are what happened, not something to do. The gate renders on the server, so the
+ * form still posts with JavaScript off.
  */
 
 /** A gap as a move needs it. Narrower than `GapView`: no evidence, no note. */
@@ -137,17 +144,19 @@ export function GapMoves({
       <div className="flex flex-col gap-[8px]">
         <SettledStamp gap={gap} t={t} label={t.item.settledBy} />
         {shown === null ? null : <MoveMessage report={shown} t={t} />}
-        <form action={settleGap}>
-          <input type="hidden" name="key" value={itemKey} />
-          <input type="hidden" name="gapId" value={gap.id} />
-          <input type="hidden" name="intent" value="reopen" />
-          {/* Secondary rather than Ghost: the accepted card is already at
-              opacity .60, and §8 warns a text-only control "vanishes precisely
-              when it has the most to say". §0 law 7 dims it, never disables it. */}
-          <Button type="submit" size="sm" variant="secondary">
-            {t.item.gapReopen}
-          </Button>
-        </form>
+        <WriteGate>
+          <form action={settleGap}>
+            <input type="hidden" name="key" value={itemKey} />
+            <input type="hidden" name="gapId" value={gap.id} />
+            <input type="hidden" name="intent" value="reopen" />
+            {/* Secondary rather than Ghost: the accepted card is already at
+                opacity .60, and §8 warns a text-only control "vanishes precisely
+                when it has the most to say". §0 law 7 dims it, never disables it. */}
+            <Button type="submit" size="sm" variant="secondary">
+              {t.item.gapReopen}
+            </Button>
+          </form>
+        </WriteGate>
       </div>
     );
   }
@@ -222,12 +231,13 @@ function AcceptForm({
 
   return (
     <div className="flex flex-col">
-      <details open={outcome !== null && !landed} className="group flex flex-col">
-        <summary className="control control-edge-none type-ui-footnote flex w-fit list-none items-center gap-[4px] rounded-sm px-[8px] py-[4px] text-n-secondary [&::-webkit-details-marker]:hidden">
-          {t.item.gapAccept}
-        </summary>
+      <WriteGate>
+        <details open={outcome !== null && !landed} className="group flex flex-col">
+          <summary className="control control-edge-none type-ui-footnote flex w-fit list-none items-center gap-[4px] rounded-sm px-[8px] py-[4px] text-n-secondary [&::-webkit-details-marker]:hidden">
+            {t.item.gapAccept}
+          </summary>
 
-        {/* No `encType`, and no hand-written `method`/`action`. Next drops a
+          {/* No `encType`, and no hand-written `method`/`action`. Next drops a
             `application/x-www-form-urlencoded` action POST and lets it fall
             through to a plain page render, so with JavaScript off that shape is
             a silent no-op. React's server renderer picks `multipart/form-data`
@@ -235,43 +245,47 @@ function AcceptForm({
             it warns about the mismatch rather than shipping the wrong body — so
             the real way to break this is to write the `<form>` by hand and post
             somewhere else. The e2e submits this one with JavaScript disabled. */}
-        <form action={settleGap} className="flex flex-col gap-[8px] px-[8px] pt-[8px]">
-          <input type="hidden" name="key" value={itemKey} />
-          <input type="hidden" name="gapId" value={gap.id} />
-          <input type="hidden" name="intent" value="accept" />
+          <form action={settleGap} className="flex flex-col gap-[8px] px-[8px] pt-[8px]">
+            <input type="hidden" name="key" value={itemKey} />
+            <input type="hidden" name="gapId" value={gap.id} />
+            <input type="hidden" name="intent" value="accept" />
 
-          <div className={inputCompositeClasses()}>
-            <label htmlFor={fieldId} className={INPUT_LABEL_CLASSES}>
-              {t.item.gapAcceptReason}
-            </label>
-            <div className={inputFieldClasses({ invalid: fieldProblem })}>
-              <input
-                id={fieldId}
-                name="reason"
-                type="text"
-                // Progressive enhancement only. `accept_gap` returns
-                // `reason-required` and `gap_resolution_shape` refuses the row —
-                // the browser is the convenience, the database is the rule.
-                required
-                maxLength={2000}
-                // §8 (v2.5): the sentinel space is what makes "empty"
-                // expressible to `:placeholder-shown`, and it never paints.
-                placeholder=" "
-                aria-invalid={fieldProblem || undefined}
-                aria-describedby={fieldProblem ? helperId : undefined}
-                className={INPUT_CONTROL_CLASSES}
-              />
+            <div className={inputCompositeClasses()}>
+              <label htmlFor={fieldId} className={INPUT_LABEL_CLASSES}>
+                {t.item.gapAcceptReason}
+              </label>
+              <div className={inputFieldClasses({ invalid: fieldProblem })}>
+                <input
+                  id={fieldId}
+                  name="reason"
+                  type="text"
+                  // Progressive enhancement only. `accept_gap` returns
+                  // `reason-required` and `gap_resolution_shape` refuses the row —
+                  // the browser is the convenience, the database is the rule.
+                  required
+                  maxLength={2000}
+                  // §8 (v2.5): the sentinel space is what makes "empty"
+                  // expressible to `:placeholder-shown`, and it never paints.
+                  placeholder=" "
+                  aria-invalid={fieldProblem || undefined}
+                  aria-describedby={fieldProblem ? helperId : undefined}
+                  className={INPUT_CONTROL_CLASSES}
+                />
+              </div>
+              <span
+                id={helperId}
+                className={inputHelperClasses(fieldProblem ? "error" : undefined)}
+              >
+                {fieldProblem && outcome !== null ? gapMoveSentence(outcome, t) : ""}
+              </span>
             </div>
-            <span id={helperId} className={inputHelperClasses(fieldProblem ? "error" : undefined)}>
-              {fieldProblem && outcome !== null ? gapMoveSentence(outcome, t) : ""}
-            </span>
-          </div>
 
-          <Button type="submit" size="md" variant="primary" className="w-fit">
-            {t.item.gapAcceptSubmit}
-          </Button>
-        </form>
-      </details>
+            <Button type="submit" size="md" variant="primary" className="w-fit">
+              {t.item.gapAcceptSubmit}
+            </Button>
+          </form>
+        </details>
+      </WriteGate>
 
       {/* **Outside the disclosure, and that is the whole point.** `open` above
           is false for a move that landed, so a sentence placed inside would be
