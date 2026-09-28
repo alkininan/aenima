@@ -3,10 +3,12 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  AGENT_FILE,
   causeOf,
   fallbackModels,
   nextReviewer,
   pinnedModel,
+  readChain,
   reviewChain,
 } from "./review-model.mjs";
 
@@ -53,6 +55,28 @@ describe("reviewChain", () => {
       "opus",
     ]);
     expect(fallbackModels("{}")).toEqual([]);
+  });
+
+  // T0.46 review pass 1 Must 3: the gatekeeper is pinned with T0.22's fallback too, so the
+  // chain is read from whichever agent file the run names — the reviewer's by default.
+  it("reads the chain from the agent file it is handed, the reviewer's when handed none", () => {
+    const GATEKEEPER = ".claude/agents/gatekeeper.md";
+    const files = {
+      [AGENT_FILE]: AGENT,
+      [GATEKEEPER]: "---\nname: gatekeeper\nmodel: sonnet\neffort: medium\n---\n\nBody.\n",
+      ".claude/settings.json": SETTINGS,
+    };
+    const read = (path) => {
+      const file = Object.keys(files).find((name) => path.endsWith(name));
+      if (file === undefined) throw new Error(`no such file: ${path}`);
+      return files[file];
+    };
+    expect(readChain("/repo", read)).toEqual(CHAIN);
+    expect(readChain("/repo", read, GATEKEEPER)).toEqual(["sonnet", "opus"]);
+    // The real gatekeeper file pins a model, so a refused call has a chain to move along.
+    expect(readChain(root, undefined, GATEKEEPER)[0]).toBe(
+      pinnedModel(readFileSync(join(root, GATEKEEPER), "utf8")),
+    );
   });
 });
 

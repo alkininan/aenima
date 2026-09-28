@@ -13,7 +13,7 @@ describe("the route", () => {
     expect(route({ type: "Fix", paths: ["src/app/app/page.tsx"] }, TABLE)).toEqual({
       route: "medium",
       effort: { builder: "medium", reviewer: "medium", gatekeeper: "medium" },
-      agents: { builder: "builder-medium", reviewer: "reviewer-medium" },
+      agents: { builder: "builder-medium", reviewer: "reviewer-medium", gatekeeper: "gatekeeper" },
     });
     expect(route({ type: "Content", paths: [] }, TABLE).route).toBe("medium");
   });
@@ -48,9 +48,12 @@ describe("the route", () => {
     }
   });
 
-  it("keeps the gatekeeper at medium whatever the ticket", () => {
+  // T0.46 Build 1: one gatekeeper file, at medium, whatever the route.
+  it("keeps the gatekeeper at medium whatever the ticket, and names its one agent file", () => {
     expect(route({ type: "Feature" }, TABLE).effort.gatekeeper).toBe("medium");
     expect(route({ type: null }, TABLE).effort.gatekeeper).toBe("medium");
+    expect(route({ type: "Feature" }, TABLE).agents.gatekeeper).toBe("gatekeeper");
+    expect(route({ type: null }, TABLE).agents.gatekeeper).toBe("gatekeeper");
   });
 
   it("names the agent file an effort runs as", () => {

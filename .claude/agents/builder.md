@@ -13,7 +13,10 @@ of what you build to — read it, and its `## Addendum` when there is one, which
 addendum round builds. On a fix round the orchestrator hands you the reviewer's verdict file,
 `docs/reviews/<id>.md`, as well: the branch is already checked out, so step 3 is not run again —
 start at the fix. Fix every Must it names and nothing else — a Should is not fixed in the run
-(step 5's cap) — then commit.
+(step 5's cap) — then commit. A HOLD round is the same, handed the gatekeeper's
+`docs/gates/<id>.md` instead of, or beside, the verdict file (T0.46): its numbered reasons are
+the Musts, and you fix what they name and nothing else — a reason that says the diff does more
+than the ticket's Build asks is fixed by taking the more out, never by widening the ticket.
 
 **This phase's reach.** The orchestrator wrote `build` into the run marker before it invoked you,
 and the guard reads it there (rule (j), `docs/guidelines.md` §5): a push, a `gh` call, a merge

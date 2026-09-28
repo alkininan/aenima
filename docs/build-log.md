@@ -8,8 +8,8 @@
 
 Written from the repo by `node scripts/run/log-index.mjs`, like the Tickets done list below, and its test refuses a stale copy: edit the documents and the log entries, never this block. No phase and no next ticket here — the board owns the queue and the roadmap owns the phases, and a stamp a human maintains is a stamp that is eventually wrong.
 
-**Specs:** product-spec v1.10 · design-spec v2.23 · guidelines v1.31
-**Newest entry:** [T0.44 — Phases as subagents](log/T0.44.md) · 2026-09-27
+**Specs:** product-spec v1.10 · design-spec v2.23 · guidelines v1.32
+**Newest entry:** [T0.46 — The gatekeeper decides the merge](log/T0.46.md) · 2026-09-28
 **Repo:** github.com/alkininan/aenima
 **Deployed:** yes — **aeni.ma** on Vercel
 
@@ -101,6 +101,7 @@ One file per ticket under `docs/log/`, oldest first. This list is written by `no
 - [T0.42 — Forms and auth to v2.21](log/T0.42.md) · 2026-09-25
 - [T0.43 — Deploy check falls back to the vercel.app address](log/T0.43.md) · 2026-09-27
 - [T0.44 — Phases as subagents](log/T0.44.md) · 2026-09-27
+- [T0.46 — The gatekeeper decides the merge](log/T0.46.md) · 2026-09-28
 
 ## Decisions made during the build
 

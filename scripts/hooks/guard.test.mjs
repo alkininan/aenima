@@ -213,10 +213,17 @@ describe("rule (d) — force-push and merging on main", () => {
 
 // T0.16 TC2 → AC2, the verdict's half: the file the second door reads is the reviewer's to
 // write, through its own Bash, and the run's Edit and Write are refused under docs/reviews/.
-describe("rule (g) — Edit and Write under docs/reviews/", () => {
+describe("rule (g) — Edit and Write under docs/reviews/ and docs/gates/", () => {
   it("refuses a Write and an Edit of a verdict file, relative or absolute", () => {
     expect(decide(...file("Write", "docs/reviews/T0.16.md"))).toContain("docs/reviews/");
     expect(decide(...file("Edit", "/repo/docs/reviews/T0.16.md"))).toContain("reviewer's to write");
+  });
+
+  // T0.46 TC5 → AC5: the gatekeeper's file is the gatekeeper's to write, as the reviewer's is
+  // the reviewer's — the run never writes under docs/gates/.
+  it("refuses a Write and an Edit of a gatekeeper file, relative or absolute", () => {
+    expect(decide(...file("Write", "docs/gates/T0.46.md"))).toContain("docs/gates/");
+    expect(decide(...file("Edit", "/repo/docs/gates/T0.46.md"))).toContain("gatekeeper's to write");
   });
 
   it("allows the report and the log beside it", () => {
@@ -796,8 +803,8 @@ describe("TC1 — the guard reads commands, not text", () => {
   });
 
   it("refuses gh pr merge on the model's word alone, and lets create and view through", () => {
-    expect(decide(...pr("gh pr merge 3 --merge"))).toContain('reply beginning with "merge"');
-    expect(decide(...pr("gh pr merge 3 --squash"))).toContain('reply beginning with "merge"');
+    expect(decide(...pr("gh pr merge 3 --merge"))).toContain("the gatekeeper's MERGE");
+    expect(decide(...pr("gh pr merge 3 --squash"))).toContain("the gatekeeper's MERGE");
     expect(decide(...pr("gh pr create --fill --base main"))).toBeNull();
     expect(decide(...pr("gh pr view 3"))).toBeNull();
   });
@@ -860,7 +867,7 @@ describe("the review's bypasses — a value-taking flag before the operand", () 
   });
 
   it("refuses gh pr merge with a repo flag between pr and merge", () => {
-    const word = 'reply beginning with "merge"';
+    const word = "the gatekeeper's MERGE";
     expect(decide(...pr("gh pr -R alkininan/aenima merge 3 --merge"))).toContain(word);
     expect(decide(...pr("gh pr --repo alkininan/aenima merge 3 --squash"))).toContain(word);
     expect(decide(...pr("gh pr --repo=alkininan/aenima merge 3"))).toContain(word);
@@ -941,33 +948,55 @@ describe("parse", () => {
 // code: `deps.permission` is what `permission.mjs` answers, and the pull request must be the
 // claimed task's branch, merged with a merge commit. Without a grant nothing merges — the
 // model's own word, with a marker or without one, is refused the same way.
-describe("TC3 — rule (f) merges only on the human's word", () => {
+// TC3 → AC3 as it was; since T0.46 (TC1 → AC1, TC6 → AC6) no word opens a merge: the door is
+// the pair, `reviewed` in permission.mjs, and everything below it — a merge commit, the task's
+// own branch — is asked of that door.
+describe("rule (f) merges on the pair alone — no word opens it", () => {
   const granted = {
     ok: true,
     why: null,
     marker: { task: "T0.11", branch: "t0-11" },
     task: { name: "T0.11 Comments", branch: "t0-11" },
+    gatekeeper: { verdict: "MERGE", commit: "abc1234" },
   };
   const missing = {
     ok: false,
-    why: 'the guard read the thread of T0.11 Comments at Review and did not find "merge" as your newest reply since the run\'s last comment',
+    why: "no gatekeeper verdict at docs/gates/T0.11.md",
   };
-  const merge = (command, permission, prBranch = () => "t0-11") => [
+  const merge = (command, verdict, prBranch = () => "t0-11") => [
     { tool_name: "Bash", tool_input: { command }, cwd: "/repo" },
-    { currentBranch: () => "t0-11", permission: () => permission, prBranch },
+    {
+      currentBranch: () => "t0-11",
+      verdict: () => verdict,
+      prBranch,
+      prHead: () => "abc1234def",
+      localHead: () => "abc1234def",
+    },
   ];
 
-  it("refuses a merge the board did not grant, and repeats what was missing", () => {
+  it("refuses a merge the pair does not open, and repeats what was missing", () => {
     const reason = decide(...merge("gh pr merge t0-11 --merge --delete-branch", missing));
-    expect(reason).toContain('reply beginning with "merge"');
+    expect(reason).toContain("the reviewer's PASS");
+    expect(reason).toContain("the gatekeeper's MERGE");
     expect(reason).toContain(missing.why);
   });
 
-  it("refuses the model's word alone — a decide with nothing having read the board", () => {
-    expect(decide(...bash("gh pr merge 3 --merge"))).toContain("the board was not read");
+  it("refuses the model's word alone — a decide with nothing having read the files", () => {
+    expect(decide(...bash("gh pr merge 3 --merge"))).toContain("no reviewer verdict was read");
   });
 
-  it("allows a merge commit on the claimed task's branch once the word is on the thread", () => {
+  // T0.46 TC6 → AC6: `merge` goes. A thread that grants it grants nothing here.
+  it("refuses a merge on the human's word, with the pair shut — merge is not a word", () => {
+    const word = { ok: true, why: null, task: { name: "T0.11 Comments", branch: "t0-11" } };
+    const reason = decide(
+      ...merge("gh pr merge t0-11 --merge", missing).map((part, i) =>
+        i === 1 ? { ...part, permission: () => word } : part,
+      ),
+    );
+    expect(reason).toContain(missing.why);
+  });
+
+  it("allows a merge commit on the claimed task's branch once the pair is on file", () => {
     expect(decide(...merge("gh pr merge t0-11 --merge --delete-branch", granted))).toBeNull();
     expect(decide(...merge("gh pr merge --merge", granted))).toBeNull();
     expect(decide(...merge("gh pr merge 7 -m", granted))).toBeNull();
@@ -1022,9 +1051,10 @@ describe("TC3 — rule (f) merges only on the human's word", () => {
   });
 });
 
-// T0.16 TC2 → AC2 and TC3 → AC3. The second door: the reviewer's PASS on file over a diff
-// with nothing gated merges without the word — and only from the commit the guard can see.
-describe("T0.16 — rule (f)'s second door, the reviewer's PASS", () => {
+// T0.16 TC2 → AC2 and TC3 → AC3, and T0.46 TC1 → AC1 and TC5 → AC5. The door: the reviewer's
+// PASS and the gatekeeper's MERGE on file over a diff with nothing gated merges — and only from
+// the commit the guard can see, which the gatekeeper's file must name.
+describe("T0.16 — rule (f)'s door, the reviewer's PASS and the gatekeeper's MERGE", () => {
   const unread = { ok: false, why: "the board was not read" };
   const passed = {
     ok: true,
@@ -1032,6 +1062,7 @@ describe("T0.16 — rule (f)'s second door, the reviewer's PASS", () => {
     marker: { task: "T0.16", branch: "t0-16" },
     task: { name: "T0.16", branch: "t0-16" },
     gated: [],
+    gatekeeper: { verdict: "MERGE", commit: "abc123d" },
   };
   const shut = (why) => ({ ok: false, why });
   const merge = (command, verdict, extra = {}) => [
@@ -1047,21 +1078,38 @@ describe("T0.16 — rule (f)'s second door, the reviewer's PASS", () => {
     },
   ];
 
-  it("allows a merge commit on the PASS when the word is not there", () => {
+  it("allows a merge commit on the pair, with no word on the thread", () => {
     expect(decide(...merge("gh pr merge t0-16 --merge --delete-branch", passed))).toBeNull();
+    const applying = { ...passed, gatekeeper: { verdict: "MERGE APPLY", commit: "abc123d" } };
+    expect(decide(...merge("gh pr merge t0-16 --merge --delete-branch", applying))).toBeNull();
   });
 
-  it("refuses when both doors are shut, and says why each is", () => {
+  it("refuses when the door is shut, and says why", () => {
     const reason = decide(
       ...merge("gh pr merge t0-16 --merge", shut("no reviewer verdict at docs/reviews/T0.16.md")),
     );
-    expect(reason).toContain("the board was not read");
     expect(reason).toContain("no reviewer verdict at docs/reviews/T0.16.md");
+    expect(reason).not.toContain("the board was not read");
   });
 
-  it("refuses on the PASS when the diff touches a gated path — the verdict says so", () => {
-    const why = "the diff touches scripts/hooks/guard.mjs, which only your word merges";
+  it("refuses on the pair when the diff adds a destructive migration — the door says so", () => {
+    const why =
+      "the diff is one only your word merges: it adds the destructive migration drizzle/0022_x.sql";
     expect(decide(...merge("gh pr merge t0-16 --merge", shut(why)))).toContain(why);
+  });
+
+  // T0.46 TC5 → AC5: the gatekeeper's file names the commit it was written for, and a pull
+  // request whose head is any other is refused, whatever else the pair says.
+  it("refuses when the gatekeeper's file names a commit other than the pull request's head", () => {
+    const stale = { ...passed, gatekeeper: { verdict: "MERGE", commit: "fff0000" } };
+    const reason = decide(...merge("gh pr merge t0-16 --merge", stale));
+    expect(reason).toContain("fff0000");
+    expect(reason).toContain("abc123d");
+    expect(reason).toContain("another commit");
+    const unnamed = { ...passed, gatekeeper: { verdict: "MERGE", commit: null } };
+    expect(decide(...merge("gh pr merge t0-16 --merge", unnamed))).toContain("names no commit");
+    const none = { ...passed, gatekeeper: undefined };
+    expect(decide(...merge("gh pr merge t0-16 --merge", none))).toContain("names no commit");
   });
 
   it("still wants a merge commit and the task's own branch on the second door", () => {
@@ -1083,15 +1131,15 @@ describe("T0.16 — rule (f)'s second door, the reviewer's PASS", () => {
     );
   });
 
-  it("does not ask for the head binding when the human's word granted the merge", () => {
+  it("asks for the head binding whatever the board says — no word stands in for the pair", () => {
     const granted = { ...passed, task: { name: "T0.16 Self-merge", branch: "t0-16" } };
     const reason = decide(
-      ...merge("gh pr merge t0-16 --merge", shut("x"), {
+      ...merge("gh pr merge t0-16 --merge", passed, {
         permission: () => granted,
         localHead: () => "different",
       }),
     );
-    expect(reason).toBeNull();
+    expect(reason).toContain("not the diff that would merge");
   });
 });
 
@@ -1212,7 +1260,7 @@ describe("TC4 — rule (b) applies only on the human's word", () => {
     expect(reason).toContain(why);
   });
 
-  it("grants apply and merge separately — one word does not stand for the other", () => {
+  it("grants apply on its own word, and no word grants a merge", () => {
     const only = (word) => (asked) => (asked === word ? granted : { ok: false, why: "no" });
     const input = (command) => ({ tool_name: "Bash", tool_input: { command }, cwd: "/repo" });
     const deps = (word) => ({
@@ -1221,9 +1269,43 @@ describe("TC4 — rule (b) applies only on the human's word", () => {
       prBranch: () => "t0-11",
     });
     expect(decide(input("pnpm db:migrate"), deps("merge"))).toContain("apply");
-    expect(decide(input("gh pr merge --merge"), deps("apply"))).toContain("merge");
+    expect(decide(input("gh pr merge --merge"), deps("apply"))).toContain("gatekeeper");
     expect(decide(input("pnpm db:migrate"), deps("apply"))).toBeNull();
-    expect(decide(input("gh pr merge --merge"), deps("merge"))).toBeNull();
+    expect(decide(input("gh pr merge --merge"), deps("merge"))).toContain("gatekeeper");
+  });
+
+  // T0.46 TC3 → AC3: the second door of an apply — the gatekeeper's MERGE APPLY for this
+  // commit over migrations migration-safety.mjs calls additive — opens it with no word.
+  it("allows an apply on the gatekeeper's MERGE APPLY, and refuses with both reasons otherwise", () => {
+    const input = (command) => ({ tool_name: "Bash", tool_input: { command }, cwd: "/repo" });
+    const unread = { ok: false, why: "the board was not read" };
+    const open = {
+      ok: true,
+      why: null,
+      task: { name: "T0.11", branch: "t0-11" },
+      migrations: ["drizzle/0022_x.sql"],
+    };
+    const shut = { ok: false, why: "docs/gates/T0.11.md ends in MERGE rather than MERGE APPLY" };
+    expect(
+      decide(input("pnpm db:migrate"), { permission: () => unread, applyVerdict: () => open }),
+    ).toBeNull();
+    expect(
+      decide(input("node scripts/run/apply.mjs"), {
+        permission: () => unread,
+        applyVerdict: () => open,
+      }),
+    ).toBeNull();
+    const reason = decide(input("pnpm db:migrate"), {
+      permission: () => unread,
+      applyVerdict: () => shut,
+    });
+    expect(reason).toContain('reply beginning with "apply"');
+    expect(reason).toContain("the board was not read");
+    expect(reason).toContain(shut.why);
+    // Nothing read the gatekeeper's file: the door is shut, as before T0.46.
+    expect(decide(input("pnpm db:migrate"), { permission: () => unread })).toContain(
+      "no gatekeeper verdict was read",
+    );
   });
 });
 
@@ -1286,37 +1368,114 @@ describe("judge — reads the marker and the token file, then the thread", () =>
     rmSync(primary, { recursive: true, force: true });
   });
 
+  const migrate = (cwd) => ({
+    tool_name: "Bash",
+    tool_input: { command: "pnpm db:migrate" },
+    cwd,
+  });
+  const QUESTION =
+    "⟡ This change adds a migration, drizzle/0015_x.sql, and applying it to the shared database is your call.";
+
   it("refuses with no marker, then with no token, then allows from the worktree on the word", async () => {
     const board = () => ({ prefix: "⟡ " });
-    const thread = async () => [{ text: "merge", created_time: "2026-09-13T11:00:00Z" }];
-    const page = async () => ({ Name: "T0.96 Smoke D", Status: "Review" });
-    const deps = { board, comments: thread, page, prBranch: () => "t0-96" };
+    const thread = async () => [
+      { text: QUESTION, created_time: "2026-09-13T10:00:00Z" },
+      { text: "apply", created_time: "2026-09-13T11:00:00Z" },
+    ];
+    const page = async () => ({ Name: "T0.96 Smoke D", Status: "Decision" });
+    const deps = { board, comments: thread, page };
 
-    expect(await judge(merge(worktree), { deps })).toContain("no run marker");
+    expect(await judge(migrate(worktree), { deps })).toContain("no run marker");
 
     claim(
       { task: "T0.96", page: "p", branch: "t0-96" },
       { cwd: primary, env: { CLAUDE_CODE_SESSION_ID: "s" } },
     );
     // The primary has no .env.local in this fixture: the marker is found, the token is not.
-    expect(await judge(merge(primary), { deps })).toContain("NOTION_TOKEN is not in .env.local");
-    expect(await judge(merge(worktree), { deps })).toBeNull();
+    expect(await judge(migrate(primary), { deps })).toContain("NOTION_TOKEN is not in .env.local");
+    expect(await judge(migrate(worktree), { deps })).toBeNull();
   });
 
-  // T0.16 TC2 → AC2: from the hook's entry, the word not there, the reviewer's door read
-  // through the same `deps` — the verdict and the diff injected, the pull request's head
-  // equal to the checkout's.
-  it("opens the reviewer's door from judge when the word is not there", async () => {
+  // T0.46 TC1 → AC1, from the hook's entry: a merge reads no word. The thread is read for the
+  // spent applies alone, and the pair — both files, the diff, the gate, the head — is the door.
+  it("merges on the pair from judge, reading the thread for spent applies only", async () => {
+    const deps = {
+      board: () => ({ prefix: "⟡ " }),
+      comments: async () => [{ text: "merge", created_time: "2026-09-13T11:00:00Z" }],
+      page: async () => ({ Name: "T0.96 Smoke D", Status: "Review" }),
+      verdict: () => "# T0.96 — review\n\nPASS\n",
+      gatekeeper: () => "# T0.96 — gate\n\ncommit abc1234\n\nMERGE\n",
+      diff: () => ({ files: ["src/a.ts"], gated: [], ok: true }),
+      gate: () => ({ green: "h", tree: "h" }),
+      prBranch: () => "t0-96",
+      prHead: () => "abc1234def",
+      localHead: () => "abc1234def",
+    };
+    expect(await judge(merge(worktree), { deps })).toBeNull();
+    const held = { ...deps, gatekeeper: () => "commit abc1234\n\n1. Too much.\n\nHOLD\n" };
+    expect(await judge(merge(worktree), { deps: held })).toContain("HOLD");
+    const other = { ...deps, gatekeeper: () => "commit fff0000\n\nMERGE\n" };
+    expect(await judge(merge(worktree), { deps: other })).toContain("another commit");
+  });
+
+  // T0.46 TC3 → AC3, from the hook's entry: an apply with no word, on the gatekeeper's MERGE
+  // APPLY for this checkout's HEAD over an additive migration.
+  it("applies on the gatekeeper's word from judge, and refuses on its HOLD", async () => {
+    const deps = {
+      board: () => ({ prefix: "⟡ " }),
+      comments: async () => [],
+      page: async () => ({ Name: "T0.96 Smoke D", Status: "Review" }),
+      gatekeeper: () => "# T0.96 — gate\n\ncommit abc1234\n\nMERGE APPLY\n",
+      localHead: () => "abc1234def",
+      diff: () => ({
+        ok: true,
+        migrations: [
+          {
+            path: "drizzle/0022_x.sql",
+            tag: "0022_x",
+            safety: "additive",
+            applied: false,
+            waits: true,
+          },
+        ],
+      }),
+    };
+    expect(await judge(migrate(worktree), { deps })).toBeNull();
+    const destructive = {
+      ...deps,
+      diff: () => ({
+        ok: false,
+        migrations: [
+          {
+            path: "drizzle/0022_x.sql",
+            tag: "0022_x",
+            safety: "destructive",
+            why: "UPDATE rewrites rows",
+            applied: false,
+            waits: true,
+          },
+        ],
+      }),
+    };
+    expect(await judge(migrate(worktree), { deps: destructive })).toContain("UPDATE rewrites rows");
+    const merging = { ...deps, gatekeeper: () => "commit abc1234\n\nMERGE\n" };
+    expect(await judge(migrate(worktree), { deps: merging })).toContain("rather than MERGE APPLY");
+  });
+
+  // T0.16 TC2 → AC2: from the hook's entry, the door read through the same `deps` — the two
+  // verdicts and the diff injected, the pull request's head equal to the checkout's.
+  it("opens the door from judge on the files alone", async () => {
     const deps = {
       board: () => ({ prefix: "⟡ " }),
       comments: async () => [],
       page: async () => ({ Name: "T0.96 Smoke D", Status: "Review" }),
       verdict: () => "# T0.96 — review\n\nPASS\n",
+      gatekeeper: () => "# T0.96 — gate\n\ncommit abc1234\n\nMERGE\n",
       diff: () => ({ files: ["src/a.ts"], gated: [], ok: true }),
       gate: () => ({ green: "h", tree: "h" }),
       prBranch: () => "t0-96",
-      prHead: () => "abc",
-      localHead: () => "abc",
+      prHead: () => "abc1234def",
+      localHead: () => "abc1234def",
     };
     expect(await judge(merge(worktree), { deps })).toBeNull();
     const gated = {
@@ -1330,25 +1489,25 @@ describe("judge — reads the marker and the token file, then the thread", () =>
     );
   });
 
-  // T0.26 TC1 → AC1 and TC2 → AC2, from the hook's entry: the thread `verify` already read
-  // for the word is where the spent applies come from, so the second door judges the diff
-  // against the migration the human has already decided about — and against no migration at
-  // all when the thread carries no spent apply.
-  it("hands the thread's spent applies to the reviewer's door", async () => {
+  // T0.26 TC1 → AC1 and TC2 → AC2, from the hook's entry: the thread is read for the spent
+  // applies, so the door judges the diff against the migration the human has already decided
+  // about — and against no migration at all when the thread carries no spent apply.
+  it("hands the thread's spent applies to the door", async () => {
     const seen = [];
     const base = (comments) => ({
       board: () => ({ prefix: "\u27e1 " }),
       comments: async () => comments,
       page: async () => ({ Name: "T0.96 Smoke D", Status: "Review" }),
       verdict: () => "# T0.96 \u2014 review\n\nPASS\n",
+      gatekeeper: () => "commit abc1234\n\nMERGE\n",
       diff: (applied) => {
         seen.push(applied);
         return { files: [], gated: [], ok: true };
       },
       gate: () => ({ green: "h", tree: "h" }),
       prBranch: () => "t0-96",
-      prHead: () => "abc",
-      localHead: () => "abc",
+      prHead: () => "abc1234def",
+      localHead: () => "abc1234def",
     });
     const spent = [
       {
@@ -1368,16 +1527,16 @@ describe("judge — reads the marker and the token file, then the thread", () =>
 
   it("refuses again once the word is consumed by the pipeline's own reply", async () => {
     const thread = async () => [
-      { text: "merge", created_time: "2026-09-13T11:00:00Z" },
-      { text: "⟡ Merged into main at x.", created_time: "2026-09-13T12:00:00Z" },
+      { text: QUESTION, created_time: "2026-09-13T10:00:00Z" },
+      { text: "apply", created_time: "2026-09-13T11:00:00Z" },
+      { text: "⟡ Applied 0015_x to the shared database.", created_time: "2026-09-13T12:00:00Z" },
     ];
     const deps = {
       board: () => ({ prefix: "⟡ " }),
       comments: thread,
-      page: async () => ({ Name: "T0.96 Smoke D", Status: "Review" }),
-      prBranch: () => "t0-96",
+      page: async () => ({ Name: "T0.96 Smoke D", Status: "Decision" }),
     };
-    expect(await judge(merge(worktree), { deps })).toContain('did not find "merge"');
+    expect(await judge(migrate(worktree), { deps })).toContain('did not find "apply"');
     expect(release({ session: "s" }, { cwd: worktree }).released).toBe(true);
   });
 

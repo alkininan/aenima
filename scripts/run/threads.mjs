@@ -12,8 +12,8 @@
  * pipeline's last comment, each with its status, the replies, how many clarifying rounds the
  * open question has had and whether another may post (`mayPost`, counted by kind since T0.20
  * — every other kind posts whatever the thread holds), and the shape the words settle —
- * `merge`, `apply`, or `assess` for the skill to read. Deciding change from new work from an
- * answer is the skill's.
+ * `apply`, `ready`, or `assess` for the skill to read (`merge` is no shape since T0.46: the
+ * gatekeeper decides the merge). Deciding change from new work from an answer is the skill's.
  */
 
 import { emit, isMain } from "./cli.mjs";

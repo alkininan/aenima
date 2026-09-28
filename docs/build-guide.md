@@ -1,4 +1,10 @@
-<!-- build-guide.md · v2.11 · in the repo · §2 says how a phase is run by hand: a run is an
+<!-- build-guide.md · v2.12 · in the repo · the gatekeeper decides the merge (T0.46): §2's
+     hooks paragraph — a pull request merges on two files, the reviewer's PASS and the
+     gatekeeper's MERGE for the pushed commit, a weakening is the gatekeeper's question rather
+     than your `merge`, and an additive migration applies on its MERGE APPLY — and its reviewer
+     paragraph gains the gatekeeper beside it; the phases paragraph names five agents and the
+     closer's two legs.
+     v2.11 · in the repo · §2 says how a phase is run by hand: a run is an
      orchestrator and four phase agents (T0.44), and a person driving a ticket can run any one
      of them the same way — the phase set in the marker, the agent handed paths, the files the
      handoff.
@@ -26,7 +32,7 @@
      v2.0 was a rewrite rather than a revision: v1.0 was written before ticket 0.1 and proposed a
      stack, a setup script and a set of habits, all of which the build has since replaced. -->
 
-# aenima — build guide v2.10
+# aenima — build guide v2.12
 
 How to run a ticket on aenima with Claude Code.
 
@@ -112,21 +118,39 @@ cannot edit: `Edit`, `Write` and `NotebookEdit` are denied, so a finding is alwa
 never a commit. Its whole value is that it did not write the code, so give it the diff and let it
 disagree with the summary — a briefing that tells it what is true has thrown away the review.
 
+**The gatekeeper is a subagent too, and it decides the merge** (T0.46). `.claude/agents/gatekeeper.md`
+— invoked by the orchestrator on the pushed commit after the reviewer's PASS and the gate's
+green, in a fresh context at medium effort. The reviewer answers "is this good"; the gatekeeper
+answers "may this land unattended", and nothing merges without both, on the same commit. It
+answers five questions and no others — does the diff do only what Build asks, is every
+loosening `scripts/run/gated.mjs` lists named by the reviewer and asked for by a sentence of the
+ticket, does the PASS stand on this commit, do the cited spec sections still say what the
+ticket assumed, is every migration additive, which `scripts/run/migration-safety.mjs` decides in
+code — and writes `docs/gates/<id>.md` through its own Bash, ending in `MERGE`, `MERGE APPLY` or
+`HOLD` above numbered reasons, naming the commit. HOLD is findings: fixed, re-reviewed and
+re-gated, three corrections at most. By hand: `node scripts/run/phase.mjs gate`, then
+`claude -p --agent gatekeeper "docs/tickets/<id>.md"`, then
+`node scripts/run/gate-cap.mjs docs/gates/<id>.md docs/reviews/<id>.md` says what comes next.
+
 **A run is phases, and so is a ticket run by hand.** Since T0.44 `/ticket` is an orchestrator and
-four subagents — the planner (step 2), the builder (steps 3 and 4), the reviewer (step 5) and the
-closer (steps 6 to 9) — each in `.claude/agents/`, each with its own slice of `docs/guidelines.md`
-§5 (§5, *Phases*). Running one by hand is the same move the orchestrator makes. Claim first
+five subagents — the planner (step 2), the builder (steps 3 and 4), the reviewer (step 5), the
+closer (steps 6 to 9, in two legs) and since T0.46 the gatekeeper (step 9's second verdict,
+between the closer's legs) — each in `.claude/agents/`, each with its own slice of
+`docs/guidelines.md` §5 (§5, *Phases*). Running one by hand is the same move the orchestrator makes. Claim first
 (`node scripts/run/claim.mjs --task <id> --page <page id> --branch t<id>`), then set the phase —
 `node scripts/run/phase.mjs build`, and `--route` from `node scripts/run/route.mjs
 docs/tickets/<id>.md` for the builder and the reviewer — then invoke the agent with the paths its
 file asks for and nothing else: the planner with `docs/tickets/<id>.md`, the builder with that and
-the branch, the reviewer with that and `pass <n>`, the closer with the ticket path and the branch.
-From a terminal that is `claude -p --agent <name> "<the paths>"`; from a session, the Agent tool in
-the foreground. Read its last line and nothing else, and hand the next phase the files, never a
-summary. The guard holds each phase to its reach while the marker names it (rule (j)): a push, a
-`gh` call, a merge or a board write only in `close`, an edit only in `build`. After each review,
-`node scripts/run/review-cap.mjs docs/reviews/<id>.md` says what comes next — three passes and no
-more. Release the marker when you are done (`node scripts/run/release.mjs`).
+the branch, the reviewer with that and `pass <n>`, the closer with the ticket path and the branch
+— and again with `merge` after them for the merge leg — the gatekeeper with the ticket path
+alone. From a terminal that is `claude -p --agent <name> "<the paths>"`; from a session, the Agent
+tool in the foreground. Read its last line and nothing else, and hand the next phase the files,
+never a summary. The guard holds each phase to its reach while the marker names it (rule (j)): a
+push, a `gh` call, a merge or a board write only in `close`, an edit only in `build`, nothing but
+its own file from `gate`. After each review, `node scripts/run/review-cap.mjs docs/reviews/<id>.md`
+says what comes next — three passes and no more — and after each gatekeeper round
+`node scripts/run/gate-cap.mjs docs/gates/<id>.md docs/reviews/<id>.md`. Release the marker when
+you are done (`node scripts/run/release.mjs`).
 
 **The rules that cost something are hooks, not sentences.** `.claude/settings.json` wires two.
 `scripts/hooks/guard.mjs` runs before every `Bash`, `Edit` and `Write`, and refuses a schema push,
@@ -136,19 +160,24 @@ shape, a merge with `main` checked out, and any write to a `.env` file except th
 rule stands a credential a run cannot migrate with: `.env.local`'s `DATABASE_URL` reads and
 writes rows and cannot change schema, and the admin URL in `.env.migrate` is read by
 `pnpm db:migrate` alone and never copied into a worktree (`docs/guidelines.md` §5). A diff that
-adds a migration sets Decision and waits for one word from you on the task's thread, `apply` —
-and that is the whole of a migration's permission: once the word is spent the ticket merges
-itself at close, and until then the pull request waits, since code reading a column nobody has
-created is code main should not carry (T0.26). A pull request that **weakens a restraint** — a
-guard rule, the gated list, a hook, the Stop gate, a test — merges on the word `merge` at Review,
-and any other merges at close
-on the reviewer's `PASS` in `docs/reviews/<id>.md`, read by the guard at the pushed commit — the
-pull request's head must be the checkout's HEAD, so the file and the weakening check are the ones
-on the commit that merges (`docs/guidelines.md` §4, T0.16, T0.21). The weakening is a measurement
-and not a reading: `scripts/run/loosening.mjs` runs the restraints themselves on both sides of the
-diff against one fixed corpus, and anything refused before and allowed after is the answer. Neither word is taken from the model: the guard
-reads the thread itself, over the Notion API with the integration token in `.env.local`, and
-refuses the command until the reply is there and newer than the run's own last comment. The
+adds a migration that destroys or rewrites data sets Decision and waits for one word from you on
+the task's thread, `apply` — and that is the whole of such a migration's permission: once the
+word is spent the ticket merges itself at close, and until then the pull request waits, since
+code reading a column nobody has created is code main should not carry (T0.26). An additive
+migration — decided in code by `scripts/run/migration-safety.mjs`, never by a model — applies on
+the gatekeeper's `MERGE APPLY` and needs no word (T0.46). A pull request merges at close on two
+files the guard reads at the pushed commit: the reviewer's `PASS` in `docs/reviews/<id>.md` and
+the gatekeeper's `MERGE` or `MERGE APPLY` in `docs/gates/<id>.md`, the latter naming the commit —
+the pull request's head must be the checkout's HEAD and that commit, so the files and the diff
+are the ones on the commit that merges (`docs/guidelines.md` §4, T0.16, T0.21, T0.46). A pull
+request that **weakens a restraint** — a guard rule, the gated list, a hook, the Stop gate, a
+test — no longer waits for your `merge`: the weakening is a measurement and not a reading —
+`scripts/run/loosening.mjs` runs the restraints themselves on both sides of the diff against one
+fixed corpus, and anything refused before and allowed after is the answer — and the gatekeeper
+holds a loosening the ticket did not ask for in a sentence of its own, or the reviewer did not
+name. No word is taken from the model: the guard reads the thread itself, over the Notion API
+with the integration token in `.env.local`, and refuses an apply on your word until the reply
+is there and newer than the run's own last comment; a reply beginning `merge` is a note. The
 hooks themselves run from `origin/main`'s copy of `scripts/`, never the checkout's, so a run
 editing its own guard changes nothing until a human merges it (`docs/guidelines.md` §5). `scripts/hooks/gate.mjs` runs on `Stop`; see §6. A rule stated
 only in `CLAUDE.md` is a rule a session can read past, which is why these moved.

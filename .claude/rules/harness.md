@@ -19,3 +19,4 @@ protocol is `docs/guidelines.md`; this is what was learned writing the code unde
 - An address that answers with its host's login rather than the site — Vercel's 302 to vercel.com with `_vercel_sso_nonce` — has not answered for the deployment: skip it and name it, never read its status as the site's. — `docs/log/T0.43.md`
 - The run marker is one file for every checkout of the repository: whatever a hook reads off it binds the run's own session and no other, or a scheduled run's state refuses a person's work in the primary checkout. — `docs/log/T0.44.md`
 - A `Set` over `matchAll` holds the match objects, which are never equal: map to the capture before deduplicating. — `docs/log/T0.44.md`
+- A verdict file written for a commit can never be inside it: a file the guard binds to a pull request's head is the run's own record, ignored by git and never committed. — `docs/log/T0.46.md`

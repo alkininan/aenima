@@ -65,13 +65,14 @@ describe("scan", () => {
     ]);
   });
 
-  // T0.11's TC1–TC4, and T0.17 TC3 → AC3 for ready at Backlog.
-  it("names the shape the words settle: merge at Review, apply on a migration, ready at Backlog, else assess", async () => {
+  // T0.11's TC1–TC4, T0.17 TC3 → AC3 for ready at Backlog, and T0.46 TC6 → AC6: merge is no
+  // shape — a reply beginning with it is assessed like any other, and read as a note.
+  it("names the shape the words settle: apply on a migration, ready at Backlog, else assess — merge included", async () => {
     const { threads: found } = await scan(tasks, commentsOf, P);
     const shape = Object.fromEntries(found.map((t) => [t.id, t.shape]));
     expect(shape).toEqual({
       review: "assess",
-      merge: "merge",
+      merge: "assess",
       migration: "apply",
       decision: "assess",
       capped: "assess",
@@ -151,13 +152,11 @@ describe("scan", () => {
     expect(found[0].unanswered.map((x) => x.text)).toEqual(["merge", "default"]);
   });
 
-  it("does not read the word merge as a shape off a Review task", async () => {
-    const { threads: found } = await scan(
-      [row("m", "T8", "Backlog")],
-      async () => threads.merge,
-      P,
-    );
-    expect(found[0].shape).toBe("assess");
+  it("does not read the word merge as a shape anywhere — at Review or off it (T0.46)", async () => {
+    for (const status of ["Backlog", "Review"]) {
+      const { threads: found } = await scan([row("m", "T8", status)], async () => threads.merge, P);
+      expect(found[0].shape, status).toBe("assess");
+    }
   });
 });
 
@@ -187,14 +186,16 @@ describe("readBoardThreads", () => {
     expect(asked).toEqual(["ds-1"]);
     expect(result.token).toBe(true);
     expect(result.scanned).toBe(2);
-    expect(result.threads.map((t) => [t.id, t.shape])).toEqual([["a", "merge"]]);
+    // T0.46: a merge reply is assessed like any other — a note — since no word merges now.
+    expect(result.threads.map((t) => [t.id, t.shape])).toEqual([["a", "assess"]]);
   });
 
   // T0.16 TC1 → AC1 (carries T0.15). The rows above are handed in already read; this one comes through the
   // real client from the API's own shape, where the Tasks data source holds Status as a
-  // select. Under the status-shaped read every row was at no status and a human "merge" at
-  // Review shaped `assess`, which is what the preflight of 14 September found on three tasks.
-  it("shapes a merge at Review from the select Status the API returns", async () => {
+  // select. Under the status-shaped read every row was at no status and a human word at
+  // its status shaped `assess`, which is what the preflight of 14 September found on three
+  // tasks. Since T0.46 the word read here is `ready` at Backlog, `merge` being no word.
+  it("shapes a ready at Backlog from the select Status the API returns", async () => {
     const fetch = async (url) => {
       const path = url.replace("https://api.notion.com/v1", "");
       const body = path.startsWith("/data_sources/")
@@ -205,7 +206,7 @@ describe("readBoardThreads", () => {
                 url: "https://n/t0-14",
                 properties: {
                   Name: { title: [{ plain_text: "T0.14 Ignore worktrees in lint" }] },
-                  Status: { type: "select", select: { name: "Review", color: "blue" } },
+                  Status: { type: "select", select: { name: "Backlog", color: "gray" } },
                 },
               },
             ],
@@ -215,7 +216,7 @@ describe("readBoardThreads", () => {
             results: [
               {
                 id: "c1",
-                rich_text: [{ plain_text: "merge" }],
+                rich_text: [{ plain_text: "ready" }],
                 created_time: "2026-09-14T12:41:00.000Z",
               },
             ],
@@ -231,7 +232,7 @@ describe("readBoardThreads", () => {
       },
     });
     expect(result.threads).toHaveLength(1);
-    expect(result.threads[0].Status).toBe("Review");
-    expect(result.threads[0].shape).toBe("merge");
+    expect(result.threads[0].Status).toBe("Backlog");
+    expect(result.threads[0].shape).toBe("ready");
   });
 });

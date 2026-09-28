@@ -330,12 +330,11 @@ describe("the protocol carries the step", () => {
       .split(/^## 5\. Run protocol$/m)[1]
       ?.match(new RegExp(`^${number} {2}\\w[\\s\\S]*?(?=\\n\\d {2}\\w|\\n\`\`\`)`, "m"))?.[0] ?? "";
 
-  it("names premerge.mjs in §5 step 0, where a merge word is assessed", () => {
-    expect(step(0)).toContain("premerge.mjs");
-  });
-
-  it("names premerge.mjs in §5 step 9, where the run merges its own work", () => {
+  // Since T0.46 a merge happens at step 9 alone — the gatekeeper decides it, and a merge word
+  // at step 0 is a note — so step 0 no longer takes main into a branch.
+  it("names premerge.mjs in §5 step 9, where the run merges its own work, and no longer in step 0", () => {
     expect(step(9)).toContain("premerge.mjs");
+    expect(step(0)).not.toContain("premerge.mjs");
   });
 
   // The rule, not the number: pinning the number exactly is what failed this very ticket
@@ -348,14 +347,15 @@ describe("the protocol carries the step", () => {
     expect(major > 1 || (major === 1 && minor > 20)).toBe(true);
   });
 
-  // Since T0.44 step 9 is the closer's, moved out of the skill verbatim; step 0 stayed.
-  it("gives the skill the step at both places a merge happens", () => {
+  // Since T0.44 step 9 is the closer's, moved out of the skill verbatim; since T0.46 it is the
+  // one place a merge happens, so the skill's preflight no longer carries the step.
+  it("gives the closer the step at the one place a merge happens", () => {
     const [preflight = ""] = skill.split(/^## 1 Claim$/m);
     const [, close = ""] = readFileSync(
       join(import.meta.dirname, "..", "..", ".claude/agents/closer.md"),
       "utf8",
     ).split(/^## 9 Close$/m);
-    expect(preflight).toContain("node scripts/run/premerge.mjs");
+    expect(preflight).not.toContain("node scripts/run/premerge.mjs");
     expect(close).toContain("node scripts/run/premerge.mjs");
   });
 });

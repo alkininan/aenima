@@ -47,12 +47,13 @@ const all = {
   gated: {
     reasons: [
       {
-        rule: "the guard no longer refuses pnpm db:push",
-        ungate: "restore the rule so pnpm db:push is refused again",
+        rule: "it adds the destructive migration drizzle/0022_x.sql",
+        ungate:
+          "UPDATE rewrites rows (UPDATE ITEM SET KEY = 1); a migration that destroys or rewrites data is applied on your word alone",
       },
       {
-        rule: "it adds the migration drizzle/0022_x.sql",
-        ungate: "a migration is applied by hand",
+        rule: "it adds drizzle/meta/_journal.json beside a destructive migration that waits",
+        ungate: "the journal goes when the migration does",
       },
     ],
   },
@@ -522,14 +523,17 @@ describe("compose", () => {
     );
   });
 
-  // T0.16 TC3 → AC3 and TC5 → AC5, and T0.21 TC3 → AC3: a diff only the word merges stays at
-  // Review and says which rule it trips and what would ungate each — a path no longer being
-  // enough, since T0.21 gates by what a diff does. A merge whose deploy failed says what
-  // failed, what was reverted, and where the fix was filed.
-  it("names the rule that waits for the word and what would ungate it, and the merge that was reverted", () => {
-    expect(compose("gated", all.gated, P)).toBe(
-      `${P}This ticket is built, reviewed and green, but the diff is one only your word merges: the guard no longer refuses pnpm db:push — restore the rule so pnpm db:push is refused again; it adds the migration drizzle/0022_x.sql — a migration is applied by hand. It stays at Review; say "merge" here and the next run lands it with a merge commit.`,
+  // T0.16 TC3 → AC3 and TC5 → AC5, T0.21 TC3 → AC3, and since T0.46 (TC3 → AC3, TC6 → AC6)
+  // narrowed to the destructive-migration case: the one diff only the word merges is one
+  // adding a migration that destroys or rewrites data, it waits at Decision for `apply`, and
+  // the comment says which migration and what the reader found — never "merge". A merge whose
+  // deploy failed says what failed, what was reverted, and where the fix was filed.
+  it("names the destructive migration that waits for apply, and the merge that was reverted", () => {
+    const gated = compose("gated", all.gated, P);
+    expect(gated).toBe(
+      `${P}This ticket is built, reviewed and green, but the diff adds a migration that destroys or rewrites data, which is applied on your word alone: it adds the destructive migration drizzle/0022_x.sql — UPDATE rewrites rows (UPDATE ITEM SET KEY = 1); a migration that destroys or rewrites data is applied on your word alone; it adds drizzle/meta/_journal.json beside a destructive migration that waits — the journal goes when the migration does. It waits at Decision; say "apply" here and the next run applies it and lands the ticket with it.`,
     );
+    expect(gated).not.toContain('"merge"');
     expect(compose("reverted", all.reverted, P)).toBe(
       `${P}The deploy check after this merge failed: /sign-in answered 500 and /app answered 200. I've reverted the merge commit 9c1d2e3 on main as a1b2c3d and put this task back at Backlog. The fix is filed as its own task: Fix the sign-in page after T0.16 (https://www.notion.so/xyz).`,
     );
@@ -691,9 +695,10 @@ describe("shapeOf and awaitingMigration", () => {
     "2026-09-13T10:00:00Z",
   );
 
-  it("is merge only at Review, and only on the word", () => {
+  // T0.46 TC6 → AC6: `merge` goes. A reply beginning with it is a note, at Review as anywhere.
+  it("is never merge — a reply beginning with merge is assess at Review as anywhere", () => {
     const merge = thread([c("merge", "2026-09-13T11:00:00Z")]);
-    expect(shapeOf("Review", merge)).toBe("merge");
+    expect(shapeOf("Review", merge)).toBe("assess");
     expect(shapeOf("Decision", merge)).toBe("assess");
     expect(shapeOf("Review", thread([c("print JSON instead", "2026-09-13T11:00:00Z")]))).toBe(
       "assess",
@@ -771,11 +776,14 @@ describe("shapeOf and awaitingMigration", () => {
     expect(shapeOf("Decision", after)).toBe("apply");
   });
 
-  // The same rule at the other word: a merge the guard let through and GitHub refused leaves
-  // the merge standing, so settling the conflict is all the human has to do.
-  it("leaves a merge standing after the merge itself was refused", () => {
-    const after = thread(timeline("merge", said("refused")));
-    expect(shapeOf("Review", after)).toBe("merge");
+  // T0.46 TC3 → AC3: the narrowed `gated` comment is the migration question too — a
+  // destructive migration the gatekeeper held goes to Decision under it, and `apply` there is
+  // read as it is under the `migration` comment.
+  it("reads the gated comment as the migration question, so apply under it is apply", () => {
+    const held = thread(timeline(said("gated"), "apply"));
+    expect(awaitingMigration(held)).toBe(true);
+    expect(shapeOf("Decision", held)).toBe("apply");
+    expect(shapeOf("Review", held)).toBe("assess");
   });
 
   // But a comment that *does* answer still consumes it, which is what keeps a word from

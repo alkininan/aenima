@@ -9,7 +9,9 @@ prints JSON for the skill to read back. `cli.mjs` is the shared helper (stdin, `
 
 Since T0.44 a run is a thin orchestrator and a subagent per phase: the skill keeps steps 0 and
 1, the **planner** (`.claude/agents/planner.md`) does step 2, the **builder** steps 3 and 4, the
-**reviewer** step 5 and the **closer** steps 6 to 9 and every stop. Before each phase the
+**reviewer** step 5, the **closer** steps 6 to 9 in two legs and every stop, and since T0.46 the
+**gatekeeper** between the closer's legs — step 9's second verdict on the pushed commit, which
+decides the merge. Before each phase the
 orchestrator writes it into the run marker with `phase.mjs` — `plan`, `build`, `review`, `gate`
 or `close`, and the route the run took — and the guard reads it there (rule (j)): a push, a `gh`
 call, a merge and a board write belong to `close` alone, an Edit or a Write to source to `build`
@@ -38,20 +40,17 @@ carries its kind in its own words, read back by `kindOf`, so the two-round cap c
 clarifying rounds on one question and nothing else, and `mayPost` — the one place that says
 whether a comment of a kind may post, the preflight asking it for a clarifying round and the
 guard, over the API, for every comment — lets every other kind through, once per claim; `mentions` says whether a reply *begins* with a word, `permitted` whether the human's
-`merge`, `apply` or `ready` is on the thread newer than the pipeline's last comment, and
-`shapeOf` names the three countable shapes — `merge` on a task at Review, `apply` on a Decision
-waiting on a migration, `ready` on a task at Backlog, which the run sets Ready through the
-connector only once the guard has read the word there too (T0.17) — leaving `assess` for the
-skill: a change to the ticket, new work, an answer that resolves a question, a note, or a
-clarifying round. The same script composes every comment the run posts — decision, clarifying,
-migration, stale, default, change, newWork, merged, applied, noted, setup, resolved, gated,
-reverted, readied, waiting, cycle, urgent, refused — in plain sentences with the prefix, from the
-sentences the skill supplies; a `merge` the thread grants first brings the branch into this
-checkout (`branch.mjs`) and gives it main (`premerge.mjs`, T0.36), because a branch pushed
-before anything else landed conflicts on the build log's generated sections alone — main's
-copy and `log-index.mjs` settle that, the gate runs on the result and the branch is pushed,
-and a conflict anywhere else is refused untouched; a merge the guard let through and GitHub
-refused anyway posts its
+`apply` or `ready` is on the thread newer than the pipeline's last comment, and
+`shapeOf` names the two countable shapes — `apply` on a Decision waiting on a migration, `ready`
+on a task at Backlog, which the run sets Ready through the connector only once the guard has
+read the word there too (T0.17) — leaving `assess` for the skill: a change to the ticket, new
+work, an answer that resolves a question, a note, or a clarifying round; a reply beginning
+`merge` is a note since T0.46, the gatekeeper deciding the merge. The same script composes every
+comment the run posts — decision, clarifying, migration, stale, default, change, newWork,
+merged, applied, noted, setup, resolved, gated, reverted, readied, waiting, cycle, urgent,
+refused — in plain sentences with the prefix, from the sentences the skill supplies; the `gated`
+one narrowed since T0.46 to a migration that destroys or rewrites data, which the gatekeeper held
+and which waits for `apply`. A merge the guard let through and GitHub refused anyway posts its
 `refused` comment with the files `conflicts.mjs` names, from `git merge-tree` against
 `origin/main` — and, since T0.24, a refusal answers nothing, so the word that granted the
 attempt outlives it and the next run acts on it rather than asking for it again, while
@@ -194,8 +193,9 @@ suite. Findings are Must or Should; every Must is fixed and the
 reviewer re-invoked, three passes at most. A Must still standing after the third becomes an
 open question, Shoulds are recorded in the report, and a finding outside the ticket's scope
 becomes a Backlog task of Type Fix under the same Epic. The reviewer writes its verdict to
-`docs/reviews/<id>.md`, last line `PASS` or `FINDINGS`; that file is what the guard reads at
-close, and the run never writes it (T0.16). The reviewer's model comes from one chain, the
+`docs/reviews/<id>.md`, last line `PASS` or `FINDINGS`; that file is half of what the guard reads
+at close — the gatekeeper's `docs/gates/<id>.md` is the other half since T0.46 — and the run
+never writes it (T0.16). The reviewer's model comes from one chain, the
 model its definition pins and then `.claude/settings.json`'s `fallbackModel`, and
 `review-model.mjs` reads it (T0.22): a call refused for credits or availability — an API
 error with a 429, a 5xx, an overloaded model or a lost connection — names the next model, and the
@@ -205,7 +205,9 @@ models tried out of the chain's order is a stop, because a review that did not r
 pass. A pass that stops at its turn limit comes back as Claude Code's note rather than an error,
 and `review-model.mjs` reads that too (T0.23): what it holds is never a verdict, so the pass is
 resumed once in its own session on the model it ran on, marked resumed in the report, and a
-second stop at the limit is a stop. Since T0.44 the loop is capped at three passes, counted in code: the orchestrator hands the
+second stop at the limit is a stop. Since T0.46 the gatekeeper's call is read the same way, the
+chain headed by the model its own file pins — `"agent":".claude/agents/gatekeeper.md"` on the
+script's input. Since T0.44 the loop is capped at three passes, counted in code: the orchestrator hands the
 reviewer the pass with the ticket path, the reviewer writes it into its verdict file as `pass
 <n>`, and `review-cap.mjs` reads that file after each pass — `close` on a PASS, `build` on
 FINDINGS in pass 1 or 2, `decision` on FINDINGS in pass 3, which stops the run at Decision, or on a
@@ -215,19 +217,26 @@ and the report lists them. That supersedes the open question a third pass's Must
 
 ## 6 Migration
 
-`migration-check.mjs` lists the `.sql` files the diff adds under `drizzle/`. If there are
-any the run commits and pushes the branch, writes the report so far, releases the marker,
-sets Decision and posts one migration comment naming the file. The human answers with one
-word, `apply`, on the thread, and the next run applies it through `apply.mjs` (step 0),
-whichever checkout it is in: the guard lets a migration apply — `db:migrate`, `drizzle-kit
+`migration-check.mjs` lists the `.sql` files the diff adds under `drizzle/`, for the report;
+nothing stops here since T0.46. `migration-safety.mjs` reads each and answers additive or
+destructive in code — CREATE, ADD COLUMN nullable or with a default, an index, a constraint, a
+policy, a function, a trigger, a grant or a revoke are additive; DROP, TRUNCATE, DELETE,
+UPDATE, RENAME, a column retyped, SET NOT NULL on a column the file gave no default, and
+anything it cannot parse are destructive — and `gated.mjs` gates only a destructive migration
+whose `apply` the thread has not spent. The gatekeeper decides at step 9: an additive migration
+is its `MERGE APPLY`, applied on the merge leg by `apply.mjs` on that word alone, and a
+destructive one is its HOLD, which goes to Decision with the `gated` comment; the human answers
+with one word, `apply`, on the thread, and the next run applies it through `apply.mjs` (step 0),
+whichever checkout it is in. The guard lets a migration apply — `db:migrate`, `drizzle-kit
 migrate`, `db:baseline`, that script, or anything handed `.env.migrate` — through only when
-`permission.mjs` has itself found that word on the claimed task's thread
+`permission.mjs` has itself found one of two things: that word on the claimed task's thread
 over the API — the marker names the task, the token opens the board, the reply must be the
 human's newest since the pipeline's question, and the task must be at the state the word is
-for, the same `shapeOf` the preflight reads — and the same check gates `gh pr merge` on the
-word `merge` at Review. The guard verifies; the model never asserts. That one word is the whole
-of a migration's permission: since T0.26 the ticket carrying it merges itself at close once the
-word has been spent (step 9).
+for, the same `shapeOf` the preflight reads — or, `applyGranted`, the gatekeeper's `MERGE APPLY`
+on file for this checkout's HEAD over migrations `migration-safety.mjs` calls additive. The
+guard verifies; the model never asserts. That one word is the whole of a destructive migration's
+permission: since T0.26 the ticket carrying it merges itself at close once the word has been
+spent (step 9).
 
 ## 7 Gate
 
@@ -254,35 +263,39 @@ human maintains is a stamp that is eventually wrong.
 
 ## 9 Close
 
-The run commits on the branch, gives it main before anything is judged (`premerge.mjs`, T0.36 —
-main may have moved while the ticket was built, and everything below is about the tree that
-results), pushes it, opens the PR against `main` unless the branch already
-has one, sets the task's Commit to the short hash and its Status to Review, and then asks
-`gated.mjs` whether the diff is its own to merge: since T0.21 that is a diff adding a migration
-under `drizzle/`, or one that **weakens a restraint**, which `loosening.mjs` measures rather than
-reads off the paths — it runs the guard's `decide`, `gated.mjs`'s own `isGatedPath` and its
-`gatedDiff` from both `origin/main` and this checkout against one fixed corpus, in a child process
-a side (`--probe`),
+The closer's close leg commits on the branch, gives it main before anything is judged
+(`premerge.mjs`, T0.36 — main may have moved while the ticket was built, and everything below is
+about the tree that results), pushes it, opens the PR against `main` unless the branch already
+has one, sets the task's Commit to the short hash and its Status to Review, runs the gate once
+more so its green for that tree is on record, and hands back with the marker kept. Then the
+gatekeeper (T0.46) reads the pushed commit cold — the ticket, the diff, the reviewer's verdict,
+and `gated.mjs`, which since T0.46 reports rather than gates: `loosenings`, every restraint the
+diff **weakens**, which `loosening.mjs` measures rather than reads off the paths — it runs the
+guard's `decide`, its three doors, `gated.mjs`'s own `isGatedPath` and its `gatedDiff` from both
+`origin/main` and this checkout against one fixed corpus, in a child process a side (`--probe`),
 and anything refused before and allowed after is a rule deleted or a matcher narrowed; a guard
 rule with no corpus entry, a hook gone from `.claude/settings.json` or no longer carrying main's
 command, a gate step dropped or its release count raised, a deleted test whose criteria nothing
-added names, and any diff touching `loosening.mjs` itself are gated the same way. Since T0.26 a
-migration leaves that list once your `apply` has been spent on it: `consumedApplies` reads the
-claimed task's thread over the API — your reply beginning with `apply`, and the run's own
-`applied` note after it naming that migration's tag — so the schema decision is taken once and
-the code that reads the column follows it, while a migration nobody has applied is gated exactly
-as before. Each reason
-carries what would ungate it, and the answer is read by the guard and the skill both. A diff
-that trips none of them, with the reviewer's `PASS` on file, is merged by the run itself with `gh pr merge --merge --delete-branch` from the pushed commit — the gate run once
-more first, so its green for that tree is on record — and the task is Done with its Release row
-in the same run; the guard's second door (`permission.mjs` `reviewed`) reads the verdict file,
-the gate's record, the diff and the pull request's head before it opens. A
-gated diff stays at Review with one comment naming the rule it trips and what would ungate it,
-and merging is the human's move,
-made with the word `merge` there, which the guard refuses `gh pr merge` until `permission.mjs`
-has read from the board. Either way `release.mjs` removes the marker and a primary checkout
-returns to `main`; `release.mjs` also runs from the SessionEnd hook, so a run that dies leaves
-no marker behind for the next preflight to trust. Beside it at SessionEnd runs `runs.mjs`,
+added names, and any diff touching `loosening.mjs` itself are listed the same way — and
+`migrations`, every migration the diff adds with `migration-safety.mjs`'s reading of it and
+whether the thread has spent an `apply` on it (`consumedApplies` reads the claimed task's thread
+over the API — your reply beginning with `apply`, and the run's own `applied` note after it
+naming that migration's tag, T0.26). Only a destructive migration nobody has applied gates. The
+gatekeeper writes `docs/gates/<id>.md`, last line `MERGE`, `MERGE APPLY` or `HOLD` above numbered
+reasons, naming the commit, and `gate-cap.mjs` reads it beside the reviewer's file: `merge` and
+`apply` go to the closer's merge leg, `build` is a HOLD fixed and re-gated with the round counted
+by the reviewer's pass, `migration` is a destructive migration waiting for your `apply` and
+`decision` the third HOLD — or a `MERGE` over a migration the script found waiting, which only
+`MERGE APPLY` applies, so a merge on it would land code reading a column nobody created. The
+merge leg applies the migrations on `MERGE APPLY` through
+`apply.mjs` — the guard's apply door (`permission.mjs` `applyGranted`) reading that file for this
+commit and the script's additive — then merges with `gh pr merge --merge --delete-branch` from
+the pushed commit, and the task is Done with its Release row in the same run; the guard's door
+(`permission.mjs` `reviewed`) reads both verdict files, the gate's record, the diff, and the pull
+request's head — which must be this checkout's HEAD and the commit the gatekeeper named — before
+it opens, and no word on the thread opens it. Either way `release.mjs` removes the marker and a
+primary checkout returns to `main`; `release.mjs` also runs from the SessionEnd hook, so a run
+that dies leaves no marker behind for the next preflight to trust. Beside it at SessionEnd runs `runs.mjs`,
 which reads the session's transcript — the JSONL Claude Code wrote, handed over as the hook's
 `transcript_path` — and posts the Runs row with the token and no model: `R-nnnn T<id>`, the
 task from the claims that did not merge before writing a Status of their own (step 0 may claim a

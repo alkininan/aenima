@@ -6,7 +6,16 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { claim } from "./claim.mjs";
 import { compose } from "./comments.mjs";
-import { postable, reviewed, verdictOf, verify } from "./permission.mjs";
+import {
+  applyGranted,
+  commitMatches,
+  postable,
+  readGate,
+  reviewed,
+  verdictOf,
+  verify,
+  WORDS,
+} from "./permission.mjs";
 
 const P = "⟡ ";
 const c = (text, created_time) => ({ text, created_time });
@@ -40,17 +49,16 @@ describe("verify", () => {
 
   // Review pass 3, Must 2: the word is granted at the state it is for, the same test the
   // preflight's `shapeOf` reads — never on the word alone.
-  it("refuses the word at a state it is not for — merge on a task In progress, apply on a wording question", async () => {
+  it("refuses the word at a state it is not for — apply on a task In progress, apply on a wording question", async () => {
     const inProgress = async () => ({ Name: "T0.12 Helpers", Status: "In progress" });
-    const merge = await verify("merge", {
-      deps: stub(
-        [c("Merge the two helpers into one, they duplicate each other", "2026-09-13T11:00:00Z")],
-        { page: inProgress },
-      ),
+    const early = await verify("apply", {
+      deps: stub([c("apply the same pattern to the helpers", "2026-09-13T11:00:00Z")], {
+        page: inProgress,
+      }),
     });
-    expect(merge.ok).toBe(false);
-    expect(merge.why).toContain("at In progress");
-    expect(merge.why).toContain("a task at Review");
+    expect(early.ok).toBe(false);
+    expect(early.why).toContain("at In progress");
+    expect(early.why).toContain("waiting on a migration question");
 
     const apply = await verify("apply", {
       deps: stub(
@@ -66,49 +74,60 @@ describe("verify", () => {
   });
 
   it("refuses the same word from the pipeline's own comment — the model cannot grant itself", async () => {
-    const result = await verify("merge", {
-      deps: stub([c(`${P}merge`, "2026-09-13T11:00:00Z")]),
+    const result = await verify("apply", {
+      deps: stub([c(MIGRATION, "2026-09-13T10:00:00Z"), c(`${P}apply`, "2026-09-13T11:00:00Z")], {
+        page: decision,
+      }),
     });
     expect(result.ok).toBe(false);
-    expect(result.why).toContain('did not find "merge"');
+    expect(result.why).toContain('did not find "apply"');
   });
 
   it("refuses a human reply older than the run's last comment — a word once consumed", async () => {
-    const result = await verify("merge", {
-      deps: stub([
-        c("merge", "2026-09-13T09:00:00Z"),
-        c(`${P}Merged into main.`, "2026-09-13T10:00:00Z"),
-      ]),
+    const result = await verify("apply", {
+      deps: stub(
+        [
+          c(MIGRATION, "2026-09-13T08:00:00Z"),
+          c("apply", "2026-09-13T09:00:00Z"),
+          c(`${P}Applied 0015_x to the shared database.`, "2026-09-13T10:00:00Z"),
+        ],
+        { page: decision },
+      ),
     });
     expect(result.ok).toBe(false);
   });
 
   it("refuses a word the human took back — only the newest reply counts", async () => {
-    const result = await verify("merge", {
-      deps: stub([
-        c("merge", "2026-09-13T10:00:00Z"),
-        c("wait, don't merge yet", "2026-09-13T11:00:00Z"),
-      ]),
+    const result = await verify("apply", {
+      deps: stub(
+        [
+          c(MIGRATION, "2026-09-13T09:00:00Z"),
+          c("apply", "2026-09-13T10:00:00Z"),
+          c("wait, don't apply yet", "2026-09-13T11:00:00Z"),
+        ],
+        { page: decision },
+      ),
     });
     expect(result.ok).toBe(false);
   });
 
-  // The branch a merge must match comes from the board's own name for the task, so a marker
-  // written with another task's branch merges nothing of that other task's.
+  // The branch an apply is for comes from the board's own name for the task, so a marker
+  // written with another task's branch says nothing about that other task.
   it("derives the task's branch from its name on the board, not from the marker", async () => {
-    const result = await verify("merge", {
-      deps: stub([c("merge", "2026-09-13T11:00:00Z")], {
+    const result = await verify("apply", {
+      deps: stub([c(MIGRATION, "2026-09-13T10:00:00Z"), c("apply", "2026-09-13T11:00:00Z")], {
         marker: () => ({ task: "T0.11", page: "page-1", branch: "t0-12" }),
+        page: decision,
       }),
     });
     expect(result.ok).toBe(true);
-    expect(result.task).toEqual({ name: "T0.11 Comments", status: "Review", branch: "t0-11" });
+    expect(result.task).toEqual({ name: "T0.11 Comments", status: "Decision", branch: "t0-11" });
   });
 
   it("says the branch is unknown when the task's name carries no ID", async () => {
-    const result = await verify("merge", {
-      deps: stub([c("merge", "2026-09-13T11:00:00Z")], {
-        page: async () => ({ Name: "Restrict Vercel's database role", Status: "Review" }),
+    const result = await verify("apply", {
+      deps: stub([c(MIGRATION, "2026-09-13T10:00:00Z"), c("apply", "2026-09-13T11:00:00Z")], {
+        page: async () => ({ Name: "Restrict Vercel's database role", Status: "Decision" }),
       }),
     });
     expect(result.ok).toBe(true);
@@ -116,19 +135,19 @@ describe("verify", () => {
   });
 
   it("refuses without a marker: no claimed task, no thread to read", async () => {
-    const result = await verify("merge", { deps: { marker: () => null } });
+    const result = await verify("apply", { deps: { marker: () => null } });
     expect(result.ok).toBe(false);
     expect(result.why).toContain("no run marker");
   });
 
   it("refuses without the token, naming the variable and the file", async () => {
-    const result = await verify("merge", { deps: { marker, token: () => null } });
+    const result = await verify("apply", { deps: { marker, token: () => null } });
     expect(result.ok).toBe(false);
     expect(result.why).toContain("NOTION_TOKEN is not in .env.local");
   });
 
   it("refuses when the API cannot be read, with the API's own status", async () => {
-    const result = await verify("merge", {
+    const result = await verify("apply", {
       deps: stub([], {
         comments: async () => {
           throw new Error("Notion API GET /comments answered 403");
@@ -179,8 +198,17 @@ describe("verify", () => {
     expect(nowhere.why).toContain("no page");
   });
 
-  it("grants only the three words the board can say", async () => {
+  it("grants only the two words the board can say", async () => {
     const result = await verify("deploy", { deps: stub([]) });
+    expect(result.ok).toBe(false);
+    expect(result.why).toContain("not a word the board grants");
+  });
+
+  // T0.46 TC6 → AC6: `merge` goes. The board grants two words, and a reply beginning with
+  // merge grants nothing, at Review or anywhere.
+  it("no longer grants merge — the gatekeeper decides the merge", async () => {
+    expect(WORDS).toEqual(["apply", "ready"]);
+    const result = await verify("merge", { deps: stub([c("merge", "2026-09-13T11:00:00Z")]) });
     expect(result.ok).toBe(false);
     expect(result.why).toContain("not a word the board grants");
   });
@@ -196,14 +224,17 @@ describe("verify", () => {
     afterAll(() => rmSync(repo, { recursive: true, force: true }));
 
     it("finds the claimed task's page through the marker and the token through .env.local", async () => {
-      expect((await verify("merge", { dir: repo })).why).toContain("no run marker");
+      expect((await verify("apply", { dir: repo })).why).toContain("no run marker");
       claim({ task: "T0.11", page: "pg", branch: "t0-11" }, { cwd: repo, env: {} });
       const pages = [];
       const comments = async (id) => {
         pages.push(id);
-        return [c("Merge it", "2026-09-13T11:00:00Z")];
+        return [c(MIGRATION, "2026-09-13T10:00:00Z"), c("Apply it", "2026-09-13T11:00:00Z")];
       };
-      const result = await verify("merge", { dir: repo, deps: { board, comments, page } });
+      const result = await verify("apply", {
+        dir: repo,
+        deps: { board, comments, page: decision },
+      });
       expect(pages).toEqual(["pg"]);
       expect(result.ok).toBe(true);
       expect(result.task.branch).toBe("t0-11");
@@ -288,21 +319,67 @@ describe("postable", () => {
   });
 });
 
-// T0.16 TC2 → AC2 and TC3 → AC3. The guard's second door: `gh pr merge` is also allowed when
-// the claimed task's reviewer verdict is on file and ends in PASS, and the diff against
-// origin/main adds no migration and weakens no restraint. Both are read in code; neither is
-// the model's claim.
+// T0.16 TC2 → AC2 and TC3 → AC3, and since T0.46 (TC1 → AC1) the pair: `gh pr merge` is
+// allowed when the claimed task's reviewer verdict is on file and ends in PASS, the
+// gatekeeper's verdict is on file and ends in MERGE or MERGE APPLY naming a commit, the diff
+// against origin/main adds no destructive migration nobody has applied, and the gate is green
+// for this tree. All read in code; none is the model's claim.
 describe("reviewed", () => {
   const passing = () => "# T0.16 — review\n\nFindings: none.\n\nPASS\n";
+  const merging = () => "# T0.16 — gate\n\ncommit abc1234\n\nMERGE\n";
   const clean = () => ({ files: ["src/a.ts"], gated: [], ok: true });
   const green = () => ({ green: "h1", tree: "h1" });
-  const deps = (extra = {}) => ({ marker, verdict: passing, diff: clean, gate: green, ...extra });
+  const deps = (extra = {}) => ({
+    marker,
+    verdict: passing,
+    gatekeeper: merging,
+    diff: clean,
+    gate: green,
+    ...extra,
+  });
 
   it("opens on a PASS verdict for the marker's task over a diff with nothing gated", () => {
     const result = reviewed({ deps: deps() });
     expect(result.ok).toBe(true);
     expect(result.task).toEqual({ name: "T0.11", branch: "t0-11" });
     expect(result.gated).toEqual([]);
+    expect(result.gatekeeper).toEqual({ verdict: "MERGE", commit: "abc1234" });
+  });
+
+  // T0.46 TC1 → AC1 and TC5 → AC5: the second file of the pair, and the commit it names.
+  it("refuses without the gatekeeper's verdict, on a HOLD, and on a file naming no commit", () => {
+    const missing = reviewed({ deps: deps({ gatekeeper: () => null }) });
+    expect(missing.ok).toBe(false);
+    expect(missing.why).toContain("docs/gates/T0.11.md");
+    const held = reviewed({
+      deps: deps({
+        gatekeeper: () =>
+          "# T0.11 — gate\n\ncommit abc1234\n\n1. It does more than Build asks.\n\nHOLD\n",
+      }),
+    });
+    expect(held.ok).toBe(false);
+    expect(held.why).toContain("HOLD");
+    expect(held.why).toContain("rather than MERGE or MERGE APPLY");
+    const unnamed = reviewed({ deps: deps({ gatekeeper: () => "# T0.11 — gate\n\nMERGE\n" }) });
+    expect(unnamed.ok).toBe(false);
+    expect(unnamed.why).toContain("names no commit");
+    const stray = reviewed({ deps: deps({ gatekeeper: () => "MERGE\n\nbut also this\n" }) });
+    expect(stray.ok).toBe(false);
+  });
+
+  it("opens on MERGE APPLY as on MERGE — the apply is the closer's before the merge", () => {
+    const result = reviewed({
+      deps: deps({ gatekeeper: () => "# T0.11 — gate\n\ncommit abc1234\n\nMERGE APPLY\n" }),
+    });
+    expect(result.ok).toBe(true);
+    expect(result.gatekeeper.verdict).toBe("MERGE APPLY");
+  });
+
+  it("reads the reviewer's file before the gatekeeper's: no PASS, no second question", () => {
+    const result = reviewed({
+      deps: deps({ verdict: () => "FINDINGS\n", gatekeeper: () => null }),
+    });
+    expect(result.why).toContain("rather than PASS");
   });
 
   it("refuses without a marker — no claimed task, no verdict to look for", () => {
@@ -353,7 +430,7 @@ describe("reviewed", () => {
     expect(never.why).toContain("none");
   });
 
-  it("reads the verdict from docs/reviews/<id>.md in the checkout, and the last non-blank line is the verdict", () => {
+  it("reads both verdicts from the checkout — docs/reviews/<id>.md and docs/gates/<id>.md — and the last non-blank line is the verdict", () => {
     expect(verdictOf("a\nPASS\n\n  \n")).toBe("PASS");
     expect(verdictOf("PASS\nFINDINGS")).toBe("FINDINGS");
     expect(verdictOf("")).toBeNull();
@@ -361,6 +438,11 @@ describe("reviewed", () => {
     try {
       mkdirSync(join(dir, "docs", "reviews"), { recursive: true });
       writeFileSync(join(dir, "docs", "reviews", "T0.11.md"), "reviewed\nPASS\n");
+      expect(reviewed({ dir, deps: { marker, diff: clean, gate: green } }).why).toContain(
+        "docs/gates/T0.11.md",
+      );
+      mkdirSync(join(dir, "docs", "gates"), { recursive: true });
+      writeFileSync(join(dir, "docs", "gates", "T0.11.md"), "gated\ncommit abc1234\nMERGE\n");
       const result = reviewed({ dir, deps: { marker, diff: clean, gate: green } });
       expect(result.ok).toBe(true);
       // Outside a repository there is no gate record: shut.
@@ -371,36 +453,181 @@ describe("reviewed", () => {
   });
 });
 
+// T0.46 Build 1 and Rules: the gatekeeper's file ends in one of three words and names the
+// commit it was written for; HOLD's numbered reasons stand above the verdict.
+describe("readGate", () => {
+  it("reads the verdict, the commit and the reasons", () => {
+    const held = readGate(
+      "# T0.46 — gate\n\ncommit 3b9a890\n\n1. The diff renames a route the ticket did not ask for.\n2. The loosening of rule (c) is named by nobody.\n\nHOLD\n",
+    );
+    expect(held).toEqual({
+      verdict: "HOLD",
+      last: "HOLD",
+      commit: "3b9a890",
+      reasons: [
+        "1. The diff renames a route the ticket did not ask for.",
+        "2. The loosening of rule (c) is named by nobody.",
+      ],
+    });
+    expect(readGate("# x\n\n3b9a890abc\n\nMERGE APPLY\n")).toMatchObject({
+      verdict: "MERGE APPLY",
+      commit: "3b9a890abc",
+      reasons: [],
+    });
+  });
+
+  it("reads a last line that is none of the three as no verdict, and no file as null", () => {
+    expect(readGate("commit 3b9a890\n\nMERGED\n")).toMatchObject({ verdict: null, last: "MERGED" });
+    expect(readGate("")).toMatchObject({ verdict: null, last: null, commit: null });
+    expect(readGate(null)).toBeNull();
+  });
+
+  it("matches a named short commit against a full one, and nothing shorter than seven", () => {
+    const full = "3b9a890abcdef0123456789abcdef0123456789a";
+    expect(commitMatches("3b9a890", full)).toBe(true);
+    expect(commitMatches(full, full)).toBe(true);
+    expect(commitMatches("3B9A890", full)).toBe(true);
+    expect(commitMatches("3b9a89", full)).toBe(false);
+    expect(commitMatches("abc1234", full)).toBe(false);
+    expect(commitMatches(null, full)).toBe(false);
+    expect(commitMatches("3b9a890", null)).toBe(false);
+  });
+});
+
+// T0.46 TC3 → AC3 and TC5 → AC5: the guard's apply door on the gatekeeper's word. A migration
+// applies with no human word when the gatekeeper's file for this commit says MERGE APPLY and
+// migration-safety.mjs says additive for every migration the diff adds and nobody has applied.
+describe("applyGranted", () => {
+  const FULL = "abc1234def0123456789abcdef0123456789abcd";
+  const applying = () => "# T0.11 — gate\n\ncommit abc1234\n\nMERGE APPLY\n";
+  const waiting = (safety, why = null) => ({
+    ok: true,
+    migrations: [
+      { path: "drizzle/0022_x.sql", tag: "0022_x", safety, why, applied: false, waits: true },
+    ],
+  });
+  const deps = (extra = {}) => ({
+    marker,
+    gatekeeper: applying,
+    localHead: () => FULL,
+    diff: () => waiting("additive"),
+    ...extra,
+  });
+
+  it("opens on MERGE APPLY for this commit over additive migrations, naming them", () => {
+    const result = applyGranted({ deps: deps() });
+    expect(result.ok).toBe(true);
+    expect(result.migrations).toEqual(["drizzle/0022_x.sql"]);
+    expect(result.task).toEqual({ name: "T0.11", branch: "t0-11" });
+  });
+
+  it("refuses on MERGE — nothing said apply — and on HOLD, and with no file", () => {
+    const merge = applyGranted({ deps: deps({ gatekeeper: () => "commit abc1234\n\nMERGE\n" }) });
+    expect(merge.ok).toBe(false);
+    expect(merge.why).toContain("rather than MERGE APPLY");
+    expect(applyGranted({ deps: deps({ gatekeeper: () => "commit abc1234\n\nHOLD\n" }) }).ok).toBe(
+      false,
+    );
+    const none = applyGranted({ deps: deps({ gatekeeper: () => null }) });
+    expect(none.ok).toBe(false);
+    expect(none.why).toContain("docs/gates/T0.11.md");
+  });
+
+  it("refuses when the file names a commit other than this checkout's HEAD", () => {
+    const moved = applyGranted({ deps: deps({ localHead: () => "f".repeat(40) }) });
+    expect(moved.ok).toBe(false);
+    expect(moved.why).toContain("abc1234");
+    expect(moved.why).toContain("fffffff");
+    expect(applyGranted({ deps: deps({ localHead: () => null }) }).ok).toBe(false);
+  });
+
+  it("refuses a destructive migration whatever the gatekeeper said — the script decides", () => {
+    const result = applyGranted({
+      deps: deps({
+        diff: () => waiting("destructive", "UPDATE rewrites rows (UPDATE ITEM SET KEY = 1)"),
+      }),
+    });
+    expect(result.ok).toBe(false);
+    expect(result.why).toContain("drizzle/0022_x.sql");
+    expect(result.why).toContain("UPDATE rewrites rows");
+  });
+
+  it("hands the thread's spent applies down to the diff, and judges only the migrations that wait", () => {
+    const seen = [];
+    const result = applyGranted({
+      deps: deps({
+        applied: ["0021_y"],
+        diff: (applied) => {
+          seen.push(applied);
+          return {
+            ok: true,
+            migrations: [
+              {
+                path: "drizzle/0021_y.sql",
+                tag: "0021_y",
+                safety: "destructive",
+                applied: true,
+                waits: false,
+              },
+              {
+                path: "drizzle/0022_x.sql",
+                tag: "0022_x",
+                safety: "additive",
+                applied: false,
+                waits: true,
+              },
+            ],
+          };
+        },
+      }),
+    });
+    expect(seen).toEqual([["0021_y"]]);
+    expect(result.ok).toBe(true);
+    expect(result.migrations).toEqual(["drizzle/0022_x.sql"]);
+  });
+
+  it("refuses without a marker", () => {
+    expect(applyGranted({ deps: deps({ marker: () => null }) }).why).toContain("no run marker");
+  });
+});
+
 // T0.26 TC1 → AC1 and TC2 → AC2. The word and the migrations its thread says are spent come
-// off one read, so the guard's two doors never ask the board twice and never disagree.
-describe("the thread's consumed applies reach the second door", () => {
+// off one read, so the guard's doors never ask the board twice and never disagree. Since T0.46
+// the merge door reads the tags through `consumedApplies` (gated.mjs) rather than beside a
+// word, since there is no merge word; the apply door still reads them off `verify`'s fetch.
+describe("the thread's consumed applies reach the doors", () => {
   const APPLIED = `${P}Applied 0015_x (idx 15) to the shared database. The ticket picks up from where it stopped.`;
 
-  it("hands back the tags the thread's applied note names, beside the word", async () => {
-    // TC1 → AC1
-    const result = await verify("merge", {
-      deps: stub([
-        c(MIGRATION, "2026-09-20T10:00:00Z"),
-        c("apply", "2026-09-20T11:00:00Z"),
-        c(APPLIED, "2026-09-20T12:00:00Z"),
-        c("merge", "2026-09-20T13:00:00Z"),
-      ]),
+  it("hands back the tags the thread's applied note names, beside the word — spent or not", async () => {
+    // TC1 → AC1: the word was consumed by the note, and the tags come back regardless.
+    const result = await verify("apply", {
+      deps: stub(
+        [
+          c(MIGRATION, "2026-09-20T10:00:00Z"),
+          c("apply", "2026-09-20T11:00:00Z"),
+          c(APPLIED, "2026-09-20T12:00:00Z"),
+        ],
+        { page: decision },
+      ),
     });
-    expect(result.ok).toBe(true);
+    expect(result.ok).toBe(false);
     expect(result.applied).toEqual(["0015_x"]);
   });
 
   it("hands back no tags when the thread has no spent apply on it", async () => {
     // TC2 → AC2
-    const result = await verify("merge", {
-      deps: stub([c(MIGRATION, "2026-09-20T10:00:00Z"), c("merge", "2026-09-20T13:00:00Z")]),
+    const result = await verify("apply", {
+      deps: stub([c(MIGRATION, "2026-09-20T10:00:00Z"), c("apply", "2026-09-20T13:00:00Z")], {
+        page: decision,
+      }),
     });
+    expect(result.ok).toBe(true);
     expect(result.applied).toEqual([]);
   });
 
   it("hands back no tags when the thread could not be read at all", async () => {
     // TC2 → AC2: a door that cannot read the thread gates the migration, as before.
-    const result = await verify("merge", { deps: stub([], { token: () => null }) });
+    const result = await verify("apply", { deps: stub([], { token: () => null }) });
     expect(result.ok).toBe(false);
     expect(result.applied).toEqual([]);
   });
@@ -414,6 +641,7 @@ describe("the thread's consumed applies reach the second door", () => {
         deps: {
           marker,
           verdict: () => "PASS\n",
+          gatekeeper: () => "commit abc1234\n\nMERGE\n",
           gate: () => ({ green: "h1", tree: "h1" }),
           diff: (applied) => {
             seen.push(applied);
