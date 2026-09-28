@@ -485,14 +485,14 @@ test.describe("TC3 · C-26 the 768 line", () => {
       expect(measured.clipped).toBe(false);
       expect(measured.activeInView).toBe(true);
 
-      // Where it cannot fit, it scrolls — and lands with the active segment in view.
+      // Where it cannot fit, it scrolls — and lands with the active segment in view. The
+      // landing is an effect's, so the read polls until hydration has run it.
       await page.setViewportSize({ width: 280, height: 900 });
       await page.goto(SINK);
       await settle(page);
-      const narrow = await page
-        .getByRole("navigation", { name: "Your work" })
-        .last()
-        .evaluate((node) => {
+      const narrowStrip = page.getByRole("navigation", { name: "Your work" }).last();
+      const measureNarrow = () =>
+        narrowStrip.evaluate((node) => {
           const box = node.getBoundingClientRect();
           const active = node.querySelector<HTMLElement>("[aria-current]")!.getBoundingClientRect();
           return {
@@ -504,10 +504,12 @@ test.describe("TC3 · C-26 the 768 line", () => {
             ),
           };
         });
-      expect(narrow.overflows).toBe(true);
-      expect(narrow.clipped).toBe(false);
-      expect(narrow.activeInView).toBe(true);
-      expect(narrow.scrolled).toBe(true);
+      await expect.poll(measureNarrow).toEqual({
+        overflows: true,
+        scrolled: true,
+        activeInView: true,
+        clipped: false,
+      });
       await context.close();
     });
   }

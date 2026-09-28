@@ -26,6 +26,14 @@ const productionBaseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:$
 
 const PRODUCTION_SPEC = /production\.spec\.ts/;
 
+/**
+ * C-45's budget is measured "unthrottled". Four workers sharing one dev server is a
+ * throttle of its own — the same route change that paints in 40 ms alone paints in 700
+ * under that contention — so the budget spec is a project that runs once the rest of the
+ * Chromium project has finished, with the server to itself (T0.48).
+ */
+const BUDGET_SPEC = /budget\.spec\.ts/;
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
@@ -44,7 +52,13 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
       // Everything else drives the dev server, which is the only place `/dev`
       // is reachable at all.
-      testIgnore: PRODUCTION_SPEC,
+      testIgnore: [PRODUCTION_SPEC, BUDGET_SPEC],
+    },
+    {
+      name: "budget",
+      use: { ...devices["Desktop Chrome"] },
+      testMatch: BUDGET_SPEC,
+      dependencies: ["chromium"],
     },
     {
       name: "production",
