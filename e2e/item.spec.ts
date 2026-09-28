@@ -779,6 +779,15 @@ test.describe("at 1440", () => {
     }
     await expect(summary).toBeFocused();
 
+    // `.control` transitions `box-shadow` over `--t-fast` (globals.css), so for
+    // 120 ms after focus arrives the glow is a transition in flight: a read
+    // inside that window sees `--control-glow` already resolved and the computed
+    // shadow still the two transparent ones. Past every animation running on
+    // the node the read is the settled paint — `settledDialog`'s wait in
+    // frame.spec.ts. (Unloaded, the read landed early and failed; under four
+    // workers it landed late and passed, which is why it looked like a flake.)
+    await summary.evaluate((node) => Promise.all(node.getAnimations().map((a) => a.finished)));
+
     const focused = await summary.evaluate((node) => {
       const computed = getComputedStyle(node);
       return {
