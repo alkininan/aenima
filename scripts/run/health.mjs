@@ -15,17 +15,25 @@
  * nothing would ever count as advanced; the record is the honest reading of "once".
  * Pure over injected inputs; `health()` gathers them.
  *
- * Two addresses, in order (T0.43): the custom domain, then the deployment's own production
- * address on Vercel, both from `deploy` in `.claude/board.json`. aeni.ma stopped resolving on
- * 2026-09-24 and every check since answered unknown while merges kept landing; the deployment
- * was up at its Vercel address the whole time. A name that does not resolve is skipped and never
- * counted, and the outcome comes from the first address that answers at all. Vercel keeps its
- * own addresses behind a login (Vercel Authentication): from outside they answer every path with
- * a redirect to vercel.com, which is Vercel answering and not the deployment, so it is skipped
- * too — read as an answer, `/sign-in` would be a 302 rather than a 200, down, and every healthy
- * merge would revert. `VERCEL_AUTOMATION_BYPASS_SECRET` in `.env.local`, Vercel's Protection
- * Bypass for Automation, lets the check through; it is sent to `*.vercel.app` alone and never
- * printed.
+ * Two addresses, in order (T0.43): the custom domain, then the deployment's public address on
+ * Vercel, both from `deploy` in `.claude/board.json`. aeni.ma stopped resolving on 2026-09-24
+ * and every check since answered unknown while merges kept landing; the deployment was up at
+ * its Vercel address the whole time. A name that does not resolve is skipped and never counted,
+ * and the outcome comes from the first address that answers at all. A team alias behind Vercel
+ * Authentication answers every path from outside with a redirect to vercel.com, which is Vercel
+ * answering and not the deployment, so it is skipped too — read as an answer, `/sign-in` would
+ * be a 302 rather than a 200, down, and every healthy merge would revert. The public address is
+ * behind no login; `VERCEL_AUTOMATION_BYPASS_SECRET` in `.env.local`, Vercel's Protection
+ * Bypass for Automation, lets the check through an alias that is. It is sent to `*.vercel.app`
+ * alone and never printed.
+ *
+ * An answer is confirmed as Vercel's before its status is read (T0.47). aeni.ma is undelegated:
+ * whoever registers the name answers the check first, and a parking page answering `/app` with
+ * 200 would be down — a healthy merge reverted, the deployment never asked. Vercel's edge sets
+ * `server: Vercel` and an `x-vercel-id` on every response, the login included; an answer with
+ * neither is nobody's, kept as no answer from that address like the login, named in the report
+ * line, and the next address is asked. The headers confirm the platform, not the project, which
+ * is why the login is still told apart first.
  */
 
 import { spawnSync } from "node:child_process";
@@ -90,6 +98,21 @@ export function isVercelLogin(response) {
   }
 }
 
+/**
+ * A response Vercel's edge answered with (T0.47): `server: Vercel`, the value compared whole and
+ * case aside, or a non-empty `x-vercel-id`. Either suffices — both are set on every response,
+ * the login's included, and the threat is a page from another host, not a spoof. False on a
+ * response without headers. This confirms the platform, not the project: `isVercelLogin` still
+ * tells Vercel answering for itself from the deployment.
+ */
+export function isVercel(response) {
+  const headers = response?.headers;
+  const server = headers?.get?.("server") ?? "";
+  if (server.trim().toLowerCase() === "vercel") return true;
+  const id = headers?.get?.("x-vercel-id") ?? "";
+  return id.trim() !== "";
+}
+
 /** The file in the shared `.git` directory holding the commit last checked. */
 export const RECORD = "aenima-deploy-checked";
 
@@ -128,7 +151,11 @@ export function assess({ commit = null, checked = null, results = [] } = {}) {
  * Each check's answer: `{ path, expected, status }`, status null when nothing answered twice.
  * One silence — a timeout, a DNS blip — is asked again before it is kept as no answer, which
  * `assess` reads as unknown and never as down. Vercel's login is kept as no answer too, marked
- * `login: true`, and not asked again: it is Vercel answering, only not for the deployment.
+ * `login: true`, and not asked again: it is Vercel answering, only not for the deployment. An
+ * answer without Vercel's headers is kept the same way, marked `elsewhere: true` with the
+ * status it gave as `returned` (T0.47): it is an answer, only not the deployment's, and not a
+ * blip. The login is read first, by its own shape, so it keeps its own words; then the headers;
+ * then the status.
  */
 export async function probe(
   base,
@@ -144,7 +171,13 @@ export async function probe(
   for (const { path, status } of checks) {
     let got = null;
     let login = false;
-    for (let attempt = 0; attempt < attempts && got === null && !login; attempt += 1) {
+    let elsewhere = false;
+    let returned = null;
+    for (
+      let attempt = 0;
+      attempt < attempts && got === null && !login && !elsewhere;
+      attempt += 1
+    ) {
       try {
         const response = await doFetch(`${base}${path}`, {
           redirect: "manual",
@@ -152,7 +185,10 @@ export async function probe(
           ...(headers ? { headers } : {}),
         });
         if (isVercelLogin(response)) login = true;
-        else got = response.status;
+        else if (!isVercel(response)) {
+          elsewhere = true;
+          returned = response.status;
+        } else got = response.status;
       } catch {
         got = null;
       }
@@ -160,7 +196,9 @@ export async function probe(
     results.push(
       login
         ? { path, expected: status, status: null, login: true }
-        : { path, expected: status, status: got },
+        : elsewhere
+          ? { path, expected: status, status: null, elsewhere: true, returned }
+          : { path, expected: status, status: got },
     );
   }
   return results;
@@ -192,10 +230,12 @@ export function describeTried(tried = []) {
       !resolved
         ? `${base} does not resolve`
         : `${base}: ${results
-            .map(({ path, status, login }) =>
+            .map(({ path, status, login, elsewhere, returned }) =>
               login
                 ? `${path} went to Vercel's login`
-                : `${path} answered ${status === null ? "nothing" : status}`,
+                : elsewhere
+                  ? `${path} answered ${returned} without Vercel's headers`
+                  : `${path} answered ${status === null ? "nothing" : status}`,
             )
             .join(" and ")}`,
     )
