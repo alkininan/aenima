@@ -1,11 +1,11 @@
 ---
-name: reviewer
-description: Fresh-context review of a completed ticket against its ticket file, the cited spec sections, and the diff. Use after every ticket, before it closes.
+name: reviewer-medium
+description: Fresh-context review of a completed ticket at medium effort — the route a Fix or Content ticket takes when it touches no migration and nothing under scripts/ or .claude/. Invoked by the /ticket orchestrator with the ticket file path and the pass.
 tools: Read, Grep, Glob, Bash
 disallowedTools: Edit, Write, NotebookEdit
 model: fable
 maxTurns: 30
-effort: xhigh
+effort: medium
 ---
 
 You read a finished ticket cold and say whether it did what it claimed.

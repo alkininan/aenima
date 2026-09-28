@@ -1,5 +1,5 @@
 {
-  "comment": "Notion dev board identity, and the addresses the deploy check asks. Ids and addresses only — no secrets. docs/guidelines.md §1 and §5.",
+  "comment": "Notion dev board identity, the addresses the deploy check asks, and the route table the phase efforts are read from. Ids, addresses and routes only — no secrets. docs/guidelines.md §1 and §5.",
   "admin": "3cf79daf-d42e-801d-8c74-e9f09bff4607",
   "tasks_ds": "193b7d6b-2ea8-4d08-8233-7634b4367f9f",
   "epics_ds": "7c4b6319-cc2d-4f69-99b6-5f52b6e6fa46",
@@ -9,5 +9,26 @@
   "documents": "3cf79daf-d42e-81fc-ac31-f8b94b9e20c2",
   "guidelines": "3cf79daf-d42e-81a9-8fc0-c661ba302c74",
   "prefix": "⟡ ",
-  "deploy": ["https://aeni.ma", "https://aenima-ae-nima.vercel.app"]
+  "deploy": ["https://aeni.ma", "https://aenima-ae-nima.vercel.app"],
+  "routes": [
+    {
+      "name": "medium",
+      "types": ["Fix", "Content"],
+      "outside": ["drizzle/", "scripts/", ".claude/"],
+      "effort": {
+        "builder": "medium",
+        "reviewer": "medium"
+      }
+    },
+    {
+      "name": "xhigh",
+      "types": ["Feature", "Enhancement", "Technical", "Content", "Experiment", "Fix", "Spike"],
+      "outside": [],
+      "effort": {
+        "builder": "xhigh",
+        "reviewer": "xhigh"
+      }
+    }
+  ],
+  "gatekeeper": "medium"
 }

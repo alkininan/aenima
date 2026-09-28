@@ -263,7 +263,7 @@ describe("guidelines §5 step 5", () => {
   });
 
   it("is what the skill's step 5 tells a run to do", () => {
-    const skillStep5 = skill.match(/^## 5 Review\n[\s\S]*?(?=^## 6 )/m)?.[0] ?? "";
+    const skillStep5 = skill.match(/^## 2–9 The phases\n[\s\S]*$/m)?.[0] ?? "";
     expect(skillStep5).toContain("node scripts/run/review-model.mjs <<'EOF'");
     expect(skillStep5).toContain("each pass starts again at the pinned model");
     expect(skillStep5).toContain("fallbackModel");
@@ -280,7 +280,7 @@ describe("guidelines §5 step 5", () => {
 
   // T0.23 TC1 → AC1
   it("is what the skill's step 5 tells a run to do at the turn limit", () => {
-    const skillStep5 = skill.match(/^## 5 Review\n[\s\S]*?(?=^## 6 )/m)?.[0] ?? "";
+    const skillStep5 = skill.match(/^## 2–9 The phases\n[\s\S]*$/m)?.[0] ?? "";
     expect(skillStep5).toContain("turn limit");
     expect(skillStep5).toContain('"resumed":0');
     expect(skillStep5).toContain("`resume: true`");

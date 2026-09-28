@@ -1,4 +1,11 @@
-<!-- guidelines.md · v1.30 · in the repo · the deploy check reads the deployment when the
+<!-- guidelines.md · v1.31 · in the repo · phases as subagents (T0.44): §5 a run is a thin
+     orchestrator and a subagent per phase — planner, builder, reviewer, closer — handing off by
+     files and one typed line; the marker carries the phase and the guard's rule (j) reads it;
+     the review loop is capped at three passes counted in code, a Must in pass 3 stops at
+     Decision and Shoulds go to one Backlog task; the builder's and the reviewer's effort is the
+     route in .claude/board.json. §2 the Runs row gains Plan, Build, Review, Gate, Close and
+     Route.
+     v1.30 · in the repo · the deploy check reads the deployment when the
      domain does not resolve (T0.43): §5's deploy check asks the addresses `deploy` in
      .claude/board.json names — aeni.ma, then the deployment's own Vercel address — skipping a
      name that does not resolve and Vercel's login, and takes its outcome from the first that
@@ -224,6 +231,8 @@ restraint, or that adds a migration you have not applied, merges on your word, a
 | Tokens | number | input + output, cache reads excluded | M |
 | Outcome | select | Done · Decision · Stopped | M — "Welcoming, never alarming" (§1): no "Failed" |
 | Findings | number | reviewer findings raised | M |
+| Plan · Build · Review · Gate · Close | number | the tokens each phase spent, the five summing to Tokens | M |
+| Route | select | medium · xhigh · fallback | M — the effort the builder and the reviewer ran at |
 
 Written by a script at session end from the local transcript, posted with a Notion integration
 token. No model call. This is the data for park rate, findings per ticket, and the four-week weight
@@ -242,7 +251,16 @@ under `<session>/subagents/` — counts towards Tokens and Model and nothing els
 is about half of what a real run spends. A run that claimed nothing of its own is `R-nnnn` alone
 with no Task. A session that was not a `/ticket` writes no row. One run is one row: the same
 transcript reaches the script more than once, so the row is keyed on its Task and the minute of
-its Started, and a post that finds its own key writes nothing (T0.30).
+its Started, and a post that finds its own key writes nothing (T0.30). Since T0.44 the run is
+phases (§5) and the row says what each cost: a subagent's usage is its phase's by the agent's name
+— the planner's Plan, the builder's Build at either effort, the reviewer's Review, a gatekeeper's
+Gate, the closer's Close — read from the `agentType` in the meta file beside its transcript, and
+the orchestrator's own, or an agent the table does not name, is the phase the marker named when
+the message was written, read off the `phase.mjs` commands the orchestrator ran; before the first
+phase — preflight and claim, and the whole of an idle run — it is Plan's. Every message lands in
+one phase, so the five sum to Tokens. Route is the last `--route` the orchestrator set. The
+closer's Status writes are read for Outcome as the orchestrator's are, since the closer is the one
+phase that writes the board.
 
 ### Documents
 
@@ -458,9 +476,12 @@ Answers given inside an interactive Code tab session follow the same rule, appli
 One run is `/ticket`: fresh session, Fable, hooks as the boundary. A Desktop scheduled task types
 it once an hour; a person can still type it from any checkout. Everything countable in the steps
 below is a script under `scripts/run/` with a test; the skill holds the judgment and nothing else.
-A run and every review pass run at `xhigh` effort, set by `effort: xhigh` in the frontmatter of
-`.claude/skills/ticket/SKILL.md` and of `.claude/agents/reviewer.md` — the scheduled task's form
-has no effort control, and a repository setting would reach every session opened here (T0.27).
+A run runs at `xhigh` effort, set by `effort: xhigh` in the frontmatter of
+`.claude/skills/ticket/SKILL.md` — the scheduled task's form has no effort control, and a
+repository setting would reach every session opened here (T0.27). Each phase agent carries its
+own effort in its own frontmatter: the planner and the closer at `xhigh`, and the builder and the
+reviewer at the effort the route names — `xhigh` by default, `medium` for a Fix or a Content
+ticket that touches no migration and nothing under `scripts/` or `.claude/` (T0.44, *The route*).
 
 ```
 0  Preflight    stamp this worktree as a run's and remove the ones earlier runs left (prune.mjs) ·
@@ -538,8 +559,11 @@ has no effort control, and a repository setting would reach every session opened
 5  Review       reviewer subagent, fresh context, reads the ticket file and the diff, not the
                 author's summary · runs only the tests the ticket names plus the test files the
                 diff touches; the Stop gate owns the full suite · findings are tagged Must or
-                Should · fix every Must and re-invoke, three passes maximum · a Must still
-                standing after the third becomes an open question, Shoulds are recorded ·
+                Should · fix every Must and re-invoke, three passes maximum, counted in code
+                (review-cap.mjs): pass 1 reads the whole diff, pass 2 the fixes, pass 3 only
+                pass 2's Musts · a Must pass 3 still finds stops at Decision (§4), one comment ·
+                Shoulds are not fixed in the run: those standing at the last pass become one
+                Backlog task, `Shoulds from <id>`, and the report lists them ·
                 out-of-scope findings → Backlog tasks (Type Fix, Epic inherited) · the reviewer
                 writes its verdict to docs/reviews/<id>.md, last line PASS when no Must stands
                 (Shoulds listed above it, recorded by the run) and FINDINGS when one does — the
@@ -590,6 +614,30 @@ has no effort control, and a repository setting would reach every session opened
 
 One run, one task. The run exits; the next scheduled run takes the next task. Chaining inside a
 session is not done: a session that built three things reasons worse about the fourth.
+
+**Phases.** Since T0.44 the session is a thin orchestrator and each phase is a subagent with a
+fresh context, its own tools and its own slice of this protocol, moved out of the skill rather
+than rewritten: the **planner** (`.claude/agents/planner.md`) does step 2 and writes the ticket
+file through its own Bash; the **builder** steps 3 and 4, the one phase that edits source; the
+**reviewer** step 5, as before; the **closer** steps 6 to 9 and every stop — the one phase that
+pushes, calls `gh`, merges and writes the board. The skill keeps steps 0 and 1 and the
+orchestration between phases. The orchestrator hands each phase paths and nothing else — the
+ticket file, the branch, the pass — and reads back one typed last line: `planned`, `built
+<commit>`, `PASS` or `FINDINGS <n>`, `closed <commit>`, or `stopped <reason>` from any. The
+handoff is the files the run already writes: the ticket file, the branch, `docs/reports/<id>.md` —
+where a phase that may not post writes its defaults, its stop, a human step and an out-of-scope
+finding under headings of their own, for the closer to post and file — and `docs/reviews/<id>.md`.
+No phase reads another's transcript. A stop from any phase goes to the closer. The Stop gate fires
+on the orchestrator's Stop alone — a subagent's end is `SubagentStop`, which runs no suite — and
+the closer runs the gate itself before a self-merge, as step 9 always has. **The route** is the
+effort the builder and the reviewer run at, read from the table in `.claude/board.json` by
+`scripts/run/route.mjs`: a Fix or a Content ticket naming no migration and nothing under
+`scripts/` or `.claude/` at medium, everything else at xhigh, the gatekeeper — when it exists —
+always at medium, and a shape the table does not cover `fallback` at xhigh. The orchestrator asks
+before the build, from the ticket, and again before the review, from the diff. Claude Code's
+Agent tool takes no effort per invocation, so an effort is a frontmatter: `builder` and
+`builder-medium`, `reviewer` and `reviewer-medium`, one body each, the twin differing only in its
+name and its effort.
 
 **The schedule.** Routines › `aenima-ticket` in the Desktop Code tab: prompt `/ticket`, folder
 `~/dev/aenima`, hourly, Bypass permissions, Fable, worktree on. Bypass rather than Auto because the
@@ -661,6 +709,16 @@ shared `.git` directory, the same file from the primary checkout and from every 
 what lets a run in one worktree see a run in another. It is written at claim and removed on every
 exit — Review, Decision, and error through the SessionEnd hook; a hard kill leaves it behind,
 which is what the three-hour age is for. Only scripts read it; the skill never reasons about it.
+Since T0.44 it carries the **phase** too — `plan`, `build`, `review`, `gate` or `close`, and the
+route — written by `scripts/run/phase.mjs` before the orchestrator invokes each phase, and the
+guard's rule (j) reads it: a push, a `gh` call, a merge or a board write outside `close` is
+refused, an Edit or a Write outside `build` is refused — in `close` everything but a write under
+`docs/` — and a hook call while the marker names no phase is judged by the other rules alone, as
+before. The phase is the run's: the marker is one file for every checkout, so a call from another
+session — you in the primary checkout while a scheduled run builds — is judged as though no phase
+were set, and a phase agent, a subagent of the run's own session, is held to it. The refusal names the phase and the rule. The phase is a tripwire the orchestrator sets,
+not a wall between agents: a phase agent that ran `phase.mjs` itself would move it, which is why
+each agent's file says what its phase may do.
 A stale run recovers by default because the branch is preserved: a wrong guess costs nothing.
 The Stop gate's green fingerprint, `aenima-gate-count`, lives beside it for the same reason: a
 fresh worktree of a commit the suite already passed inherits the green.
@@ -775,7 +833,9 @@ by `scripts/run/log-index.mjs`, and its test refuses a stale copy. Two open pull
 file and never edit the same lines; a merge that meets two new list lines is settled by running the
 script again.
 
-Hard boundaries, enforced by hooks not prose, from the copy of the hooks on `origin/main`: no
+Hard boundaries, enforced by hooks not prose, from the copy of the hooks on `origin/main`: while
+the marker names a phase, no push, `gh` call, merge or board write outside `close` and no Edit or
+Write outside `build` but a write under `docs/` in `close` (rule (j), T0.44); no
 schema push, no writes to `.env` or `.env.*` (`.env.example` is tracked and excepted), no
 production deploy, no force-push, no push to main in any refspec shape but one — the revert of
 the merge at the tip, `HEAD:main`, HEAD one commit past `origin/main` with the tree the merge's

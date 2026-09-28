@@ -348,8 +348,13 @@ describe("the protocol carries the step", () => {
     expect(major > 1 || (major === 1 && minor > 20)).toBe(true);
   });
 
+  // Since T0.44 step 9 is the closer's, moved out of the skill verbatim; step 0 stayed.
   it("gives the skill the step at both places a merge happens", () => {
-    const [preflight = "", close = ""] = skill.split(/^## 9 Close$/m);
+    const [preflight = ""] = skill.split(/^## 1 Claim$/m);
+    const [, close = ""] = readFileSync(
+      join(import.meta.dirname, "..", "..", ".claude/agents/closer.md"),
+      "utf8",
+    ).split(/^## 9 Close$/m);
     expect(preflight).toContain("node scripts/run/premerge.mjs");
     expect(close).toContain("node scripts/run/premerge.mjs");
   });

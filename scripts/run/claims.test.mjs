@@ -340,9 +340,11 @@ describe("the protocol says when the names are checked and where a rule goes", (
   });
 
   // TC5 → AC5
+  // Since T0.44 step 2 is the planner's and step 8 the closer's, moved out of the skill verbatim.
   it("the /ticket skill's steps 2 and 8 say what the guidelines say", () => {
-    const skill = doc(".claude/skills/ticket/SKILL.md");
-    const two = section(skill, "## 2 Inline", "## 3 Branch");
+    const planner = doc(".claude/agents/planner.md");
+    const skill = doc(".claude/agents/closer.md");
+    const two = section(planner, "## 2 Inline");
     expect(two).toContain("node scripts/run/claims.mjs docs/tickets/<id>.md");
     expect(two).toContain("The script finds the names; what a\nmissing one means is yours.");
     const eight = section(skill, "## 8 Report", "## 9 Close");

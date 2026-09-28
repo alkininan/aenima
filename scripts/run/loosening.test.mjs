@@ -116,8 +116,30 @@ describe("the corpus", () => {
   // TC3 → AC3: a rule with no corpus entry could be deleted unseen.
   it("has an entry for every rule letter the guard marks", () => {
     const letters = ruleLetters(readFileSync(join(root, "scripts/hooks/guard.mjs"), "utf8"));
-    expect(letters).toEqual(["a", "b", "c", "d", "e", "f", "g", "h", "i"]);
+    expect(letters).toEqual(["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"]);
     expect(uncovered(letters)).toEqual([]);
+  });
+
+  // T0.44 TC2 → AC2: rule (j)'s entries are refused by the phase and by nothing else, so a
+  // later diff that drops (j) reads as loosened rather than as covered by a neighbouring rule.
+  it("refuses rule (j)'s entries by the phase alone", () => {
+    const phased = GUARD_CORPUS.filter((entry) => entry.rule === "j");
+    expect(phased.map((entry) => entry.name)).toEqual([
+      "push from the build phase",
+      "gh from the build phase",
+      "merge from the build phase",
+      "pull from the build phase",
+      "board write from the build phase",
+      "Edit from the review phase",
+      "Write from the plan phase",
+      "Write to source from the close phase",
+    ]);
+    const unphased = phased.map((entry) => ({
+      ...entry,
+      deps: { ...entry.deps, phase: () => null },
+    }));
+    const answers = refusals(decide, unphased);
+    for (const entry of unphased) expect(answers[entry.name], entry.name).toBe(false);
   });
 
   // TC3 → AC3
@@ -185,6 +207,15 @@ describe("ruleLetters", () => {
       "\n",
     );
     expect(ruleLetters(source)).toEqual(["a", "b"]);
+  });
+
+  // T0.44: rule (j) is marked where each of its three checks stands, and a letter marked
+  // twice is one rule — the Set held the match objects, which are never equal, and read three.
+  it("reads a letter marked in several places as one rule", () => {
+    expect(ruleLetters(["// (j) one", "  // (a) two", "// (j) three"].join("\n"))).toEqual([
+      "a",
+      "j",
+    ]);
   });
 });
 
