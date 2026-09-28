@@ -277,11 +277,10 @@ describe("T0.44 — the documents", () => {
   });
 
   it("bumps both documents' versions and notes the change in their headers", () => {
-    expect(guidelines.slice(0, 600)).toMatch(
-      /^<!-- guidelines\.md · v1\.31 · in the repo · phases as subagents \(T0\.44\)/,
-    );
-    expect(guide.slice(0, 600)).toMatch(
-      /^<!-- build-guide\.md · v2\.11 · in the repo · .*\(T0\.44\)/s,
-    );
+    // The note is read from the whole header comment, not its first line: a later bump — v1.32
+    // at T0.47 — pushes it one entry down and leaves it standing.
+    const header = (text) => text.slice(0, text.indexOf("-->") + 3);
+    expect(header(guidelines)).toMatch(/v1\.31 · in the repo · phases as subagents \(T0\.44\)/);
+    expect(header(guide)).toMatch(/v2\.11 · in the repo · .*?\(T0\.44\)/s);
   });
 });

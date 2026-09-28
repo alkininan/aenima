@@ -9,7 +9,7 @@
   "documents": "3cf79daf-d42e-81fc-ac31-f8b94b9e20c2",
   "guidelines": "3cf79daf-d42e-81a9-8fc0-c661ba302c74",
   "prefix": "⟡ ",
-  "deploy": ["https://aeni.ma", "https://aenima-ae-nima.vercel.app"],
+  "deploy": ["https://aeni.ma", "https://aenima-puce.vercel.app"],
   "routes": [
     {
       "name": "medium",

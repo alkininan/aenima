@@ -81,8 +81,10 @@ hours, is a run that died, and `stale.mjs --recover <id>` keeps its branch as
 with the reason when that commit was refused — so the task can be claimed again from
 `origin/main` with one comment and no human. Then, once per commit of main, `health.mjs` asks
 the live site from outside — `/sign-in` 200, `/app` 307 — at each address `deploy` in
-`.claude/board.json` names, aeni.ma and then the deployment's own Vercel address, skipping a name
-that does not resolve and Vercel's login and taking the first that answers (T0.43); recording the commit it asked about
+`.claude/board.json` names, aeni.ma and then the deployment's public Vercel address, skipping a
+name that does not resolve, Vercel's login, and an answer without Vercel's headers — neither
+`server: Vercel` nor an `x-vercel-id`, so a stranger on the domain and not the deployment
+(T0.47) — and taking the first that answers (T0.43); recording the commit it asked about
 beside the marker so one outage reverts one merge. Its outcome is up, down or unknown (T0.39):
 a check that never answered, with none answering wrongly, is unknown, records nothing and is
 asked again next run, since silence is no verdict on a merge; a wrong answer has `revert.mjs` prepare the

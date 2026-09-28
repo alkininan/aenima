@@ -1,4 +1,10 @@
-<!-- guidelines.md · v1.31 · in the repo · phases as subagents (T0.44): §5 a run is a thin
+<!-- guidelines.md · v1.32 · in the repo · the deploy check confirms the answer is Vercel's
+     (T0.47): §5's deploy check asks the deployment's public address, aenima-puce.vercel.app,
+     after aeni.ma, and reads a status only once Vercel's headers — `server: Vercel` or an
+     `x-vercel-id` — say the answer is Vercel's; one without them is skipped and named like a
+     name that does not resolve or Vercel's login, never down, and the next address is asked;
+     step 0 says the same.
+     v1.31 · in the repo · phases as subagents (T0.44): §5 a run is a thin
      orchestrator and a subagent per phase — planner, builder, reviewer, closer — handing off by
      files and one typed line; the marker carries the phase and the guard's rule (j) reads it;
      the review loop is capped at three passes counted in code, a Must in pass 3 stops at
@@ -505,7 +511,9 @@ ticket that touches no migration and nothing under `scripts/` or `.claude/` (T0.
                 re-claim it from origin/main and continue — no human needed · main moved
                 since the last deploy check → ask the live site from outside (health.mjs):
                 /sign-in 200, /app 307, from aeni.ma or, when that name does not resolve,
-                the deployment's own Vercel address; a wrong answer (down) reverts the merge at the tip
+                the deployment's own Vercel address, a status read only once Vercel's headers
+                say the answer is Vercel's — one without them is skipped and named, like a name
+                that does not resolve; a wrong answer (down) reverts the merge at the tip
                 (revert.mjs, then the one push to main the guard lets through, HEAD:main),
                 files one Fix task at Backlog, puts the reverted ticket back at Backlog, one
                 comment; no answer (unknown) reverts nothing, files nothing, records nothing
@@ -688,14 +696,21 @@ not resolve aeni.ma, the check read that as down, and only the run's own judgeme
 reverting a healthy merge. Unknown leaves the commit unrecorded, so the next run asks again, and
 the report line says the site could not be reached from this machine, naming each address tried
 and what it returned. The addresses are `deploy` in `.claude/board.json`, in order (T0.43): the
-domain, then the deployment's own production address, `https://aenima-ae-nima.vercel.app`. A name
+domain, then the deployment's public address on Vercel, `https://aenima-puce.vercel.app`. A name
 that does not resolve is skipped and never counted, and the outcome is the first address's that
 answers at all — so while aeni.ma does not resolve, the check reads the deployment rather than the
-DNS. Vercel keeps its own addresses behind a login: from outside, every path there redirects to
-Vercel's login at vercel.com, which is Vercel answering and not the deployment, so it is skipped
-too and never read as down. `VERCEL_AUTOMATION_BYPASS_SECRET` in `.env.local` — Vercel's
-Protection Bypass for Automation — lets the check through; it is sent to a `vercel.app` address
-alone, never to the domain, and never printed. A wrong answer reverts: `revert.mjs` detaches at `origin/main` and reverts its tip with
+DNS. An answer is confirmed as Vercel's by Vercel's headers before its status is read (T0.47):
+Vercel's edge sets `server: Vercel` and an `x-vercel-id` on every response, and an answer carrying
+neither is nobody's — aeni.ma is undelegated, whoever registers it answers the check first, and a
+parking page answering `/app` with 200 read as the site's would revert a healthy merge — so it is
+skipped and named in the report line, like a name that does not resolve, never down, and the next
+address is asked. The headers confirm the platform, not the project: Vercel's own login carries
+them too. A team alias behind Vercel Authentication answers every path from outside with a
+redirect to Vercel's login at vercel.com, which is Vercel answering and not the deployment, so it
+is skipped too and never read as down; the public address is behind no login.
+`VERCEL_AUTOMATION_BYPASS_SECRET` in `.env.local` — Vercel's Protection Bypass for Automation —
+lets the check through an alias that is; it is sent to a `vercel.app` address alone, never to the
+domain, and never printed. A wrong answer reverts: `revert.mjs` detaches at `origin/main` and reverts its tip with
 `git revert -m 1` — one commit that restores the tree main had before the merge, never a
 force-push — and the run pushes it as `git push origin HEAD:main`, the one push to main the guard
 lets through, having checked in code that HEAD is exactly that revert. Then one Fix task at
