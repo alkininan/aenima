@@ -63,6 +63,15 @@ export function isTopLayer(id: string): boolean {
   return topLayer() === id;
 }
 
+/**
+ * Whether a layer of `kind` is open anywhere in the stack. §11: "while a modal or sheet is
+ * open only Esc and the layer's own keys act" — a global shortcut asks this, not what is on
+ * top, since a select opened inside a modal leaves the modal no less open.
+ */
+export function hasLayerOfKind(kind: LayerKind): boolean {
+  return stack.some((entry) => entry.kind === kind);
+}
+
 export function layerCount(): number {
   return stack.length;
 }

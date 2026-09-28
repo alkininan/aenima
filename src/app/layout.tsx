@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 
+import { RouteFocus } from "@/components/RouteFocus";
+import { KeyboardLayer } from "@/components/ui/KeyboardLayer";
 import { FOCUS_MODALITY_SCRIPT } from "@/lib/focus-modality";
 
 import { FONT_VARIABLES } from "./fonts";
@@ -46,7 +49,18 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             to it. */}
         <script dangerouslySetInnerHTML={{ __html: FOCUS_MODALITY_SCRIPT }} />
       </head>
-      <body className="flex min-h-full flex-col">{children}</body>
+      <body className="flex min-h-full flex-col">
+        {children}
+        {/* §11's keyboard layer: the global shortcuts and the sheet they open, and where
+            focus goes after a route change. Both live here because the root layout is the
+            one tree that survives every navigation; each renders nothing of its own. The
+            route watcher reads the router, which a statically rendered page can only hand
+            to a client component behind a Suspense boundary. */}
+        <KeyboardLayer />
+        <Suspense fallback={null}>
+          <RouteFocus />
+        </Suspense>
+      </body>
     </html>
   );
 }

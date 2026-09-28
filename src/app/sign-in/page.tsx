@@ -21,7 +21,10 @@ export default function SignInPage() {
     // §8.3: the step's mark sits 48 below the top of the page — 16 below 600
     // tall (§4 Height), so a landscape phone still sees a step whole — and the
     // mode's gutters sit outside the column: 16 in hand chrome, 24 from 1024.
-    <main className="dot-grid flex flex-1 flex-col items-center px-[16px] py-[48px] lg:px-[24px] [@media(max-height:599px)]:pt-[16px]">
+    <main
+      tabIndex={-1}
+      className="dot-grid flex flex-1 flex-col items-center px-[16px] py-[48px] lg:px-[24px] [@media(max-height:599px)]:pt-[16px]"
+    >
       <SignInForm />
       <p className="sr-only">{t.common.appName}</p>
     </main>

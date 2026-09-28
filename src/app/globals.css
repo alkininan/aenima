@@ -226,6 +226,16 @@
     outline-offset: 2px;
   }
 
+  /* §11 — the main region takes focus after a route change (`tabindex="-1"`, RouteFocus)
+   * and "never draws the ring, whatever the modality — it is a landmark, not a control, and
+   * the ring is a control's affordance — the one exemption from §6's rule and C-31." Both
+   * selectors, since a script-placed focus after a keypress matches :focus-visible. */
+  main:focus,
+  main:focus-visible {
+    outline: none;
+    box-shadow: none;
+  }
+
   /* §8 autofill paint — law, not chance. Chrome paints its own yellow/white
    * over a filled field; the inset box-shadow is the only way to repaint it,
    * and the 9999s transition keeps it from flashing through on the way in. The
@@ -1003,6 +1013,38 @@
   }
   to {
     background-position: -50% 0;
+  }
+}
+
+/* §11 — the skip link: the first Tab stop on a fresh load, a Neutral sm pill "visible only
+ * while focused, at the top-left of the viewport inset 16 on both axes, rung 600". Hidden by
+ * clipping rather than by display, or it would be no Tab stop at all. The button grammar comes
+ * from `buttonClasses`; this is only where it stands and when it shows — and it stands outside
+ * every layer, as the reduced-motion block below does, because the sizes and padding it undoes
+ * are utilities, and a layered rule loses to a utility whatever its specificity. */
+.skip-link {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: var(--z-tooltip);
+}
+
+.skip-link:not(:focus) {
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* §8.15 — a kbd hint appears "never on touch until the modality script has recorded keyboard
+ * input (§6, §7) — an iPad with a keyboard has every shortcut, a bare one has none." Touch is
+ * everything §7's pointer query does not match, at any width, and recorded is the script's
+ * latch on `<html>`, not the modality of the moment. Unlayered, for the reason above. */
+@media not all and (hover: hover) and (pointer: fine) {
+  html:not([data-keyboard-recorded]) .kbd {
+    display: none;
   }
 }
 

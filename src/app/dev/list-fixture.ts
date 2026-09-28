@@ -21,6 +21,13 @@ const DAY = 24 * 60 * 60 * 1000;
 export const LIST_T = getDictionary();
 
 /**
+ * Where a fixture row goes: the item mirror, which links back to `/dev/list`. The
+ * key rides in the query so each row has a destination of its own, as each real
+ * row does; the mirror ignores what it does not read.
+ */
+const devItemHref = (key: string) => `/dev/item?row=${key}`;
+
+/**
  * One row per case the §8 geometry has to survive: both accents, no accent, an
  * idle row, and more gap chips than the two that fit — and §10's two clocks: a
  * scored row with a retry queued, a scored row without, and rows nothing has
@@ -29,6 +36,7 @@ export const LIST_T = getDictionary();
 export const LIST_FIXTURE: ItemRowData[] = [
   {
     key: "soc-12",
+    href: devItemHref("soc-12"),
     title: "Weekly digest email",
     type: "feature",
     stage: "design",
@@ -46,6 +54,7 @@ export const LIST_FIXTURE: ItemRowData[] = [
   },
   {
     key: "soc-4",
+    href: devItemHref("soc-4"),
     title: "Rewrite the empty states",
     type: "content",
     stage: "define",
@@ -58,6 +67,7 @@ export const LIST_FIXTURE: ItemRowData[] = [
   },
   {
     key: "aur-1",
+    href: devItemHref("aur-1"),
     title: "Shared reading lists",
     type: "feature",
     stage: "define",
@@ -70,6 +80,7 @@ export const LIST_FIXTURE: ItemRowData[] = [
   },
   {
     key: "soc-7",
+    href: devItemHref("soc-7"),
     title: "Can we diff Figma frames by node id?",
     type: "spike",
     stage: "discover",

@@ -1,19 +1,12 @@
 import Link from "next/link";
 
 import { AeMark } from "@/components/AeMark";
-import { Avatar } from "@/components/ui/Avatar";
-import { IconButton } from "@/components/ui/IconButton";
 import type { Dictionary } from "@/i18n";
 import { cx } from "@/lib/cx";
 import { NAV } from "@/lib/routes";
-import {
-  AnalyticsIcon,
-  ListIcon,
-  SettingsIcon,
-  SignOutIcon,
-  TriageIcon,
-} from "@/components/ui/icons";
+import { AnalyticsIcon, ListIcon, SettingsIcon, TriageIcon } from "@/components/ui/icons";
 
+import { AccountMenu } from "./AccountMenu";
 import { ProductSwitcher, type SwitcherProduct } from "./ProductSwitcher";
 
 const NAV_ICONS = {
@@ -28,8 +21,8 @@ const NAV_ICONS = {
  * product switcher. **It never collapses** — §4 is explicit that the chat dock
  * is the thing that collapses in v1.
  *
- * A Server Component. The only interactive part is the switcher, which is its
- * own island.
+ * A Server Component. The interactive parts — the switcher and the account
+ * menu — are islands of their own.
  *
  * **Unbuilt destinations render as disabled, not as links.** Three of the four
  * nav entries have no page behind them yet, and a link that answers 404 is worse
@@ -114,23 +107,10 @@ export function Sidebar({
           something you check and change, not something you navigate between —
           the top-left belongs to the things that move you around.
 
-          Sign-out lives here because it is the only thing that can be done to
-          an identity today, and because it is a plain form POST to a route
-          handler: no client component, and it still works if the page never
-          hydrates. */}
-      <div className="flex items-center gap-[8px] border-t border-glass-border pt-[16px]">
-        {/* §8: 32 is the avatar's row size. Initials until there is a portrait. */}
-        <Avatar size={32} name={email} />
-        <span className="type-ui-body min-w-0 flex-1 truncate text-n-secondary">{email}</span>
-        <form action="/auth/sign-out" method="post" className="shrink-0">
-          <IconButton
-            type="submit"
-            variant="ghost"
-            size="sm"
-            label={t.common.signOut}
-            icon={<SignOutIcon />}
-          />
-        </form>
+          A menu trigger (§4, v2.21) whose rows are "Keyboard shortcuts" and
+          "Sign out" — the sign-out still a form POST, submitted by its row. */}
+      <div className="flex flex-col border-t border-glass-border pt-[16px]">
+        <AccountMenu email={email} />
       </div>
     </aside>
   );

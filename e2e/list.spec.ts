@@ -216,7 +216,7 @@ test.describe("at 1440", () => {
   test("walks the rows with the arrow keys, across buckets, wrapping at the ends", async ({
     page,
   }) => {
-    const links = listSection(page).getByTestId("item-row").locator("a[href^='/i/']");
+    const links = listSection(page).getByTestId("item-row").locator("a[data-row-link]");
     await expect(links).toHaveCount(4);
 
     await links.first().focus();

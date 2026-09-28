@@ -6,7 +6,6 @@ import { IconButton } from "@/components/ui/IconButton";
 import { Menu } from "@/components/ui/Menu";
 import { OverflowIcon } from "@/components/ui/icons";
 import { getDictionary } from "@/i18n";
-import { itemHref } from "@/lib/routes";
 
 /**
  * §8's item-row overflow menu.
@@ -28,7 +27,16 @@ import { itemHref } from "@/lib/routes";
  * `getDictionary` the way `SignInForm` does; anything it needs *interpolated*
  * arrives as an already-formatted string, like `label` below.
  */
-export function ItemRowMenu({ itemKey, label }: { itemKey: string; label: string }) {
+export function ItemRowMenu({
+  itemKey,
+  href,
+  label,
+}: {
+  itemKey: string;
+  /** The row's own destination, so "Open" goes where the name goes. */
+  href: string;
+  label: string;
+}) {
   const t = getDictionary();
   const router = useRouter();
 
@@ -49,7 +57,7 @@ export function ItemRowMenu({ itemKey, label }: { itemKey: string; label: string
         />
       }
       entries={[
-        { kind: "item", label: t.list.openItem, onSelect: () => router.push(itemHref(itemKey)) },
+        { kind: "item", label: t.list.openItem, onSelect: () => router.push(href) },
         {
           kind: "item",
           label: t.list.copyKey,

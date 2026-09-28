@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { FOCUS_MODALITY_ATTRIBUTE, FOCUS_MODALITY_SCRIPT, FOCUS_KEYS } from "@/lib/focus-modality";
+import {
+  FOCUS_MODALITY_ATTRIBUTE,
+  FOCUS_MODALITY_SCRIPT,
+  FOCUS_KEYS,
+  KEYBOARD_RECORDED_ATTRIBUTE,
+} from "@/lib/focus-modality";
 
 /**
  * The script the document head actually inlines, run as-is.
@@ -18,7 +23,27 @@ const modality = () => document.documentElement.getAttribute(FOCUS_MODALITY_ATTR
 describe("focus modality", () => {
   beforeEach(() => {
     document.documentElement.removeAttribute(FOCUS_MODALITY_ATTRIBUTE);
+    document.documentElement.removeAttribute(KEYBOARD_RECORDED_ATTRIBUTE);
     runScript();
+  });
+
+  /**
+   * §8.15: a kbd hint shows on touch "once the modality script has recorded keyboard input".
+   * Recorded is a latch — the modality itself goes back to pointer at the next tap, and an
+   * iPad with a keyboard taps and types by turns.
+   */
+  it("records that keyboard input has happened, and keeps the record through a later tap", () => {
+    expect(document.documentElement.hasAttribute(KEYBOARD_RECORDED_ATTRIBUTE)).toBe(false);
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "a" }));
+    expect(document.documentElement.hasAttribute(KEYBOARD_RECORDED_ATTRIBUTE)).toBe(false);
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab" }));
+    expect(document.documentElement.hasAttribute(KEYBOARD_RECORDED_ATTRIBUTE)).toBe(true);
+
+    window.dispatchEvent(new Event("pointerdown"));
+    expect(modality()).toBe("pointer");
+    expect(document.documentElement.hasAttribute(KEYBOARD_RECORDED_ATTRIBUTE)).toBe(true);
   });
 
   /**

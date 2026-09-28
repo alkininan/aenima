@@ -15,7 +15,8 @@ import { ItemListSkeleton } from "./ItemRowSkeleton";
  */
 export default function AppLoading() {
   return (
-    <main className="mx-auto flex w-full max-w-[1200px] flex-col gap-[24px] px-[24px] py-[32px]">
+    // The same content column the page renders, inside the layout's main region.
+    <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-[24px] px-[24px] py-[32px]">
       <header className="flex flex-col gap-[8px]">
         {/* §6's shimmer, the one skeleton motion: its loop is --t-skeleton, where
             Tailwind's pulse would bring a 2s of its own (C-06). */}
@@ -27,6 +28,6 @@ export default function AppLoading() {
       <div className="glass h-[62px] rounded-md" />
 
       <ItemListSkeleton />
-    </main>
+    </div>
   );
 }

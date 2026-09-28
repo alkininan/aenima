@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
 import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/Input";
+import { Kbd } from "@/components/ui/Kbd";
 import { Spinner } from "@/components/ui/Spinner";
 import { ChevronRightIcon, PlusIcon, SearchIcon } from "@/components/ui/icons";
 import {
@@ -272,7 +273,10 @@ export default async function PrimitivesPage({
           {/* §8 exemption: Search is named by its leading icon, so it floats no
               label, reserves no zone, and keeps a resting placeholder — the one
               place in the product where --n-placeholder paints. */}
+          {/* A search field by type as well as by name: §11's `/` finds the page's
+              `input[type="search"]` and focuses it. */}
           <Input
+            type="search"
             label="Search"
             floatingLabel={false}
             reserveHelper={false}
@@ -315,6 +319,26 @@ export default async function PrimitivesPage({
           <span className="type-display-num inline-flex h-[24px] items-center rounded-pill bg-surface-2 px-[10px] text-n-primary">
             12
           </span>
+        </Row>
+      </Section>
+
+      {/* §8.15: a shortcut rendered as a key. The modifier follows the platform —
+          `⌘` here, `Ctrl` elsewhere — and on touch none of these show until the
+          modality script has recorded keyboard input. */}
+      <Section label="Kbd hint">
+        <Row label="keys">
+          <Kbd chord={["?"]} />
+          <Kbd chord={["esc"]} />
+          <Kbd chord={["enter"]} />
+          <Kbd chord={["up"]} />
+          <Kbd chord={["down"]} />
+          <Kbd chord={["home"]} />
+          <Kbd chord={["end"]} />
+        </Row>
+        <Row label="with the platform's modifier">
+          <Kbd chord={["mod", "k"]} />
+          <Kbd chord={["mod", "z"]} />
+          <Kbd chord={["shift", "up"]} />
         </Row>
       </Section>
 

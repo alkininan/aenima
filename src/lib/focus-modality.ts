@@ -37,6 +37,15 @@
  */
 export const FOCUS_MODALITY_ATTRIBUTE = "data-focus-modality";
 
+/**
+ * Set once the script has recorded keyboard input, and never removed: §8.15's kbd hints and
+ * §4's "Keyboard shortcuts" row appear on touch "once the modality script has recorded
+ * keyboard input" — a latch, where the modality above is the last device used and flips back
+ * to `pointer` at the next tap. An iPad with a keyboard taps and types by turns; its hints,
+ * once earned, stay.
+ */
+export const KEYBOARD_RECORDED_ATTRIBUTE = "data-keyboard-recorded";
+
 export type FocusModality = "keyboard" | "pointer";
 
 /**
@@ -78,5 +87,5 @@ export const FOCUS_MODALITY_SCRIPT = `(function(){
 var e=document.documentElement,k=${JSON.stringify(FOCUS_KEYS)};
 function s(m){if(e.getAttribute("${FOCUS_MODALITY_ATTRIBUTE}")!==m)e.setAttribute("${FOCUS_MODALITY_ATTRIBUTE}",m)}
 addEventListener("pointerdown",function(){s("pointer")},true);
-addEventListener("keydown",function(v){if(k.indexOf(v.key)>-1)s("keyboard")},true);
+addEventListener("keydown",function(v){if(k.indexOf(v.key)>-1){s("keyboard");e.setAttribute("${KEYBOARD_RECORDED_ATTRIBUTE}","")}},true);
 })();`;

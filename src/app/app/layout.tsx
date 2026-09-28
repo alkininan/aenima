@@ -5,7 +5,7 @@ import { getSessionUser } from "@/db/queries/session";
 import { ensureWorkspace } from "@/db/queries/workspace";
 import { getDictionary } from "@/i18n";
 
-import { Sidebar } from "./Sidebar";
+import { AppShell } from "./AppShell";
 
 /**
  * The signed-in shell — §4's grid: "Left sidebar 240px fixed · content
@@ -28,6 +28,9 @@ import { Sidebar } from "./Sidebar";
  *
  * The chat dock §4 puts at 380 right is not in this ticket. The grid here is two
  * columns; the third arrives with the dock.
+ *
+ * The shell itself — skip link, sidebar, main region — is `AppShell`, which
+ * `/dev/list` renders too, so §11's keyboard paths can be driven in a browser.
  */
 export default async function AppLayout({ children }: LayoutProps<"/app">) {
   const t = getDictionary();
@@ -42,9 +45,8 @@ export default async function AppLayout({ children }: LayoutProps<"/app">) {
   const products = await listProducts(workspace.id);
 
   return (
-    <div className="flex min-h-dvh">
-      <Sidebar t={t} products={products} email={user.email} />
-      <div className="min-w-0 flex-1">{children}</div>
-    </div>
+    <AppShell t={t} products={products} email={user.email}>
+      {children}
+    </AppShell>
   );
 }
