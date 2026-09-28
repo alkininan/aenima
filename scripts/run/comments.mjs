@@ -15,10 +15,11 @@
  * the sentences that need judgment and never the shape.
  *
  * Since T0.11 every task's thread is read, not only a Decision's, and a reply's shape is
- * partly countable: `mentions` and `permitted` say whether the human's word — `merge`,
- * `apply`, and since T0.17 `ready` — is on the thread, and the guard asks the same question
- * of the API before it lets the command or the status write through. `shapeOf` names the
- * countable shapes; the rest is `assess`.
+ * partly countable: `mentions` and `permitted` say whether the human's word — `apply`, and
+ * since T0.17 `ready` — is on the thread, and the guard asks the same question of the API
+ * before it lets the command or the status write through. `shapeOf` names the countable
+ * shapes; the rest is `assess`. Since T0.46 `merge` is no word: the gatekeeper decides the
+ * merge, and a reply beginning with merge is a note.
  *
  * Since T0.20 a comment's kind is read back from its own words — the fixed part of the sentence
  * `compose` wrote (`kindOf`) — so the cap counts clarifying rounds and nothing else, and
@@ -202,11 +203,17 @@ export const MIGRATION_PHRASE = "This change adds a migration";
 
 /**
  * True when the pipeline's last comment on the thread is the migration question — reading past
- * a refusal, which reports an apply that failed and leaves the question standing (T0.20).
+ * a refusal, which reports an apply that failed and leaves the question standing (T0.20). Two
+ * comments ask it: the `migration` kind, and since T0.46 the `gated` kind, which is the
+ * gatekeeper's HOLD on a migration that destroys or rewrites data, taken to Decision.
  */
 export function awaitingMigration(thread) {
   const asked = (thread?.pipeline ?? []).findLast((comment) => comment.kind !== "refused");
-  return String(asked?.text ?? "").includes(MIGRATION_PHRASE);
+  if (asked === undefined) return false;
+  const kind = asked.kind ?? kindOf(asked.text);
+  return (
+    kind === "migration" || kind === "gated" || String(asked.text ?? "").includes(MIGRATION_PHRASE)
+  );
 }
 
 /**
@@ -249,17 +256,16 @@ export function appliedMigrations(thread, prefix = "⟡ ") {
 }
 
 /**
- * The part of a reply's shape that is countable. `merge` is a Review task whose unanswered
- * reply begins with the word; `apply` is a Decision task waiting on a migration whose reply
- * begins with the word; `ready` is a Backlog task whose reply begins with the word — the
- * human's go, said on the thread rather than clicked (T0.17). Everything else is `assess`:
- * change, new work, an answer that resolves a question, a note, or a reply that needs a
- * clarifying round — the skill's call.
+ * The part of a reply's shape that is countable. `apply` is a Decision task waiting on a
+ * migration whose reply begins with the word; `ready` is a Backlog task whose reply begins
+ * with the word — the human's go, said on the thread rather than clicked (T0.17). Everything
+ * else is `assess`: change, new work, an answer that resolves a question, a note, or a reply
+ * that needs a clarifying round — the skill's call. A reply beginning with `merge` is assess
+ * like any other since T0.46: the gatekeeper decides the merge, and the reply is a note.
  */
 export function shapeOf(status, thread) {
   const newest = thread?.unanswered?.at(-1) ?? null;
   const said = (word) => newest !== null && mentions(newest.text, word);
-  if (status === "Review" && said("merge")) return "merge";
   if (status === "Decision" && awaitingMigration(thread) && said("apply")) return "apply";
   if (status === "Backlog" && said("ready")) return "ready";
   return "assess";
@@ -310,10 +316,9 @@ const SIGNATURES = [
   ["applied", /^Applied .+\. The ticket picks up from where it stopped\.$/],
   ["noted", /^Read that, thanks\. Nothing for me to do here, /],
   ["resolved", /^Read that as the answer, thanks\. /],
-  [
-    "gated",
-    /^This ticket is built, reviewed and green, but the diff is one only your word merges: /,
-  ],
+  // The opening is shared by the comments written before T0.46, which offered the word
+  // `merge`, and by the narrowed one, which names a destructive migration and asks for `apply`.
+  ["gated", /^This ticket is built, reviewed and green, but the diff /],
   ["reverted", /^The deploy check after this merge failed: /],
   ["readied", /^Read that as your go, so the task is Ready\. /],
   ["waiting", /^This task is waiting on .+, so runs pass it by for now\. /],
@@ -368,14 +373,14 @@ const listed = (items) => {
  *   default     { gap, choice }             — a choice cheap to undo, taken and said
  *   change      {}                          — a Review reply folded in as an addendum
  *   newWork     { name, url }               — a reply drafted as its own Backlog task
- *   merged      { commit }                  — the human's "merge", done
+ *   merged      { commit }                  — a merge made on the word, at step 0 (T0.11–T0.45)
  *   applied     { file }                    — the human's "apply", done
  *   noted       {}                          — a reply that asks for nothing
  *   setup       { step, where }             — a step only a human can do, said exactly
  *   resolved    {}                          — a Decision answer read as resolving: Ready
- *   gated       { reasons: [{ rule, ungate }] } — a diff only the word merges: a migration,
- *               or a restraint this diff weakens. Each reason names the rule it trips and
- *               what would ungate it (T0.21); `gated.mjs` measures them
+ *   gated       { reasons: [{ rule, ungate }] } — a diff only the word applies: a migration
+ *               that destroys or rewrites data, which the gatekeeper held (T0.46). Each reason
+ *               names the migration and what the reader found; `gated.mjs` writes them
  *   reverted    { failed, merge, commit, name, url } — a merge whose deploy check failed
  *   readied     {}                          — the human's "ready" on a Backlog task, done
  *   waiting     { blockers }                — a Ready task skipped for a blocker not Ready
@@ -423,7 +428,7 @@ export function compose(kind, fields = {}, prefix = "⟡ ") {
       const reasons = (fields.reasons ?? []).map(
         (each) => `${clause(each.rule)} — ${clause(each.ungate)}`,
       );
-      return `${prefix}This ticket is built, reviewed and green, but the diff is one only your word merges: ${reasons.join("; ")}. It stays at Review; say "merge" here and the next run lands it with a merge commit.`;
+      return `${prefix}This ticket is built, reviewed and green, but the diff adds a migration that destroys or rewrites data, which is applied on your word alone: ${reasons.join("; ")}. It waits at Decision; say "apply" here and the next run applies it and lands the ticket with it.`;
     }
     case "reverted":
       return `${prefix}The deploy check after this merge failed: ${sentence(fields.failed)} I've reverted the merge commit ${clause(fields.merge)} on main as ${clause(fields.commit)} and put this task back at Backlog. The fix is filed as its own task: ${clause(fields.name)} (${clause(fields.url)}).`;

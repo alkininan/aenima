@@ -36,7 +36,8 @@ export const agentFor = (phase, effort) => (effort === "xhigh" ? phase : `${phas
  * The route for a ticket of `type` naming `paths`, read against `table` — `{ routes,
  * gatekeeper }` as `.claude/board.json` holds them. Returns `{ route, effort, agents }`, where
  * `effort` carries the builder's, the reviewer's and the gatekeeper's, and `agents` the files
- * the orchestrator invokes for the first two.
+ * the orchestrator invokes for all three — the gatekeeper's is one file, `gatekeeper`, at the
+ * one effort the table gives it (T0.46).
  */
 export function route({ type = null, paths = [] }, table = {}) {
   const routes = Array.isArray(table.routes) ? table.routes : [];
@@ -56,6 +57,7 @@ export function route({ type = null, paths = [] }, table = {}) {
     agents: {
       builder: agentFor("builder", effort.builder),
       reviewer: agentFor("reviewer", effort.reviewer),
+      gatekeeper: "gatekeeper",
     },
   };
 }

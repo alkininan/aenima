@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -89,29 +89,90 @@ describe("gatedPaths and gatedDiff", () => {
     expect(result.ok).toBe(true);
     expect(result.gated).toEqual([]);
     expect(result.reasons).toEqual([]);
+    expect(result.loosenings).toEqual([]);
+    expect(result.migrations).toEqual([]);
   });
 
-  it("names the migration it adds, and what would ungate it", () => {
-    // TC5 → AC5
+  it("names the destructive migration it adds, and what would ungate it", () => {
+    // T0.46 TC3 → AC3, and T0.21 TC5 → AC5: a migration nothing read the safety of is
+    // destructive, and a destructive one is the human's word.
     const result = gatedDiff({ files: ["drizzle/0022_x.sql"], weakened: [] });
     expect(result.ok).toBe(false);
     expect(result.reasons).toHaveLength(1);
-    expect(result.reasons[0].rule).toBe("it adds the migration drizzle/0022_x.sql");
-    expect(result.reasons[0].ungate).toMatch(/applied by hand/);
-    expect(result.gated).toEqual(["it adds the migration drizzle/0022_x.sql"]);
+    expect(result.reasons[0].rule).toBe("it adds the destructive migration drizzle/0022_x.sql");
+    expect(result.reasons[0].ungate).toMatch(/say "apply"/);
+    expect(result.gated).toEqual(["it adds the destructive migration drizzle/0022_x.sql"]);
+    expect(result.migrations).toEqual([
+      expect.objectContaining({
+        path: "drizzle/0022_x.sql",
+        tag: "0022_x",
+        safety: "destructive",
+        applied: false,
+        waits: true,
+      }),
+    ]);
   });
 
-  it("carries a weakening through with its own reason, migrations first", () => {
-    // TC3 → AC3: the measurement's reasons reach the caller that writes the comment.
-    const result = gatedDiff({
-      files: ["drizzle/0022_x.sql", "scripts/hooks/guard.mjs"],
-      weakened: [{ rule: "the guard no longer refuses pnpm db:push", ungate: "restore the rule" }],
+  // T0.46 TC2 → AC2: a weakening no longer gates. It is reported, for the gatekeeper to read
+  // against the ticket and the reviewer's verdict, and the diff is the run's own to merge.
+  it("reports a weakening as a loosening and does not gate on it", () => {
+    const weakened = [
+      { rule: "the guard no longer refuses pnpm db:push", ungate: "restore the rule" },
+    ];
+    const result = gatedDiff({ files: ["scripts/hooks/guard.mjs"], weakened });
+    expect(result.ok).toBe(true);
+    expect(result.gated).toEqual([]);
+    expect(result.loosenings).toEqual(weakened);
+  });
+
+  // T0.46 TC3 → AC3: an additive migration is the gatekeeper's MERGE APPLY, not the human's
+  // word, so it is not gated; a destructive one beside it is, and names why.
+  it("lets an additive migration through and gates a destructive one, with the reader's reason", () => {
+    const safety = {
+      "drizzle/0022_a.sql": { safety: "additive", why: null },
+      "drizzle/0023_b.sql": {
+        safety: "destructive",
+        why: "UPDATE rewrites rows (UPDATE ITEM SET KEY = 1)",
+      },
+    };
+    const additive = gatedDiff({
+      files: ["drizzle/0022_a.sql", "drizzle/meta/_journal.json"],
+      safety,
     });
-    expect(result.ok).toBe(false);
-    expect(result.gated).toEqual([
-      "it adds the migration drizzle/0022_x.sql",
-      "the guard no longer refuses pnpm db:push",
+    expect(additive.ok).toBe(true);
+    expect(additive.migrations[0]).toMatchObject({ safety: "additive", waits: true });
+
+    const mixed = gatedDiff({
+      files: ["drizzle/0022_a.sql", "drizzle/0023_b.sql", "drizzle/meta/_journal.json"],
+      safety,
+    });
+    expect(mixed.ok).toBe(false);
+    expect(mixed.gated).toEqual([
+      "it adds the destructive migration drizzle/0023_b.sql",
+      "it adds drizzle/meta/_journal.json beside a destructive migration that waits",
     ]);
+    expect(mixed.reasons[0].ungate).toContain("UPDATE rewrites rows");
+  });
+
+  // T0.46 Rules: `apply` on a destructive migration is untouched — a spent apply still takes
+  // the file off the list, and only its own.
+  it("lets a destructive migration through once its own apply is spent", () => {
+    const safety = { "drizzle/0023_b.sql": { safety: "destructive", why: "UPDATE rewrites rows" } };
+    const spent = gatedDiff({ files: ["drizzle/0023_b.sql"], safety, applied: ["0023_b"] });
+    expect(spent.ok).toBe(true);
+    expect(spent.migrations[0]).toMatchObject({ applied: true, waits: false });
+    const other = gatedDiff({ files: ["drizzle/0023_b.sql"], safety, applied: ["0022_a"] });
+    expect(other.ok).toBe(false);
+  });
+
+  // A migration the diff modifies rather than adds is one the database already has — editing
+  // prose in an applied migration is not a schema change (migration-check.mjs) — so it never
+  // waits, whatever its text says.
+  it("judges only the migrations the diff adds, when told which those are", () => {
+    const safety = { "drizzle/0001_policies.sql": { safety: "destructive", why: "DROP" } };
+    const edited = gatedDiff({ files: ["drizzle/0001_policies.sql"], added: [], safety });
+    expect(edited.ok).toBe(true);
+    expect(edited.migrations[0]).toMatchObject({ added: false, waits: false });
   });
 });
 
@@ -167,36 +228,86 @@ describe("gatedDiffOf over a repository", () => {
 
   // T0.26 TC1 → AC1, end to end: the tags the thread answered with reach the judgement, so a
   // migration the human has already applied is not a second word to ask for.
-  it("lets a migration through on the tag its thread says is applied", { timeout: 60_000 }, () => {
+  it(
+    "lets a destructive migration through on the tag its thread says is applied",
+    { timeout: 60_000 },
+    () => {
+      const dir = branchWith((at) => {
+        mkdirSync(join(at, "drizzle", "meta"), { recursive: true });
+        writeFileSync(join(at, "drizzle/0022_x.sql"), "update item set key = 1;\n");
+        writeFileSync(join(at, "drizzle/meta/_journal.json"), '{"entries":[]}\n');
+      });
+      const waiting = gatedDiffOf({ cwd: dir, range: "main...HEAD" });
+      expect(waiting.ok).toBe(false);
+      expect(waiting.gated).toHaveLength(2);
+
+      const spent = gatedDiffOf({ cwd: dir, range: "main...HEAD", applied: ["0022_x"] });
+      expect(spent.ok).toBe(true);
+      expect(spent.gated).toEqual([]);
+    },
+  );
+
+  it(
+    "names the destructive migration a diff adds, from the diff itself, with the reader's reason",
+    { timeout: 60_000 },
+    () => {
+      // T0.21 TC5 → AC5 and T0.46 TC3 → AC3, end to end: the file is read at the head of the
+      // range, and what migration-safety.mjs says of it is what the reason carries.
+      const dir = branchWith((at) => {
+        mkdirSync(join(at, "drizzle"), { recursive: true });
+        writeFileSync(join(at, "drizzle/0022_x.sql"), "delete from item where id = 1;\n");
+      });
+      const result = gatedDiffOf({ cwd: dir, range: "main...HEAD" });
+      expect(result.ok).toBe(false);
+      expect(result.gated).toEqual(["it adds the destructive migration drizzle/0022_x.sql"]);
+      expect(result.migrations[0].why).toContain("DELETE removes rows");
+    },
+  );
+
+  // T0.46 TC3 → AC3, end to end: an additive migration is not gated, and the judgement says
+  // what it read — the gatekeeper's MERGE APPLY rests on `migrations`.
+  it("lets an additive migration through, reporting it as waiting", { timeout: 60_000 }, () => {
     const dir = branchWith((at) => {
       mkdirSync(join(at, "drizzle", "meta"), { recursive: true });
-      writeFileSync(join(at, "drizzle/0022_x.sql"), "select 1;\n");
+      writeFileSync(
+        join(at, "drizzle/0022_x.sql"),
+        'create table "x" (id int);\ncreate index "x_id" on "x" ("id");\n',
+      );
       writeFileSync(join(at, "drizzle/meta/_journal.json"), '{"entries":[]}\n');
     });
-    const waiting = gatedDiffOf({ cwd: dir, range: "main...HEAD" });
-    expect(waiting.ok).toBe(false);
-    expect(waiting.gated).toHaveLength(2);
-
-    const spent = gatedDiffOf({ cwd: dir, range: "main...HEAD", applied: ["0022_x"] });
-    expect(spent.ok).toBe(true);
-    expect(spent.gated).toEqual([]);
+    const result = gatedDiffOf({ cwd: dir, range: "main...HEAD" });
+    expect(result.ok).toBe(true);
+    expect(result.gated).toEqual([]);
+    expect(result.migrations).toEqual([
+      expect.objectContaining({ path: "drizzle/0022_x.sql", safety: "additive", waits: true }),
+    ]);
   });
 
-  it("names the migration a diff adds, from the diff itself", { timeout: 60_000 }, () => {
-    // TC5 → AC5, end to end.
+  // T0.46 TC2 → AC2, end to end: a loosening is reported beside the judgement and gates nothing.
+  it("reports a diff's loosenings without gating on them", { timeout: 60_000 }, () => {
     const dir = branchWith((at) => {
-      mkdirSync(join(at, "drizzle"), { recursive: true });
-      writeFileSync(join(at, "drizzle/0022_x.sql"), "select 1;\n");
+      const guard = join(at, "scripts/hooks/guard.mjs");
+      writeFileSync(
+        guard,
+        readFileSync(guard, "utf8").replace(
+          'vercel.some((a) => a.startsWith("--prod") || a === "deploy")',
+          'vercel.some((a) => a === "deploy")',
+        ),
+      );
     });
     const result = gatedDiffOf({ cwd: dir, range: "main...HEAD" });
-    expect(result.ok).toBe(false);
-    expect(result.gated).toEqual(["it adds the migration drizzle/0022_x.sql"]);
+    expect(result.ok).toBe(true);
+    expect(result.loosenings.map((r) => r.rule)).toEqual([
+      "the guard no longer refuses vercel --prod",
+    ]);
   });
 });
 
 // T0.26 TC1 → AC1, TC2 → AC2, TC3 → AC3. The migration gate narrows: a file whose `apply`
 // the thread has already granted and spent is a decision already made, so the code that uses
 // it stops waiting for a second word about it. Everything else about the gate is unchanged.
+// Since T0.46 the migrations here are destructive ones — 0016 is, its backfill an UPDATE —
+// since an additive one is the gatekeeper's to apply and never waits for the word.
 describe("a consumed apply ungates its own migration", () => {
   const FILES = ["drizzle/0016_opportunity_keys.sql", "drizzle/meta/_journal.json"];
 
@@ -219,8 +330,8 @@ describe("a consumed apply ungates its own migration", () => {
     const result = gatedDiff({ files: FILES, weakened: [], applied: [] });
     expect(result.ok).toBe(false);
     expect(result.gated).toEqual([
-      "it adds the migration drizzle/0016_opportunity_keys.sql",
-      "it adds the migration drizzle/meta/_journal.json",
+      "it adds the destructive migration drizzle/0016_opportunity_keys.sql",
+      "it adds drizzle/meta/_journal.json beside a destructive migration that waits",
     ]);
   });
 
@@ -235,8 +346,8 @@ describe("a consumed apply ungates its own migration", () => {
     const result = gatedDiff({ files: FILES, weakened: [], applied: ["0015_refinement_round"] });
     expect(result.ok).toBe(false);
     expect(result.gated).toEqual([
-      "it adds the migration drizzle/0016_opportunity_keys.sql",
-      "it adds the migration drizzle/meta/_journal.json",
+      "it adds the destructive migration drizzle/0016_opportunity_keys.sql",
+      "it adds drizzle/meta/_journal.json beside a destructive migration that waits",
     ]);
   });
 
@@ -249,8 +360,8 @@ describe("a consumed apply ungates its own migration", () => {
       applied: ["0017_a"],
     });
     expect(result.gated).toEqual([
-      "it adds the migration drizzle/0018_b.sql",
-      "it adds the migration drizzle/meta/_journal.json",
+      "it adds the destructive migration drizzle/0018_b.sql",
+      "it adds drizzle/meta/_journal.json beside a destructive migration that waits",
     ]);
   });
 
@@ -279,8 +390,8 @@ describe("a consumed apply ungates its own migration", () => {
       applied: [],
     });
     expect(result.gated).toEqual([
-      "it adds the migration drizzle/0022_x.sql",
-      "it adds the migration drizzle/meta/0022_snapshot.json",
+      "it adds the destructive migration drizzle/0022_x.sql",
+      "it adds drizzle/meta/0022_snapshot.json beside a destructive migration that waits",
     ]);
   });
 
@@ -291,18 +402,24 @@ describe("a consumed apply ungates its own migration", () => {
       weakened: [],
       applied: ["0016_opportunity_keys"],
     });
-    expect(result.gated).toEqual(["it adds the migration drizzle/meta/_journal.json"]);
+    expect(result.gated).toEqual([
+      "it adds drizzle/meta/_journal.json with no migration beside it",
+    ]);
   });
 
-  it("leaves a weakening gated whatever the thread says about migrations", () => {
-    // TC2 → AC2: the apply answers the schema question and nothing else.
+  it("reports a weakening beside a spent apply, and gates on neither (T0.46)", () => {
+    // T0.26 TC2 → AC2 and T0.46 TC2 → AC2: the apply answers the schema question and nothing
+    // else, and a weakening is the gatekeeper's question rather than the word's.
     const result = gatedDiff({
       files: FILES,
       weakened: [{ rule: "the guard no longer refuses pnpm db:push", ungate: "restore the rule" }],
       applied: ["0016_opportunity_keys"],
     });
-    expect(result.ok).toBe(false);
-    expect(result.gated).toEqual(["the guard no longer refuses pnpm db:push"]);
+    expect(result.ok).toBe(true);
+    expect(result.gated).toEqual([]);
+    expect(result.loosenings.map((r) => r.rule)).toEqual([
+      "the guard no longer refuses pnpm db:push",
+    ]);
   });
 });
 

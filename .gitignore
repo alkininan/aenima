@@ -62,3 +62,8 @@ sample*.md
 # The upstream font files scripts/fonts/vendor.py cuts the subsets from. The subsets
 # are committed; the sources they came from are re-fetched by the script when it runs.
 .fonts-upstream/
+
+# The gatekeeper's verdict, docs/gates/<id>.md (T0.46). It names the pushed commit it was
+# written for, and the guard binds it to the pull request's head, so it can never be inside
+# that commit: the run's own record, like the gate's fingerprint beside the marker.
+docs/gates/

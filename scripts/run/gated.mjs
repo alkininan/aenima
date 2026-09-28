@@ -1,28 +1,35 @@
 #!/usr/bin/env node
 /**
- * Step 9 — which diffs a run may merge on its own.
+ * Steps 6 and 9 — which diffs wait for the human's word.
  *
  * A finished ticket merges itself (T0.16): the reviewer's PASS is on file and the gate is
  * green, so the human's word adds nothing — except where it still does. T0.16 kept three
  * places: a migration, the product spec, and the pipeline's own guard, gate, skill and run
- * scripts. T0.21 keeps one and a half. The human owns the documents upstream, in the
- * conversation that cuts the ticket, so re-approving a spec diff adds nothing; and a harness
- * diff is not dangerous because of where it lands but because of what it does. So:
+ * scripts. T0.21 kept one and a half. T0.46 keeps one: the gatekeeper decides the merge, a
+ * second independent verdict on the pushed commit (`.claude/agents/gatekeeper.md`), and the
+ * one decision no revert takes back is a migration that destroys or rewrites data. So:
  *
- *   - a diff adding a migration waits for `apply`: the schema is shared, and applying one is
- *     the human's call. Since T0.26 that is the whole of it — once the word has been spent on
- *     the task's thread the ticket merges itself, and until then the diff waits, because code
- *     that reads a column nobody has created is code main should not carry (§4);
- *   - a diff that **weakens a restraint** waits for `merge`, measured by running the
- *     restraints on both sides of it (`scripts/run/loosening.mjs`) rather than read off the
- *     paths it touches;
+ *   - a diff adding a **destructive** migration waits for `apply`: the schema is shared, and
+ *     a migration that drops, truncates, deletes, updates, renames or retypes is the human's
+ *     call. `scripts/run/migration-safety.mjs` says which is which, in code. Since T0.26 that
+ *     word is the whole of it — once it has been spent on the task's thread the ticket goes
+ *     on, and until then the diff waits, because code that reads a column nobody has created
+ *     is code main should not carry (§4);
+ *   - a diff adding an **additive** migration is the gatekeeper's `MERGE APPLY`: the run
+ *     applies it on that word and merges in the same run. It is reported here, never gated;
+ *   - a diff that **weakens a restraint** is reported — measured by running the restraints on
+ *     both sides of it (`scripts/run/loosening.mjs`) rather than read off the paths it
+ *     touches — for the gatekeeper to read against the ticket and the reviewer's verdict.
+ *     Since T0.46 it no longer gates: a weakening the ticket asked for and the reviewer named
+ *     merges, and one it did not is the gatekeeper's HOLD;
  *   - everything else lands on main at close.
  *
- * The answer is read in two places and lives in one: the guard's second door
- * (`scripts/hooks/guard.mjs`, rule (f)) refuses `gh pr merge` on the reviewer's PASS while
- * this says the diff is gated, and the skill's step 9 asks the same question before it
- * tries. `gatedDiff` is pure over injected inputs; `gatedDiffOf` reads the diff and both
- * sides of the restraints.
+ * The answer is read in three places and lives in one: the closer's step 6 stops on `ok:
+ * false` with the migration question, the guard's second door (`scripts/hooks/guard.mjs`,
+ * rule (f)) refuses `gh pr merge` while this says the diff is gated, and the gatekeeper reads
+ * `migrations` and `loosenings` off the same command. `gatedDiff` is pure over injected
+ * inputs; `gatedDiffOf` reads the diff, each added migration at the head of the range, and
+ * both sides of the restraints.
  */
 
 import { execFileSync } from "node:child_process";
@@ -31,7 +38,8 @@ import { readMarker } from "./claim.mjs";
 import { emit, isMain } from "./cli.mjs";
 import { appliedMigrations, readThread } from "./comments.mjs";
 import { loosenedBy } from "./loosening.mjs";
-import { MIGRATIONS_DIR } from "./migration-check.mjs";
+import { addedMigrations, MIGRATIONS_DIR } from "./migration-check.mjs";
+import { ADDITIVE, DESTRUCTIVE, safetyOfFiles } from "./migration-safety.mjs";
 import { client, readBoard, readToken, TOKEN_VAR } from "./notion.mjs";
 
 /**
@@ -100,27 +108,94 @@ export function coveredBy(files = [], applied = []) {
 const reason = (rule, ungate) => ({ rule, ungate });
 
 /**
- * `{ files, reasons, gated, ok }` for a diff whose restraint comparison has already been made.
- * `weakened` is `loosenedBy`'s reasons. `applied` is the migration tags the claimed task's
- * thread says have been applied, which since T0.26 is what takes a migration off the list;
- * absent, every migration is gated, so a caller that has read no thread gates as before.
- * `gated` is the reasons' rules, which is what a caller naming them in a sentence wants;
- * `reasons` carries what would ungate each.
+ * What `safety` says of one path — `{ safety, why }` — read from a map or a function, a bare
+ * string widened. A path nothing read is destructive: a migration whose text nobody has
+ * classified is not one the run may apply on its own word (T0.46).
  */
-export function gatedDiff({ files = [], weakened = [], applied = [] } = {}) {
+function safetyOf(safety, path) {
+  const read = typeof safety === "function" ? safety(path) : (safety ?? {})[path];
+  if (read === undefined || read === null) {
+    return { safety: DESTRUCTIVE, why: "nothing has read what it does" };
+  }
+  if (typeof read === "string") return { safety: read, why: null };
+  return { safety: read.safety ?? DESTRUCTIVE, why: read.why ?? null };
+}
+
+/**
+ * `{ files, migrations, loosenings, reasons, gated, ok }` for a diff whose restraint comparison
+ * has already been made.
+ *
+ * `weakened` is `loosenedBy`'s reasons, carried through as `loosenings` for the gatekeeper and
+ * gating nothing (T0.46). `applied` is the migration tags the claimed task's thread says have
+ * been applied, which since T0.26 is what takes a migration off the list; absent, none is.
+ * `safety` is what `migration-safety.mjs` said of each migration, by path; absent, every one
+ * is destructive. `added` is the paths the diff adds, when the caller knows; absent, every
+ * file is taken as added, which is the stricter reading. `migrations` is every migration in
+ * the diff with what was read of it — `waits` when it is added and no apply has been spent on
+ * it, which is what the gatekeeper's MERGE APPLY rests on. `reasons` is what gates: a
+ * destructive migration that waits, and the bookkeeping beside one; `gated` is their rules.
+ */
+export function gatedDiff({
+  files = [],
+  added = null,
+  weakened = [],
+  applied = [],
+  safety = {},
+} = {}) {
+  const adds = new Set(added ?? files);
   const covered = coveredBy(files, applied);
+  const migrations = gatedPaths(files)
+    .filter((path) => migrationTag(path) !== null)
+    .map((path) => {
+      const read = safetyOf(safety, path);
+      const isAdded = adds.has(path);
+      const isApplied = covered.has(path);
+      return {
+        path,
+        tag: migrationTag(path),
+        safety: read.safety,
+        why: read.why,
+        added: isAdded,
+        applied: isApplied,
+        waits: isAdded && !isApplied,
+      };
+    });
+  const held = migrations.filter((each) => each.waits && each.safety !== ADDITIVE);
+  const bookkeeping = gatedPaths(files)
+    .filter(isBookkeeping)
+    .filter((path) => !covered.has(path));
   const reasons = [
-    ...gatedPaths(files)
-      .filter((file) => !covered.has(file))
-      .map((file) =>
-        reason(
-          `it adds the migration ${file}`,
-          'a migration is applied by hand, so this one waits for you either way — say "apply" on the thread and the run that applies it lands the ticket with it',
-        ),
+    ...held.map((each) =>
+      reason(
+        `it adds the destructive migration ${each.path}`,
+        `${each.why ?? "it destroys or rewrites data"}; a migration that destroys or rewrites data is applied on your word alone — say "apply" on the thread and the run that applies it lands the ticket with it`,
       ),
-    ...weakened,
+    ),
+    ...(held.length > 0
+      ? bookkeeping.map((path) =>
+          reason(
+            `it adds ${path} beside a destructive migration that waits`,
+            "the journal and the snapshots are the record of the migrations beside them, and go when those do",
+          ),
+        )
+      : []),
+    ...(migrations.length === 0
+      ? bookkeeping.map((path) =>
+          reason(
+            `it adds ${path} with no migration beside it`,
+            "the journal and the snapshots record migrations, and with none in the diff there is nothing an apply could have been for",
+          ),
+        )
+      : []),
   ];
-  return { files, reasons, gated: reasons.map((r) => r.rule), ok: reasons.length === 0 };
+  return {
+    files,
+    migrations,
+    loosenings: weakened,
+    reasons,
+    gated: reasons.map((r) => r.rule),
+    ok: reasons.length === 0,
+  };
 }
 
 const git = (args, cwd) => {
@@ -175,10 +250,30 @@ export async function consumedApplies({ dir = process.cwd(), deps = {} } = {}) {
   return { tags: appliedMigrations(readThread(comments, prefix), prefix), why: null };
 }
 
+/** The judgement of a diff git could not produce: gated, since nothing was read. */
+function unreadDiff(range) {
+  const reasons = [
+    reason(
+      `the diff ${range} could not be read`,
+      "run from the checkout with origin/main fetched, so the diff that would merge can be judged",
+    ),
+  ];
+  return {
+    files: [],
+    migrations: [],
+    loosenings: [],
+    reasons,
+    gated: reasons.map((r) => r.rule),
+    ok: false,
+  };
+}
+
 /**
  * The diff of `range` in the checkout at `cwd`, judged. `origin/main...HEAD` is what a pull
  * request from this branch merges, and it is both sides of the restraint comparison. `applied`
- * is `consumedApplies`' tags; absent, every migration is gated.
+ * is `consumedApplies`' tags; absent, every destructive migration is gated. Each migration the
+ * diff adds is read at the head of the range — the commit that would merge, never the working
+ * tree — and handed to `migration-safety.mjs` (T0.46).
  */
 export function gatedDiffOf({
   cwd = process.cwd(),
@@ -188,12 +283,18 @@ export function gatedDiffOf({
   // `--no-renames`: without it git prints the destination alone, and a diff that renames
   // the detector would not list it — AC6 with a hole in it (review pass 2, Must 1).
   const names = git(["diff", "--name-only", "--no-renames", range], cwd);
+  // A diff nobody can read is not an empty one: with a weakening no longer gating (T0.46),
+  // an empty file list would open the door on a checkout git cannot even diff.
+  if (names === null) return { range, ...unreadDiff(range) };
   const files = String(names ?? "")
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
+  const added = addedMigrations(git(["diff", "--name-status", "--no-renames", range], cwd));
+  const head = range.split("...")[1] || "HEAD";
+  const safety = safetyOfFiles(added, (path) => git(["show", `${head}:${path}`], cwd));
   const weakened = loosenedBy({ cwd, range, files }).reasons;
-  return { range, ...gatedDiff({ files, weakened, applied }) };
+  return { range, ...gatedDiff({ files, added, weakened, applied, safety }) };
 }
 
 /** CLI: `node gated.mjs [range]`, run from the checkout. */

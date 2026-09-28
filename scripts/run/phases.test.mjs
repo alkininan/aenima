@@ -66,6 +66,39 @@ const REWRITTEN = new Map([
     "Each finding is tagged **Must** or **Should**. Fix every Must, then re-invoke.",
     "Build 4: pass 3 reads only pass 2's Musts, a Must there stops at Decision, Shoulds go to one task",
   ],
+  // T0.46 — the gatekeeper decides the merge: the closer's steps 6 and 9 are rewritten.
+  [
+    "`waiting: true` → write the Report so far, commit and push the branch",
+    "T0.46 Build 4 and 5: step 6 stops on nothing; the gatekeeper decides, a destructive migration its HOLD",
+  ],
+  [
+    "`merged: true` means main came in and the tree changed",
+    "T0.46 Build 7: what is judged below is the gatekeeper's verdict on the pushed commit",
+  ],
+  [
+    "One ticket, one pull request: a reused branch already has one, and the push updated it.",
+    "T0.46 Build 4 and 6: the close leg ends at the gate's green; no gated stop, no merge word",
+  ],
+  [
+    "`ok: false` → this diff is one only the human's word merges",
+    "T0.46 Build 4 and 6: a weakening no longer gates, and merge goes",
+  ],
+  [
+    "Exit 0 is the green, written beside the marker as this tree's fingerprint",
+    "T0.46 Build 4: the close leg hands back closed <commit> with the marker kept for the gatekeeper",
+  ],
+  [
+    "The guard opens its second door on its own reading",
+    "T0.46 Build 4: the door is the pair, and the head must be the gatekeeper's commit",
+  ],
+  [
+    "Either way, release the marker: `node scripts/run/release.mjs`.",
+    "T0.46 Build 4: the merge leg releases and hands back merged <commit>",
+  ],
+  [
+    "**Never merge on your own word.** The two doors are the guard's",
+    "T0.46 Build 4 and 6: one door, the pair, and no word",
+  ],
 ]);
 
 describe("T0.44 — phases as subagents", () => {
@@ -232,6 +265,86 @@ describe("T0.44 — phases as subagents", () => {
   });
 });
 
+// T0.46 — the gatekeeper decides the merge. TC1 → AC1 and TC5 → AC5: the gatekeeper is a
+// subagent that reads and writes one file; TC4 → AC4: a HOLD is a round the orchestrator counts;
+// TC6 → AC6: the skill and the closer no longer read a merge word.
+describe("T0.46 — the gatekeeper", () => {
+  it("gives the gatekeeper an agent file at medium that reads, runs and writes one file through Bash", () => {
+    const { front, body } = parts(agent("gatekeeper"));
+    expect(front.name).toBe("gatekeeper");
+    expect(list(front.tools)).toEqual(["Read", "Grep", "Glob", "Bash"]);
+    expect(list(front.disallowedTools)).toEqual(
+      expect.arrayContaining(["Edit", "Write", "NotebookEdit"]),
+    );
+    expect(front.effort).toBe("medium");
+    expect(front.model).toBe("fable");
+    for (const words of [
+      "docs/gates/<id>.md",
+      "git diff origin/main...HEAD",
+      "docs/reviews/<id>.md",
+      "node scripts/run/gated.mjs",
+      "node scripts/run/migration-safety.mjs",
+      "only what the ticket's Build asks",
+      "every loosening",
+      "stand on this commit",
+      "spec sections the ticket cites",
+      "every migration additive",
+      "`MERGE APPLY`",
+      "`HOLD`",
+    ]) {
+      expect(body, words).toContain(words);
+    }
+    expect(body).toMatch(/`MERGE`, `MERGE APPLY`, or `HOLD <n>`/);
+    expect(read(".gitignore")).toContain("docs/gates/");
+  });
+
+  it("has the route name the gatekeeper's one file, which exists", () => {
+    const table = JSON.parse(read(".claude/board.json"));
+    for (const type of ["Fix", "Feature", null]) {
+      const { agents } = route({ type, paths: [] }, table);
+      expect(agents.gatekeeper).toBe("gatekeeper");
+      expect(existsSync(join(root, agent(agents.gatekeeper)))).toBe(true);
+    }
+  });
+
+  it("has the skill run the gatekeeper after the close leg and read gate-cap.mjs, and read merge as a note", () => {
+    const skill = read(SKILL);
+    expect(skill).toContain("| 9 Gate | `gate` | `gatekeeper` | `docs/tickets/<id>.md` |");
+    expect(skill).toContain(
+      "| 9 Merge | `close` | `closer` | `docs/tickets/<id>.md <branch> merge` |",
+    );
+    expect(skill).toContain(
+      "node scripts/run/gate-cap.mjs docs/gates/<id>.md docs/reviews/<id>.md",
+    );
+    expect(skill).toContain("node scripts/run/phase.mjs <plan|build|review|gate|close>");
+    expect(fold(skill)).toContain("under `## Held` in `docs/reports/<id>.md`");
+    expect(skill).not.toContain("`shape: merge`");
+    expect(fold(skill)).toContain(
+      "A reply that begins with *merge*, at Review or anywhere, is a note that consumes nothing else",
+    );
+  });
+
+  it("splits the closer into a close leg and a merge leg, and reads `## Held`", () => {
+    const closer = fold(read(agent("closer")));
+    expect(closer).toContain("**The merge leg** — handed `docs/tickets/<id>.md <branch> merge`.");
+    expect(closer).toContain("`## Held`");
+    expect(closer).toContain("node scripts/run/apply.mjs");
+    expect(closer).toMatch(/`closed <commit>`.*`merged <commit>`.*`stopped <reason>`/s);
+    expect(closer).not.toContain("the human's *merge* there is the merge");
+  });
+
+  it("tells the builder and the reviewer what a HOLD round is, in both twins", () => {
+    for (const name of ["builder", "builder-medium"]) {
+      expect(fold(read(agent(name)))).toContain(
+        "A HOLD round is the same, handed the gatekeeper's `docs/gates/<id>.md`",
+      );
+    }
+    for (const name of ["reviewer", "reviewer-medium"]) {
+      expect(fold(read(agent(name)))).toContain("**After a HOLD** (T0.46)");
+    }
+  });
+});
+
 // T0.44 TC6 → AC6: the documents say what the run now is, and say they changed.
 describe("T0.44 — the documents", () => {
   const section = (text, heading, next) => {
@@ -276,12 +389,67 @@ describe("T0.44 — the documents", () => {
     expect(two).toContain("node scripts/run/review-cap.mjs");
   });
 
+  // T0.44 pinned v1.31 and v2.11 here; T0.46 bumps both, so the pin moves with it.
   it("bumps both documents' versions and notes the change in their headers", () => {
+    expect(guidelines).toContain("phases as subagents (T0.44)");
+    expect(guide).toContain("(T0.44)");
     expect(guidelines.slice(0, 600)).toMatch(
-      /^<!-- guidelines\.md · v1\.31 · in the repo · phases as subagents \(T0\.44\)/,
+      /^<!-- guidelines\.md · v1\.32 · in the repo · the gatekeeper decides the merge \(T0\.46\)/,
     );
     expect(guide.slice(0, 600)).toMatch(
-      /^<!-- build-guide\.md · v2\.11 · in the repo · .*\(T0\.44\)/s,
+      /^<!-- build-guide\.md · v2\.12 · in the repo · .*\(T0\.46\)/s,
     );
+    expect(guide).toContain("# aenima — build guide v2.12");
+  });
+});
+
+// T0.46 TC6 → AC6: the documents say the gatekeeper decides the merge, and that merge goes.
+describe("T0.46 — the documents", () => {
+  const section = (text, heading, next) => {
+    const start = text.indexOf(heading);
+    const end = next ? text.indexOf(next, start + heading.length) : -1;
+    return text.slice(start, end === -1 ? undefined : end);
+  };
+  const guidelines = read("docs/guidelines.md");
+  const guide = read("docs/build-guide.md");
+
+  it("makes §3's Review → Done one row on the pair, beside the merged-by-hand row", () => {
+    const three = section(guidelines, "## 3. Status machine", "## 4.");
+    const rows = three.split("\n").filter((line) => line.startsWith("| Review | Done |"));
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toContain("the reviewer's PASS and the gatekeeper's MERGE");
+    expect(rows[0]).toContain("a reply beginning `merge` is a note");
+    expect(three).not.toContain("says `merge`");
+  });
+
+  it("names two words in §4, the gatekeeper in place of the third, and a weakening as its question", () => {
+    const four = section(guidelines, "## 4. Decision protocol", "## 5.");
+    expect(four).toContain("**The two words are verified in code.**");
+    expect(four).toContain("**The gatekeeper replaces the word.**");
+    expect(four).toContain("**`apply` is your word in one case, said as one sentence");
+    expect(four).toContain("docs/gates/<id>.md");
+    expect(four).not.toContain("**The three words");
+    expect(four).not.toContain("**`merge` is still your word");
+  });
+
+  it("runs the gatekeeper in §5 step 9 after the PASS and the gate's green, on the pushed commit, and stops nothing at step 6", () => {
+    const five = section(guidelines, "## 5. Run protocol", "## 6. Cutting tickets");
+    expect(five).toContain("then the gatekeeper (T0.46)");
+    expect(five).toContain("6  Migration    nothing stops here since T0.46");
+    expect(five).toContain("**gatekeeper**");
+    expect(five).toContain("`docs/gates/<id>.md`");
+    expect(five).toContain("no word on the thread opens it (T0.46)");
+    expect(five).not.toContain("waits for `merge` from you");
+    expect(five).not.toContain("merge at Review → claim");
+  });
+
+  it("gains the gatekeeper in build-guide §2's hooks, reviewer and phases paragraphs", () => {
+    const two = section(guide, "## 2. How to run a ticket", "## 3.");
+    expect(two).toContain("**The gatekeeper is a subagent too, and it decides the merge**");
+    expect(two).toContain('claude -p --agent gatekeeper "docs/tickets/<id>.md"');
+    expect(two).toContain("node scripts/run/gate-cap.mjs docs/gates/<id>.md docs/reviews/<id>.md");
+    expect(two).toContain("five subagents");
+    expect(two).toContain("the gatekeeper's `MERGE` or `MERGE APPLY` in `docs/gates/<id>.md`");
+    expect(two).not.toContain("merges on the word `merge` at Review");
   });
 });

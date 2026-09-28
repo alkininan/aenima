@@ -21,16 +21,21 @@
  * never matches: T0.98 and T0.8's close were both refused for *mentioning* a command in a
  * file they were writing, which is what T0.9 replaces.
  *
- * Two rules — (b) a migration apply and (f) a pull-request merge — are allowed on the
- * human's word: before `decide()` runs, `judge()` asks `scripts/run/permission.mjs` to read
- * the claimed task's thread over the Notion API with the integration token, and hands the
- * answer in as `deps.permission`. Since T0.16 rule (f) has a second door, `deps.verdict`:
- * the claimed task's reviewer verdict on file ends in PASS and the diff is not one only the
- * word merges (`scripts/run/gated.mjs`, which since T0.21 measures the restraints on both
- * sides of it rather than reading paths), and the pull request's head is this checkout's
- * HEAD — the diff the guard read is the diff that merges. Rule (d) lets one push to main through: the
- * revert of the merge at origin/main's tip, `HEAD:main`, one commit that restores the tree
- * before the merge. The guard verifies; the model never asserts (docs/guidelines.md §4).
+ * Rule (b), a migration apply, is allowed on the human's word: before `decide()` runs,
+ * `judge()` asks `scripts/run/permission.mjs` to read the claimed task's thread over the
+ * Notion API with the integration token, and hands the answer in as `deps.permission`. Since
+ * T0.46 it has a second door, `deps.applyVerdict`: the gatekeeper's verdict on file ends in
+ * MERGE APPLY for this checkout's HEAD and `scripts/run/migration-safety.mjs` says additive for
+ * every migration the diff adds and nobody has applied. Rule (f), a pull-request merge, opens
+ * on no word since T0.46: `deps.verdict` is the pair — the claimed task's reviewer verdict on
+ * file ends in PASS, its gatekeeper verdict ends in MERGE or MERGE APPLY and names the commit
+ * it was written for, the diff adds no destructive migration nobody has applied
+ * (`scripts/run/gated.mjs`, which reports a weakening for the gatekeeper and no longer gates
+ * on it), and the pull request's head is this checkout's HEAD and the commit the gatekeeper
+ * named — the diff the guard read is the diff that merges, and the verdicts are its. Rule (d)
+ * lets one push to main through: the revert of the merge at origin/main's tip, `HEAD:main`,
+ * one commit that restores the tree before the merge. The guard verifies; the model never
+ * asserts (docs/guidelines.md §4).
  *
  * Since T0.17 the guard also stands at the board's connector — the Notion tools the run writes
  * the board through, whatever the server is called. Rule (h): a status write that sets a
@@ -59,8 +64,16 @@ import { fileURLToPath } from "node:url";
 
 import { readMarker } from "../run/claim.mjs";
 import { kindOf } from "../run/comments.mjs";
+import { consumedApplies } from "../run/gated.mjs";
 import { readBoard } from "../run/notion.mjs";
-import { postable, reviewed, unreadPost, verify } from "../run/permission.mjs";
+import {
+  applyGranted,
+  commitMatches,
+  postable,
+  reviewed,
+  unreadPost,
+  verify,
+} from "../run/permission.mjs";
 import { resolveDir } from "./gate.mjs";
 
 /** Words that run their remaining argv as the command. */
@@ -1030,12 +1043,21 @@ export function isEnvPath(path) {
 
 /**
  * True when a path is a reviewer's verdict file, `docs/reviews/<id>.md`, wherever the
- * checkout sits. The second door reads it, so the run's own Edit and Write may not touch it
+ * checkout sits. The door reads it, so the run's own Edit and Write may not touch it
  * (T0.16); the reviewer writes it through its Bash, which this rule does not read.
  */
 export function isVerdictPath(path) {
   const p = String(path ?? "").replaceAll("\\", "/");
   return p.startsWith("docs/reviews/") || p.includes("/docs/reviews/");
+}
+
+/**
+ * True when a path is a gatekeeper's verdict file, `docs/gates/<id>.md`, wherever the checkout
+ * sits — the gatekeeper's to write, through its own Bash, for the same reason (T0.46).
+ */
+export function isGatePath(path) {
+  const p = String(path ?? "").replaceAll("\\", "/");
+  return p.startsWith("docs/gates/") || p.includes("/docs/gates/");
 }
 
 /**
@@ -1242,7 +1264,11 @@ export function wantedBy(input) {
   return movesStatus(input) ? ["ready"] : [];
 }
 
-/** The words a command line would need the board's permission for, in the order met. */
+/**
+ * The doors a command line would need opened, in the order met: `apply` for a migration apply,
+ * `merge` for a pull-request merge. Since T0.46 `merge` is no word of the board's — the door is
+ * the pair of files — but the name is what `judge()` reads the thread for: the spent applies.
+ */
 export function wanted(command) {
   const words = [];
   for (const cmd of parse(command)) {
@@ -1259,8 +1285,11 @@ export function wanted(command) {
 /** When nothing read the board, nothing is granted. */
 const UNREAD = { ok: false, why: "the board was not read" };
 
-/** When nothing read the reviewer's verdict, the second door is shut. */
+/** When nothing read the reviewer's and the gatekeeper's verdicts, the merge door is shut. */
 const UNREVIEWED = { ok: false, why: "no reviewer verdict was read" };
+
+/** When nothing read the gatekeeper's verdict, the apply's second door is shut. */
+const UNGATED = { ok: false, why: "no gatekeeper verdict was read" };
 
 /**
  * Rule (j), T0.44: what the phase the marker names may not do. A run is an orchestrator and a
@@ -1327,20 +1356,23 @@ export function isDocsPath(path, dir, cwd = dir) {
 /**
  * The whole decision. Returns the refusal reason, or null to let the call through.
  *
- * `deps.currentBranch`, `deps.permission`, `deps.verdict`, `deps.posting`, `deps.prBranch`,
- * `deps.prHead`, `deps.localHead`, `deps.revertOfTip`, `deps.prefix`, `deps.readScript` and
- * `deps.mainScript` are injected so the rules that depend on where HEAD points, on what the
- * board's thread says, on what the reviewer wrote, on which branch and commit a pull request
- * carries, and on what a script a command runs holds — and main's copy of it — can be tested
- * without a repository, a board or a file standing in a particular state. Without `deps.permission` nothing is granted, without
- * `deps.verdict` the second door is shut, and without `deps.posting` the thread was not read, so
- * a clarifying round waits and every other comment posts: the hook's `judge()` reads all three.
+ * `deps.currentBranch`, `deps.permission`, `deps.verdict`, `deps.applyVerdict`, `deps.posting`,
+ * `deps.prBranch`, `deps.prHead`, `deps.localHead`, `deps.revertOfTip`, `deps.prefix`,
+ * `deps.readScript` and `deps.mainScript` are injected so the rules that depend on where HEAD
+ * points, on what the board's thread says, on what the reviewer and the gatekeeper wrote, on
+ * which branch and commit a pull request carries, and on what a script a command runs holds —
+ * and main's copy of it — can be tested without a repository, a board or a file standing in a
+ * particular state. Without `deps.permission` nothing is granted, without `deps.verdict` the
+ * merge door is shut, without `deps.applyVerdict` the apply's second door is shut, and without
+ * `deps.posting` the thread was not read, so a clarifying round waits and every other comment
+ * posts: the hook's `judge()` reads all four.
  */
 export function decide(input, deps = {}) {
   const dir = resolveDir(input);
   const currentBranch = deps.currentBranch ?? (() => branchAt(input?.cwd ?? process.cwd()));
   const permission = deps.permission ?? (() => UNREAD);
   const verdict = deps.verdict ?? (() => UNREVIEWED);
+  const applyVerdict = deps.applyVerdict ?? (() => UNGATED);
   const prBranch = deps.prBranch ?? ((selector) => prBranchAt(selector, dir));
   const prHead = deps.prHead ?? ((selector) => prHeadAt(selector, dir));
   const localHead = deps.localHead ?? (() => revAt("HEAD", dir));
@@ -1365,9 +1397,13 @@ export function decide(input, deps = {}) {
     if (typeof path === "string" && isEnvPath(path)) {
       return `Writing ${path} is refused — .env files carry secrets and are edited by hand. docs/guidelines.md §5, hard boundaries.`;
     }
-    // (g) the reviewer's verdict is the reviewer's to write; the guard's second door reads it.
+    // (g) the reviewer's verdict is the reviewer's to write, and the gatekeeper's the
+    // gatekeeper's (T0.46); the guard's door reads both.
     if (typeof path === "string" && isVerdictPath(path)) {
       return `Writing ${path} is refused — a file under docs/reviews/ is the reviewer's to write, and the guard opens a merge on what it finds there. docs/guidelines.md §4.`;
+    }
+    if (typeof path === "string" && isGatePath(path)) {
+      return `Writing ${path} is refused — a file under docs/gates/ is the gatekeeper's to write, and the guard opens a merge and an apply on what it finds there. docs/guidelines.md §4.`;
     }
     // (j) only the build phase edits source, and plan, review and gate edit nothing (T0.44).
     return phaseRefusal(phase(), "edit", {
@@ -1479,10 +1515,17 @@ export function decide(input, deps = {}) {
     // and a child in the primary checkout, so this rule is no longer the second layer behind
     // a credential the run could not reach: it is the layer. It reads every shape — the
     // package script, the binary's verb, that script, and anything handed `.env.migrate`.
+    // Since T0.46 an additive migration applies on the gatekeeper's word instead: its file for
+    // this commit ends in MERGE APPLY and `migration-safety.mjs` says additive for every
+    // migration that waits — the script's answer, never the model's (`applyGranted`). The
+    // human's word stays for a migration that destroys or rewrites data.
     if (appliesMigration(cmd.argv)) {
       const granted = permission("apply");
       if (!granted.ok) {
-        return `Applying a migration needs your word on the board — a reply beginning with "apply" on the task's thread, newer than the run's question — and the guard could not find it: ${granted.why}. Leave the migration in the diff and say it is waiting. docs/guidelines.md §4.`;
+        const gate = applyVerdict();
+        if (!gate.ok) {
+          return `Applying a migration needs your word on the board — a reply beginning with "apply" on the task's thread, newer than the run's question — and the guard could not find it: ${granted.why}. The gatekeeper's door is shut too — MERGE APPLY on file for this commit over migrations migration-safety.mjs calls additive: ${gate.why}. Leave the migration in the diff and say it is waiting. docs/guidelines.md §4.`;
+        }
       }
     }
 
@@ -1510,32 +1553,24 @@ export function decide(input, deps = {}) {
       return "Merging while main is checked out is refused — merges to main are made by hand. docs/guidelines.md §5, hard boundaries.";
     }
 
-    // (f) a pull request merged through the API writes main from any branch. Two doors. The
-    // human's word, since T0.11: one reply on the task at Review, read from the board, and the
-    // pull request must be that task's branch — derived from the task's name on the board,
-    // never from the marker the run wrote. The reviewer's PASS, since T0.16: the claimed
-    // task's verdict on file, a diff that weakens no restraint, and the pull request's head
-    // equal to this checkout's HEAD, so the diff the guard judged is the one that merges.
-    // Either way a merge commit, said as --merge: a squash rewrites the hash and
-    // `merge-detect.mjs` would never see the task land.
+    // (f) a pull request merged through the API writes main from any branch. One door since
+    // T0.46, and no word opens it: the pair — the claimed task's reviewer verdict on file
+    // ending in PASS and its gatekeeper verdict ending in MERGE or MERGE APPLY, both read by
+    // `reviewed` with the diff and the gate's green — and the pull request must be that
+    // task's branch, derived from the marker's task, its head this checkout's HEAD, and that
+    // HEAD the commit the gatekeeper's file names, so the diff the guard judged is the one
+    // that merges and the verdicts were written for it. A merge commit, said as --merge: a
+    // squash rewrites the hash and `merge-detect.mjs` would never see the task land.
     const gh = ghWords(rest);
     if (name === "gh" && gh[0] === "pr" && gh[1] === "merge") {
-      const word = permission("merge");
-      let granted = word;
-      let door = "word";
-      if (!word.ok) {
-        const passed = verdict();
-        if (passed.ok) {
-          granted = passed;
-          door = "verdict";
-        } else {
-          return `Merging a pull request needs your word on the board — a reply beginning with "merge" on the task at Review — and the guard could not find it: ${word.why}. The reviewer's door is shut too: ${passed.why}. docs/guidelines.md §4.`;
-        }
+      const passed = verdict();
+      if (!passed.ok) {
+        return `Merging a pull request opens on two files the guard reads for itself — the reviewer's PASS in docs/reviews/<id>.md and the gatekeeper's MERGE in docs/gates/<id>.md, both for the pushed commit — and the door is shut: ${passed.why}. docs/guidelines.md §4.`;
       }
       if (!mergeCommit(rest)) {
         return "Merging is refused unless it says --merge — a squash or a rebase rewrites the commit the board carries, a flagless merge takes whatever the repository is set to, and either way the task would never be seen to land. scripts/run/merge-detect.mjs.";
       }
-      const branch = granted.task?.branch ?? null;
+      const branch = passed.task?.branch ?? null;
       if (branch === null) {
         return "Merging is refused — the claimed task's name on the board carries no T<n>.<n> ID, so its branch is unknown and the pull request cannot be matched to it. docs/guidelines.md §4.";
       }
@@ -1544,15 +1579,20 @@ export function decide(input, deps = {}) {
         return "Merging is refused — gh could not say which branch the pull request carries, so it cannot be matched to the claimed task. docs/guidelines.md §4.";
       }
       if (head !== branch) {
-        return `Merging is refused — the pull request is for ${head} and the claimed task's branch is ${branch}; the word on one task's thread does not merge another's. docs/guidelines.md §4.`;
+        return `Merging is refused — the pull request is for ${head} and the claimed task's branch is ${branch}; one task's verdicts do not merge another's. docs/guidelines.md §4.`;
       }
-      if (door === "verdict") {
-        const oid = prHead(gh[2] ?? null);
-        const local = localHead();
-        if (oid === null || local === null || oid !== local) {
-          const at = (sha) => (sha === null ? "unknown" : sha.slice(0, 7));
-          return `Merging on the reviewer's PASS is refused — the pull request's head is ${at(oid)} and this checkout's HEAD is ${at(local)}, so the verdict on file and the diff the guard read are not the diff that would merge. Push, then merge from the pushed commit. docs/guidelines.md §4.`;
-        }
+      const oid = prHead(gh[2] ?? null);
+      const local = localHead();
+      const at = (sha) => (sha === null || sha === undefined ? "unknown" : String(sha).slice(0, 7));
+      if (oid === null || local === null || oid !== local) {
+        return `Merging on the pair is refused — the pull request's head is ${at(oid)} and this checkout's HEAD is ${at(local)}, so the verdicts on file and the diff the guard read are not the diff that would merge. Push, then merge from the pushed commit. docs/guidelines.md §4.`;
+      }
+      const named = passed.gatekeeper?.commit ?? null;
+      if (named === null) {
+        return "Merging is refused — the gatekeeper's file names no commit, so nothing says which commit its verdict was written for. docs/guidelines.md §4.";
+      }
+      if (!commitMatches(named, oid)) {
+        return `Merging is refused — the gatekeeper's file was written for ${at(named)} and the pull request's head is ${at(oid)}: its verdict is another commit's. Run the gatekeeper on the pushed commit. docs/guidelines.md §4.`;
       }
     }
 
@@ -1600,26 +1640,33 @@ async function readStdin() {
 }
 
 /**
- * `decide` with the board read first: for each word the command would need, the claimed
- * task's thread is fetched once, and the answers are what the rules see. A command that
- * needs no word reads nothing.
+ * `decide` with the board and the files read first: for each door the command would need,
+ * the claimed task's thread is fetched once, and the answers are what the rules see. A
+ * command that needs no door reads nothing.
  */
 export async function judge(input, { dir = resolveDir(input), deps = {} } = {}) {
   const answers = {};
   let passed = null;
+  let applyGate = null;
   for (const word of wantedBy(input)) {
     // "ready" is read on the page the write names; the preflight sets Ready before any claim.
     const page = word === "ready" ? (input?.tool_input?.page_id ?? null) : null;
-    answers[word] = await verify(word, { dir, page, deps });
-    // The reviewer's door is read only when the word is not there: a merge the human
-    // granted needs no verdict, and a verdict is never read for an apply. Since T0.26 the
-    // door is also told which of the diff's migrations the thread says are already applied —
-    // read off the same fetch `verify` just made, so the two doors ask the board once and
-    // cannot disagree about it. A thread it could not read hands back none, and the
-    // migration is gated as before.
-    if (word === "merge" && !answers[word].ok) {
-      const applied = deps.applied ?? answers[word].applied ?? [];
+    if (word === "merge") {
+      // No word opens a merge (T0.46). The thread is read for the migrations it says are
+      // already applied — `consumedApplies`, the same reading the closer's step 6 makes — and
+      // the door is the pair of files over that diff. A thread nobody can read hands back
+      // none, and a destructive migration is gated as before.
+      const applied = deps.applied ?? (await consumedApplies({ dir, deps })).tags;
       passed = reviewed({ dir, deps: { ...deps, applied } });
+      continue;
+    }
+    answers[word] = await verify(word, { dir, page, deps });
+    // The gatekeeper's door is read only when the word is not there (T0.46): an apply the
+    // human granted needs no verdict. The door is told which migrations the thread says are
+    // already applied, read off the same fetch `verify` just made.
+    if (word === "apply" && !answers[word].ok) {
+      const applied = deps.applied ?? answers[word].applied ?? [];
+      applyGate = applyGranted({ dir, deps: { ...deps, applied } });
     }
   }
   // A comment is read against the thread of the page it names (T0.20).
@@ -1637,6 +1684,7 @@ export async function judge(input, { dir = resolveDir(input), deps = {} } = {}) 
     phase,
     permission: (word) => answers[word] ?? UNREAD,
     verdict: () => passed ?? UNREVIEWED,
+    applyVerdict: () => applyGate ?? UNGATED,
     ...(posted ? { posting: () => posted } : {}),
     ...(deps.prBranch ? { prBranch: deps.prBranch } : {}),
     ...(deps.prHead ? { prHead: deps.prHead } : {}),

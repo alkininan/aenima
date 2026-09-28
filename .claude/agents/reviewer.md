@@ -25,6 +25,10 @@ The review loop is capped at three passes, and the pass says how much you read:
   pass 1 did not raise is still a Must, if a fix introduced it.
 - **Pass 3** reads only pass 2's Musts, from the verdict file pass 2 left, and answers on those:
   is each one settled or not. It raises nothing new. There is no pass 4.
+- **After a HOLD** (T0.46) the pass before yours passed and the gatekeeper held the pushed
+  commit: the Musts the fixes answer are then the numbered reasons in `docs/gates/<id>.md`,
+  read beside the verdict file, and the round counts as a pass like any other — the third
+  correction, whoever asked for it, is the last.
 
 Work in this order.
 
@@ -71,13 +75,14 @@ Work in this order.
    your last act. First line `# <id> — review`, then the commit you reviewed (`git rev-parse
    --short HEAD`), then `pass <n>` on a line of its own — the pass you were handed, which
    `scripts/run/review-cap.mjs` counts the cap by — then your findings as returned above, and the **last line is the verdict
-   alone: `PASS` when no Must stands, `FINDINGS` when one does**. The guard reads that file at close and lets a ticket whose
-   diff weakens no restraint, and adds no migration the human's `apply` is still owed on, merge
-   itself on `PASS`
-   (`docs/guidelines.md` §4); a verdict the
+   alone: `PASS` when no Must stands, `FINDINGS` when one does**. The guard reads that file at
+   close beside the gatekeeper's `docs/gates/<id>.md`, and lets a ticket merge itself on the
+   pair — your `PASS` and its `MERGE`, both for the pushed commit — over a diff that adds no
+   migration the human's `apply` is still owed on (`docs/guidelines.md` §4, T0.46); a verdict the
    run wrote for itself would be the model's claim, which is why it is yours to write and the
-   run is told never to touch it. Overwrite the file on every pass; the last pass is the one
-   that counts.
+   run is told never to touch it. Name every loosening `node scripts/run/gated.mjs` lists in your
+   findings, Must or Should, since the gatekeeper holds a loosening nobody named. Overwrite the
+   file on every pass; the last pass is the one that counts.
 
 **Your reply's last line is the verdict, alone:** `PASS`, or `FINDINGS <n>` with the number of
 Musts standing. The orchestrator reads that line and the file, nothing else of your reply.

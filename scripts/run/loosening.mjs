@@ -78,6 +78,7 @@ export const PROBE_DEPS = {
   currentBranch: () => "t0-1",
   permission: () => ({ ok: false, why: "the corpus grants nothing" }),
   verdict: () => ({ ok: false, why: "the corpus grants nothing" }),
+  applyVerdict: () => ({ ok: false, why: "the corpus grants nothing" }),
   prBranch: () => "t0-1",
   prHead: () => "a".repeat(40),
   localHead: () => "b".repeat(40),
@@ -124,9 +125,32 @@ export const GUARD_CORPUS = [
   },
   { name: "gh pr merge with no word", rule: "f", input: bash("gh pr merge t0-1 --merge") },
   {
+    // T0.46: the pair is on file and the head is this checkout's, but the gatekeeper's file
+    // names another commit — the one binding the merge door added, refused by it alone.
+    name: "gh pr merge on the pair whose gatekeeper file names another commit",
+    rule: "f",
+    input: bash("gh pr merge t0-1 --merge"),
+    deps: {
+      verdict: () => ({
+        ok: true,
+        why: null,
+        task: { name: "T0.1", branch: "t0-1" },
+        gated: [],
+        gatekeeper: { verdict: "MERGE", commit: "c".repeat(40) },
+      }),
+      prHead: () => "a".repeat(40),
+      localHead: () => "a".repeat(40),
+    },
+  },
+  {
     name: "write a reviewer verdict",
     rule: "g",
     input: { tool_name: "Write", tool_input: { file_path: "docs/reviews/T0.1.md" } },
+  },
+  {
+    name: "write a gatekeeper verdict",
+    rule: "g",
+    input: { tool_name: "Write", tool_input: { file_path: "docs/gates/T0.1.md" } },
   },
   {
     name: "set a Backlog task Ready with no word",
@@ -255,14 +279,16 @@ export const GUARD_CORPUS = [
 ];
 
 /**
- * The two doors a merge and a close actually rest on, which the guard's rule table only
- * *reacts* to: `reviewed()` in `scripts/run/permission.mjs` decides whether the reviewer's
- * PASS opens a merge, and `decide()` in `scripts/hooks/gate.mjs` decides whether a red suite
- * may close a session. `PROBE_DEPS` hands the guard fixed refusals for both, so without this
- * second corpus a diff could make either answer yes to everything and self-merge, after which
- * the hooks run the gutted copy from `origin/main` (review pass 2, Must 2).
+ * The three doors a merge, an apply and a close actually rest on, which the guard's rule
+ * table only *reacts* to: `reviewed()` in `scripts/run/permission.mjs` decides whether the
+ * pair — the reviewer's PASS and the gatekeeper's MERGE — opens a merge, `applyGranted()`
+ * beside it whether the gatekeeper's MERGE APPLY opens an apply (T0.46), and `decide()` in
+ * `scripts/hooks/gate.mjs` whether a red suite may close a session. `PROBE_DEPS` hands the
+ * guard fixed refusals for all three, so without this second corpus a diff could make any of
+ * them answer yes to everything and self-merge, after which the hooks run the gutted copy
+ * from `origin/main` (review pass 2, Must 2).
  *
- * Each entry says what must go on being refused, and runs it: `refused` is handed the two
+ * Each entry says what must go on being refused, and runs it: `refused` is handed the
  * functions from the side under measurement and answers whether that side still refuses.
  */
 export const DOOR_CORPUS = [
@@ -321,6 +347,76 @@ export const DOOR_CORPUS = [
         deps: { ...DOOR_OPEN, gate: () => ({ green: "a".repeat(40), tree: "b".repeat(40) }) },
       }).ok,
   },
+  // T0.46: the second file of the pair. Without it, on a HOLD, or naming no commit, no merge.
+  {
+    name: "a merge with no gatekeeper verdict on file",
+    door: "reviewed",
+    refused: ({ reviewed }) =>
+      !reviewed({ dir: "/nowhere", deps: { ...DOOR_OPEN, gatekeeper: () => null } }).ok,
+  },
+  {
+    name: "a merge whose gatekeeper file says HOLD",
+    door: "reviewed",
+    refused: ({ reviewed }) =>
+      !reviewed({
+        dir: "/nowhere",
+        deps: { ...DOOR_OPEN, gatekeeper: () => "commit aaaaaaa\n\n1. Too much.\n\nHOLD\n" },
+      }).ok,
+  },
+  {
+    name: "a merge whose gatekeeper file names no commit",
+    door: "reviewed",
+    refused: ({ reviewed }) =>
+      !reviewed({ dir: "/nowhere", deps: { ...DOOR_OPEN, gatekeeper: () => "MERGE\n" } }).ok,
+  },
+  // T0.46: the apply door on the gatekeeper's word, each entry withholding one of the four
+  // things it needs — the file, MERGE APPLY, this commit, an additive migration.
+  {
+    name: "an apply with no gatekeeper verdict on file",
+    door: "applyGranted",
+    refused: ({ applyGranted }) =>
+      !applyGranted({ dir: "/nowhere", deps: { ...APPLY_OPEN, gatekeeper: () => null } }).ok,
+  },
+  {
+    name: "an apply whose gatekeeper file says MERGE rather than MERGE APPLY",
+    door: "applyGranted",
+    refused: ({ applyGranted }) =>
+      !applyGranted({
+        dir: "/nowhere",
+        deps: { ...APPLY_OPEN, gatekeeper: () => "commit aaaaaaa\n\nMERGE\n" },
+      }).ok,
+  },
+  {
+    name: "an apply whose gatekeeper file was written for another commit",
+    door: "applyGranted",
+    refused: ({ applyGranted }) =>
+      !applyGranted({ dir: "/nowhere", deps: { ...APPLY_OPEN, localHead: () => "b".repeat(40) } })
+        .ok,
+  },
+  {
+    name: "an apply over a migration the reader calls destructive",
+    door: "applyGranted",
+    refused: ({ applyGranted }) =>
+      !applyGranted({
+        dir: "/nowhere",
+        deps: {
+          ...APPLY_OPEN,
+          diff: () => ({
+            ok: false,
+            migrations: [
+              {
+                path: "drizzle/0022_x.sql",
+                tag: "0022_x",
+                safety: "destructive",
+                why: "UPDATE rewrites rows",
+                applied: false,
+                waits: true,
+              },
+            ],
+          }),
+        },
+      }).ok,
+  },
   {
     name: "a stop over a red first step",
     door: "gate",
@@ -342,12 +438,33 @@ export const DOOR_CORPUS = [
 /** A path that is no git repository, so `gatedDiffOf` answers without measuring anything. */
 const NO_REPOSITORY = "/aenima-no-such-directory";
 
-/** The four things `reviewed` needs before it opens, so an entry can withhold exactly one. */
+/** The five things `reviewed` needs before it opens, so an entry can withhold exactly one. */
 const DOOR_OPEN = {
   marker: () => ({ task: "T0.1", page: "p", branch: "t0-1" }),
   verdict: () => "## Findings\n\nnone\n\nPASS\n",
+  gatekeeper: () => "# T0.1 — gate\n\ncommit aaaaaaa\n\nMERGE\n",
   diff: () => ({ ok: true, gated: [] }),
   gate: () => ({ green: "a".repeat(40), tree: "a".repeat(40) }),
+};
+
+/** The four things `applyGranted` needs before it opens, so an entry can withhold one (T0.46). */
+const APPLY_OPEN = {
+  marker: () => ({ task: "T0.1", page: "p", branch: "t0-1" }),
+  gatekeeper: () => "# T0.1 — gate\n\ncommit aaaaaaa\n\nMERGE APPLY\n",
+  localHead: () => "a".repeat(40),
+  diff: () => ({
+    ok: true,
+    migrations: [
+      {
+        path: "drizzle/0022_x.sql",
+        tag: "0022_x",
+        safety: "additive",
+        why: null,
+        applied: false,
+        waits: true,
+      },
+    ],
+  }),
 };
 
 /**
@@ -392,7 +509,11 @@ export function refusals(decide, corpus = GUARD_CORPUS) {
 }
 
 /** What each door is called in a sentence. */
-const DOORS = { reviewed: "the guard's second door", gate: "the Stop gate" };
+const DOORS = {
+  reviewed: "the guard's second door",
+  applyGranted: "the guard's apply door",
+  gate: "the Stop gate",
+};
 
 /** `{ name: refused }` for one side's two doors. */
 export function doorRefusals(doors, corpus = DOOR_CORPUS) {
@@ -897,7 +1018,7 @@ async function runProbe(root) {
   const url = (file) => pathToFileURL(join(root, file)).href;
   const { decide } = await import(url("hooks/guard.mjs"));
   const { gatedDiff, isGatedPath } = await import(url("run/gated.mjs"));
-  const { reviewed } = await import(url("run/permission.mjs"));
+  const { reviewed, applyGranted } = await import(url("run/permission.mjs"));
   const { STEPS, MAX_RED, decide: gate } = await import(url("hooks/gate.mjs"));
   // One red step of *this* side's STEPS, the rest green: an entry follows a gate whose steps
   // were renamed, and only one that stopped refusing a red step reads as loosened.
@@ -912,7 +1033,7 @@ async function runProbe(root) {
   };
   emit({
     guard: refusals(decide),
-    doors: doorRefusals({ reviewed, gateDecide }),
+    doors: doorRefusals({ reviewed, applyGranted, gateDecide }),
     paths: gating(isGatedPath),
     diffs: diffGating(gatedDiff),
     letters: ruleLetters(readFileSync(join(root, "hooks/guard.mjs"), "utf8")),

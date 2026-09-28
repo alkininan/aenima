@@ -6,7 +6,7 @@ import { afterAll, describe, expect, it } from "vitest";
 
 import { decide as gate, MAX_RED, STEPS } from "../hooks/gate.mjs";
 import { decide } from "../hooks/guard.mjs";
-import { reviewed } from "./permission.mjs";
+import { applyGranted, reviewed } from "./permission.mjs";
 import {
   coverageGaps,
   detectorLoosened,
@@ -158,13 +158,38 @@ describe("the corpus", () => {
 
   // Review pass 2, Must 2. The guard's rule table only reacts to these two; they are what a
   // merge and a close actually rest on, so they are measured in their own right.
-  it("is refused entry by entry by this checkout's two doors", () => {
-    const answers = doorRefusals({ reviewed, gateDecide });
+  it("is refused entry by entry by this checkout's three doors", () => {
+    const answers = doorRefusals({ reviewed, applyGranted, gateDecide });
     for (const entry of DOOR_CORPUS) {
       expect(answers[entry.name], entry.name).toBe(true);
     }
     expect(DOOR_CORPUS.map((entry) => entry.door)).toContain("reviewed");
+    expect(DOOR_CORPUS.map((entry) => entry.door)).toContain("applyGranted");
     expect(DOOR_CORPUS.map((entry) => entry.door)).toContain("gate");
+  });
+
+  // T0.46 Tests: the loosening corpus gains this diff's own case — the gatekeeper's file the
+  // run may not write, the merge door's second file and the commit it names, and the apply door
+  // on the gatekeeper's word — so a later diff cannot take any of them away unseen.
+  it("carries this diff's own case: the gatekeeper's file, the pair and the apply door", () => {
+    const guard = GUARD_CORPUS.map((entry) => entry.name);
+    expect(guard).toContain("write a gatekeeper verdict");
+    expect(guard).toContain("gh pr merge on the pair whose gatekeeper file names another commit");
+    expect(GUARD_CORPUS.find((entry) => entry.name === "write a gatekeeper verdict").rule).toBe(
+      "g",
+    );
+    const doors = DOOR_CORPUS.map((entry) => entry.name);
+    for (const name of [
+      "a merge with no gatekeeper verdict on file",
+      "a merge whose gatekeeper file says HOLD",
+      "a merge whose gatekeeper file names no commit",
+      "an apply with no gatekeeper verdict on file",
+      "an apply whose gatekeeper file says MERGE rather than MERGE APPLY",
+      "an apply whose gatekeeper file was written for another commit",
+      "an apply over a migration the reader calls destructive",
+    ]) {
+      expect(doors, name).toContain(name);
+    }
   });
 
   it("reaches the gate's last step and its release count, whatever they are named", () => {
@@ -187,10 +212,14 @@ describe("doorsLoosened", () => {
     expect(found[0].rule).toBe(`the guard's second door no longer refuses ${name}`);
   });
 
-  it("names the Stop gate as itself", () => {
+  it("names the Stop gate as itself, and the apply door as itself", () => {
     const stop = DOOR_CORPUS.find((entry) => entry.door === "gate").name;
     expect(doorsLoosened({ [stop]: true }, { [stop]: false })[0].rule).toBe(
       `the Stop gate no longer refuses ${stop}`,
+    );
+    const apply = DOOR_CORPUS.find((entry) => entry.door === "applyGranted").name;
+    expect(doorsLoosened({ [apply]: true }, { [apply]: false })[0].rule).toBe(
+      `the guard's apply door no longer refuses ${apply}`,
     );
   });
 
@@ -578,11 +607,14 @@ describe("loosenedBy over a repository", () => {
   });
 
   it("gates a diff that cuts the door's wiring to gated.mjs", { timeout: 60_000 }, () => {
-    // Review pass 3, Must 1: `reviewed` works its own diff out when nothing hands it one, and
-    // that line — and `gatedDiff`'s `...weakened` spread behind it — is what the corpus entry
-    // withholding `diff` reaches.
+    // Review pass 3, Must 1, and T0.46: `reviewed` works its own diff out when nothing hands
+    // it one, and that line — and, since a weakening no longer gates, `gatedDiffOf`'s reading
+    // of a diff git could not produce as gated — is what the corpus entry withholding `diff`
+    // reaches. Cut that reading and an unreadable diff is an empty one, which opens the door.
     const dir = repoWith((at) =>
-      edit(at, "scripts/run/gated.mjs", (text) => text.replace("    ...weakened,\n", "")),
+      edit(at, "scripts/run/gated.mjs", (text) =>
+        text.replace("  if (names === null) return { range, ...unreadDiff(range) };\n", ""),
+      ),
     );
     const found = loosenedBy({ cwd: dir, range: "main...HEAD" });
     expect(found.ok).toBe(false);

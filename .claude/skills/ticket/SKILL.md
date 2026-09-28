@@ -1,5 +1,5 @@
 ---
-description: Run one dev-board ticket end to end, per docs/guidelines.md §5 — recover a stale run, assess every task's comments (change, new work, merge, apply, ready, an answer), claim the first Ready task in the board's order, build it on a branch, review it, report, set Review, exit. One run, one ticket.
+description: Run one dev-board ticket end to end, per docs/guidelines.md §5 — recover a stale run, assess every task's comments (change, new work, apply, ready, an answer), claim the first Ready task in the board's order, build it on a branch, review it, report, set Review, have the gatekeeper decide the merge, exit. One run, one ticket.
 disable-model-invocation: true
 effort: xhigh
 ---
@@ -27,7 +27,7 @@ the gap lives, in words — and the script supplies the shape:
 Kinds: `decision` (stopped, gap, fallback) · `clarifying` (readings, fallback) · `migration`
 (file) · `stale` (date, branch or null) · `default` (gap, choice) · `change` · `newWork` (name,
 url) · `merged` (commit) · `applied` (file) · `noted` · `setup` (step, where) · `resolved` ·
-`gated` (reasons) · `reverted` (failed, merge, commit, name, url) · `readied` · `waiting` (blockers) ·
+`gated` (reasons — a destructive migration the gatekeeper held) · `reverted` (failed, merge, commit, name, url) · `readied` · `waiting` (blockers) ·
 `cycle` (members) · `urgent` (count) · `refused` (what, why, files, settle).
 A comment carries its kind in its own words, and the guard reads it against the thread before
 the comment posts: a third clarifying round on one question waits, and so does a second comment
@@ -92,38 +92,11 @@ end it with one ⟡ comment on that task. The cap withholds one comment only: wh
 is false and your assessment is a clarifying round, two clarifying rounds on that question is
 the cap — keep reading, post nothing. Every other assessment posts its comment, cap or no cap.
 
-- `shape: merge` (Review, the newest reply begins with *merge*). Claim it so the guard knows
-  the task — `node scripts/run/claim.mjs --task <id> --page <page id> --branch t<id>` — then
-  bring the branch here and give it main, because a branch that was pushed before anything
-  else landed no longer merges on the build log alone (T0.36):
-
-      node scripts/run/branch.mjs <id>
-      node scripts/run/route-types.mjs
-      node scripts/run/premerge.mjs
-
-  `branch.mjs` frees the branch from the worktree that still holds it and checks it out here,
-  where the dependencies the gate needs already are. `premerge.mjs` merges `origin/main` in: a
-  clean merge, or a conflict confined to the build log's generated sections settled from main's
-  copy and `log-index.mjs`. `ok: false` is a conflict that is nobody's to settle alone — post
-  one `refused` comment with its `files` and what would settle them, leave the task at Review,
-  and go on; nothing was pushed. `merged: true` means the branch moved, so the gate runs on the
-  result and the branch is pushed before anything merges — the gate as step 9 runs it, then
-  `git push origin HEAD:t<id>`. A red gate there is main meeting this branch badly, and it is
-  not this run's to fix on a ticket it did not build: push nothing, post one `refused` comment
-  naming the gate step that failed and that the branch needs a round of its own, and leave the
-  task at Review. `merged: false` is a branch that already carries main: push nothing, gate
-  nothing. Then
-
-      gh pr merge t<id> --merge
-
-  The guard reads the thread itself before it lets that through; if it refuses, the reason
-  says which of the four things was missing — quote it in your report and post nothing. If
-  the guard lets it through and GitHub refuses anyway,
-  run `node scripts/run/conflicts.mjs t<id>` and post one `refused` comment: `files` its
-  `files`, and `settle` what would settle them; the task stays at Review. On success post one
-  `merged` comment with the merge commit's short hash. Any of the three, then:
-  `node scripts/run/release.mjs`. Step c fetches, sets Done and writes the Release row; the
-  remote branch is left for GitHub's own deletion and the worktree for `prune.mjs`.
+- A reply that begins with *merge*, at Review or anywhere, is a note that consumes nothing
+  else (T0.46): `merge` is no word of the board's since the gatekeeper decides the merge, so it
+  is `shape: assess` and reads as *asks for nothing* — one `noted` comment, and the task is left
+  as it is. A task at Review is landed by its own run's gatekeeper and merge leg, never by a
+  reply.
 - `shape: apply` (Decision waiting on a migration, the newest reply begins with *apply*). From
   whichever checkout this run is in. Claim it the same way — `node scripts/run/claim.mjs
   --task <id> --page <page id> --branch t<id>` — and then, **before** the branch is checked
@@ -316,9 +289,9 @@ which is all you read of it.
 
 **Before each phase, write it into the marker.** The guard reads it there (rule (j)): a push, a
 `gh` call, a merge and a board write belong to `close` alone, an Edit or a Write to source to
-`build` alone.
+`build` alone, and `gate` — the gatekeeper's — writes nothing but its own file, through Bash.
 
-    node scripts/run/phase.mjs <plan|build|review|close> [--route <route>]
+    node scripts/run/phase.mjs <plan|build|review|gate|close> [--route <route>]
 
 **Invoke each phase in the foreground** — `run_in_background: false` — with the paths it needs and
 nothing else, and read its last line:
@@ -329,6 +302,8 @@ nothing else, and read its last line:
 | 3–4 Build | `build` | the route's builder | `docs/tickets/<id>.md <branch>` | `built <commit>` · `stopped <reason>` |
 | 5 Review | `review` | the route's reviewer | `docs/tickets/<id>.md pass <n>` | `PASS` · `FINDINGS <n>` |
 | 6–9 Close | `close` | `closer` | `docs/tickets/<id>.md <branch>` | `closed <commit>` · `stopped <reason>` |
+| 9 Gate | `gate` | `gatekeeper` | `docs/tickets/<id>.md` | `MERGE` · `MERGE APPLY` · `HOLD <n>` |
+| 9 Merge | `close` | `closer` | `docs/tickets/<id>.md <branch> merge` | `merged <commit>` · `stopped <reason>` |
 
 **The route.** After the planner, and again after the builder, ask which effort the builder and
 the reviewer run at:
@@ -336,10 +311,37 @@ the reviewer run at:
     node scripts/run/route.mjs docs/tickets/<id>.md
 
 It reads the ticket's Type and the paths it names — and the diff's, once there is one — against
-the table in `.claude/board.json`, and prints the `route` and the two `agents` to invoke:
-`builder` or `builder-medium`, `reviewer` or `reviewer-medium`. Pass the `route` to `phase.mjs`
+the table in `.claude/board.json`, and prints the `route` and the `agents` to invoke:
+`builder` or `builder-medium`, `reviewer` or `reviewer-medium`, and `gatekeeper`, which is one
+file at medium whatever the route. Pass the `route` to `phase.mjs`
 with `--route` each time, so the Runs row says which one the run took. The Agent tool takes no
 effort per invocation, which is why an effort is an agent file.
+
+**The gatekeeper decides the merge** (T0.46). `closed <commit>` from the closer is the close leg
+done — the branch pushed, the pull request open, the task at Review, the gate's green on record —
+with the marker kept. Then `phase.mjs gate` and the `gatekeeper` with the ticket path alone: it
+reads the pushed commit cold — the ticket, the diff, the reviewer's verdict, `gated.mjs`'s
+loosenings and migrations — and writes `docs/gates/<id>.md` through its own Bash, last line
+`MERGE`, `MERGE APPLY` or `HOLD`, naming the commit. Never write or edit that file yourself: the
+guard refuses a write under `docs/gates/` from the run, and opens a merge on what it finds there.
+After each round:
+
+    node scripts/run/gate-cap.mjs docs/gates/<id>.md docs/reviews/<id>.md
+
+`next: merge` or `next: apply` → `phase.mjs close`, the closer with the ticket path, the branch
+and `merge`: the merge leg applies the migrations on `MERGE APPLY` — the guard letting the apply
+through on the gatekeeper's file for this commit and `migration-safety.mjs`'s additive, never on
+a word — then merges on the pair, sets Done, writes the Release row and releases the marker.
+`next: build` → HOLD is findings: `phase.mjs build`, the builder with the ticket path, the branch
+and `docs/gates/<id>.md` — it fixes what the numbered reasons name and nothing else — then the
+reviewer at the next pass, `review-cap.mjs`, the closer's close leg on the new commit, and the
+gatekeeper again; the round counts toward the three corrections by the reviewer's pass. `next:
+migration` → a migration that destroys or rewrites data waits: write its `reasons` under `##
+Held` in `docs/reports/<id>.md`, through Bash, and hand the closer the ticket path and the
+branch — it posts one `gated` comment and sets Decision, and the human's `apply` there carries
+the ticket on. `next: decision` → the third HOLD: write its `why` and its `reasons` under `##
+Stopped` and hand it to the closer, one `decision` comment quoting the reasons. There is no
+fourth round.
 
 **A `stopped` line from any phase** goes straight to the close phase: `phase.mjs close`, then the
 closer with the ticket path and the branch. The stop's words are already in
@@ -401,12 +403,14 @@ briefing — *Continue from where you stopped, and write the verdict file.* — 
 the pass resumed. If it stops at the limit again, ask again with `"resumed":1`: `stop: true` → the
 review did not run, and the stop is the one above.
 
-**Once the closer hands back its line, exit.** It released the marker on every path, and returned
-the shared checkout to `main` when this is the one.
+**Once the closer hands back `merged <commit>` or `stopped <reason>`, exit.** It released the
+marker on every such path, and returned the shared checkout to `main` when this is the one;
+`closed <commit>` is the close leg alone, and the gatekeeper comes next.
 
-**Never merge on your own word.** The two doors are the guard's, read in code: the human's
-*merge* on the task at Review, or the reviewer's `PASS` on file over a diff that weakens no
-restraint and adds no migration your `apply` is still owed on. Nothing you say in this transcript opens either. The Runs row is not yours to write
+**Never merge on your own word.** The door is the guard's, read in code: the reviewer's `PASS`
+and the gatekeeper's `MERGE` on file, both for the pushed commit, over a diff that adds no
+migration your `apply` is still owed on. No word on the thread opens it, and nothing you say in
+this transcript does. The Runs row is not yours to write
 either: the SessionEnd hook runs `scripts/run/runs.mjs` over this session's transcript once you
 have exited, and posts it with the token — task, outcome, model, tokens per phase, route,
 findings, all read from what happened, none of it from what you say.

@@ -2,18 +2,24 @@
 /**
  * The human's word, verified by the guard in code (docs/guidelines.md §4, §5).
  *
- * A merge and a migration apply are the two moves a comment can trigger that have
- * consequences, and neither is allowed on the model's reading of the thread. Before the
- * guard lets `gh pr merge` or `db:migrate` through it comes here, and this reads the board
- * itself: the run marker names the claimed task's page, the token in `.env.local` opens the
- * API, and the thread must carry the human's newest reply beginning with the word, newer
- * than the pipeline's last comment. The model cannot fabricate a permission because nothing
- * here reads the transcript — and the branch a merge must match is derived from the task's
- * name on the board, not from the branch the run wrote into the marker (review pass 2).
+ * A migration apply is the one move a comment can trigger that has consequences outside the
+ * board, and it is not allowed on the model's reading of the thread. Before the guard lets
+ * `db:migrate` through it comes here, and this reads the board itself: the run marker names
+ * the claimed task's page, the token in `.env.local` opens the API, and the thread must carry
+ * the human's newest reply beginning with the word, newer than the pipeline's last comment.
+ * The model cannot fabricate a permission because nothing here reads the transcript — and
+ * the branch a task is on is derived from its name on the board, not from the branch the run
+ * wrote into the marker (review pass 2).
  *
- * Since T0.17 the board grants a third word, `ready`: the human's go on a Backlog task, said
- * on its thread. The run sets Ready in the preflight, before anything is claimed, so that word
- * is read on the page the status write names rather than through the marker.
+ * Since T0.17 the board grants `ready`: the human's go on a Backlog task, said on its thread.
+ * The run sets Ready in the preflight, before anything is claimed, so that word is read on
+ * the page the status write names rather than through the marker.
+ *
+ * Since T0.46 `merge` is no longer a word. The merge is decided by two files the guard reads
+ * for itself (`reviewed`): the reviewer's PASS and the gatekeeper's MERGE or MERGE APPLY,
+ * both for the pushed commit; and an additive migration applies on the gatekeeper's word
+ * alone (`applyGranted`), the human's `apply` staying for a migration that destroys or
+ * rewrites data.
  *
  * Since T0.20 the guard asks one more thing of a page's thread before a comment posts
  * (`postable`): whether a comment of that kind may post there now — the cap on clarifying
@@ -29,19 +35,21 @@ import { readMarker } from "./claim.mjs";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { execFileSync } from "node:child_process";
+
 import { STATE_FILE, treeFingerprint } from "../hooks/gate.mjs";
 import { emit, isMain } from "./cli.mjs";
 import { appliedMigrations, kindOf, mayPost, readThread, shapeOf } from "./comments.mjs";
 import { gatedDiffOf } from "./gated.mjs";
+import { ADDITIVE } from "./migration-safety.mjs";
 import { commonDir } from "./repo.mjs";
 import { client, readBoard, readToken, TOKEN_VAR } from "./notion.mjs";
 import { idOf } from "./stale.mjs";
 
-export const WORDS = ["merge", "apply", "ready"];
+export const WORDS = ["apply", "ready"];
 
 /** The state each word is for, as a refusal says it. */
 const STATE = {
-  merge: "a task at Review",
   apply: "a task at Decision waiting on a migration question",
   ready: "a task at Backlog",
 };
@@ -204,6 +212,109 @@ export const REVIEWS_DIR = join("docs", "reviews");
 /** The one word a verdict file ends in when the ticket may merge itself. */
 export const VERDICT = "PASS";
 
+/** Where the gatekeeper writes its verdict, one file per ticket (T0.46). */
+export const GATES_DIR = join("docs", "gates");
+
+/** The gatekeeper's three words: the last line of its file is one of them. */
+export const GATE_MERGE = "MERGE";
+export const GATE_MERGE_APPLY = "MERGE APPLY";
+export const GATE_HOLD = "HOLD";
+export const GATE_VERDICTS = [GATE_MERGE, GATE_MERGE_APPLY, GATE_HOLD];
+
+/** A commit as the gatekeeper names it: `commit 3b9a890`, or the hash alone on its line. */
+const COMMIT_LINE = /^(?:commit\s+)?([0-9a-f]{7,40})$/i;
+
+/** A numbered reason, `1. …` — the shape a HOLD's reasons and a reviewer's findings take. */
+const REASON_LINE = /^\d+\.\s+\S/;
+
+/**
+ * A gatekeeper's file, read: `{ verdict, last, commit, reasons }`. `verdict` is the last
+ * non-blank line when it is one of the three words, else null; `last` is that line whatever it
+ * says; `commit` the first line naming one; `reasons` the numbered lines above the verdict.
+ * Null for no text at all.
+ */
+export function readGate(text) {
+  if (text === null || text === undefined) return null;
+  const lines = String(text)
+    .split("\n")
+    .map((line) => line.trim());
+  const last = verdictOf(text);
+  const commit = lines.map((line) => line.match(COMMIT_LINE)?.[1] ?? null).find(Boolean) ?? null;
+  return {
+    verdict: GATE_VERDICTS.includes(last) ? last : null,
+    last,
+    commit: commit === null ? null : commit.toLowerCase(),
+    reasons: lines.filter((line) => REASON_LINE.test(line)),
+  };
+}
+
+/**
+ * True when `named` — a commit as a verdict file names it, seven to forty hex digits — is
+ * `full` or a prefix of it, case aside. Anything shorter than seven names nothing.
+ */
+export function commitMatches(named, full) {
+  const short = String(named ?? "")
+    .trim()
+    .toLowerCase();
+  const whole = String(full ?? "")
+    .trim()
+    .toLowerCase();
+  if (!/^[0-9a-f]{7,40}$/.test(short) || !/^[0-9a-f]{7,40}$/.test(whole)) return false;
+  return whole.startsWith(short);
+}
+
+/** The text of a file under `dir`, or null. */
+function readAt(dir, file) {
+  try {
+    return readFileSync(join(dir, file), "utf8");
+  } catch {
+    return null;
+  }
+}
+
+/** `git rev-parse HEAD` at `dir`, or null. */
+function headAt(dir) {
+  try {
+    return execFileSync("git", ["rev-parse", "--verify", "--quiet", "HEAD"], {
+      cwd: dir,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The gatekeeper's verdict for the claimed task, or the reason there is none:
+ * `{ ok, why, id, file, gate }`. Read by both doors below.
+ */
+function gatekeeperOf(id, { dir, deps }) {
+  const file = join(GATES_DIR, `${id}.md`);
+  const text = deps.gatekeeper ? deps.gatekeeper(id) : readAt(dir, file);
+  if (text === null)
+    return { ok: false, why: `no gatekeeper verdict at ${file}`, file, gate: null };
+  const gate = readGate(text);
+  if (gate.verdict === null) {
+    const ends = gate.last === null ? "nothing" : `"${gate.last}"`;
+    return {
+      ok: false,
+      why: `${file} ends in ${ends} rather than ${GATE_VERDICTS.join(", ")}`,
+      file,
+      gate,
+    };
+  }
+  if (gate.commit === null) {
+    return {
+      ok: false,
+      why: `${file} names no commit, so nothing says which commit its ${gate.verdict} was written for`,
+      file,
+      gate,
+    };
+  }
+  return { ok: true, why: null, file, gate };
+}
+
 /** The last non-blank line of a verdict file, trimmed; null for an empty file. */
 export function verdictOf(text) {
   const lines = String(text ?? "")
@@ -233,20 +344,23 @@ export function gateState(dir = process.cwd()) {
 }
 
 /**
- * The guard's second door for `merge` (T0.16): `{ ok, why, marker, task, gated }`. Open
- * when the claimed task's reviewer verdict, `docs/reviews/<id>.md`, ends in PASS, the diff
- * against origin/main is not one only the human's word merges — since T0.21 that is a
- * migration, or a restraint the diff weakens, measured by `gated.mjs` — and the Stop gate's
- * last green is this very tree (`gateState`). The task's branch comes from the marker's id — the file is
- * named by it, so the two cannot name different tickets.
+ * The guard's second door for a merge — since T0.46 the only door (T0.16, T0.46): `{ ok, why,
+ * marker, task, gated, gatekeeper }`. Open when the claimed task's reviewer verdict,
+ * `docs/reviews/<id>.md`, ends in PASS; its gatekeeper verdict, `docs/gates/<id>.md`, ends in
+ * MERGE or MERGE APPLY and names the commit it was written for — the guard binds that commit
+ * to the pull request's head, so a verdict for another commit merges nothing; the diff
+ * against origin/main adds no destructive migration nobody has applied (`gated.mjs`, which
+ * reports a weakening for the gatekeeper's reading and no longer gates on it); and the Stop
+ * gate's last green is this very tree (`gateState`). The task's branch comes from the
+ * marker's id — both files are named by it, so the three cannot name different tickets.
  *
  * `deps.applied` is the migration tags the claimed task's thread says are already on the shared
- * database, which `verify` read off the same fetch that looked for the word; since T0.26 they
- * are what takes a migration off the gated list. Absent — every caller that has read no thread,
- * the loosening detector's own corpus among them — every migration is gated, as before.
+ * database, read off the thread by `consumedApplies`; since T0.26 they are what takes a
+ * migration off the gated list. Absent — every caller that has read no thread, the loosening
+ * detector's own corpus among them — every destructive migration is gated, as before.
  *
- * Effects injected: `marker`, `verdict(id)` (the file's text, or null), `diff(applied)`,
- * `gate()`.
+ * Effects injected: `marker`, `verdict(id)` (the reviewer's text, or null), `gatekeeper(id)`
+ * (the gatekeeper's text, or null), `diff(applied)`, `gate()`.
  */
 export function reviewed({ dir = process.cwd(), deps = {} } = {}) {
   const marker = deps.marker ? deps.marker() : readMarker(dir);
@@ -273,6 +387,16 @@ export function reviewed({ dir = process.cwd(), deps = {} } = {}) {
     return { ok: false, why: `${file} ends in ${ends} rather than ${VERDICT}`, marker };
   }
 
+  const kept = gatekeeperOf(id, { dir, deps });
+  if (!kept.ok) return { ok: false, why: kept.why, marker };
+  if (kept.gate.verdict === GATE_HOLD) {
+    return {
+      ok: false,
+      why: `${kept.file} ends in ${GATE_HOLD} rather than ${GATE_MERGE} or ${GATE_MERGE_APPLY} — the gatekeeper holds this commit`,
+      marker,
+    };
+  }
+
   const applied = deps.applied ?? [];
   const diff = deps.diff ? deps.diff(applied) : gatedDiffOf({ cwd: dir, applied });
   if (!diff.ok) {
@@ -294,11 +418,77 @@ export function reviewed({ dir = process.cwd(), deps = {} } = {}) {
     };
   }
 
-  return { ok: true, why: null, marker, task: { name: id, branch: branchName(id) }, gated: [] };
+  return {
+    ok: true,
+    why: null,
+    marker,
+    task: { name: id, branch: branchName(id) },
+    gated: [],
+    gatekeeper: { verdict: kept.gate.verdict, commit: kept.gate.commit },
+  };
 }
 
 /**
- * CLI: `node permission.mjs merge`, or `node permission.mjs ready <page id>` — what the guard
+ * The guard's apply door on the gatekeeper's word (T0.46): `{ ok, why, marker, task,
+ * migrations }`. Open when the claimed task's gatekeeper verdict ends in MERGE APPLY, names
+ * this checkout's HEAD — the apply reads the checkout's `drizzle/`, so the commit judged must
+ * be the commit applied — and `migration-safety.mjs` says additive for every migration the
+ * diff adds and nobody has applied. The script's answer, never the model's: a MERGE APPLY
+ * over a destructive migration opens nothing. The human's `apply` is the other door, read by
+ * `verify`, and stays for a migration that destroys or rewrites data.
+ *
+ * Effects injected: `marker`, `gatekeeper(id)`, `localHead()`, `diff(applied)`, `applied`.
+ */
+export function applyGranted({ dir = process.cwd(), deps = {} } = {}) {
+  const marker = deps.marker ? deps.marker() : readMarker(dir);
+  if (marker === null || !marker.task) {
+    return {
+      ok: false,
+      why: "no run marker names a claimed task, so there is no gatekeeper verdict to read",
+    };
+  }
+  const id = String(marker.task).trim();
+  const kept = gatekeeperOf(id, { dir, deps });
+  if (!kept.ok) return { ok: false, why: kept.why, marker };
+  if (kept.gate.verdict !== GATE_MERGE_APPLY) {
+    return {
+      ok: false,
+      why: `${kept.file} ends in ${kept.gate.verdict} rather than ${GATE_MERGE_APPLY}, so the gatekeeper has not said apply`,
+      marker,
+    };
+  }
+  const local = deps.localHead ? deps.localHead() : headAt(dir);
+  if (!commitMatches(kept.gate.commit, local)) {
+    const at = (sha) => (sha === null || sha === undefined ? "unknown" : String(sha).slice(0, 7));
+    return {
+      ok: false,
+      why: `${kept.file} was written for ${at(kept.gate.commit)} and this checkout's HEAD is ${at(local)}, so the migrations it judged are not the ones that would apply`,
+      marker,
+    };
+  }
+  const applied = deps.applied ?? [];
+  const diff = deps.diff ? deps.diff(applied) : gatedDiffOf({ cwd: dir, applied });
+  const waiting = (diff.migrations ?? []).filter((each) => each.waits);
+  const held = waiting.filter((each) => each.safety !== ADDITIVE);
+  if (held.length > 0) {
+    const named = held.map((each) => `${each.path} (${each.why ?? "not read as additive"})`);
+    return {
+      ok: false,
+      why: `migration-safety.mjs reads ${named.join("; ")} as destructive, and a migration that destroys or rewrites data is applied on your word alone, whatever the gatekeeper said`,
+      marker,
+    };
+  }
+  return {
+    ok: true,
+    why: null,
+    marker,
+    task: { name: id, branch: branchName(id) },
+    migrations: waiting.map((each) => each.path),
+  };
+}
+
+/**
+ * CLI: `node permission.mjs apply`, or `node permission.mjs ready <page id>` — what the guard
  * would find, for a person to check.
  */
 async function main() {
