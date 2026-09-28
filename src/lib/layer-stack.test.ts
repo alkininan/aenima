@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import {
   Z_LAYERS,
+  hasLayerOfKind,
   isTopLayer,
   layerCount,
   layerKind,
@@ -63,6 +64,19 @@ describe("layer stack", () => {
     pushLayer("second", "modal");
     expect(topLayer()).toBe("second");
     expect(isTopLayer("first")).toBe(false);
+  });
+
+  // §11: "while a modal or sheet is open only Esc and the layer's own keys act" — a global
+  // shortcut asks whether any modal is open, not whether one is on top.
+  it("says whether a layer of a kind is open anywhere in the stack", () => {
+    expect(hasLayerOfKind("modal")).toBe(false);
+    pushLayer("modal", "modal");
+    pushLayer("select", "popover");
+    expect(hasLayerOfKind("modal")).toBe(true);
+    expect(hasLayerOfKind("tooltip")).toBe(false);
+
+    removeLayer("modal");
+    expect(hasLayerOfKind("modal")).toBe(false);
   });
 
   it("hands the layer back when the one above it closes", () => {

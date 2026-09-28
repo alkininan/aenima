@@ -20,6 +20,7 @@ import {
   ArrowLeft,
   Check,
   GraphUp,
+  KeyCommand,
   List,
   LogOut,
   Mail,
@@ -105,7 +106,12 @@ export function OverflowIcon({ className }: IconProps) {
   return <MoreHoriz className={className} aria-hidden="true" focusable="false" />;
 }
 
-/** §4's account slot: the one thing you can do to an identity today. */
+/** §4's account slot: its "Sign out" row (`log-out`). */
 export function SignOutIcon({ className }: IconProps) {
   return <LogOut className={className} aria-hidden="true" focusable="false" />;
+}
+
+/** §4's account slot: its "Keyboard shortcuts" row (`key-command`, §8.38). */
+export function KeyCommandIcon({ className }: IconProps) {
+  return <KeyCommand className={className} aria-hidden="true" focusable="false" />;
 }

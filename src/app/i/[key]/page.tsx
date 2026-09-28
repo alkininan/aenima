@@ -193,7 +193,9 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/i/[
   );
 
   return (
-    <main className="mx-auto w-full max-w-[1200px] px-[24px] py-[32px]">
+    // §11: the main region takes focus after a route change (`RouteFocus`), so it is
+    // focusable — and never ringed, which globals.css says of every `main`.
+    <main tabIndex={-1} className="mx-auto w-full max-w-[1200px] px-[24px] py-[32px]">
       {/* §4: item page = content 1fr / chat 380. The chat column is reserved
           from the start and built later — adding it then fills a column rather
           than reflowing the page, and §4 turns it into an overlay drawer below

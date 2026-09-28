@@ -11,7 +11,10 @@ import { AeMark } from "@/components/AeMark";
  */
 export default function Home() {
   return (
-    <main className="flex flex-1 flex-col items-center justify-center gap-[16px] px-[24px] text-center">
+    <main
+      tabIndex={-1}
+      className="flex flex-1 flex-col items-center justify-center gap-[16px] px-[24px] text-center"
+    >
       <AeMark size={32} className="text-n-primary" />
       <p className="type-ui-body text-n-secondary">Foundation in place. No product surfaces yet.</p>
     </main>

@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { ActivityFeed } from "@/app/i/[key]/ActivityFeed";
 import { ArtifactList } from "@/app/i/[key]/ArtifactList";
 import { DecisionList } from "@/app/i/[key]/DecisionList";
@@ -108,9 +110,20 @@ export default async function DevItemPage({ searchParams }: PageProps<"/dev/item
     ];
 
   return (
-    <main className="mx-auto w-full max-w-[1200px] px-[24px] py-[32px]">
+    // Focusable, as the real page's main region is (§11, `RouteFocus`).
+    <main tabIndex={-1} className="mx-auto w-full max-w-[1200px] px-[24px] py-[32px]">
       <div className="grid grid-cols-1 gap-[24px] lg:grid-cols-[1fr_380px]">
         <div className="flex min-w-0 flex-col gap-[32px]">
+          {/* The real page's first control, pointed at the list mirror rather than
+              `/app` — `/dev/list` links here, and this is the breadcrumb's way back
+              (§11), driven in a browser by `keyboard.spec.ts`. */}
+          <Link
+            href="/dev/list"
+            className="type-ui-body w-fit text-n-secondary hover:text-n-primary"
+          >
+            {t.item.backToList}
+          </Link>
+
           {unclaimedMove === null ? null : <MoveMessage report={unclaimedMove} t={t} />}
 
           {/* The same 16 the real page holds these two at. */}

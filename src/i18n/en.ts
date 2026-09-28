@@ -18,6 +18,36 @@ export const en = {
     back: "Back",
     retry: "Retry",
     signOut: "Sign out",
+    /** §12's close — every modal's footer carries at least this (§8.21). */
+    close: "Close",
+    /** §12's skip link — §11's first Tab stop on a fresh load. */
+    skipToContent: "Skip to content",
+  },
+  /**
+   * §8.38's shortcut sheet. The title and the five groups are §12's defaults; the rows are
+   * the verb phrases T0.45's Decision fixed, one per shortcut, in TR and NL too (`tr.ts`,
+   * `nl.ts`). Keys are named in `src/lib/shortcuts.ts`, which decides which rows a page shows.
+   */
+  shortcuts: {
+    title: "Keyboard shortcuts",
+    groups: {
+      anywhere: "Anywhere",
+      lists: "Lists",
+      panels: "Panels",
+      chat: "Chat",
+      drag: "Drag",
+    },
+    rows: {
+      showSheet: "Show keyboard shortcuts",
+      closeLast: "Close the last thing opened",
+      undo: "Undo",
+      betweenRows: "Move between rows",
+      withinRow: "Move within a row",
+      openItem: "Open the item",
+      jump: "Jump to the first or last",
+      betweenOptions: "Move between options",
+      choose: "Choose",
+    },
   },
   signIn: {
     title: "Sign in",
@@ -413,4 +443,18 @@ export const en = {
   },
 } as const;
 
-export type Dictionary = typeof en;
+/**
+ * A dictionary's shape with every string widened. `en` stays `as const` so the design laws
+ * (`scripts/design/laws.mjs`) read its literals, but a translation is the same shape with
+ * other words in it — so the type a locale has to satisfy is the shape, not the English.
+ * Formatter functions are kept as they are.
+ */
+type Strings<T> = {
+  readonly [K in keyof T]: T[K] extends string
+    ? string
+    : T[K] extends (...args: never[]) => unknown
+      ? T[K]
+      : Strings<T[K]>;
+};
+
+export type Dictionary = Strings<typeof en>;

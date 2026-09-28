@@ -606,6 +606,9 @@ function Composites() {
               value={null}
               onValueChange={() => {}}
             />
+            {/* §11: a text field is where the unmodified shortcuts go quiet — and where
+                Esc still acts, closing this modal from inside the field (C-43). */}
+            <Input label="A field in a modal" reserveHelper={false} />
             {Array.from({ length: 8 }, (_, index) => (
               <p key={index}>Filler line {index + 1} — enough content to make the body scroll.</p>
             ))}

@@ -9,7 +9,7 @@ import { getCurrentWorkspace } from "@/db/queries/workspace";
 import { getDictionary } from "@/i18n";
 import { isStale } from "@/lib/baselines";
 import { BUCKETS, assignBucket, compareInBucket, type BucketInput } from "@/lib/buckets";
-import { LIST_PARAMS, ROUTES } from "@/lib/routes";
+import { LIST_PARAMS, ROUTES, itemHref } from "@/lib/routes";
 import { STAGES, type Stage } from "@/lib/stage";
 
 import { BucketSection } from "./BucketSection";
@@ -49,6 +49,7 @@ function toBucketInput(item: ItemListRow, now: number): BucketInput {
 function toRowData(item: ItemListRow, input: BucketInput): ItemRowData {
   return {
     key: item.key,
+    href: itemHref(item.key),
     title: item.title,
     type: item.type,
     stage: item.stage,
@@ -128,7 +129,9 @@ export default async function AppPage({ searchParams }: PageProps<"/app">) {
   const filtered = stageFilter !== null || productFilter !== undefined;
 
   return (
-    <main className="mx-auto flex w-full max-w-[1200px] flex-col gap-[24px] px-[24px] py-[32px]">
+    // The content column. The main region is the layout's (`AppShell`), so it is the same
+    // element before and after this page replaces its skeleton.
+    <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-[24px] px-[24px] py-[32px]">
       {/* §4: a page topbar is a display-xl title, and §4's subtitle slot is
           where instructional copy lives — never a field's helper line. */}
       <header className="flex flex-col gap-[8px]">
@@ -183,6 +186,6 @@ export default async function AppPage({ searchParams }: PageProps<"/app">) {
           ))}
         </RowWalker>
       )}
-    </main>
+    </div>
   );
 }

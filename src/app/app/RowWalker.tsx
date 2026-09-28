@@ -3,8 +3,7 @@
 import { useCallback, type KeyboardEvent, type ReactNode } from "react";
 
 import { nextRovingIndex } from "@/lib/roving";
-
-import { ROW_LINK_ATTRIBUTE } from "./row-link";
+import { ROW_LINK_ATTRIBUTE } from "@/lib/row-link";
 
 /**
  * design-spec.md §11: "arrow keys walk … list rows".

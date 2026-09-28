@@ -5,11 +5,10 @@ import type { Dictionary } from "@/i18n";
 import type { Bucket } from "@/lib/buckets";
 import { cx } from "@/lib/cx";
 import { relativeTime } from "@/lib/relative-time";
-import { itemHref } from "@/lib/routes";
+import { ROW_LINK_ATTRIBUTE } from "@/lib/row-link";
 import type { Stage } from "@/lib/stage";
 
 import { ItemRowMenu } from "./ItemRowMenu";
-import { ROW_LINK_ATTRIBUTE } from "./row-link";
 
 /**
  * Everything a row paints, and nothing else.
@@ -21,6 +20,12 @@ import { ROW_LINK_ATTRIBUTE } from "./row-link";
  */
 export type ItemRowData = {
   key: string;
+  /**
+   * Where the row goes — `itemHref(key)` on `/app`. Handed in rather than derived here, so
+   * the `/dev/list` mirror can send its rows to `/dev/item` and the way back (§11) can be
+   * driven in a browser without a session.
+   */
+  href: string;
   title: string;
   type: keyof Dictionary["itemTypes"];
   stage: Stage;
@@ -126,9 +131,10 @@ export function ItemRow({
           wrapping it, so the overflow menu and the chips stay clickable in
           their own right rather than being swallowed by an outer anchor. */}
       <Link
-        href={itemHref(item.key)}
-        // §11: the link is the row's stop for the arrow keys — see `RowWalker`.
-        {...{ [ROW_LINK_ATTRIBUTE]: "" }}
+        href={item.href}
+        // §11: the link is the row's stop for the arrow keys (`RowWalker`), and carries the
+        // key so the way back can find the row that was opened (`RouteFocus`).
+        {...{ [ROW_LINK_ATTRIBUTE]: item.key }}
         className="min-w-0 flex-1 after:absolute after:inset-0 after:content-['']"
       >
         <span className="flex min-w-0 items-center gap-[8px]">
@@ -188,7 +194,7 @@ export function ItemRow({
       {/* The label is formatted here and passed as a string: the menu is a
           client component, and the dictionary that formats it cannot cross the
           boundary. */}
-      <ItemRowMenu itemKey={item.key} label={t.list.itemMenu(item.title)} />
+      <ItemRowMenu itemKey={item.key} href={item.href} label={t.list.itemMenu(item.title)} />
     </div>
   );
 }

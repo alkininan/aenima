@@ -816,6 +816,15 @@ export const DEFAULTS = [
   { key: "relativeTime.hours", default: "{} h ago", as: "row freshness" },
   { key: "relativeTime.days", default: "{} d ago", as: "row freshness" },
   { key: "relativeTime.weeks", default: "{} w ago", as: "row freshness" },
+  // T0.45 built the skip link and the shortcut sheet, and their defaults have keys now.
+  { key: "common.skipToContent", default: "Skip to content", as: "skip link" },
+  { key: "common.close", default: "Close", as: "close" },
+  { key: "shortcuts.title", default: "Keyboard shortcuts", as: "shortcut sheet" },
+  { key: "shortcuts.groups.anywhere", default: "Anywhere", as: "shortcut sheet group" },
+  { key: "shortcuts.groups.lists", default: "Lists", as: "shortcut sheet group" },
+  { key: "shortcuts.groups.panels", default: "Panels", as: "shortcut sheet group" },
+  { key: "shortcuts.groups.chat", default: "Chat", as: "shortcut sheet group" },
+  { key: "shortcuts.groups.drag", default: "Drag", as: "shortcut sheet group" },
 ];
 
 /** The English dictionary's strings by key path — `signIn.codeSentTo` — each with its shape. */

@@ -43,7 +43,8 @@ export default async function OpportunityPage({ params }: PageProps<"/o/[key]">)
   if (!opportunity) notFound();
 
   return (
-    <main className="mx-auto w-full max-w-[1200px] px-[24px] py-[32px]">
+    // §11: focusable, so `RouteFocus` can land here after a route change; never ringed.
+    <main tabIndex={-1} className="mx-auto w-full max-w-[1200px] px-[24px] py-[32px]">
       {/* §4: content 1fr / chat 380, as the item page holds it. The chat column
           is reserved from the start and built later — adding it then fills a
           column rather than reflowing the page. */}

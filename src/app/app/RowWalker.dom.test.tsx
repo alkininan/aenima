@@ -42,12 +42,11 @@ describe("RowWalker", () => {
   it("renders one link per row, in bucket order", () => {
     const links = harness();
     expect(links).toHaveLength(LIST_FIXTURE.length);
-    expect(links.map((link) => link.getAttribute("href"))).toEqual([
-      "/i/soc-12",
-      "/i/soc-4",
-      "/i/aur-1",
-      "/i/soc-7",
-    ]);
+    expect(links.map((link) => link.getAttribute("href"))).toEqual(
+      ["soc-12", "soc-4", "aur-1", "soc-7"].map(
+        (key) => LIST_FIXTURE.find((row) => row.key === key)!.href,
+      ),
+    );
   });
 
   it("steps down and up across buckets, wrapping at both ends", async () => {

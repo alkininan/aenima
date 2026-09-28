@@ -1,6 +1,7 @@
+import { AppShell } from "@/app/app/AppShell";
 import { BucketSection } from "@/app/app/BucketSection";
 import { PipelineStrip } from "@/app/app/PipelineStrip";
-import { Sidebar } from "@/app/app/Sidebar";
+import { RowWalker } from "@/app/app/RowWalker";
 import { getDictionary } from "@/i18n";
 import { BUCKETS } from "@/lib/buckets";
 
@@ -27,6 +28,12 @@ import { LIST_COUNTS, LIST_FIXTURE, LIST_NOW } from "../list-fixture";
  * So this page exists to be that render. It is deliberately thin — the same
  * fixture, no client wrapper — and its whole job is to fail when a value that
  * cannot cross the boundary is passed across it.
+ *
+ * Since T0.45 it is also the shell `/app` has — `AppShell`: skip link, sidebar
+ * with its account menu, main region — and its rows walk under `RowWalker` and
+ * link to `/dev/item`, which links back. That is what lets §11's keyboard paths
+ * — the first Tab stops, focus after a route change, the way back to the row —
+ * be driven in a browser without a session.
  */
 /**
  * Dynamic, like `/app`, and for the same reason it is dynamic there.
@@ -47,28 +54,29 @@ export default function DevListPage() {
   const t = getDictionary();
 
   return (
-    <div className="flex min-h-dvh">
-      {/* The other half of the boundary: Sidebar is a Server Component and
-          ProductSwitcher is a client one. */}
-      <Sidebar
-        t={t}
-        products={[{ slug: "sociera", name: "Sociera" }]}
-        email="someone@example.com"
-      />
+    // The other half of the boundary: Sidebar is a Server Component and
+    // ProductSwitcher and AccountMenu are client ones.
+    <AppShell t={t} products={[{ slug: "sociera", name: "Sociera" }]} email="someone@example.com">
+      <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-[24px] px-[24px] py-[32px]">
+        <header className="flex flex-col gap-[8px]">
+          <h1 className="type-display-xl text-n-primary">{t.list.title}</h1>
+          <p className="type-ui-body truncate text-n-secondary">{t.list.subtitle}</p>
+        </header>
 
-      <main className="mx-auto flex w-full max-w-[1200px] flex-col gap-[24px] px-[24px] py-[32px]">
         <PipelineStrip counts={LIST_COUNTS} active="define" product={undefined} total={6} t={t} />
 
-        {BUCKETS.map((bucket) => (
-          <BucketSection
-            key={bucket}
-            bucket={bucket}
-            items={LIST_FIXTURE.filter((row) => row.bucket === bucket)}
-            t={t}
-            now={LIST_NOW}
-          />
-        ))}
-      </main>
-    </div>
+        <RowWalker className="flex flex-col gap-[24px]">
+          {BUCKETS.map((bucket) => (
+            <BucketSection
+              key={bucket}
+              bucket={bucket}
+              items={LIST_FIXTURE.filter((row) => row.bucket === bucket)}
+              t={t}
+              now={LIST_NOW}
+            />
+          ))}
+        </RowWalker>
+      </div>
+    </AppShell>
   );
 }

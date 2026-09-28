@@ -6,7 +6,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { Menu } from "@/components/ui/Menu";
 import { OverflowIcon } from "@/components/ui/icons";
 import { getDictionary } from "@/i18n";
-import { itemHref } from "@/lib/routes";
+import { rememberReturn, routeKey } from "@/lib/return-focus";
 
 /**
  * §8's item-row overflow menu.
@@ -28,7 +28,16 @@ import { itemHref } from "@/lib/routes";
  * `getDictionary` the way `SignInForm` does; anything it needs *interpolated*
  * arrives as an already-formatted string, like `label` below.
  */
-export function ItemRowMenu({ itemKey, label }: { itemKey: string; label: string }) {
+export function ItemRowMenu({
+  itemKey,
+  href,
+  label,
+}: {
+  itemKey: string;
+  /** The row's own destination, so "Open" goes where the name goes. */
+  href: string;
+  label: string;
+}) {
   const t = getDictionary();
   const router = useRouter();
 
@@ -49,7 +58,20 @@ export function ItemRowMenu({ itemKey, label }: { itemKey: string; label: string
         />
       }
       entries={[
-        { kind: "item", label: t.list.openItem, onSelect: () => router.push(itemHref(itemKey)) },
+        {
+          kind: "item",
+          label: t.list.openItem,
+          onSelect: () => {
+            // §11: the way back "focuses the row that was opened" — opened from here as much
+            // as from its name. The name's link records its place through `RouteFocus`'s
+            // click listener; this row is not that link, so it records the same place itself.
+            rememberReturn(routeKey(window.location.pathname, window.location.search), {
+              row: itemKey,
+              scrollY: window.scrollY,
+            });
+            router.push(href);
+          },
+        },
         {
           kind: "item",
           label: t.list.copyKey,
