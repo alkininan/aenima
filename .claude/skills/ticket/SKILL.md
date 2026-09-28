@@ -304,79 +304,68 @@ If the body lacks the seven sections of §2, expand it into Objective · Build �
 Tests · Done · Report from the Name, the body, the Spec and the cited sections, and put a callout
 at the top: `Drafted by pipeline · <date> · confirm or edit in Notion`.
 
-## 2 Inline
+## 2–9 The phases
 
-Write `docs/tickets/<id>.md`: the seven sections, then a `## Cited` section holding every cited
-spec section verbatim from
+From here you are the orchestrator, and nothing more (T0.44). Each phase is a subagent with a
+fresh context, its own tools and its own slice of this protocol: the **planner** does step 2,
+the **builder** steps 3 and 4, the **reviewer** step 5, the **closer** steps 6 to 9 and every
+stop. You never do a phase's work yourself, and you never summarise one phase to the next: the
+handoff is the files the run already writes — `docs/tickets/<id>.md`, the branch,
+`docs/reports/<id>.md`, `docs/reviews/<id>.md` — and each phase hands back one typed last line,
+which is all you read of it.
 
-    echo '{"cited":[{"doc":"product-spec","sections":["8"]}]}' | node scripts/run/spec-sections.mjs
+**Before each phase, write it into the marker.** The guard reads it there (rule (j)): a push, a
+`gh` call, a merge and a board write belong to `close` alone, an Edit or a Write to source to
+`build` alone.
 
-This file is the whole of what the reviewer reads. A `missing: true` section means the ticket
-cites something that is not there — say so in the ticket file rather than inlining nothing.
-A body with an `# Addendum` section is a task sent back from Review by a reply: the ticket
-file already exists, so add an `## Addendum` section to it with the reply, and the addendum
-is what this round builds — the Criteria it names, or the reply read as one.
+    node scripts/run/phase.mjs <plan|build|review|close> [--route <route>]
 
-Then read the names the ticket claims against the repo. Most tickets are cut in chat, away
-from the code, so every backticked path and identifier in them is a claim nobody checked:
+**Invoke each phase in the foreground** — `run_in_background: false` — with the paths it needs and
+nothing else, and read its last line:
 
-    node scripts/run/claims.mjs docs/tickets/<id>.md
+| phase | marker | agent | hand it | last line |
+|---|---|---|---|---|
+| 2 Inline | `plan` | `planner` | `docs/tickets/<id>.md` | `planned` · `stopped <reason>` |
+| 3–4 Build | `build` | the route's builder | `docs/tickets/<id>.md <branch>` | `built <commit>` · `stopped <reason>` |
+| 5 Review | `review` | the route's reviewer | `docs/tickets/<id>.md pass <n>` | `PASS` · `FINDINGS <n>` |
+| 6–9 Close | `close` | `closer` | `docs/tickets/<id>.md <branch>` | `closed <commit>` · `stopped <reason>` |
 
-`absent` is every one of them `origin/main` lacks — paths looked up as files, identifiers with
-`git grep`; commands, flags, placeholders and code fragments are never looked up, and the
-`## Cited` section is left to the document it quotes. **The script finds the names; what a
-missing one means is yours.** Each is either something this ticket creates — the common case,
-and nothing to do — or drift: a file that moved, a function that was renamed. Drift goes by
-§4 like any other gap: take the default and say it in the claim's one `default` comment where
-a wrong guess is cheap, set `Decision` where it is expensive. Say in the report which absent
-names were which.
+**The route.** After the planner, and again after the builder, ask which effort the builder and
+the reviewer run at:
 
-## 3 Branch
+    node scripts/run/route.mjs docs/tickets/<id>.md
 
-    node scripts/run/branch.mjs <id>
+It reads the ticket's Type and the paths it names — and the diff's, once there is one — against
+the table in `.claude/board.json`, and prints the `route` and the two `agents` to invoke:
+`builder` or `builder-medium`, `reviewer` or `reviewer-medium`. Pass the `route` to `phase.mjs`
+with `--route` each time, so the Runs row says which one the run took. The Agent tool takes no
+effort per invocation, which is why an effort is an agent file.
 
-Record `primary` and `reused` from its output. If `primary` is true, this is the shared
-checkout and step 9 returns it to `main` however the run ends. A scheduled run is in a
-worktree Desktop made for it; it stays on its branch and the next run's step 0 removes the
-worktree once the branch is merged. `reused` true means the branch was already on origin —
-an addendum round, or a ticket continuing after its migration was applied — and the pull
-request is already open: build on it, and step 9 pushes to it rather than opening another.
-`ok: false` means the claim cannot go on: post one `refused` comment with its `detail` and what
-would settle it, release the marker, set `Decision`, and exit.
+**A `stopped` line from any phase** goes straight to the close phase: `phase.mjs close`, then the
+closer with the ticket path and the branch. The stop's words are already in
+`docs/reports/<id>.md`; the closer pushes, comments, releases and sets `Decision`. A phase that
+comes back with neither of its lines — an error, or a note that it stopped at its turn limit — is
+a stop too: write `## Stopped` into `docs/reports/<id>.md` yourself, through Bash, with what came
+back verbatim, and hand it to the closer the same way. The closer is handed a stop once: if the
+closer itself comes back with neither line, do its stop yourself — the marker still names
+`close` — one `refused` comment with what came back, `node scripts/run/release.mjs`, set
+`Decision`, and exit.
 
-## 4 Build
+**The review loop is capped at three passes, counted in code.** Pass 1 reads the whole diff; pass
+2 reads the fixes; pass 3 reads only pass 2's Musts. After each pass:
 
-Plan first. Then the smallest complete implementation that satisfies the Criteria — no more.
+    node scripts/run/review-cap.mjs docs/reviews/<id>.md
 
-**Where the ticket is silent, stop only when a wrong guess is expensive to undo** (§4). A choice
-is expensive if it touches the database schema or stored data, a public surface — a route, copy
-a product user sees, an API shape — or would need a spec to record it. Then commit what you
-have and push the branch (`git push -u origin <branch>`) so the next run finds it, post one
-`decision` comment, release the marker (`node scripts/run/release.mjs`), set `Decision`, and
-exit. Everything else: take the stated default and keep building, and say it in the claim's
-one `default` comment — every default the claim takes, what you chose and why you could pick
-alone. Hold that comment until the claim's defaults are all in: post it before the `decision`
-or `migration` comment when the claim stops, or at close before `release.mjs`. Every comment of
-a claim goes up while the marker still names it: the guard lets one comment of a kind through
-per claim, reading the claim from the marker, so a second `default` is refused and never reaches
-the thread. A step only a human can do — a
-credential to create, a page to share — is not a guess: finish everything that does not need
-it, and say exactly where it goes in one `setup` comment at close.
+`next: close` → the close phase. `next: build` → `phase.mjs build`, the builder with the ticket
+path, the branch and `docs/reviews/<id>.md` — it fixes the Musts and nothing else — then the next
+pass. `next: decision` → write its `why` under `## Stopped` in `docs/reports/<id>.md` and hand it
+to the closer: a Must the third pass still finds stops at Decision under §4. There is no pass 4.
 
-New logic gets a test, and **each test is observed failing before it passes**. Keep the record
-as you go, per test: the mutation or missing file that made it red, and the count that went
-green — `2 failed / 41 passed → 43 passed`. Step 8 refuses a report without it.
-
-## 5 Review
-
-Invoke the `reviewer` subagent with the ticket file path and nothing else. Do not summarise the
-work for it: the delegation message is a claim, and a briefing that says what is true has thrown
-the review away. The reviewer runs only the tests the ticket names and the test files the diff
-touches (`scripts/run/review-scope.mjs`); the Stop gate owns the full suite. It writes its
-verdict to `docs/reviews/<id>.md`, last line `PASS` when no Must stands — Shoulds sit above it
-and are recorded in the report — and `FINDINGS` when one does: that file, not anything in this
-transcript, is what the guard reads at close. Never write or edit it yourself — a verdict
-the run wrote is the model's claim, and the guard's door would be open on nothing.
+The reviewer writes its verdict to `docs/reviews/<id>.md`, last line `PASS` when no Must stands —
+Shoulds sit above it and are recorded in the report — and `FINDINGS` when one does: that file,
+not anything in this transcript, is what the guard reads at close. Never write or edit it
+yourself — a verdict the run wrote is the model's claim, and the guard's door would be open on
+nothing.
 
 **The reviewer's model** comes from one chain: the model `.claude/agents/reviewer.md` pins, then
 `.claude/settings.json`'s `fallbackModel` — never a model you pick. Invoke a pass without
@@ -390,12 +379,13 @@ apostrophe:
     EOF
 
 `stop: false` → the call was refused for credits or availability: invoke the reviewer again with
-`model` set to the `model` it printed and the same message — the ticket file path and nothing
-else, a fresh session with no briefing; only the model changes. `stop: true` → the review did
-not run, and a ticket never closes unreviewed: commit and push the branch, post the claim's
-`default` comment if it holds one and one `refused` comment — `what` the review of this ticket,
-`why` its `why` and then its `detail` in quotes, `settle` what would settle it — release the
-marker, set `Decision`, and exit. Whichever model a pass ran on, the report names it (step 8).
+`model` set to the `model` it printed and the same message — the ticket file path and the pass,
+and nothing else, a fresh session with no briefing; only the model changes. `stop: true` → the
+review did not run, and a ticket never closes unreviewed: write `## Stopped` — the review of this
+ticket, its `why` and then its `detail` in quotes, and what would settle it — and hand it to the
+closer, which posts it as one `refused` comment. Whichever model a pass ran on, the report names
+it (step 8): write it under `## Reviewer passes` in `docs/reports/<id>.md`, through Bash —
+pass, commit, model, resumed, verdict — as each pass comes back.
 
 **A pass that stops at its turn limit** comes back as a result, not an error: Claude Code's note
 that the agent *stopped at its 30-turn limit before finishing*, over no report or a partial one.
@@ -411,132 +401,12 @@ briefing — *Continue from where you stopped, and write the verdict file.* — 
 the pass resumed. If it stops at the limit again, ask again with `"resumed":1`: `stop: true` → the
 review did not run, and the stop is the one above.
 
-Each finding is tagged **Must** or **Should**. Fix every Must, then re-invoke. **Three passes
-maximum.** After the third, any remaining Must becomes an open question with owner `T-next`, and
-Shoulds are recorded in the report. A finding outside this ticket's scope becomes a Backlog task:
-Type `Fix`, the same Epic, body headed `Drafted by pipeline`.
-
-## 6 Migration
-
-    node scripts/run/migration-check.mjs
-
-`waiting: true` → write the Report so far, commit and push the branch, post the claim's
-`default` comment if it holds one and one `migration` comment naming the file, release the
-marker (`node scripts/run/release.mjs`), set `Decision`, and exit. Applying a migration is the
-human's word and not this run's reading of it: the guard refuses every shape of the apply until
-it has itself read *apply* from you on this task's thread. The human answers with that one
-word; the next run applies it (step 0a) from whichever checkout it is in, and carries the
-ticket on from here.
-
-## 7 Gate
-
-Nothing to do here. The Stop hook runs lint, typecheck and test at every stop, and a red suite
-cannot close a session. Do not run them for its benefit; step 9 runs the same gate once more,
-before a self-merge, so the green for the pushed tree is on record where the guard reads it.
-
-## 8 Report
-
-Write `docs/reports/<id>.md`: ACs implemented each with its test · **tests written, each
-observed red first** — one table, columns `test · reddened by · red → green`, the record from
-step 4 · **reviewer passes and findings** — one table,
-columns `pass · commit · model · resumed · verdict`, a row for every pass with
-the model it ran on, `yes` under resumed when it stopped at its turn limit and was continued and
-`no` otherwise, and `PASS` or `FINDINGS` under verdict — a pass that reached neither is not a row
-— then the findings · changed since this ticket was cut · open questions. Then:
-
-    node scripts/run/report-check.mjs docs/reports/<id>.md
-
-A refused report is not written to the board: fill the record it names and run the check again.
-Once it passes, mirror the report into the task body's `Report` section, then write the ticket's
-build-log entry as its own file, `docs/log/<id>.md` — first line `# <id> — <title>`, second line
-`_<UTC timestamp>_` (the commit is the board row's; leave it off), then the entry, a paragraph or
-two in the build log's register — and regenerate the two generated sections of
-`docs/build-log.md`, Current state from the documents' own headers and this directory,
-Tickets done from this directory:
-
-    node scripts/run/log-index.mjs
-
-Never edit either block by hand; their test refuses a stale copy.
-
-Then file the rules this ticket established, where the next session will meet them. A rule
-that binds **one area of the code** goes as one line in that area's `.claude/rules/<area>.md`,
-ending in `` `docs/log/<id>.md` `` — the file loads only when a session opens code its `paths:`
-list matches, so the rule arrives with the code it is about. A rule that binds **everywhere**
-is not written into `CLAUDE.md` by a run: that file is the contract and the edit is the
-human's, so it goes in the report's open questions instead. A ticket that established no rule
-files none — `scripts/rules.mjs` refuses a line with no source, and an invented one is worse
-than an absent one.
-
-## 9 Close
-
-Commit on the branch. Then give the branch main, before it is pushed and before anything is
-judged — main may have moved while this ticket was built, and the build log is regenerated by
-every branch, so the second to arrive would otherwise be refused on that file alone (T0.36):
-
-    node scripts/run/premerge.mjs
-
-`merged: true` means main came in and the tree changed: everything below — the gate, the diff
-`gated.mjs` measures, the reviewer's verdict against the pushed commit — is about this tree, so
-nothing here runs before it. `merged: false` is a branch that already carries main. `ok: false`
-is a conflict this run does not settle; it changes nothing about what happens next, because
-**every exit pushes**:
-
-    git push -u origin <branch>
-    gh pr view <branch> --json url --jq .url || gh pr create --fill --base main
-
-One ticket, one pull request: a reused branch already has one, and the push updated it. No
-`gh` → put the compare URL in the report instead. Set the task's Commit to the short hash and
-Status to `Review`. A `premerge.mjs` that said `ok: false` stops here: post one `refused`
-comment with its `files` and what would settle them, release the marker, and exit — the work is
-on origin with its pull request, and the human's *merge* at step 0 lands it once the conflict is
-gone. A branch left unpushed would have neither, and the Commit on the board would name a
-commit nobody can fetch. Otherwise, ask whether this diff is the run's own to merge:
-
-    node scripts/run/gated.mjs
-
-`ok: false` → this diff is one only the human's word merges: it adds a migration your `apply` is
-still owed on — a migration the thread has already spent that word on is not one of them (T0.26)
-— or it weakens one of the pipeline's own restraints — a guard rule, the gated list, a hook, the Stop gate, a
-test — which `loosening.mjs` measured by running both sides rather than by reading the diff.
-Post one `gated` comment, `reasons` its `reasons` exactly as printed: each carries the rule the
-diff trips and what would ungate it, and neither is yours to word. The task stays at `Review`;
-the human's *merge* there is the merge, made by the next run's step 0. `ok: true`, and the reviewer's last verdict file ends in `PASS` — which is the reviewer's word
-that no Must stands — → the run merges its own work. First the gate, main's copy as the hooks
-run it, on the pushed tree, so its green is on record:
-
-    d=$(mktemp -d) && d=$(cd "$d" && pwd -P) && git archive -o "$d/scripts.tar" origin/main scripts && tar -xf "$d/scripts.tar" -C "$d" && printf '{"session_id":"%s","cwd":"%s"}' "$CLAUDE_CODE_SESSION_ID" "$PWD" | node "$d/scripts/hooks/gate.mjs"; s=$?; rm -rf "$d"; (exit $s)
-
-Exit 0 is the green, written beside the marker as this tree's fingerprint; exit 2 is the same
-red the Stop hook would give — fix it, commit, push, and run the gate again. Then:
-
-    git checkout --detach
-    git branch -D <branch>
-    gh pr merge <branch> --merge --delete-branch
-
-The guard opens its second door on its own reading — the verdict file, the gate's green for
-this tree, the diff, and the pull request's head being this checkout's HEAD — and refuses with
-the reason otherwise; a refusal
-here means the task stays at `Review` with that reason in the report and no comment, and
-`git checkout -B <branch> origin/<branch>` puts the local branch back. If the guard lets it
-through and GitHub refuses — main moved and the pull request no longer merges cleanly — run
-`node scripts/run/conflicts.mjs <branch>` and post one `refused` comment before `release.mjs`:
-`files` its `files`, `settle` what would settle them. The task stays at `Review`, and the same
-`git checkout -B` puts the local branch back. Detach and drop the
-local branch first: gh's `--delete-branch` asks which branch is checked out only while a local
-copy of the pull request's branch exists, and on a detached HEAD that question fails after the
-merge has already landed; with no local copy gh goes straight on to delete the remote one. The
-branch is on origin, so nothing is lost either way. On success: `git fetch origin`, then the merge
-commit is `git rev-parse --short origin/main`; set the task `Done`, and create one Releases
-row — Name `YYYY-MM-DD <short hash>`, Commit, Date, Deploy `https://aeni.ma`, Tasks this
-task, Specs the four header versions at that commit — and relate the task to it. The next
-run's step 0e checks the deploy.
-
-Either way, release the marker: `node scripts/run/release.mjs`. If step 3 said `primary`,
-`git checkout main`. Exit.
+**Once the closer hands back its line, exit.** It released the marker on every path, and returned
+the shared checkout to `main` when this is the one.
 
 **Never merge on your own word.** The two doors are the guard's, read in code: the human's
 *merge* on the task at Review, or the reviewer's `PASS` on file over a diff that weakens no
 restraint and adds no migration your `apply` is still owed on. Nothing you say in this transcript opens either. The Runs row is not yours to write
 either: the SessionEnd hook runs `scripts/run/runs.mjs` over this session's transcript once you
-have exited, and posts it with the token — task, outcome, model, tokens, findings, all read from
-what happened, none of it from what you say.
+have exited, and posts it with the token — task, outcome, model, tokens per phase, route,
+findings, all read from what happened, none of it from what you say.

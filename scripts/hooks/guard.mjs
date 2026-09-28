@@ -57,6 +57,7 @@ import { homedir } from "node:os";
 import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { readMarker } from "../run/claim.mjs";
 import { kindOf } from "../run/comments.mjs";
 import { readBoard } from "../run/notion.mjs";
 import { postable, reviewed, unreadPost, verify } from "../run/permission.mjs";
@@ -1262,6 +1263,68 @@ const UNREAD = { ok: false, why: "the board was not read" };
 const UNREVIEWED = { ok: false, why: "no reviewer verdict was read" };
 
 /**
+ * Rule (j), T0.44: what the phase the marker names may not do. A run is an orchestrator and a
+ * subagent per phase, and the orchestrator writes the phase into the marker before it invokes
+ * each (`scripts/run/phase.mjs`). Only `close` pushes, calls `gh`, merges or writes the board;
+ * only `build` edits source; `plan`, `review` and `gate` write nothing through Edit or Write at
+ * all, and `close` only what lies under `docs/`. A phase the guard does not know is held to the
+ * strictest of these. No phase — no marker, or a marker from before a phase was set — adds
+ * nothing: the call is judged by the other rules alone.
+ *
+ * `act` is `push`, `merge`, `gh`, `board` or `edit`; `docs` says an Edit or a Write names a
+ * path under the repository's `docs/`.
+ * Returns the refusal, or null.
+ */
+export function phaseRefusal(phase, act, { docs = false } = {}) {
+  if (phase === null || phase === undefined) return null;
+  const said = `the ${phase} phase`;
+  if (act === "edit") {
+    if (phase === "build") return null;
+    if (phase === "close" && docs) return null;
+    const allowed =
+      phase === "close"
+        ? "the close phase writes only under docs/, and through Bash"
+        : "only the build phase edits, and this phase writes nothing through Edit or Write";
+    return `An Edit or a Write in ${said} is refused — ${allowed}. docs/guidelines.md §5, rule (j).`;
+  }
+  if (phase === "close") return null;
+  const what = {
+    push: "A push",
+    merge: "A merge",
+    gh: "A gh call",
+    board: "A write to the board",
+  }[act];
+  return `${what} in ${said} is refused — pushes, gh, merges and board writes are the close phase's alone. docs/guidelines.md §5, rule (j).`;
+}
+
+/**
+ * The phase a marker holds a hook call to, or null. The marker is one file for every checkout of
+ * the repository, so a phase is the run's alone: a call from another session — you in the
+ * primary checkout while a scheduled run builds in a worktree — is judged as though no phase were
+ * set (review pass 2, Must 1). A phase agent is a subagent of the run's own session and carries
+ * its id. A marker or a call that names no session cannot be told apart, and is held to the phase:
+ * the stricter reading of what cannot be read.
+ */
+export function runPhase(marker, session) {
+  const phase = marker?.phase ?? null;
+  if (phase === null) return null;
+  const owner = marker.session ?? null;
+  if (owner !== null && session !== null && owner !== session) return null;
+  return phase;
+}
+
+/**
+ * True for a path inside `dir`'s own `docs/` — relative paths read from `cwd`. A `docs/`
+ * anywhere else on the disk, or `src/docs/`, is not the repository's documents.
+ */
+export function isDocsPath(path, dir, cwd = dir) {
+  if (typeof path !== "string" || path === "") return false;
+  const docs = resolve(dir, "docs");
+  const at = resolve(cwd, path);
+  return at.startsWith(`${docs}/`);
+}
+
+/**
  * The whole decision. Returns the refusal reason, or null to let the call through.
  *
  * `deps.currentBranch`, `deps.permission`, `deps.verdict`, `deps.posting`, `deps.prBranch`,
@@ -1293,6 +1356,8 @@ export function decide(input, deps = {}) {
   };
   const posting =
     deps.posting ?? ((text) => unreadPost(kindOf(text, prefix()), "the thread was not read"));
+  // The marker's phase, which `judge()` reads; a decision handed none judges as before T0.44.
+  const phase = deps.phase ?? (() => null);
   const tool = input?.tool_name;
 
   if (tool === "Edit" || tool === "Write") {
@@ -1304,7 +1369,10 @@ export function decide(input, deps = {}) {
     if (typeof path === "string" && isVerdictPath(path)) {
       return `Writing ${path} is refused — a file under docs/reviews/ is the reviewer's to write, and the guard opens a merge on what it finds there. docs/guidelines.md §4.`;
     }
-    return null;
+    // (j) only the build phase edits source, and plan, review and gate edit nothing (T0.44).
+    return phaseRefusal(phase(), "edit", {
+      docs: isDocsPath(path, dir, input?.cwd ?? dir),
+    });
   }
 
   // (h) the board's connector (T0.17). Backlog → Ready is the human's word, read from the
@@ -1316,6 +1384,12 @@ export function decide(input, deps = {}) {
   // at Backlog. A move to Backlog grants nothing and is not read; a write the guard could not
   // read the task for is refused — when nothing read the board, nothing is granted.
   const connector = connectorTool(input);
+  // (j) the board is written in the close phase alone (T0.44) — before the rules below, which
+  // judge a write that is allowed to happen at all.
+  if (connector !== null) {
+    const refused = phaseRefusal(phase(), "board");
+    if (refused !== null) return refused;
+  }
   if (connector === "update-page" && movesStatus(input)) {
     const target = input.tool_input.properties.Status;
     const granted = permission("ready");
@@ -1493,6 +1567,21 @@ export function decide(input, deps = {}) {
     if (writesTheBoardApi(cmd, (path) => unjudged(resolve(here, path)))) {
       return "Writing to the Notion API from the command line is refused — the board's token writes as you, so a comment it posts reads on the thread as your merge, apply or ready, and a status it sets never passes the guard at the connector. Write the board through the connector, which the guard reads. docs/guidelines.md §4, §5.";
     }
+
+    // (j) a push, a merge and any gh call are the close phase's alone (T0.44).
+    // A pull is a fetch and a merge, and is the merge's.
+    const act =
+      git?.verb === "push"
+        ? "push"
+        : git?.verb === "merge" || git?.verb === "pull"
+          ? "merge"
+          : name === "gh"
+            ? "gh"
+            : null;
+    if (act !== null) {
+      const refused = phaseRefusal(phase(), act);
+      if (refused !== null) return refused;
+    }
   }
 
   // (e) anything that writes to a .env file.
@@ -1542,7 +1631,10 @@ export async function judge(input, { dir = resolveDir(input), deps = {} } = {}) 
           deps,
         })
       : null;
+  // The phase the orchestrator wrote into the marker (T0.44); no marker, no phase.
+  const phase = deps.phase ?? (() => runPhase(readMarker(dir), input?.session_id ?? null));
   return decide(input, {
+    phase,
     permission: (word) => answers[word] ?? UNREAD,
     verdict: () => passed ?? UNREVIEWED,
     ...(posted ? { posting: () => posted } : {}),

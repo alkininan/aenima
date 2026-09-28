@@ -4,10 +4,12 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  agentOf,
   countFindings,
   modelLabel,
   nextNumber,
   parseTranscript,
+  phaseOfAgent,
   post,
   rowProperties,
   runKey,
@@ -435,7 +437,7 @@ describe("parseTranscript", () => {
     ].map((line) => line.replace('"type":"assistant"', '"isSidechain":true,"type":"assistant"'));
     const main = transcript({ statuses: ["In progress", "Review"] });
     const alone = parseTranscript(main);
-    const withSide = parseTranscript(main, [reviewer]);
+    const withSide = parseTranscript(main, [{ agent: "reviewer", lines: reviewer }]);
     expect(withSide.tokens).toEqual({
       input: alone.tokens.input + 100,
       output: alone.tokens.output + 1000,
@@ -743,3 +745,150 @@ describe.skipIf(T010.some(({ worktree, id }) => session(worktree, id) === null))
     });
   },
 );
+
+// T0.44 TC4 → AC4, TC5 → AC5: tokens per phase that sum to Tokens, and the route the run took.
+describe("T0.44 — the receipts per phase", () => {
+  const usage = (input, output) => ({ input_tokens: input, output_tokens: output });
+  const bashAt = (id, command, stamp, spent) =>
+    assistant(
+      id,
+      "claude-fable-5-1",
+      spent,
+      [{ type: "tool_use", id: `tu_${id}`, name: "Bash", input: { command } }],
+      stamp,
+    );
+  const side = (id, stamp, spent, blocks = [{ type: "text", text: "x" }]) =>
+    assistant(id, "claude-fable-5-1", spent, blocks, stamp).map((l) =>
+      l.replace('"type":"assistant"', '"isSidechain":true,"type":"assistant"'),
+    );
+  const PAGE = "3d679daf-d42e-813f-af58-f5f053219a57";
+
+  /** An orchestrated run: claim, then plan, build, review and close, each phase set first. */
+  function orchestrated() {
+    const main = [
+      PROMPT,
+      ...bashAt(
+        "m_claim",
+        `node scripts/run/claim.mjs --task T0.96 --page ${PAGE} --branch t0-96`,
+        at(23, 0),
+        usage(10, 100),
+      ),
+      ...bashAt("m_plan", "node scripts/run/phase.mjs plan", at(24, 0), usage(1, 10)),
+      ...bashAt(
+        "m_build",
+        "node scripts/run/phase.mjs build --route medium",
+        at(26, 0),
+        usage(2, 20),
+      ),
+      ...bashAt(
+        "m_review",
+        "node scripts/run/phase.mjs review --route medium",
+        at(30, 0),
+        usage(3, 30),
+      ),
+      ...assistant(
+        "m_agent",
+        "claude-fable-5-1",
+        usage(4, 40),
+        [
+          {
+            type: "tool_use",
+            id: "tu_rev",
+            name: "Agent",
+            input: { subagent_type: "reviewer-medium", prompt: "docs/tickets/T0.96.md pass 1" },
+          },
+        ],
+        at(30, 30),
+      ),
+      user(
+        [{ type: "tool_result", tool_use_id: "tu_rev", content: "1. Should — a name\n\nPASS" }],
+        at(33, 0),
+      ),
+      ...bashAt("m_close", "node scripts/run/phase.mjs close", at(34, 0), usage(5, 50)),
+    ];
+    const sidechains = [
+      { agent: "planner", lines: side("s_plan", at(24, 30), usage(100, 1000)) },
+      // Written while the marker named review: only its name says it is the build's.
+      { agent: "builder-medium", lines: side("s_build", at(31, 30), usage(200, 2000)) },
+      { agent: "reviewer-medium", lines: side("s_review", at(31, 0), usage(300, 3000)) },
+      {
+        agent: "closer",
+        lines: side("s_close", at(35, 0), usage(400, 4000), [
+          {
+            type: "tool_use",
+            id: "tu_st",
+            name: "mcp__abc__notion-update-page",
+            input: { page_id: PAGE, properties: { Status: "Review" } },
+          },
+        ]),
+      },
+      // An agent the table does not name is the phase the marker named when it wrote.
+      { agent: "Explore", lines: side("s_other", at(28, 0), usage(7, 70)) },
+    ];
+    return { main, sidechains };
+  }
+
+  it("splits the tokens across the phases, by agent name and by the phase the marker named", () => {
+    const { main, sidechains } = orchestrated();
+    const summary = parseTranscript(main, sidechains);
+    expect(summary.phases).toEqual({
+      plan: 110 + 11 + 1100,
+      build: 22 + 2200 + 77,
+      review: 33 + 44 + 3300,
+      gate: 0,
+      close: 55 + 4400,
+    });
+    const sum = Object.values(summary.phases).reduce((a, b) => a + b, 0);
+    expect(sum).toBe(summary.tokens.total);
+  });
+
+  it("reads the route the orchestrator set, the last one standing", () => {
+    const { main, sidechains } = orchestrated();
+    expect(parseTranscript(main, sidechains).route).toBe("medium");
+    expect(parseTranscript(transcript()).route).toBeNull();
+  });
+
+  it("writes the five phase columns and the route onto the row", () => {
+    const { main, sidechains } = orchestrated();
+    const properties = rowProperties(parseTranscript(main, sidechains), 7);
+    expect(properties).toMatchObject({
+      Plan: { number: 1221 },
+      Build: { number: 2299 },
+      Review: { number: 3377 },
+      Gate: { number: 0 },
+      Close: { number: 4455 },
+      Route: { select: { name: "medium" } },
+    });
+    expect(rowProperties(parseTranscript(transcript()), 7).Route).toBeUndefined();
+  });
+
+  it("reads the closer's Status write as the run's outcome, and a reviewer-medium's findings", () => {
+    const { main, sidechains } = orchestrated();
+    const summary = parseTranscript(main, sidechains);
+    expect(summary).toMatchObject({ task: "T0.96", outcome: "Done", findings: 1 });
+    // Without the closer's transcript nothing wrote a Status: the orchestrator writes none.
+    expect(parseTranscript(main, sidechains.slice(0, 3)).outcome).toBe(STOPPED);
+  });
+
+  it("puts an idle run's tokens in Plan, since no phase was ever set", () => {
+    const summary = parseTranscript(transcript({ withTask: false, statuses: [] }));
+    expect(summary.phases.plan).toBe(summary.tokens.total);
+  });
+
+  it("reads the agent's name from the meta file beside its transcript", () => {
+    const dir = mkdtempSync(join(tmpdir(), "aenima-runs-meta-"));
+    try {
+      writeFileSync(join(dir, "agent-a1.meta.json"), JSON.stringify({ agentType: "closer" }));
+      writeFileSync(join(dir, "agent-a2.meta.json"), "{}");
+      expect(agentOf(join(dir, "agent-a1.jsonl"))).toBe("closer");
+      expect(agentOf(join(dir, "agent-a2.jsonl"))).toBeNull();
+      expect(agentOf(join(dir, "agent-a3.jsonl"))).toBeNull();
+      expect(phaseOfAgent("builder-medium")).toBe("build");
+      expect(phaseOfAgent("reviewer")).toBe("review");
+      expect(phaseOfAgent("gatekeeper")).toBe("gate");
+      expect(phaseOfAgent("Explore")).toBeNull();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

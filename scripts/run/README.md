@@ -7,6 +7,14 @@ where it has any, injected so a test stays off the repo — and also runs as a c
 prints JSON for the skill to read back. `cli.mjs` is the shared helper (stdin, `emit`,
 `isMain`) and is not a step. The step names and numbers below are §5's.
 
+Since T0.44 a run is a thin orchestrator and a subagent per phase: the skill keeps steps 0 and
+1, the **planner** (`.claude/agents/planner.md`) does step 2, the **builder** steps 3 and 4, the
+**reviewer** step 5 and the **closer** steps 6 to 9 and every stop. Before each phase the
+orchestrator writes it into the run marker with `phase.mjs` — `plan`, `build`, `review`, `gate`
+or `close`, and the route the run took — and the guard reads it there (rule (j)): a push, a `gh`
+call, a merge and a board write belong to `close` alone, an Edit or a Write to source to `build`
+alone. The handoff between phases is the files below, never a summary.
+
 ## 0 Preflight
 
 Before anything else the run tends the ground it stands on: `prune.mjs` stamps the worktree
@@ -73,8 +81,10 @@ hours, is a run that died, and `stale.mjs --recover <id>` keeps its branch as
 with the reason when that commit was refused — so the task can be claimed again from
 `origin/main` with one comment and no human. Then, once per commit of main, `health.mjs` asks
 the live site from outside — `/sign-in` 200, `/app` 307 — at each address `deploy` in
-`.claude/board.json` names, aeni.ma and then the deployment's own Vercel address, skipping a name
-that does not resolve and Vercel's login and taking the first that answers (T0.43); recording the commit it asked about
+`.claude/board.json` names, aeni.ma and then the deployment's public Vercel address, skipping a
+name that does not resolve, Vercel's login, and an answer without Vercel's headers — neither
+`server: Vercel` nor an `x-vercel-id`, so a stranger on the domain and not the deployment
+(T0.47) — and taking the first that answers (T0.43); recording the commit it asked about
 beside the marker so one outage reverts one merge. Its outcome is up, down or unknown (T0.39):
 a check that never answered, with none answering wrongly, is unknown, records nothing and is
 asked again next run, since silence is no verdict on a merge; a wrong answer has `revert.mjs` prepare the
@@ -142,7 +152,10 @@ file back and reports every backticked path and identifier in the ticket's own s
 `origin/main` lacks — paths as files, identifiers with `git grep`, commands and flags and
 fragments never looked up, and the Cited section left to the document it quotes; whether an
 absent name is something the ticket creates or drift is the skill's reading, since only a
-reader of the ticket can tell those apart.
+reader of the ticket can tell those apart. Since T0.44 the planner does all of this in a fresh
+context and writes the ticket file through its own Bash; before it — and before every phase — the
+orchestrator writes the phase into the run marker with `phase.mjs`, `plan` here, with the route
+once there is one, and the guard reads it there.
 
 ## 3 Branch
 
@@ -162,7 +175,15 @@ new logic gets a test, and each test is observed failing before it passes, with 
 and the count recorded for step 8. Where the ticket is silent the run stops only when a
 wrong guess is expensive to undo (guidelines §4) — on a Decision exit `release.mjs` removes
 the marker — and otherwise takes the stated default, says so in one comment, and keeps
-building.
+building. Since T0.44 the builder is a subagent that pushes and posts nothing: a default, a
+stop, a human step and an out-of-scope finding go into `docs/reports/<id>.md` under their own
+headings, and the closer turns them into the comments and the tasks. `route.mjs` says which effort
+it and the reviewer run at, from the table in `.claude/board.json`: a Fix or a Content ticket
+naming no migration and nothing under `scripts/` or `.claude/` at medium, everything else at
+xhigh, a shape the table does not cover `fallback` at xhigh. The Agent tool takes no effort per
+invocation, so an effort is an agent file — `builder` and `builder-medium` — and the answer names
+the one to invoke. The orchestrator asks before the build and again before the review, when the
+diff's paths are known.
 
 ## 5 Review
 
@@ -186,7 +207,13 @@ models tried out of the chain's order is a stop, because a review that did not r
 pass. A pass that stops at its turn limit comes back as Claude Code's note rather than an error,
 and `review-model.mjs` reads that too (T0.23): what it holds is never a verdict, so the pass is
 resumed once in its own session on the model it ran on, marked resumed in the report, and a
-second stop at the limit is a stop.
+second stop at the limit is a stop. Since T0.44 the loop is capped at three passes, counted in code: the orchestrator hands the
+reviewer the pass with the ticket path, the reviewer writes it into its verdict file as `pass
+<n>`, and `review-cap.mjs` reads that file after each pass — `close` on a PASS, `build` on
+FINDINGS in pass 1 or 2, `decision` on FINDINGS in pass 3, which stops the run at Decision, or on a
+file whose count cannot be read. Pass 2 reads the fixes and pass 3 only pass 2's Musts. A Should
+is not fixed in the run: those standing at the last pass become one Backlog task the closer files,
+and the report lists them. That supersedes the open question a third pass's Must used to become.
 
 ## 6 Migration
 

@@ -1608,3 +1608,168 @@ describe("T0.31, AC1 — a shell's -c bundled with other short flags", () => {
     }
   });
 });
+
+// T0.44 TC2 → AC2: the marker's phase. Pushes, gh, merges and board writes belong to close;
+// source edits to build; plan, review and gate write nothing through Edit or Write; and a hook
+// call with no phase is judged exactly as before.
+describe("T0.44 — rule (j) the phase the marker names", () => {
+  const at = (phase) => ({ phase: () => phase, currentBranch: () => "t0-44" });
+  const sh = (command) => ({ tool_name: "Bash", tool_input: { command }, cwd: "/repo" });
+  // A real package root, since `resolveDir` walks up to one: this checkout's own.
+  const ROOT = join(import.meta.dirname, "..", "..");
+  const write = (tool_name, file_path) => ({
+    tool_name,
+    tool_input: { file_path: file_path.replace(/^\/repo/, ROOT) },
+    cwd: ROOT,
+  });
+  const board = (tool, tool_input) => ({ tool_name: `mcp__abc__notion-${tool}`, tool_input });
+
+  it("refuses a push, a gh call and a merge from the build phase, naming the phase and the rule", () => {
+    for (const command of [
+      "git push -u origin t0-44",
+      "gh pr create --fill --base main",
+      "gh pr view t0-44 --json url",
+      "git merge origin/main",
+      "git pull origin t0-44",
+    ]) {
+      const reason = decide(sh(command), at("build"));
+      expect(reason).toContain("in the build phase is refused");
+      expect(reason).toContain("rule (j)");
+    }
+  });
+
+  it("refuses a board write from the build phase, whatever the connector tool", () => {
+    const writes = [
+      board("create-comment", { page_id: "p", markdown: "⟡ I took a default" }),
+      board("update-page", { page_id: "p", properties: { Status: "Review" } }),
+      board("update-page", {
+        page_id: "p",
+        command: "update_properties",
+        properties: { Commit: "abc" },
+      }),
+      board("create-pages", { pages: [{ properties: { Status: "Backlog" } }] }),
+    ];
+    for (const input of writes) {
+      expect(decide(input, { ...at("build"), posting: () => ({ ok: true }) })).toContain(
+        "A write to the board in the build phase is refused",
+      );
+    }
+  });
+
+  it("lets the close phase push, call gh and write the board as the other rules allow", () => {
+    expect(decide(sh("git push -u origin t0-44"), at("close"))).toBeNull();
+    expect(decide(sh("gh pr create --fill --base main"), at("close"))).toBeNull();
+    expect(
+      decide(board("create-comment", { page_id: "p", markdown: "⟡ I took a default" }), {
+        ...at("close"),
+        posting: () => ({ ok: true }),
+      }),
+    ).toBeNull();
+    // The other rules still stand in close: a force-push is refused by (d), not let through.
+    expect(decide(sh("git push --force origin t0-44"), at("close"))).toContain("Force-pushing");
+  });
+
+  it("refuses an Edit or a Write in the plan, review and gate phases, source or docs", () => {
+    for (const phase of ["plan", "review", "gate"]) {
+      for (const path of ["/repo/src/a.ts", "/repo/docs/tickets/T0.44.md"]) {
+        const reason = decide(write("Edit", path), at(phase));
+        expect(reason).toContain(`An Edit or a Write in the ${phase} phase is refused`);
+        expect(reason).toContain("rule (j)");
+      }
+    }
+  });
+
+  it("lets the build phase edit source, and the close phase write under docs/ and nowhere else", () => {
+    expect(decide(write("Edit", "/repo/src/a.ts"), at("build"))).toBeNull();
+    expect(decide(write("Write", "/repo/docs/reports/T0.44.md"), at("close"))).toBeNull();
+    expect(decide(write("Write", "/repo/src/a.ts"), at("close"))).toContain(
+      "close phase writes only under docs/",
+    );
+    expect(decide(write("Write", "/repo/src/docs/a.ts"), at("close"))).toContain("rule (j)");
+  });
+
+  it("holds a phase it does not know to the strictest of them", () => {
+    expect(decide(sh("git push origin t0-44"), at("ship"))).toContain(
+      "in the ship phase is refused",
+    );
+    expect(decide(write("Write", "/repo/src/a.ts"), at("ship"))).toContain("rule (j)");
+  });
+
+  it("adds to the other rules and replaces none: the build phase still refuses what (a) and (e) refuse", () => {
+    expect(decide(sh("pnpm db:push"), at("build"))).toContain("drizzle-kit push is refused");
+    expect(decide(write("Write", "/repo/.env.local"), at("build"))).toContain(".env files");
+    expect(decide(write("Write", "/repo/docs/reviews/T0.44.md"), at("build"))).toContain(
+      "docs/reviews/",
+    );
+  });
+
+  it("judges a hook call with no phase as before", () => {
+    for (const phase of [null, undefined]) {
+      const deps = { phase: () => phase, currentBranch: () => "t0-44" };
+      expect(decide(sh("git push -u origin t0-44"), deps)).toBeNull();
+      expect(decide(sh("gh pr view t0-44"), deps)).toBeNull();
+      expect(decide(write("Edit", "/repo/src/a.ts"), deps)).toBeNull();
+    }
+    expect(decide(sh("git push -u origin t0-44"), { currentBranch: () => "t0-44" })).toBeNull();
+  });
+
+  describe("judge reads the phase from the marker", () => {
+    let repo;
+    const git = (cwd, ...args) => spawnSync("git", args, { cwd, encoding: "utf8" });
+    const env = { CLAUDE_CODE_SESSION_ID: "sess-j" };
+
+    beforeAll(() => {
+      repo = mkdtempSync(join(tmpdir(), "aenima-guard-phase-"));
+      git(repo, "init", "-q", "-b", "t0-44");
+      writeFileSync(join(repo, "package.json"), "{}\n");
+      git(repo, "add", "-A");
+      git(repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "base");
+    });
+    afterAll(() => rmSync(repo, { recursive: true, force: true }));
+
+    // Review pass 2, Must 1: the marker is one file for every checkout, and the phase is the run's.
+    it("holds the run's own session to the phase, and no other session", async () => {
+      const call = (session_id) => ({
+        tool_name: "Bash",
+        tool_input: { command: "git push -u origin t0-44" },
+        cwd: repo,
+        session_id,
+      });
+      claim({ task: "T0.44", page: "p", branch: "t0-44" }, { cwd: repo, env });
+      const { setPhase } = await import("../run/phase.mjs");
+      setPhase({ phase: "build" }, { cwd: repo, env });
+      expect(await judge(call("sess-j"))).toContain("in the build phase is refused");
+      expect(await judge(call("someone-else"))).toBeNull();
+      // A call that names no session cannot be told from the run's, and is held to it.
+      expect(await judge(call(undefined))).toContain("in the build phase is refused");
+      release({ session: "sess-j" }, { cwd: repo });
+    });
+
+    it("reads a marker with no session as the phase's for every call", async () => {
+      const { runPhase } = await import("./guard.mjs");
+      expect(runPhase({ phase: "build", session: null }, "anyone")).toBe("build");
+      expect(runPhase({ phase: "build", session: "a" }, "b")).toBeNull();
+      expect(runPhase({ phase: "build", session: "a" }, "a")).toBe("build");
+      expect(runPhase({ session: "a" }, "a")).toBeNull();
+      expect(runPhase(null, "a")).toBeNull();
+    });
+
+    it("refuses from the phase the marker names, and judges as before once it names none", async () => {
+      const push = {
+        tool_name: "Bash",
+        tool_input: { command: "git push -u origin t0-44" },
+        cwd: repo,
+      };
+      expect(await judge(push)).toBeNull();
+      claim({ task: "T0.44", page: "p", branch: "t0-44" }, { cwd: repo, env });
+      expect(await judge(push)).toBeNull();
+      const { setPhase } = await import("../run/phase.mjs");
+      setPhase({ phase: "build" }, { cwd: repo, env });
+      expect(await judge(push)).toContain("in the build phase is refused");
+      setPhase({ phase: "close" }, { cwd: repo, env });
+      expect(await judge(push)).toBeNull();
+      release({ session: "sess-j" }, { cwd: repo });
+      expect(await judge(push)).toBeNull();
+    });
+  });
+});
