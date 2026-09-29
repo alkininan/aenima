@@ -9,7 +9,10 @@
  * a client island below.
  */
 import { devOnly } from "../dev-only";
+import { holdContent } from "../frame-fixture";
 import { AeMark } from "@/components/AeMark";
+import { PageTopbar } from "@/components/frame/PageTopbar";
+import { PaintMark } from "@/components/frame/PaintMark";
 import { CompositesPreview } from "./Composites";
 import { Button } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
@@ -21,8 +24,12 @@ import {
   BUTTON_SIZES,
   BUTTON_VARIANTS,
   CHIP_GAP_TONES,
+  GUTTER_CLASSES,
+  MAIN_CLASSES,
   SPINNER_SIZES,
 } from "@/components/ui/variants";
+import { cx } from "@/lib/cx";
+import { PAINT_MARKS } from "@/lib/layout";
 
 const TYPE_SCALE = [
   ["type-display-xl", "display-xl — 32/38"],
@@ -92,251 +99,261 @@ export default async function PrimitivesPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   devOnly();
-  const forceFallback = (await searchParams)["fallback"] !== undefined;
+  const params = await searchParams;
+  const forceFallback = params["fallback"] !== undefined;
+  // C-40's held request and C-45's route changes both drive this route: `?delay=`
+  // keeps the content behind its skeleton while the chrome is measured.
+  await holdContent(params);
 
   return (
-    <main
-      {...(forceFallback ? { "data-force-fallback": "" } : {})}
-      className="mx-auto flex w-full max-w-[1200px] flex-col gap-[48px] px-[24px] py-[48px]"
-    >
-      <header className="flex flex-wrap items-end gap-[16px]">
-        <AeMark size={32} className="text-n-primary" />
-        <AeMark size={24} className="text-n-primary" />
-        <AeMark size={16} className="text-n-primary" />
-        <AeMark size={32} className="text-prime" />
-        <h1 className="type-display-xl text-n-primary">Primitives</h1>
-      </header>
+    <main {...(forceFallback ? { "data-force-fallback": "" } : {})} className={MAIN_CLASSES}>
+      {/* §4's page topbar, as every frame route carries one (C-40). The title is
+          the preview's name, not product copy. */}
+      <PageTopbar title="Primitives" />
 
-      <Section label="Type scale">
-        <div className="flex flex-col gap-[8px]">
-          {TYPE_SCALE.map(([className, sample]) => (
-            <p key={className} className={`${className} text-n-primary`}>
-              {sample}
-            </p>
-          ))}
-        </div>
-      </Section>
+      <div className={cx(GUTTER_CLASSES, "flex flex-col gap-[48px] py-[48px]")}>
+        <PaintMark name={PAINT_MARKS.content} />
 
-      {/* §2 (v2.8): the deepened ramp and the two materials. The ramp is the
+        <Section label="Brand mark">
+          <div className="flex flex-wrap items-end gap-[16px]">
+            <AeMark size={32} className="text-n-primary" />
+            <AeMark size={24} className="text-n-primary" />
+            <AeMark size={16} className="text-n-primary" />
+            <AeMark size={32} className="text-prime" />
+          </div>
+        </Section>
+
+        <Section label="Type scale">
+          <div className="flex flex-col gap-[8px]">
+            {TYPE_SCALE.map(([className, sample]) => (
+              <p key={className} className={`${className} text-n-primary`}>
+                {sample}
+              </p>
+            ))}
+          </div>
+        </Section>
+
+        {/* §2 (v2.8): the deepened ramp and the two materials. The ramp is the
           thing that needs eyeballing — the steps have to stay distinguishable
           from each other at the new depth, and --surface-1 has to lift off the
           base rather than sink into it. */}
-      <Section label="Surfaces & materials">
-        <Row label="ramp">
-          {[
-            ["--bg-base", "bg-bg-base"],
-            ["--surface-1", "bg-surface-1"],
-            ["--surface-3", "bg-surface-3"],
-            ["--surface-2", "bg-surface-2"],
-          ].map(([token, fill]) => (
-            <div
-              key={token}
-              className={`flex h-[64px] w-[128px] items-end rounded-md border border-glass-border p-[8px] ${fill}`}
-            >
-              <span className="type-mono-micro text-n-secondary">{token}</span>
-            </div>
-          ))}
-        </Row>
-        <Row label="materials">
-          <div className="control-gloss flex h-[64px] w-[128px] items-end rounded-md p-[8px]">
-            <span className="type-mono-micro text-bg-base">--grad-primary</span>
-          </div>
-          <div className="field-pill flex h-[64px] w-[128px] items-end rounded-md border border-glass-border bg-surface-1 p-[8px]">
-            <span className="type-mono-micro text-n-secondary">--sheen</span>
-          </div>
-        </Row>
-      </Section>
-
-      <Section label="Button">
-        {BUTTON_VARIANTS.map((variant) => (
-          <div key={variant} className="flex flex-col gap-[12px]">
-            <span className="type-ui-subhead text-n-primary">{variant}</span>
-            {BUTTON_SIZES.map((size) => (
-              <Row key={size} label={size}>
-                <Button variant={variant} size={size}>
-                  {variant}
-                </Button>
-                <Button variant={variant} size={size} leadingIcon={<PlusIcon />}>
-                  leading
-                </Button>
-                <Button variant={variant} size={size} trailingIcon={<ChevronRightIcon />}>
-                  trailing
-                </Button>
-                <Button
-                  variant={variant}
-                  size={size}
-                  leadingIcon={<PlusIcon />}
-                  trailingIcon={<ChevronRightIcon />}
-                >
-                  both
-                </Button>
-                <Button variant={variant} size={size} loading>
-                  loading
-                </Button>
-                <Button variant={variant} size={size} disabled>
-                  disabled
-                </Button>
-              </Row>
-            ))}
-          </div>
-        ))}
-        <Row label="full width">
-          <div className="w-full max-w-[320px]">
-            <Button fullWidth>full width</Button>
-          </div>
-        </Row>
-      </Section>
-
-      <Section label="Icon button">
-        {BUTTON_VARIANTS.map((variant) => (
-          <Row key={variant} label={variant}>
-            {BUTTON_SIZES.map((size) => (
-              <IconButton
-                key={size}
-                variant={variant}
-                size={size}
-                label={`${variant} ${size}`}
-                icon={<PlusIcon />}
-              />
-            ))}
-            {BUTTON_SIZES.map((size) => (
-              <IconButton
-                key={`${size}-loading`}
-                variant={variant}
-                size={size}
-                loading
-                label={`${variant} ${size} loading`}
-                icon={<PlusIcon />}
-              />
-            ))}
-            {BUTTON_SIZES.map((size) => (
-              <IconButton
-                key={`${size}-disabled`}
-                variant={variant}
-                size={size}
-                disabled
-                label={`${variant} ${size} disabled`}
-                icon={<PlusIcon />}
-              />
+        <Section label="Surfaces & materials">
+          <Row label="ramp">
+            {[
+              ["--bg-base", "bg-bg-base"],
+              ["--surface-1", "bg-surface-1"],
+              ["--surface-3", "bg-surface-3"],
+              ["--surface-2", "bg-surface-2"],
+            ].map(([token, fill]) => (
+              <div
+                key={token}
+                className={`flex h-[64px] w-[128px] items-end rounded-md border border-glass-border p-[8px] ${fill}`}
+              >
+                <span className="type-mono-micro text-n-secondary">{token}</span>
+              </div>
             ))}
           </Row>
-        ))}
-      </Section>
+          <Row label="materials">
+            <div className="control-gloss flex h-[64px] w-[128px] items-end rounded-md p-[8px]">
+              <span className="type-mono-micro text-bg-base">--grad-primary</span>
+            </div>
+            <div className="field-pill flex h-[64px] w-[128px] items-end rounded-md border border-glass-border bg-surface-1 p-[8px]">
+              <span className="type-mono-micro text-n-secondary">--sheen</span>
+            </div>
+          </Row>
+        </Section>
 
-      {/* §8 (v2.5): every state the field can be in, so the reserved label zone
+        <Section label="Button">
+          {BUTTON_VARIANTS.map((variant) => (
+            <div key={variant} className="flex flex-col gap-[12px]">
+              <span className="type-ui-subhead text-n-primary">{variant}</span>
+              {BUTTON_SIZES.map((size) => (
+                <Row key={size} label={size}>
+                  <Button variant={variant} size={size}>
+                    {variant}
+                  </Button>
+                  <Button variant={variant} size={size} leadingIcon={<PlusIcon />}>
+                    leading
+                  </Button>
+                  <Button variant={variant} size={size} trailingIcon={<ChevronRightIcon />}>
+                    trailing
+                  </Button>
+                  <Button
+                    variant={variant}
+                    size={size}
+                    leadingIcon={<PlusIcon />}
+                    trailingIcon={<ChevronRightIcon />}
+                  >
+                    both
+                  </Button>
+                  <Button variant={variant} size={size} loading>
+                    loading
+                  </Button>
+                  <Button variant={variant} size={size} disabled>
+                    disabled
+                  </Button>
+                </Row>
+              ))}
+            </div>
+          ))}
+          <Row label="full width">
+            <div className="w-full max-w-[320px]">
+              <Button fullWidth>full width</Button>
+            </div>
+          </Row>
+        </Section>
+
+        <Section label="Icon button">
+          {BUTTON_VARIANTS.map((variant) => (
+            <Row key={variant} label={variant}>
+              {BUTTON_SIZES.map((size) => (
+                <IconButton
+                  key={size}
+                  variant={variant}
+                  size={size}
+                  label={`${variant} ${size}`}
+                  icon={<PlusIcon />}
+                />
+              ))}
+              {BUTTON_SIZES.map((size) => (
+                <IconButton
+                  key={`${size}-loading`}
+                  variant={variant}
+                  size={size}
+                  loading
+                  label={`${variant} ${size} loading`}
+                  icon={<PlusIcon />}
+                />
+              ))}
+              {BUTTON_SIZES.map((size) => (
+                <IconButton
+                  key={`${size}-disabled`}
+                  variant={variant}
+                  size={size}
+                  disabled
+                  label={`${variant} ${size} disabled`}
+                  icon={<PlusIcon />}
+                />
+              ))}
+            </Row>
+          ))}
+        </Section>
+
+        {/* §8 (v2.5): every state the field can be in, so the reserved label zone
           (22h now) and reserved helper line can be eyeballed for shift. Nothing
           here changes height between states — that is the thing to check. And
           no field but Search shows any text but its label. */}
-      <Section label="Input">
-        <div className="grid gap-[24px] sm:grid-cols-2">
-          <Input label="At rest" />
-          <Input label="Filled" defaultValue="filled" readOnly />
-          <Input label="Leading icon" leadingIcon={<SearchIcon />} />
-          <Input
-            label="Trailing icon"
-            trailingIcon={<ChevronRightIcon />}
-            defaultValue="filled"
-            readOnly
-          />
-          <Input
-            label="Error"
-            helper="That doesn't look right yet."
-            invalid
-            defaultValue="bad"
-            readOnly
-          />
-          <Input
-            label="Error with icon"
-            helper="That doesn't look right yet."
-            invalid
-            leadingIcon={<SearchIcon />}
-            defaultValue="bad"
-            readOnly
-          />
-          <Input
-            label="Warning"
-            helper="This one is unusual."
-            helperTone="warning"
-            defaultValue="ok"
-            readOnly
-          />
-          <Input
-            label="Success"
-            helper="That works."
-            helperTone="success"
-            defaultValue="ok"
-            readOnly
-          />
-          <Input label="Disabled" disabled />
-          <Input label="Disabled filled" defaultValue="filled" disabled />
-          {/* §8 exemption: Search is named by its leading icon, so it floats no
+        <Section label="Input">
+          <div className="grid gap-[24px] sm:grid-cols-2">
+            <Input label="At rest" />
+            <Input label="Filled" defaultValue="filled" readOnly />
+            <Input label="Leading icon" leadingIcon={<SearchIcon />} />
+            <Input
+              label="Trailing icon"
+              trailingIcon={<ChevronRightIcon />}
+              defaultValue="filled"
+              readOnly
+            />
+            <Input
+              label="Error"
+              helper="That doesn't look right yet."
+              invalid
+              defaultValue="bad"
+              readOnly
+            />
+            <Input
+              label="Error with icon"
+              helper="That doesn't look right yet."
+              invalid
+              leadingIcon={<SearchIcon />}
+              defaultValue="bad"
+              readOnly
+            />
+            <Input
+              label="Warning"
+              helper="This one is unusual."
+              helperTone="warning"
+              defaultValue="ok"
+              readOnly
+            />
+            <Input
+              label="Success"
+              helper="That works."
+              helperTone="success"
+              defaultValue="ok"
+              readOnly
+            />
+            <Input label="Disabled" disabled />
+            <Input label="Disabled filled" defaultValue="filled" disabled />
+            {/* §8 exemption: Search is named by its leading icon, so it floats no
               label, reserves no zone, and keeps a resting placeholder — the one
               place in the product where --n-placeholder paints. */}
-          <Input
-            label="Search"
-            floatingLabel={false}
-            reserveHelper={false}
-            placeholder="Search"
-            leadingIcon={<SearchIcon />}
-          />
-          <Input label="No state possible" reserveHelper={false} />
-        </div>
-      </Section>
+            <Input
+              label="Search"
+              floatingLabel={false}
+              reserveHelper={false}
+              placeholder="Search"
+              leadingIcon={<SearchIcon />}
+            />
+            <Input label="No state possible" reserveHelper={false} />
+          </div>
+        </Section>
 
-      <Section label="Chip">
-        <Row label="base">
-          <Chip>base</Chip>
-          <Chip leadingIcon={<PlusIcon />}>leading</Chip>
-          <Chip interactive>interactive</Chip>
-          <Chip interactive trailingIcon={<ChevronRightIcon />}>
-            interactive
-          </Chip>
-        </Row>
-        <Row label="type badge">
-          {TYPE_BADGES.map((badge) => (
-            <Chip key={badge} variant="type-badge">
-              {badge}
+        <Section label="Chip">
+          <Row label="base">
+            <Chip>base</Chip>
+            <Chip leadingIcon={<PlusIcon />}>leading</Chip>
+            <Chip interactive>interactive</Chip>
+            <Chip interactive trailingIcon={<ChevronRightIcon />}>
+              interactive
             </Chip>
-          ))}
-        </Row>
-        <Row label="gap chip">
-          {CHIP_GAP_TONES.map((tone) => (
-            <Chip key={tone} variant="gap" tone={tone}>
-              {tone}
-            </Chip>
-          ))}
-          {CHIP_GAP_TONES.map((tone) => (
-            <Chip key={`${tone}-interactive`} variant="gap" tone={tone} interactive>
-              {tone}
-            </Chip>
-          ))}
-        </Row>
-        <Row label="count badge">
-          <span className="type-display-num inline-flex h-[24px] items-center rounded-pill bg-surface-2 px-[10px] text-n-primary">
-            12
-          </span>
-        </Row>
-      </Section>
-
-      <Section label="Spinner">
-        <Row label="prime">
-          {SPINNER_SIZES.map((size) => (
-            <Spinner key={size} size={size} />
-          ))}
-        </Row>
-        <Row label="on prime fill">
-          {SPINNER_SIZES.map((size) => (
-            <span
-              key={size}
-              className="inline-flex items-center justify-center rounded-pill bg-prime p-[12px]"
-            >
-              <Spinner size={size} tone="on-prime" />
+          </Row>
+          <Row label="type badge">
+            {TYPE_BADGES.map((badge) => (
+              <Chip key={badge} variant="type-badge">
+                {badge}
+              </Chip>
+            ))}
+          </Row>
+          <Row label="gap chip">
+            {CHIP_GAP_TONES.map((tone) => (
+              <Chip key={tone} variant="gap" tone={tone}>
+                {tone}
+              </Chip>
+            ))}
+            {CHIP_GAP_TONES.map((tone) => (
+              <Chip key={`${tone}-interactive`} variant="gap" tone={tone} interactive>
+                {tone}
+              </Chip>
+            ))}
+          </Row>
+          <Row label="count badge">
+            <span className="type-display-num inline-flex h-[24px] items-center rounded-pill bg-surface-2 px-[10px] text-n-primary">
+              12
             </span>
-          ))}
-        </Row>
-      </Section>
+          </Row>
+        </Section>
 
-      <CompositesPreview />
+        <Section label="Spinner">
+          <Row label="prime">
+            {SPINNER_SIZES.map((size) => (
+              <Spinner key={size} size={size} />
+            ))}
+          </Row>
+          <Row label="on prime fill">
+            {SPINNER_SIZES.map((size) => (
+              <span
+                key={size}
+                className="inline-flex items-center justify-center rounded-pill bg-prime p-[12px]"
+              >
+                <Spinner size={size} tone="on-prime" />
+              </span>
+            ))}
+          </Row>
+        </Section>
+
+        <CompositesPreview />
+      </div>
     </main>
   );
 }

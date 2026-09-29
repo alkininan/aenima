@@ -54,8 +54,16 @@ const names = (rule: { selectors: string[] }, selector: string) =>
 /** The two places §5 and §6 let a blur be declared. */
 const ALLOWED = [".glass-blur", ":root::view-transition-image-pair(morph)"];
 
-/** And the places it is declared as `none`, which C-37 names explicitly. */
-const ALLOWED_NONE = [".glass-blur", ":root::view-transition-group(morph)"];
+/**
+ * And the places it is declared as `none`: the two C-37 names explicitly, and the page
+ * topbar in hand chrome, where §4 makes it scroll with the page — a bar nothing passes
+ * beneath carries no blur (T0.48).
+ */
+const ALLOWED_NONE = [
+  ".glass-blur",
+  ":root::view-transition-group(morph)",
+  ".page-topbar > .glass-blur",
+];
 
 describe("C-37 · backdrop-filter is only where §5 and §6 put it", () => {
   const blurring = rules(globals).filter((rule) => /backdrop-filter/.test(rule.body));
@@ -111,12 +119,12 @@ describe("C-37 · which surfaces carry the blurred class", () => {
     text: readFileSync(join(root, path), "utf8"),
   }));
 
-  it("is claimed only by a panel and a toast", () => {
+  it("is claimed only by a panel, a toast and the two sticky bars", () => {
     const carriers = files
       .filter(({ text }) => /\bglass-blur\b/.test(text))
       .map(({ path }) => path);
 
-    // Both live in `variants.ts`, which is where every class string in the
+    // All four live in `variants.ts`, which is where every class string in the
     // system is written; no component assembles one of its own.
     expect(carriers).toEqual(["src/components/ui/variants.ts"]);
 
@@ -128,6 +136,11 @@ describe("C-37 · which surfaces carry the blurred class", () => {
       .join("\n");
     expect(blurred).toContain("panel glass glass-blur");
     expect(blurred).toContain("glass glass-blur overlay-rise");
+    // §4's two sticky bars (T0.48): the hand top bar and the page topbar.
+    expect(blurred).toContain(
+      "glass glass-blur relative flex h-[calc(56px+env(safe-area-inset-top))]",
+    );
+    expect(blurred).toContain("glass glass-blur relative flex flex-col");
   });
 
   // §5: surfaces over `--bg-scrim`, and in-flow glass, take the recipe without

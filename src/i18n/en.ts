@@ -18,6 +18,8 @@ export const en = {
     back: "Back",
     retry: "Retry",
     signOut: "Sign out",
+    /** §12's close default — every modal's footer carries at least this (§8.21). */
+    close: "Close",
   },
   signIn: {
     title: "Sign in",
@@ -59,14 +61,23 @@ export const en = {
     rateLimited: "Too many requests. Wait a moment before asking for another code.",
     unavailable: "Sign-in is unavailable right now.",
   },
-  /** §4 sidebar nav. Keys match `NavEntry.label` in src/lib/routes.ts. */
+  /** §4's nav, verbatim. Keys match `NavEntry.label` in src/lib/routes.ts. */
   nav: {
-    list: "List",
+    dashboard: "Dashboard",
     triage: "Triage",
-    analytics: "Analytics",
+    graveyard: "Graveyard",
     settings: "Settings",
     /** Appended to an unbuilt destination's accessible name, never painted. */
     notYet: "not built yet",
+  },
+  /** §4's frame — the sidebar, the hand top bar and their menus. */
+  chrome: {
+    /** The nav landmark's name. */
+    nav: "Navigation",
+    /** §4: the hand top bar's `menu` IconButton, morphing into the nav menu. */
+    menu: "Menu",
+    /** §4: the account slot's menu — Sign out, and later the shortcut sheet. */
+    account: "Account",
   },
   /** §13's three buckets. mono-micro headers, so §3 uppercases them in CSS. */
   buckets: {

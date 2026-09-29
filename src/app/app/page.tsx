@@ -1,14 +1,20 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
+import { PageTopbar } from "@/components/frame/PageTopbar";
+import { PaintMark } from "@/components/frame/PaintMark";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { buttonClasses } from "@/components/ui/variants";
+import { GUTTER_CLASSES, MAIN_CLASSES, buttonClasses } from "@/components/ui/variants";
 import { ListIcon } from "@/components/ui/icons";
 import { listItemsForWorkspace, type ItemListRow } from "@/db/queries/item";
-import { getCurrentWorkspace } from "@/db/queries/workspace";
+import { getSessionUser } from "@/db/queries/session";
+import { ensureWorkspace } from "@/db/queries/workspace";
 import { getDictionary } from "@/i18n";
 import { isStale } from "@/lib/baselines";
 import { BUCKETS, assignBucket, compareInBucket, type BucketInput } from "@/lib/buckets";
+import { cx } from "@/lib/cx";
+import { PAINT_MARKS } from "@/lib/layout";
 import { LIST_PARAMS, ROUTES } from "@/lib/routes";
 import { STAGES, type Stage } from "@/lib/stage";
 
@@ -87,15 +93,25 @@ function toRowData(item: ItemListRow, input: BucketInput): ItemRowData {
  *
  * **Every meter is hollow.** Scoring is Phase 2; §10 forbids drawing that as a
  * zero, and a 0% bar would say this work was measured and found wanting.
+ *
+ * **The page topbar is the page's** (§4): its title and subtitle are the same
+ * on every load, so `loading.tsx` renders the same bar as chrome while this
+ * reads, and the content beneath is what the skeleton stands in for.
  */
 export default async function AppPage({ searchParams }: PageProps<"/app">) {
   const t = getDictionary();
   const params = await searchParams;
 
-  // The layout has already bootstrapped the workspace and turned anonymous
-  // traffic away, so this reads rather than ensures.
-  const workspace = await getCurrentWorkspace();
-  if (!workspace) return null;
+  // The proxy has already turned anonymous traffic away; this re-checks rather
+  // than trusting that it ran, because what follows reads user data. It was the
+  // layout's until the layout stopped awaiting anything (§4 chrome before data).
+  const user = await getSessionUser();
+  if (!user) redirect("/sign-in");
+
+  // The frame's reads run beside this one rather than ahead of it, so first run
+  // is settled here too: `ensureWorkspace` is idempotent and answers the same
+  // workspace to every concurrent caller.
+  const workspace = await ensureWorkspace(t.workspace.defaultName);
 
   // The read stamps its own instant, and everything below is computed against
   // it. §13's buckets are claims about two moments, so they have to be judged
@@ -128,61 +144,62 @@ export default async function AppPage({ searchParams }: PageProps<"/app">) {
   const filtered = stageFilter !== null || productFilter !== undefined;
 
   return (
-    <main className="mx-auto flex w-full max-w-[1200px] flex-col gap-[24px] px-[24px] py-[32px]">
+    <main className={MAIN_CLASSES}>
       {/* §4: a page topbar is a display-xl title, and §4's subtitle slot is
           where instructional copy lives — never a field's helper line. */}
-      <header className="flex flex-col gap-[8px]">
-        <h1 className="type-display-xl text-n-primary">{t.list.title}</h1>
-        <p className="type-ui-body truncate text-n-secondary">{t.list.subtitle}</p>
-      </header>
+      <PageTopbar title={t.list.title} subtitle={t.list.subtitle} />
 
-      <PipelineStrip
-        counts={counts}
-        active={stageFilter}
-        product={productFilter}
-        total={inProduct.length}
-        t={t}
-      />
+      <div className={cx(GUTTER_CLASSES, "flex flex-col gap-[24px] py-[32px]")}>
+        <PaintMark name={PAINT_MARKS.content} />
 
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<ListIcon />}
-          textured
-          action={
-            filtered ? (
-              // A link rather than a Button: this navigates, and `Button`
-              // renders a `<button>` with no `asChild` escape hatch. The
-              // secondary variant's classes are what §8 asks for, so they are
-              // borrowed directly rather than a variant being invented.
-              <Link href={ROUTES.app} className={buttonClasses({ variant: "secondary" })}>
-                {t.list.emptyFilteredAction}
-              </Link>
-            ) : null
-          }
-        >
-          {/* §8: "Nothing needs you right now," never "No data" — and a filter
-              that matches nothing is a different situation from an empty
-              workspace, so it says a different thing. */}
-          {filtered ? t.list.emptyFilteredTitle : t.list.emptyTitle}
-        </EmptyState>
-      ) : (
-        // §11: arrow keys walk the rows, across buckets. The one client island
-        // on this page; the rows inside it stay Server Components.
-        <RowWalker className="flex flex-col gap-[24px]">
-          {BUCKETS.map((bucket) => (
-            <BucketSection
-              key={bucket}
-              bucket={bucket}
-              items={rows
-                .filter((entry) => entry.row.bucket === bucket)
-                .sort((a, b) => compareInBucket(bucket, a.input, b.input))
-                .map((entry) => entry.row)}
-              t={t}
-              now={now}
-            />
-          ))}
-        </RowWalker>
-      )}
+        <PipelineStrip
+          counts={counts}
+          active={stageFilter}
+          product={productFilter}
+          total={inProduct.length}
+          t={t}
+        />
+
+        {rows.length === 0 ? (
+          <EmptyState
+            icon={<ListIcon />}
+            textured
+            action={
+              filtered ? (
+                // A link rather than a Button: this navigates, and `Button`
+                // renders a `<button>` with no `asChild` escape hatch. The
+                // secondary variant's classes are what §8 asks for, so they are
+                // borrowed directly rather than a variant being invented.
+                <Link href={ROUTES.app} className={buttonClasses({ variant: "secondary" })}>
+                  {t.list.emptyFilteredAction}
+                </Link>
+              ) : null
+            }
+          >
+            {/* §8: "Nothing needs you right now," never "No data" — and a filter
+                that matches nothing is a different situation from an empty
+                workspace, so it says a different thing. */}
+            {filtered ? t.list.emptyFilteredTitle : t.list.emptyTitle}
+          </EmptyState>
+        ) : (
+          // §11: arrow keys walk the rows, across buckets. The one client island
+          // on this page; the rows inside it stay Server Components.
+          <RowWalker className="flex flex-col gap-[24px]">
+            {BUCKETS.map((bucket) => (
+              <BucketSection
+                key={bucket}
+                bucket={bucket}
+                items={rows
+                  .filter((entry) => entry.row.bucket === bucket)
+                  .sort((a, b) => compareInBucket(bucket, a.input, b.input))
+                  .map((entry) => entry.row)}
+                t={t}
+                now={now}
+              />
+            ))}
+          </RowWalker>
+        )}
+      </div>
     </main>
   );
 }

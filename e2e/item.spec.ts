@@ -29,15 +29,15 @@ for (const width of [1440, 768, 375] as const) {
     });
 
     /**
-     * §4: "item page = content 1fr / chat 380px", and the dock becomes an
-     * overlay drawer below 1024.
+     * §4: "item page = content 1fr / chat 380 while the dock is docked", and the dock docks
+     * from 1280 — desk and hand take it as an overlay drawer.
      *
      * The 380 column is reserved before the dock exists so that building it
      * fills a column rather than reflowing the page. Measured as the grid's
      * resolved template, because that is the thing that has to hold — a column
      * that is merely empty looks identical to one that is missing.
      */
-    test("reserves the chat column above 1024 and collapses below it", async ({ page }) => {
+    test("reserves the chat column from 1280 and collapses below it", async ({ page }) => {
       const columns = await page
         .locator("main > div")
         .first()
@@ -45,7 +45,7 @@ for (const width of [1440, 768, 375] as const) {
 
       const tracks = columns.split(" ").filter(Boolean);
 
-      if (width >= 1024) {
+      if (width >= 1280) {
         expect(tracks).toHaveLength(2);
         expect(Math.round(parseFloat(tracks[1]!))).toBe(380);
       } else {
@@ -82,6 +82,28 @@ for (const width of [1440, 768, 375] as const) {
     });
   });
 }
+
+/**
+ * The line itself, either side: §4 docks the dock at 1280 — "a docked dock beside a 240
+ * sidebar leaves 660 at 1280 and 404 at 1024" — so the column is reserved at 1280 and not
+ * at 1279 (T0.48).
+ */
+test.describe("the chat column's line", () => {
+  for (const [width, tracks] of [
+    [1279, 1],
+    [1280, 2],
+  ] as const) {
+    test(`is ${tracks === 2 ? "reserved" : "absent"} at ${width}`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/dev/item");
+      const columns = await page
+        .locator("main > div")
+        .first()
+        .evaluate((node) => getComputedStyle(node).gridTemplateColumns);
+      expect(columns.split(" ").filter(Boolean)).toHaveLength(tracks);
+    });
+  }
+});
 
 test.describe("at 1440", () => {
   test.beforeEach(async ({ page }) => {
@@ -322,20 +344,28 @@ test.describe("at 1440", () => {
   });
 
   /**
-   * **AC3's "working without JS", proved by turning JavaScript off and pressing
-   * the button.**
+   * **AC3's "working without JS", proved by pressing the button on a page that never
+   * hydrates.**
    *
    * `/dev` carries no session — it is in `PUBLIC_PREFIXES` — so `settleGap`
    * redirects to sign-in. That is the assertion: landing there means the POST
    * reached the action. The failure this guards against is the opposite and is
    * *silent* — Next drops a urlencoded action POST and re-renders the page, so a
    * broken form looks exactly like a form nobody pressed.
+   *
+   * The bundles are blocked rather than script disabled (T0.48): the page streams its
+   * content into a Suspense boundary — its `loading.tsx`, which is what lets the frame
+   * paint before the data (§4, C-40) — and the reveal is an inline script the streamed
+   * HTML carries, which script-off never runs. What the form has to survive is the page
+   * never hydrating — React never arriving — and that is the case this stages.
    */
-  test("submits the move with JavaScript disabled", async ({ browser }) => {
-    const context = await browser.newContext({ javaScriptEnabled: false });
+  test("submits the move on a page that never hydrates", async ({ browser }) => {
+    const context = await browser.newContext();
+    await context.route("**/_next/static/chunks/**", (route) => route.abort());
     const page = await context.newPage();
 
     await page.goto("/dev/item");
+    expect(await page.evaluate(() => "__next_f" in window && document.readyState)).toBeTruthy();
     // Opened by clicking its `<summary>`, which is the browser's own behaviour
     // and not page script — the reason the disclosure is a `<details>` at all.
     // The gap card's, not the meter expansion's: that one is inside the
@@ -741,11 +771,22 @@ test.describe("at 1440", () => {
   test("rings and glows the disclosure on keyboard focus", async ({ page }) => {
     const summary = page.getByTestId("readiness").locator("summary").first();
 
-    for (let tabs = 0; tabs < 6; tabs += 1) {
+    // §4's frame stands ahead of the content now — the lockup, the switcher, the
+    // dashboard row and the account slot — so the walk is longer than it was.
+    for (let tabs = 0; tabs < 16; tabs += 1) {
       await page.keyboard.press("Tab");
       if (await summary.evaluate((node) => node === document.activeElement)) break;
     }
     await expect(summary).toBeFocused();
+
+    // `.control` transitions `box-shadow` over `--t-fast` (globals.css), so for
+    // 120 ms after focus arrives the glow is a transition in flight: a read
+    // inside that window sees `--control-glow` already resolved and the computed
+    // shadow still the two transparent ones. Past every animation running on
+    // the node the read is the settled paint — `settledDialog`'s wait in
+    // frame.spec.ts. (Unloaded, the read landed early and failed; under four
+    // workers it landed late and passed, which is why it looked like a flake.)
+    await summary.evaluate((node) => Promise.all(node.getAnimations().map((a) => a.finished)));
 
     const focused = await summary.evaluate((node) => {
       const computed = getComputedStyle(node);
@@ -809,11 +850,12 @@ test.describe("the meter's other states", () => {
     await page.goto("/dev/item?run=retrying");
     await page.evaluate(() => document.fonts.ready);
 
-    const readiness = page.getByTestId("readiness");
-    await expect(readiness).toContainText("scored 4 h ago — retrying");
+    // §4 (T0.48): the freshness stands in the page topbar's readout slot.
+    const readout = page.getByTestId("page-readout");
+    await expect(readout).toContainText("scored 4 h ago — retrying");
 
     // The dot is 8, like every system dot in the product, and it is --warning.
-    const dot = readiness.locator("span[aria-hidden='true']").last();
+    const dot = page.getByTestId("page-freshness-dot");
     const style = await dot.evaluate((node) => {
       const computed = getComputedStyle(node);
       return { background: computed.backgroundColor, size: computed.width };
@@ -833,7 +875,7 @@ test.describe("the meter's other states", () => {
     await page.goto("/dev/item");
     await page.evaluate(() => document.fonts.ready);
 
-    const dot = page.getByTestId("readiness").locator("span[aria-hidden='true']").last();
+    const dot = page.getByTestId("page-freshness-dot");
 
     expect(await dot.evaluate((node) => getComputedStyle(node).backgroundColor)).toBe(PRIME);
   });

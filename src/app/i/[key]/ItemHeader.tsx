@@ -1,8 +1,12 @@
 import Link from "next/link";
 
+import { PageTopbar } from "@/components/frame/PageTopbar";
 import type { Dictionary } from "@/i18n";
 import { opportunityHref } from "@/lib/routes";
+import type { RunView } from "@/lib/scoring/run-view";
 import type { Stage } from "@/lib/stage";
+
+import { Freshness } from "./freshness";
 
 export type ItemHeaderData = {
   key: string;
@@ -21,64 +25,76 @@ export type ItemHeaderData = {
 };
 
 /**
- * §4's page topbar, for an item.
+ * §4's page topbar, for an item — "the title is the item's name and the freshness its
+ * last-scored readout", the two data slots in chrome.
  *
- * display-xl title with the key above it in mono-readout — §3 puts IDs in mono,
- * and the key is the name people say out loud, so it is the first thing on the
- * page rather than a detail beside the title.
+ * The key leads the title row in mono-readout — §3 puts IDs in mono, and the key is the
+ * name people say out loud, so it is the first thing on the page rather than a detail
+ * beside the title. The §2 lineage takes §4's subtitle slot: ui-body, `--n-secondary`, one
+ * line, truncating rather than wrapping, a link to `/o/<key>` since T1.4 gave opportunities
+ * a key. Absent when the item is unlinked: §2 makes that legal — "an item may be unlinked
+ * from any opportunity … never a block" — so there is nothing to report and nothing is
+ * said.
  *
- * The type renders bare, per §8 (v2.15): no container. A bordered thing on a
- * surface that also carries gap chips means a gap, and type is taxonomy.
+ * The freshness is §10's readout, `--warning`-dotted while a retry is queued; with no run
+ * there is nothing to say and the slot is empty. The taxonomy — type, product, derived
+ * stage — is `ItemTaxonomy` below, the content's first line: the 56 row holds a key, a
+ * title and a readout, and §4 gives it nothing else.
  *
  * **The meter is not here.** It left with T2.4, because §8 makes the meter the
  * summary of a disclosure and the run it opens onto is a list, not a header.
- * `ReadinessPanel` owns both, and the page holds the two together at the gap
- * they had when they were one element — the meter keeps its position, and a
- * header stops containing a page's worth of check results.
  */
-export function ItemHeader({ item, t }: { item: ItemHeaderData; t: Dictionary }) {
+export function ItemHeader({
+  item,
+  run,
+  now,
+  t,
+}: {
+  item: ItemHeaderData;
+  run: RunView | null;
+  /** Epoch ms — the read's own instant, which the freshness is judged against. */
+  now: number;
+  t: Dictionary;
+}) {
   return (
-    <header className="flex flex-col gap-[8px]">
-      <span className="type-mono-readout text-n-secondary">{item.key}</span>
-      <h1 className="type-display-xl text-n-primary">{item.title}</h1>
+    <PageTopbar
+      eyebrow={item.key}
+      title={item.title}
+      subtitle={
+        item.opportunity === null ? undefined : (
+          <>
+            <span className="type-mono-micro text-n-secondary">{t.item.opportunity}</span>{" "}
+            <Link
+              href={opportunityHref(item.opportunity.key)}
+              className="text-n-secondary hover:text-n-primary"
+            >
+              {item.opportunity.title}
+            </Link>
+          </>
+        )
+      }
+      readout={run === null ? undefined : <Freshness run={run} t={t} now={now} />}
+    />
+  );
+}
 
-      {/* §2 lineage, in §4's subtitle slot: ui-body, --n-secondary, one line,
-            truncating rather than wrapping. The opportunity is the thing that
-            explains why this item exists, so it sits directly under the title
-            rather than among the taxonomy below it.
-
-            A link now, to `/o/<key>` — T1.4 gave opportunities the same key
-            `item.key` carries, which is what `routes.ts` was keeping its
-            segments short for (build log, open question 9). It was plain text
-            until then because the only thing left to route by was a uuid.
-
-            Absent when the item is unlinked. §2 makes that legal — "an item may
-            be unlinked from any opportunity … never a block" — so there is
-            nothing to report and nothing is said. */}
-      {item.opportunity === null ? null : (
-        <p className="flex items-baseline gap-[8px]">
-          <span className="type-mono-micro shrink-0 text-n-secondary">{t.item.opportunity}</span>
-          <Link
-            href={opportunityHref(item.opportunity.key)}
-            className="type-ui-body truncate text-n-secondary hover:text-n-primary"
-          >
-            {item.opportunity.title}
-          </Link>
-        </p>
-      )}
-
-      {/* Taxonomy, product and derived stage — the three things that place an
-            item without describing it. mono-micro is §3's eyebrow. */}
-      <p className="type-mono-micro flex flex-wrap items-center gap-[8px] text-n-secondary">
-        <span>{t.itemTypes[item.type]}</span>
-        <span aria-hidden="true">·</span>
-        <span>{item.productName}</span>
-        <span aria-hidden="true">·</span>
-        {/* Named so nobody reads a derived value as a settable field. */}
-        <span>
-          {t.item.stageLabel}: {t.stages[item.stage]}
-        </span>
-      </p>
-    </header>
+/**
+ * Taxonomy, product and derived stage — the three things that place an item
+ * without describing it. mono-micro is §3's eyebrow. The type renders bare, per
+ * §8 (v2.15): no container. A bordered thing on a surface that also carries gap
+ * chips means a gap, and type is taxonomy.
+ */
+export function ItemTaxonomy({ item, t }: { item: ItemHeaderData; t: Dictionary }) {
+  return (
+    <p className="type-mono-micro flex flex-wrap items-center gap-[8px] text-n-secondary">
+      <span>{t.itemTypes[item.type]}</span>
+      <span aria-hidden="true">·</span>
+      <span>{item.productName}</span>
+      <span aria-hidden="true">·</span>
+      {/* Named so nobody reads a derived value as a settable field. */}
+      <span>
+        {t.item.stageLabel}: {t.stages[item.stage]}
+      </span>
+    </p>
   );
 }

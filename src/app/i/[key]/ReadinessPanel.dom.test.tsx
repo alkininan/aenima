@@ -71,7 +71,6 @@ describe("ReadinessPanel", () => {
       <ReadinessPanel
         run={null}
         t={t}
-        now={NOW}
         itemKey="soc-12"
         gapsByCheck={NO_GAPS}
         noLongerApplicable={NO_CLOSURES}
@@ -96,7 +95,6 @@ describe("ReadinessPanel", () => {
       <ReadinessPanel
         run={view()}
         t={t}
-        now={NOW}
         itemKey="soc-12"
         gapsByCheck={NO_GAPS}
         noLongerApplicable={NO_CLOSURES}
@@ -131,7 +129,6 @@ describe("ReadinessPanel", () => {
       <ReadinessPanel
         run={view()}
         t={signFirst}
-        now={NOW}
         itemKey="soc-12"
         gapsByCheck={NO_GAPS}
         noLongerApplicable={NO_CLOSURES}
@@ -153,7 +150,6 @@ describe("ReadinessPanel", () => {
       <ReadinessPanel
         run={view()}
         t={t}
-        now={NOW}
         itemKey="soc-12"
         gapsByCheck={NO_GAPS}
         noLongerApplicable={NO_CLOSURES}
@@ -164,69 +160,9 @@ describe("ReadinessPanel", () => {
     expect(screen.getByText(t.item.pointsOf(66, 99))).not.toBeNull();
   });
 
-  // §5: "Timestamps show freshness." The clock is the run's own.
-  it("dates the run relative to the page's read clock", () => {
-    render(
-      <ReadinessPanel
-        run={view()}
-        t={t}
-        now={NOW}
-        itemKey="soc-12"
-        gapsByCheck={NO_GAPS}
-        noLongerApplicable={NO_CLOSURES}
-        outcome={null}
-      />,
-    );
-
-    expect(screen.getByText(t.item.scoredAt(t.relativeTime.hours(4)))).not.toBeNull();
-  });
-
-  /**
-   * §10: "Provider outage / retry: freshness shows `--warning` dot +
-   * mono-readout 'scored 6 h ago — retrying'; **no banners**." §5 queues
-   * outages silently and "the timestamp does the honest work".
-   *
-   * §0 law 1 and law 2 keep Danger off it entirely: a queued retry is the
-   * system working, not a destructive action and not a validation error.
-   */
-  it("shows a queued retry as a timestamp, never as an error", () => {
-    const { container } = render(
-      <ReadinessPanel
-        run={view({ nextScoringAttemptAt: new Date(NOW + 15 * 60 * 1000).toISOString() })}
-        t={t}
-        now={NOW}
-        itemKey="soc-12"
-        gapsByCheck={NO_GAPS}
-        noLongerApplicable={NO_CLOSURES}
-        outcome={null}
-      />,
-    );
-
-    expect(screen.getByText(t.item.scoredRetrying(t.relativeTime.hours(4)))).not.toBeNull();
-    expect(screen.queryByText(t.item.scoredAt(t.relativeTime.hours(4)))).toBeNull();
-
-    // The dot is --warning, and nothing on the panel is --danger.
-    expect(container.innerHTML).toMatch(/bg-warning/);
-    expect(container.innerHTML).not.toMatch(/danger/);
-    expect(container.querySelector('[role="alert"]')).toBeNull();
-  });
-
-  it("shows a settled run with the prime dot, not the warning one", () => {
-    const { container } = render(
-      <ReadinessPanel
-        run={view()}
-        t={t}
-        now={NOW}
-        itemKey="soc-12"
-        gapsByCheck={NO_GAPS}
-        noLongerApplicable={NO_CLOSURES}
-        outcome={null}
-      />,
-    );
-
-    expect(container.innerHTML).toMatch(/bg-prime/);
-    expect(container.innerHTML).not.toMatch(/bg-warning/);
-  });
+  // §5's freshness — the run's clock, the retry's `--warning` dot — stood in this
+  // summary until T0.48 moved it to the page topbar's readout slot, where §4 puts
+  // it; `freshness.dom.test.tsx` holds those cases now.
 
   /**
    * §1 law 3, on a run that predates the record of what it did not ask.
@@ -241,7 +177,6 @@ describe("ReadinessPanel", () => {
       <ReadinessPanel
         run={view({ notAsked: [] })}
         t={t}
-        now={NOW}
         itemKey="soc-12"
         gapsByCheck={NO_GAPS}
         noLongerApplicable={NO_CLOSURES}
@@ -261,7 +196,6 @@ describe("ReadinessPanel", () => {
       <ReadinessPanel
         run={view()}
         t={t}
-        now={NOW}
         itemKey="soc-12"
         gapsByCheck={NO_GAPS}
         noLongerApplicable={NO_CLOSURES}
@@ -281,7 +215,6 @@ describe("ReadinessPanel", () => {
       <ReadinessPanel
         run={view()}
         t={t}
-        now={NOW}
         itemKey="soc-12"
         gapsByCheck={NO_GAPS}
         noLongerApplicable={NO_CLOSURES}
@@ -309,7 +242,6 @@ describe("ReadinessPanel", () => {
       <ReadinessPanel
         run={view()}
         t={t}
-        now={NOW}
         itemKey="soc-12"
         gapsByCheck={NO_GAPS}
         noLongerApplicable={NO_CLOSURES}
@@ -366,7 +298,6 @@ describe("ReadinessPanel", () => {
           ],
         })}
         t={t}
-        now={NOW}
         itemKey="soc-12"
         gapsByCheck={gaps}
         noLongerApplicable={NO_CLOSURES}
@@ -415,7 +346,6 @@ describe("ReadinessPanel", () => {
       <ReadinessPanel
         run={run}
         t={t}
-        now={NOW}
         itemKey="soc-12"
         gapsByCheck={new Map([["prd-1", should]])}
         noLongerApplicable={NO_CLOSURES}
@@ -460,7 +390,6 @@ describe("ReadinessPanel", () => {
           ],
         })}
         t={t}
-        now={NOW}
         itemKey="soc-12"
         gapsByCheck={new Map([["prd-1", must]])}
         noLongerApplicable={NO_CLOSURES}
@@ -492,7 +421,6 @@ describe("ReadinessPanel", () => {
       <ReadinessPanel
         run={view()}
         t={t}
-        now={NOW}
         itemKey="soc-12"
         gapsByCheck={NO_GAPS}
         noLongerApplicable={NO_CLOSURES}
@@ -518,7 +446,6 @@ describe("ReadinessPanel", () => {
       <ReadinessPanel
         run={view()}
         t={t}
-        now={NOW}
         itemKey="soc-12"
         gapsByCheck={NO_GAPS}
         noLongerApplicable={NO_CLOSURES}

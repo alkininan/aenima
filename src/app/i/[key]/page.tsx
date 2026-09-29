@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
+import { PaintMark } from "@/components/frame/PaintMark";
+import { MAIN_CLASSES } from "@/components/ui/variants";
 import { listGapsClosedAsNoLongerApplicable, listItemActivity } from "@/db/queries/activity";
 import { getItemByKey } from "@/db/queries/item";
 import { getLatestRunForItem } from "@/db/queries/scoring";
@@ -9,6 +11,7 @@ import { getCurrentWorkspace } from "@/db/queries/workspace";
 import { getDictionary } from "@/i18n";
 import { describeActor } from "@/lib/actor";
 import { readGapMove } from "@/lib/gap-move";
+import { PAINT_MARKS } from "@/lib/layout";
 import { GAP_PARAMS, ROUTES } from "@/lib/routes";
 import { composeRunView } from "@/lib/scoring/run-view";
 import { getPack } from "@/packs";
@@ -17,11 +20,12 @@ import { ActivityFeed } from "./ActivityFeed";
 import { ArtifactList } from "./ArtifactList";
 import { DecisionList } from "./DecisionList";
 import { GapList } from "./GapList";
-import { ItemHeader } from "./ItemHeader";
+import { ItemHeader, ItemTaxonomy } from "./ItemHeader";
 import { MoveMessage, type MoveableGap } from "./GapMoves";
 import { noLongerApplicableByCheck } from "./CheckList";
 import { ItemSection } from "./ItemSection";
 import { ReadinessPanel } from "./ReadinessPanel";
+import { CHAT_COLUMN_CLASSES, ITEM_GRID_CLASSES } from "./item-grid";
 
 /**
  * One item, everything it owns, readable — the page `/app`'s rows link to.
@@ -192,14 +196,29 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/i/[
       .filter((id): id is string => id !== null),
   );
 
+  const header = {
+    key: item.key,
+    title: item.title,
+    type: item.type,
+    stage: item.stage,
+    productName: item.productName,
+    opportunity: item.opportunity,
+  };
+
   return (
-    <main className="mx-auto w-full max-w-[1200px] px-[24px] py-[32px]">
+    <main className={MAIN_CLASSES}>
+      {/* §4's page topbar: the item's name and its freshness, the two data slots
+          in chrome that `loading.tsx` skeletons until this render replaces them. */}
+      <ItemHeader item={header} run={run} now={now} t={t} />
+
       {/* §4: item page = content 1fr / chat 380. The chat column is reserved
-          from the start and built later — adding it then fills a column rather
-          than reflowing the page, and §4 turns it into an overlay drawer below
-          1024, which is where this collapses to one. */}
-      <div className="grid grid-cols-1 gap-[24px] lg:grid-cols-[1fr_380px]">
+          from 1280, where §4 docks the dock, and built later — adding it then
+          fills a column rather than reflowing the page; below 1280 the dock is
+          an overlay drawer and the page is one column. */}
+      <div className={ITEM_GRID_CLASSES}>
         <div className="flex min-w-0 flex-col gap-[32px]">
+          <PaintMark name={PAINT_MARKS.content} />
+
           <Link
             href={ROUTES.app}
             className="type-ui-body w-fit text-n-secondary hover:text-n-primary"
@@ -207,33 +226,22 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/i/[
             {t.item.backToList}
           </Link>
 
-          {/* §4's topbar and §8's meter, held at the 16 they had when the meter
-              lived inside the header. The meter is the summary of a disclosure
-              now (T2.4), and what it opens onto is a page's worth of check
-              results — which does not belong inside a `<header>`. */}
           {/* Above everything, because a redirect that named no gap carries no
               fragment and lands here. §0 law 1 keeps it out of Danger and §12
               keeps it calm: nothing was destroyed, something merely did not
               happen, and the sentence says which. */}
           {unclaimedMove === null ? null : <MoveMessage report={unclaimedMove} t={t} />}
 
+          {/* The taxonomy line and §8's meter, held at the 16 they had when the
+              two lived inside the header. The meter is the summary of a
+              disclosure (T2.4), and what it opens onto is a page's worth of
+              check results — which does not belong inside a `<header>`. */}
           <div className="flex flex-col gap-[16px]">
-            <ItemHeader
-              item={{
-                key: item.key,
-                title: item.title,
-                type: item.type,
-                stage: item.stage,
-                productName: item.productName,
-                opportunity: item.opportunity,
-              }}
-              t={t}
-            />
+            <ItemTaxonomy item={header} t={t} />
 
             <ReadinessPanel
               run={run}
               t={t}
-              now={now}
               itemKey={item.key}
               gapsByCheck={gapsByCheck}
               noLongerApplicable={noLongerApplicable}
@@ -321,9 +329,9 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/i/[
           </ItemSection>
         </div>
 
-        {/* §4's 380 chat column, reserved and empty. The dock is T2/T3; holding
+        {/* §4's 380 chat column, reserved and empty. The dock is T3.2's; holding
             its width now is what stops the page reflowing when it arrives. */}
-        <aside aria-hidden="true" className="hidden lg:block" />
+        <aside aria-hidden="true" className={CHAT_COLUMN_CLASSES} />
       </div>
     </main>
   );

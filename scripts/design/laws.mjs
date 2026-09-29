@@ -531,12 +531,27 @@ export const BLUR_ALLOWED = [
     context: ":root::view-transition-group(morph)",
     why: "§6: the group is told none, so the engine does not copy the panel's blur onto it",
   },
+  {
+    path: GLOBALS,
+    context: ".page-topbar > .glass-blur",
+    why: "§4: the page topbar scrolls with the page in hand chrome, so its blur is set to none there",
+  },
 ];
 
 /** Where the blurred class may be applied: sticky bars, panels and toasts. */
 export const GLASS_BLUR_ALLOWED = [
   { path: "src/components/ui/variants.ts", context: "TOAST_BASE", why: "a toast" },
   { path: "src/components/ui/variants.ts", context: "PANEL_BASE", why: "a menu or select panel" },
+  {
+    path: "src/components/ui/variants.ts",
+    context: "TOP_BAR_SURFACE_CLASSES",
+    why: "a sticky bar — §4's hand top bar",
+  },
+  {
+    path: "src/components/ui/variants.ts",
+    context: "PAGE_TOPBAR_SURFACE_CLASSES",
+    why: "a sticky bar — §4's page topbar in the sidebar modes",
+  },
 ];
 
 /** Where the recipe may be applied at all: §5's list. */
@@ -546,8 +561,8 @@ export const GLASS_ALLOWED = [
   { path: "src/components/ui/variants.ts", context: "SHEET_BASE", why: "a sheet" },
   { path: "src/app/app/PipelineStrip.tsx", context: "PipelineStrip", why: "the pipeline strip" },
   {
-    path: "src/app/app/loading.tsx",
-    context: "AppLoading",
+    path: "src/app/app/ListSkeleton.tsx",
+    context: "ListSkeleton",
     why: "the pipeline strip, standing in while the list loads",
   },
 ];
@@ -805,6 +820,7 @@ export const DEFAULTS = [
   { key: "signIn.codeSentTo", default: "Code sent to {}", as: "OTP step subtitle" },
   { key: "item.scoredRetrying", default: "scored {} — retrying", as: "provider retry readout" },
   { key: "item.gapReopen", default: "Reopen", as: "reopen" },
+  { key: "common.close", default: "Close", as: "close" },
   { key: "item.checkUnclear.must", default: "Must · unclear", as: "gap chip" },
   { key: "item.checkUnclear.should", default: "Should · unclear", as: "gap chip" },
   { key: "item.gapAcceptedBy.must", default: "Must · {}", as: "accepted gap chip" },

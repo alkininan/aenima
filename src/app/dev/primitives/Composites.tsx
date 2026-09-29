@@ -612,12 +612,9 @@ function Composites() {
           </div>
         </Modal>
 
-        <Sheet
-          open={sheetOpen}
-          onClose={() => setSheetOpen(false)}
-          title="Side sheet"
-          footer={<Button onClick={() => setSheetOpen(false)}>Done</Button>}
-        >
+        {/* §8.21: a sheet carries no footer — its 56 header with the close is the
+            way out at every width, and below 768 both of these are bottom sheets. */}
+        <Sheet open={sheetOpen} onClose={() => setSheetOpen(false)} title="Side sheet">
           480 wide, slides in from the right, rounded on the leading corners only.
         </Sheet>
       </Section>

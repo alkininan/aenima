@@ -275,7 +275,8 @@ test.describe("at 1440", () => {
   /**
    * §5's nested rule: an inner surface flush inside a rounded container takes
    * the container's radius minus the container's padding, never its own token.
-   * The strip is `--r-md` (20) with 4 of padding, so a segment is r16.
+   * The strip is `--r-md` (20) with 6 of padding (§8.26), so a segment is r14 —
+   * "§5's worked example: 20 − 6".
    *
    * Read as a computed value, because the failure this catches is someone
    * reaching for `--r-pill` — which is what a segment *looks* like it wants —
@@ -301,7 +302,8 @@ test.describe("at 1440", () => {
     // The derivation, not the number: if --r-md or the padding moves, this
     // still says what the rule says.
     const derived = measured.barRadius - measured.padding;
-    expect(derived).toBe(16);
+    expect(measured.padding).toBe(6);
+    expect(derived).toBe(14);
     expect(measured.segments.length).toBeGreaterThan(0);
     expect(measured.segments.every((radius) => radius === derived)).toBe(true);
 

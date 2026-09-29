@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useId, useRef, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from "react";
 
 import { cx } from "@/lib/cx";
 import { nextRovingIndex } from "@/lib/roving";
+import { revealActive } from "@/lib/scroll-row";
 
 import { TAB_LIST_CLASSES, TAB_UNDERLINE_CLASSES, tabClasses } from "./variants";
 
@@ -43,6 +44,12 @@ export function Tabs({ items, value, onValueChange, label, className }: TabsProp
   const baseId = useId();
   const listRef = useRef<HTMLDivElement | null>(null);
   const current = items.findIndex((item) => item.value === value);
+
+  // §8.19: "Below 768 the tab row scrolls horizontally with the active tab scrolled into
+  // view; it never wraps." The row scrolls, never the page.
+  useEffect(() => {
+    if (listRef.current) revealActive(listRef.current, '[role="tab"][aria-selected="true"]');
+  }, [value]);
 
   const onKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {

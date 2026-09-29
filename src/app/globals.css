@@ -1,6 +1,19 @@
 @import "tailwindcss";
 
 /* ---------------------------------------------------------------------------
+ * §4's three variants Tailwind does not carry (T0.48). `wide` is the 1440
+ * breakpoint — a variant and not a token, since a breakpoint is CSS px and no
+ * colour, radius, duration or easing (C-05). `pointer` is §7's one gate —
+ * "(hover: hover) and (pointer: fine)" — and `touch` is everything else, at any
+ * width. The frame's `--layout-mode`, the nav's row height, the write gate and
+ * the bottom sheet's grabber are their readers; `src/lib/layout.ts` holds the
+ * same numbers for the script that reads `matchMedia`.
+ * ------------------------------------------------------------------------- */
+@custom-variant wide (@media (min-width: 1440px));
+@custom-variant pointer (@media (hover: hover) and (pointer: fine));
+@custom-variant touch (@media not all and (hover: hover) and (pointer: fine));
+
+/* ---------------------------------------------------------------------------
  * Design tokens — design-spec.md §2, §5 and §6, copied verbatim from the
  * document's CSS blocks. Do not edit values here; edit the spec, then re-copy.
  * C-05 reads both files and compares them in both directions, so a value that
@@ -274,6 +287,18 @@
     font-weight: 700;
     font-size: 32px;
     line-height: 38px;
+  }
+
+  /* §4: "The page title steps down to display-lg" in hand chrome — the one
+   * place in the scale a token changes with the viewport. The page title wears
+   * display-xl and this row, which is display-lg's whole; C-39's test holds the
+   * two equal so the step-down cannot drift from the scale (T0.48). */
+  @media (max-width: 1023px) {
+    .type-display-xl.page-title {
+      font-weight: 500;
+      font-size: 24px;
+      line-height: 28px;
+    }
   }
 
   .type-display-lg {
@@ -976,6 +1001,82 @@
   }
 }
 
+/* ---------------------------------------------------------------------------
+ * §4's 768 line and §8.21 — below 768 a modal and a side sheet are bottom
+ * sheets, on pointer and touch alike (C-26).
+ *
+ * Unlayered on purpose: these override utilities the surfaces carry at every
+ * width (`rounded-md`, `rounded-l-lg`, the footer's `h-[34px]`), and a rule in
+ * `@layer components` loses to a utility whatever its order. The reduced-motion
+ * block below is unlayered for the same reason.
+ * ------------------------------------------------------------------------- */
+@media (max-width: 767px) {
+  /* "`--r-lg` on the top corners only": the bottom edge is flush with the
+   * viewport, which §5 names as the one place a corner is square. */
+  .overlay-bottom {
+    border-top-left-radius: var(--r-lg);
+    border-top-right-radius: var(--r-lg);
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    /* §6: "A bottom sheet rises its own height … over `--t-med`", and leaves
+     * over `--t-fast` (C-48). Replaces the modal's 8px rise and the side
+     * sheet's sideways slide on this one axis. */
+    opacity: 1;
+    transform: translateY(0);
+    transition: transform var(--t-med) var(--ease);
+  }
+
+  @starting-style {
+    .overlay-bottom {
+      opacity: 1;
+      transform: translateY(100%);
+    }
+  }
+
+  .overlay-bottom[data-leaving] {
+    opacity: 1;
+    transform: translateY(100%);
+    transition: transform var(--t-fast) var(--ease);
+  }
+
+  /* §8.21: "in a bottom sheet lg, full width, stacked, primary last". The
+   * footer's buttons arrive at md from the caller; here they take §8.1's lg
+   * geometry — 48 tall, pad 14/20, icon 24 — and the stack keeps their order,
+   * so the primary the caller placed last stays last. */
+  .overlay-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .overlay-footer > .control {
+    width: 100%;
+    height: 48px;
+    padding: 14px 20px;
+    --control-icon: 24px;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * §4 Topbar per page — "in the sidebar modes the topbar is sticky, glass
+ * recipe + `--scrim-top`; in hand chrome only the app top bar sticks and the
+ * page topbar scrolls with the page". The bar keeps one class list at every
+ * width; below 1024 its material and its scrim go, since nothing passes
+ * beneath a bar that is not sticky (§5, C-37).
+ * ------------------------------------------------------------------------- */
+@media (max-width: 1023px) {
+  .page-topbar > .glass-blur {
+    background-color: transparent;
+    border-color: transparent;
+    box-shadow: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  .page-topbar > .scrim-top {
+    display: none;
+  }
+}
+
 @keyframes aenima-sweep {
   from {
     background-position: 100% 0;
@@ -1035,7 +1136,9 @@
   .overlay-fade,
   .overlay-fade[data-leaving],
   .overlay-slide,
-  .overlay-slide[data-leaving] {
+  .overlay-slide[data-leaving],
+  .overlay-bottom,
+  .overlay-bottom[data-leaving] {
     opacity: 1;
     transform: none;
     transition: none;

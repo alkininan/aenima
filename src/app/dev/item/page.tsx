@@ -2,15 +2,20 @@ import { ActivityFeed } from "@/app/i/[key]/ActivityFeed";
 import { ArtifactList } from "@/app/i/[key]/ArtifactList";
 import { DecisionList } from "@/app/i/[key]/DecisionList";
 import { GapList } from "@/app/i/[key]/GapList";
-import { ItemHeader } from "@/app/i/[key]/ItemHeader";
+import { ItemHeader, ItemTaxonomy } from "@/app/i/[key]/ItemHeader";
 import { ItemSection } from "@/app/i/[key]/ItemSection";
 import { ReadinessPanel } from "@/app/i/[key]/ReadinessPanel";
 import { MoveMessage, type MoveableGap } from "@/app/i/[key]/GapMoves";
+import { CHAT_COLUMN_CLASSES, ITEM_GRID_CLASSES } from "@/app/i/[key]/item-grid";
+import { PaintMark } from "@/components/frame/PaintMark";
+import { MAIN_CLASSES } from "@/components/ui/variants";
 import { getDictionary } from "@/i18n";
 import { readGapMove } from "@/lib/gap-move";
+import { PAINT_MARKS } from "@/lib/layout";
 import { GAP_PARAMS } from "@/lib/routes";
 
 import { devOnly } from "../dev-only";
+import { holdContent } from "../frame-fixture";
 import {
   ITEM_ACTIVITY,
   ITEM_ARTIFACTS,
@@ -61,7 +66,10 @@ export default async function DevItemPage({ searchParams }: PageProps<"/dev/item
   devOnly();
 
   const t = getDictionary();
-  const { run: requested, ...move } = await searchParams;
+  const { run: requested, delay: _delay, ...move } = await searchParams;
+  // C-40's held request: `?delay=` keeps the content behind its skeleton while
+  // the chrome — the frame's and the topbar with its two slots — is measured.
+  await holdContent({ delay: _delay });
 
   /**
    * The same `checkId → gap` map and the same URL outcome the real page builds,
@@ -108,18 +116,21 @@ export default async function DevItemPage({ searchParams }: PageProps<"/dev/item
     ];
 
   return (
-    <main className="mx-auto w-full max-w-[1200px] px-[24px] py-[32px]">
-      <div className="grid grid-cols-1 gap-[24px] lg:grid-cols-[1fr_380px]">
+    <main className={MAIN_CLASSES}>
+      <ItemHeader item={ITEM_HEADER} run={run} now={ITEM_NOW} t={t} />
+
+      <div className={ITEM_GRID_CLASSES}>
         <div className="flex min-w-0 flex-col gap-[32px]">
+          <PaintMark name={PAINT_MARKS.content} />
+
           {unclaimedMove === null ? null : <MoveMessage report={unclaimedMove} t={t} />}
 
           {/* The same 16 the real page holds these two at. */}
           <div className="flex flex-col gap-[16px]">
-            <ItemHeader item={ITEM_HEADER} t={t} />
+            <ItemTaxonomy item={ITEM_HEADER} t={t} />
             <ReadinessPanel
               run={run}
               t={t}
-              now={ITEM_NOW}
               itemKey={ITEM_HEADER.key}
               gapsByCheck={gapsByCheck}
               noLongerApplicable={ITEM_NO_LONGER_APPLICABLE}
@@ -151,7 +162,7 @@ export default async function DevItemPage({ searchParams }: PageProps<"/dev/item
         </div>
 
         {/* The reserved chat column, held the same way the real page holds it. */}
-        <aside aria-hidden="true" className="hidden lg:block" />
+        <aside aria-hidden="true" className={CHAT_COLUMN_CLASSES} />
       </div>
     </main>
   );

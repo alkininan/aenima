@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 
 import { FOCUS_MODALITY_SCRIPT } from "@/lib/focus-modality";
 
@@ -15,6 +15,16 @@ export const metadata: Metadata = {
   description:
     "Aenima turns raw product ideas into validated, developer-ready specifications — " +
     "automatically monitored, scored, and handed over.",
+};
+
+/**
+ * design-spec §4 Top bar mechanics: "`viewport-fit=cover` with safe-area insets on every
+ * sticky bar, sheet and toast" — the bars read `env(safe-area-inset-top)`, the bottom
+ * sheet and the toast `env(safe-area-inset-bottom)`, and none of the four is non-zero
+ * until the page asks to reach under the notch. Width and scale keep Next's defaults.
+ */
+export const viewport: Viewport = {
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

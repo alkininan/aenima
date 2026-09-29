@@ -29,7 +29,7 @@ const header = (overrides: Partial<ItemHeaderData> = {}): ItemHeaderData => ({
  */
 describe("ItemHeader lineage", () => {
   it("links the opportunity to its own page, by key", () => {
-    render(<ItemHeader item={header()} t={t} />);
+    render(<ItemHeader item={header()} run={null} now={0} t={t} />);
 
     const link = screen.getByRole("link", {
       name: "People miss what changed while they were away",
@@ -43,7 +43,7 @@ describe("ItemHeader lineage", () => {
    * not a link to nowhere.
    */
   it("renders no lineage line at all for an unlinked item", () => {
-    render(<ItemHeader item={header({ opportunity: null })} t={t} />);
+    render(<ItemHeader item={header({ opportunity: null })} run={null} now={0} t={t} />);
 
     expect(screen.queryByText(t.item.opportunity)).toBeNull();
     expect(screen.queryByRole("link")).toBeNull();
@@ -51,7 +51,7 @@ describe("ItemHeader lineage", () => {
 
   /** The label is the dictionary's, never a bare string in the JSX. */
   it("labels the line from the dictionary", () => {
-    render(<ItemHeader item={header()} t={t} />);
+    render(<ItemHeader item={header()} run={null} now={0} t={t} />);
 
     expect(screen.getByText(t.item.opportunity)).toBeTruthy();
   });

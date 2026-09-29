@@ -72,12 +72,19 @@ export function ItemRow({
   item,
   t,
   now,
+  href = itemHref(item.key),
   className,
 }: {
   item: ItemRowData;
   t: Dictionary;
   /** Epoch ms, passed in so a row renders identically on the server and in a test. */
   now: number;
+  /**
+   * Where the row goes — `/i/<key>`, always, but for the `/dev/list` fixture, whose rows
+   * lead to the `/dev/item` fixture so the frame's route changes can be driven where no
+   * session exists (C-45).
+   */
+  href?: string;
   className?: string;
 }) {
   const shown = item.gaps.slice(0, VISIBLE_GAPS);
@@ -126,7 +133,7 @@ export function ItemRow({
           wrapping it, so the overflow menu and the chips stay clickable in
           their own right rather than being swallowed by an outer anchor. */}
       <Link
-        href={itemHref(item.key)}
+        href={href}
         // §11: the link is the row's stop for the arrow keys — see `RowWalker`.
         {...{ [ROW_LINK_ATTRIBUTE]: "" }}
         className="min-w-0 flex-1 after:absolute after:inset-0 after:content-['']"
