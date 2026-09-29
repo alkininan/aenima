@@ -16,9 +16,12 @@ import { expect, test } from "@playwright/test";
 
 // §2 tokens, resolved.
 const SURFACE_1 = "rgb(21, 23, 28)";
+const SURFACE_2 = "rgb(40, 44, 52)";
 const PRIME = "rgb(33, 184, 220)";
 const WARNING = "rgb(235, 169, 47)";
 const PRIMARY_TEXT = "rgb(224, 229, 235)";
+const SECONDARY_TEXT = "rgb(157, 163, 176)";
+const GLASS_BORDER = "rgba(77, 81, 89, 0.64)";
 
 for (const width of [1440, 768, 375] as const) {
   test.describe(`at ${width}`, () => {
@@ -116,26 +119,48 @@ test.describe("at 1440", () => {
    * §1 law 7: a settled gap is a visible debt that a named person accepted.
    * All three dispositions are on the page at once — the accepted and excluded
    * ones dimmed rather than removed, because removing one deletes the name.
+   *
+   * §2 Dimming (T0.49): dimmed means the card's text in `--n-secondary` and its chip's
+   * fill at .60 — never opacity on the card, which would take the words under AA.
    */
-  test("shows every gap disposition, settled ones dimmed rather than hidden", async ({ page }) => {
+  test("shows every gap disposition, settled ones dimmed by colour rather than hidden", async ({
+    page,
+  }) => {
     // Scoped to the gap list: the same check ids appear in the meter's
     // expansion, where they mean something else entirely.
     const gaps = page.getByTestId("gap-list");
 
-    await expect(gaps.getByText("prd-10")).toBeVisible();
-    await expect(gaps.getByText("prd-16")).toBeVisible();
-    await expect(gaps.getByText("prd-20")).toBeVisible();
+    await expect(gaps.getByText("prd-10", { exact: true }).first()).toBeVisible();
+    await expect(gaps.getByText("prd-16", { exact: true })).toBeVisible();
+    await expect(gaps.getByText("prd-20", { exact: true })).toBeVisible();
 
-    const opacities = await gaps
+    const settled = await gaps
       .getByRole("listitem")
       .filter({ hasText: /prd-16|prd-20/ })
       .evaluateAll((nodes) =>
-        nodes.map((node) => getComputedStyle(node.firstElementChild!).opacity),
+        nodes.map((node) => {
+          const card = node.firstElementChild!;
+          const chip = node.querySelector("[data-testid='gap-chip']")!;
+          return {
+            card: getComputedStyle(card).opacity,
+            wording: getComputedStyle(card.querySelector("p")!).color,
+            id: getComputedStyle(card.querySelector("[class*='type-mono-readout']")!).color,
+            chipText: getComputedStyle(chip).color,
+            chipOpacity: getComputedStyle(chip).opacity,
+            fill: getComputedStyle(chip.querySelector("[aria-hidden='true']")!).opacity,
+          };
+        }),
       );
 
-    expect(opacities.length).toBeGreaterThan(0);
-    // §0 law 7 dims settled work; it never reddens it.
-    expect(opacities.every((opacity) => opacity === "0.6")).toBe(true);
+    expect(settled).toHaveLength(2);
+    for (const card of settled) {
+      expect(card.card).toBe("1");
+      expect(card.wording).toBe(SECONDARY_TEXT);
+      expect(card.id).toBe(SECONDARY_TEXT);
+      expect(card.chipText).toBe(SECONDARY_TEXT);
+      expect(card.chipOpacity).toBe("1");
+      expect(card.fill).toBe("0.6");
+    }
   });
 
   /**
@@ -399,15 +424,36 @@ test.describe("at 1440", () => {
    * keeps the name and carries the reversal, and §0 law 7 dims it rather than
    * disabling it — it stays fully interactive at .60.
    */
-  test("keeps an accepted gap named, dimmed and reversible", async ({ page }) => {
+  test("keeps an accepted gap named, dimmed and reversible — its Reopen fully live", async ({
+    page,
+  }) => {
     const card = page.getByTestId("gap-list").getByRole("listitem").filter({ hasText: "prd-16" });
 
-    await expect(card.getByRole("button", { name: "Reopen" })).toBeVisible();
-    const opacity = await card
-      .locator("> *")
-      .first()
-      .evaluate((node) => getComputedStyle(node).opacity);
-    expect(opacity).toBe("0.6");
+    const reopen = card.getByRole("button", { name: "Reopen" });
+    await expect(reopen).toBeVisible();
+    // §8.10: Secondary sm, at 1 — §0 law 7 dims the card, never the control.
+    const live = await reopen.evaluate((node) => {
+      const style = getComputedStyle(node);
+      return {
+        opacity: style.opacity,
+        color: style.color,
+        border: style.borderTopColor,
+        height: Math.round(node.getBoundingClientRect().height),
+      };
+    });
+    expect(live).toEqual({ opacity: "1", color: PRIMARY_TEXT, border: GLASS_BORDER, height: 28 });
+    // The stamp keeps the name, in --n-secondary.
+    expect(
+      await card
+        .getByText("You accepted this", { exact: false })
+        .evaluate((node) => getComputedStyle(node).color),
+    ).toBe(SECONDARY_TEXT);
+    expect(
+      await card
+        .locator("> *")
+        .first()
+        .evaluate((node) => getComputedStyle(node).opacity),
+    ).toBe("1");
   });
 
   /**
@@ -531,6 +577,237 @@ test.describe("at 1440", () => {
     // rather than borrowing the other move's sentence.
     await page.goto("/dev/item?intent=reopen&move=reason-required&gap=g1");
     await expect(page.getByText("Add a reason.")).toHaveCount(0);
+  });
+
+  /* ------------------------------------------------------------------------ */
+  /* T0.49 — §8.32 the gap card                                               */
+  /* ------------------------------------------------------------------------ */
+
+  /**
+   * §8.32: "a plain card, padding per §5 by where it stands, the check's wording ui-body,
+   * its gap chip (§8.9), the quoted evidence on a `--surface-1` card in ui-body, and
+   * §8.10's moves at the foot." Padding 20 — it stands on the page by itself; the evidence
+   * on a bordered inner card, since a card must separate from a card (§5); no "Typically"
+   * line, since product-spec has none for a gap move; no Undo, which lives in the toast.
+   */
+  test("the gap card pads 20, carries the check's wording, quotes the evidence on a bordered card, and no estimate or undo", async ({
+    page,
+  }) => {
+    const gaps = page.getByTestId("gap-list");
+    const card = gaps.getByRole("listitem").filter({ hasText: "prd-10" }).locator("> *").first();
+
+    const padding = await card.evaluate((node) => getComputedStyle(node).padding);
+    expect(padding).toBe("20px");
+
+    // The pack's prose for prd-10, then the id beside its chip "Must · prd-10".
+    await expect(card.getByText("Every story has testable GWT acceptance criteria")).toBeVisible();
+    const chip = card.locator("[data-testid='gap-chip']");
+    await expect(chip).toHaveText("Must · prd-10");
+    expect(
+      await chip
+        .getByText("prd-10", { exact: true })
+        .evaluate((n) => getComputedStyle(n).fontFamily),
+    ).toContain("JetBrains Mono");
+
+    const evidence = card.getByText(
+      "GM-4 is prose. The other four stories carry Given/When/Then.",
+      {
+        exact: false,
+      },
+    );
+    const inner = await evidence.evaluate((node) => {
+      const style = getComputedStyle(node);
+      return {
+        background: style.backgroundColor,
+        border: `${style.borderTopWidth} ${style.borderTopColor}`,
+        padding: style.padding,
+        color: style.color,
+      };
+    });
+    expect(inner).toEqual({
+      background: SURFACE_1,
+      border: `1px ${GLASS_BORDER}`,
+      padding: "16px",
+      color: PRIMARY_TEXT,
+    });
+
+    await expect(gaps.getByText(/Typically/)).toHaveCount(0);
+    await expect(gaps.getByRole("button", { name: /undo/i })).toHaveCount(0);
+    await expect(gaps.getByText(/\bUndo\b/)).toHaveCount(0);
+  });
+
+  /**
+   * §8.20: "an optional action as a Neutral sm button ('Undo')" — the one Undo the product
+   * renders. Raised on the sink, where a toast can be, and measured: 28 tall on
+   * `--surface-2` with `--n-primary` text.
+   */
+  test("the toast's Undo is the Neutral sm §8.20 gives it", async ({ page }) => {
+    await page.goto("/dev/primitives");
+    await page.evaluate(() => document.fonts.ready);
+    await page.getByRole("button", { name: "undo toast" }).click();
+
+    const undo = page.getByRole("button", { name: "Undo", exact: true });
+    await expect(undo).toBeVisible();
+    const style = await undo.evaluate((node) => {
+      const computed = getComputedStyle(node);
+      return {
+        height: Math.round(node.getBoundingClientRect().height),
+        background: computed.backgroundColor,
+        color: computed.color,
+      };
+    });
+    expect(style).toEqual({ height: 28, background: SURFACE_2, color: PRIMARY_TEXT });
+  });
+
+  /* ------------------------------------------------------------------------ */
+  /* T0.49 — §8.24 the check list and §8.25 the disclosure                    */
+  /* ------------------------------------------------------------------------ */
+
+  /**
+   * §8.25: one recipe for every summary — pad 8 vertical by 4 horizontal, a 16 chevron 4
+   * from the text, swapped between right and down, the browser marker removed in both
+   * spellings — shared by the meter's summary and the accept form's, which §8.10 says uses
+   * it unchanged.
+   */
+  test("both disclosure summaries pad 8 by 4 with a 16 chevron 4 from the text that swaps, and no marker", async ({
+    page,
+  }) => {
+    const meter = page.getByTestId("readiness").locator("summary").first();
+    await meter.click();
+    const accept = page
+      .getByTestId("gap-list")
+      .getByRole("listitem")
+      .filter({ hasText: "prd-10" })
+      .locator("summary");
+
+    for (const summary of [meter, accept]) {
+      const box = await summary.evaluate((node) => {
+        const style = getComputedStyle(node);
+        return {
+          paddingTop: style.paddingTop,
+          paddingBottom: style.paddingBottom,
+          paddingLeft: style.paddingLeft,
+          paddingRight: style.paddingRight,
+          radius: style.borderTopLeftRadius,
+          listStyle: style.listStyleType,
+          marker: getComputedStyle(node, "::marker").content,
+          chevrons: [...node.querySelectorAll("svg")].map((svg) => {
+            const rect = svg.getBoundingClientRect();
+            return { w: Math.round(rect.width), h: Math.round(rect.height) };
+          }),
+        };
+      });
+      expect(box.paddingTop).toBe("8px");
+      expect(box.paddingBottom).toBe("8px");
+      expect(box.paddingLeft).toBe("4px");
+      expect(box.paddingRight).toBe("4px");
+      expect(box.radius).toBe("16px");
+      expect(box.listStyle).toBe("none");
+      expect(["none", "", "normal"]).toContain(box.marker);
+      // One chevron drawn at a time, 16 square; the other is display: none and has no box.
+      expect(box.chevrons.filter((c) => c.w > 0)).toEqual([{ w: 16, h: 16 }]);
+    }
+
+    // 4 from the text: the chevron's left edge sits 4 past the text beside it.
+    const acceptGap = await accept.evaluate((node) => {
+      const chevron = [...node.querySelectorAll("svg")].find(
+        (svg) => svg.getBoundingClientRect().width > 0,
+      )!;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const text = [...node.childNodes].find((n) => n.nodeType === Node.TEXT_NODE)!;
+      range.selectNodeContents(text);
+      return Math.round(chevron.getBoundingClientRect().left - range.getBoundingClientRect().right);
+    });
+    expect(acceptGap).toBe(4);
+    const meterGap = await meter.evaluate((node) => {
+      // The innermost span holding the number — its wrapper's text is "67%" too, but its
+      // box ends at the chevron.
+      const percent = [...node.querySelectorAll("span")].find(
+        (s) => s.textContent === "67%" && s.children.length === 0,
+      )!;
+      const chevron = [...node.querySelectorAll("svg")].find(
+        (svg) => svg.getBoundingClientRect().width > 0,
+      )!;
+      return Math.round(
+        chevron.getBoundingClientRect().left - percent.getBoundingClientRect().right,
+      );
+    });
+    expect(meterGap).toBe(4);
+
+    // Swapped: closed shows the right chevron, open the down one.
+    const shown = (summary: import("@playwright/test").Locator) =>
+      summary.evaluate((node) =>
+        [...node.querySelectorAll("svg")].map((svg) => svg.getBoundingClientRect().width > 0),
+      );
+    expect(await shown(meter)).toEqual([false, true]);
+    await meter.click();
+    expect(await shown(meter)).toEqual([true, false]);
+    expect(await shown(accept)).toEqual([true, false]);
+    await accept.click();
+    expect(await shown(accept)).toEqual([false, true]);
+  });
+
+  /**
+   * §8.24, read against the list: one line per check, gap 8 between lines and across one
+   * and 4 when it wraps; passed as mono-micro `--success` with the 12 tick and gap 4;
+   * unclear as the §8.9 chip "Must · unclear" with the evidence on a `--surface-1` card
+   * at 16; not asked as mono-micro `--n-secondary` with the condition beneath it. And the
+   * excluded chip's text computes to `--n-secondary` (§8.9).
+   */
+  test("the check list keeps §8.24's geometry and the excluded chip's text is --n-secondary", async ({
+    page,
+  }) => {
+    await page.getByTestId("readiness").locator("summary").first().click();
+    const checks = page.getByTestId("check-list");
+
+    expect(await checks.evaluate((node) => getComputedStyle(node).rowGap)).toBe("8px");
+    const line = checks
+      .getByRole("listitem")
+      .filter({ hasText: "prd-10" })
+      .locator("> div")
+      .first();
+    const lineStyle = await line.evaluate((node) => {
+      const style = getComputedStyle(node);
+      return { columnGap: style.columnGap, rowGap: style.rowGap };
+    });
+    expect(lineStyle).toEqual({ columnGap: "8px", rowGap: "4px" });
+
+    // Passed: the 12 tick, 4 from "Answered", in --success.
+    const passed = checks.getByRole("listitem").filter({ hasText: "prd-1" }).first();
+    const tick = await passed.getByText("Answered").evaluate((node) => {
+      const svg = node.querySelector("svg")!;
+      const rect = svg.getBoundingClientRect();
+      const style = getComputedStyle(node);
+      return {
+        size: [Math.round(rect.width), Math.round(rect.height)],
+        gap: style.columnGap,
+        color: style.color,
+      };
+    });
+    expect(tick).toEqual({ size: [12, 12], gap: "4px", color: "rgb(34, 197, 94)" });
+
+    // Unclear: the chip and the evidence card at 16.
+    await expect(line.getByText("Must · unclear")).toBeVisible();
+    const evidence = checks
+      .getByRole("listitem")
+      .filter({ hasText: "prd-10" })
+      .locator("> div")
+      .nth(1);
+    expect(await evidence.evaluate((node) => getComputedStyle(node).padding)).toBe("16px");
+
+    // Not asked: the label and the condition beneath it.
+    const fifteen = checks.getByRole("listitem").filter({ hasText: "prd-15" });
+    await expect(fifteen.getByText("Not asked")).toBeVisible();
+    await expect(fifteen).toContainText("Only asked when:");
+
+    // §8.9's excluded tone: --n-disabled outline, --n-secondary text.
+    const excluded = page
+      .getByTestId("gap-list")
+      .getByRole("listitem")
+      .filter({ hasText: "prd-20" })
+      .locator("[data-testid='gap-chip']");
+    expect(await excluded.evaluate((node) => getComputedStyle(node).color)).toBe(SECONDARY_TEXT);
   });
 
   /* ------------------------------------------------------------------------ */

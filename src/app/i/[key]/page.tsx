@@ -12,14 +12,14 @@ import { getDictionary } from "@/i18n";
 import { describeActor } from "@/lib/actor";
 import { readGapMove } from "@/lib/gap-move";
 import { PAINT_MARKS } from "@/lib/layout";
-import { GAP_PARAMS, ROUTES } from "@/lib/routes";
+import { CHECK_PARAM, GAP_PARAMS, ROUTES } from "@/lib/routes";
 import { composeRunView } from "@/lib/scoring/run-view";
 import { getPack } from "@/packs";
 
 import { ActivityFeed } from "./ActivityFeed";
 import { ArtifactList } from "./ArtifactList";
 import { DecisionList } from "./DecisionList";
-import { GapList } from "./GapList";
+import { GapList, proseByCheck } from "./GapList";
 import { ItemHeader, ItemTaxonomy } from "./ItemHeader";
 import { MoveMessage, type MoveableGap } from "./GapMoves";
 import { noLongerApplicableByCheck } from "./CheckList";
@@ -111,6 +111,14 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/i/[
   const move = readGapMove(query[GAP_PARAMS.intent], query[GAP_PARAMS.move], query[GAP_PARAMS.gap]);
 
   /**
+   * The check a row's gap chip named (§8.27), for the panel to open onto. Never rendered:
+   * it is matched against the run's own check ids and nothing else, so a crafted value
+   * opens nothing and reaches no surface.
+   */
+  const linkedCheck = query[CHECK_PARAM];
+  const openOnCheck = typeof linkedCheck === "string" ? linkedCheck : null;
+
+  /**
    * What each check currently owes, by check id — the map §5's moves need in
    * the meter's expansion.
    *
@@ -189,6 +197,9 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/i/[
   /** The claim a gap card or a check line may speak for, if any gap holds it. */
   const claimedMove = move !== null && move.intent !== null && unclaimedMove === null ? move : null;
 
+  /** §8.32: the check's wording on each gap card, from the run the check list reads. */
+  const proseFor = proseByCheck(run);
+
   /** §11: a correction is a new decision naming the one it replaced. */
   const supersededIds = new Set(
     item.decisions
@@ -246,6 +257,7 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/i/[
               gapsByCheck={gapsByCheck}
               noLongerApplicable={noLongerApplicable}
               outcome={claimedMove}
+              openOnCheck={openOnCheck}
             />
           </div>
 
@@ -270,6 +282,7 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/i/[
                 checkId: gap.checkId,
                 tag: gap.tag,
                 disposition: gap.disposition,
+                prose: proseFor(gap.checkId),
                 evidence: gap.evidence,
                 resolvedBy:
                   gap.resolvedByUserId === null

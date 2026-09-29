@@ -1,36 +1,53 @@
 import { Skeleton } from "@/components/ui/Skeleton";
+import { LIST_CONTAINER_CLASSES } from "@/components/ui/variants";
 
 /**
  * §10: "Full-page loads: skeleton screens mirroring the target layout; never a
  * centered spinner page."
  *
- * Mirroring means the same 56h row, the same left accent gutter and blocks
- * where the real content sits — so the page does not jump when it arrives. A
- * skeleton with different geometry is a spinner with extra steps.
+ * Mirroring means the same row — `.item-row`, so it is 56 in a content box of 760 or
+ * more and 72 as two lines below it, following the same container query the rows do —
+ * with blocks where the real content sits, so the page does not jump when the rows
+ * arrive (§8.27). A skeleton with different geometry is a spinner with extra steps.
  *
- * The accent is transparent rather than absent: a bucket is not known yet, and
- * guessing one would flash the wrong colour for a moment.
+ * The accent segment is left unpainted: a bucket is not known yet, and guessing one
+ * would flash the wrong colour for a moment.
  */
 export function ItemRowSkeleton() {
   return (
-    <div className="flex h-[56px] items-center gap-[12px] rounded-sm border-l-[2px] border-l-transparent bg-surface-1 pr-[12px] pl-[14px]">
-      <Skeleton shape="text" className="w-[56px]" />
-      <Skeleton shape="text" className="min-w-0 flex-1 max-w-[280px]" />
-      <Skeleton shape="block" className="hidden h-[24px] w-[72px] rounded-pill sm:block" />
-      <Skeleton shape="block" className="hidden h-[4px] w-[96px] rounded-pill md:block" />
-      <Skeleton shape="text" className="hidden w-[96px] sm:block" />
-      <Skeleton shape="circle" className="size-[28px]" />
+    <div className="item-row relative bg-surface-1">
+      <div className="item-row-name min-w-0">
+        <Skeleton shape="text" className="h-[16px] w-full max-w-[280px]" />
+      </div>
+      <div className="item-row-type">
+        <Skeleton shape="text" className="h-[12px] w-[56px]" />
+      </div>
+      <div className="item-row-chips">
+        <Skeleton shape="block" className="h-[24px] w-[112px] rounded-pill" />
+      </div>
+      <div className="item-row-fresh">
+        <Skeleton shape="text" className="h-[12px] w-[72px]" />
+      </div>
+      <div className="item-row-menu">
+        <Skeleton shape="circle" className="size-[28px]" />
+      </div>
     </div>
   );
 }
 
-/** A page's worth. Six is roughly a first screen at the default breakpoint. */
+/**
+ * A page's worth, as one ledger — the group's corners and its hairlines, so the rows
+ * replace it in place. Six is roughly a first screen at the default breakpoint. The list
+ * declares the container the row's query reads, exactly as the real list does.
+ */
 export function ItemListSkeleton() {
   return (
-    <div aria-hidden="true" className="flex flex-col gap-[4px]">
-      {Array.from({ length: 6 }, (_, index) => (
-        <ItemRowSkeleton key={index} />
-      ))}
+    <div aria-hidden="true" className={LIST_CONTAINER_CLASSES}>
+      <div className="flex flex-col gap-[1px] overflow-hidden rounded-sm bg-bg-base">
+        {Array.from({ length: 6 }, (_, index) => (
+          <ItemRowSkeleton key={index} />
+        ))}
+      </div>
     </div>
   );
 }

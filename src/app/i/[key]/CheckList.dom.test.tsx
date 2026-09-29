@@ -369,6 +369,44 @@ describe("CheckList", () => {
     expect(container.querySelector("#gap-g-must")).toBeNull();
   });
 
+  /**
+   * §8.27 (T0.49): the row's gap chip links to the item page "with the check list expanded
+   * and that check scrolled into view", so every line wears `check-{id}` — beside, never
+   * instead of, the `gap-{uuid}` a filed-away open Should carries on the same line.
+   */
+  it("anchors every check line by its id, beside the gap anchor where one stands", () => {
+    const should: MoveableGap = {
+      id: "g-should",
+      checkId: "prd-8",
+      tag: "should",
+      disposition: "open",
+      resolvedBy: null,
+      resolutionNote: null,
+    };
+    const { container } = render(
+      <CheckList
+        checks={[
+          passed("prd-1"),
+          unclear("prd-8", "should", "B."),
+          notAsked("prd-15", LIST_CONDITION),
+        ]}
+        t={t}
+        itemKey="soc-12"
+        gapsByCheck={new Map([["prd-8", should]])}
+        noLongerApplicable={NO_CLOSURES}
+        outcome={null}
+      />,
+    );
+
+    for (const id of ["prd-1", "prd-8", "prd-15"]) {
+      expect(container.querySelectorAll(`#check-${id}`), id).toHaveLength(1);
+    }
+    // Both anchors on the one line, on elements of their own.
+    const line = container.querySelector("#gap-g-should")!;
+    expect(line.contains(container.querySelector("#check-prd-8"))).toBe(true);
+    expect(container.querySelector("#check-prd-8")).not.toBe(line);
+  });
+
   /** An accepted gap has a card too, so the expansion does not claim its id. */
   it("leaves a settled gap's anchor to the card that shows it", () => {
     const { container } = render(
@@ -427,6 +465,12 @@ describe("CheckList", () => {
 
     expect(screen.getByText(evidence)).not.toBeNull();
     expect(screen.getByText(t.item.checkNotAskedClosedGap)).not.toBeNull();
+
+    // §2 Dimming (T0.49): the notice's card is settled work — its text steps to
+    // `--n-secondary`, and no opacity touches a card that holds words.
+    const notice = screen.getByText(evidence);
+    expect(notice.className).toContain("text-n-secondary");
+    expect(notice.className).not.toContain("opacity-60");
 
     // AC1 says *beneath* the condition line, and the order is the reading:
     // the condition explains why the check left, the quote is what left with

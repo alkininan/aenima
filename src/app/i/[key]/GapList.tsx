@@ -1,10 +1,10 @@
 import { Card } from "@/components/ui/Card";
-import { Chip } from "@/components/ui/Chip";
+import { Chip, ChipIdLabel } from "@/components/ui/Chip";
 import type { Dictionary } from "@/i18n";
 import type { Actor } from "@/lib/actor";
-import { cx } from "@/lib/cx";
 import type { GapMoveClaim } from "@/lib/gap-move";
 import { gapAnchor } from "@/lib/routes";
+import type { RunView } from "@/lib/scoring/run-view";
 
 import { actorWords, GapMoves } from "./GapMoves";
 
@@ -17,6 +17,13 @@ export type GapView = {
    * — a time, no name — and the only one that never reaches the page.
    */
   disposition: "open" | "accepted" | "excluded" | "closed";
+  /**
+   * §8.32: "the check's wording ui-body" — the pack's prose for the check, threaded from
+   * the run's checks by check id the way `CheckList` reads `CheckLine.prose`, and null
+   * when no run stands behind the item or the loaded pack no longer names the check; the
+   * id then stands alone. See `proseByCheck`.
+   */
+  prose: string | null;
   evidence: string;
   /** Who settled it, already resolved to what can honestly be said. */
   resolvedBy: Actor | null;
@@ -85,6 +92,17 @@ export function gapHasCard(gap: {
   if (gap.disposition === "closed") return false;
   if (gap.disposition === "open") return gap.tag === "must";
   return true;
+}
+
+/**
+ * The check's wording for each gap on the page, read off the run the way the check list
+ * reads it — `composeRunView` puts the pack's prose on every `CheckLine` — so the card and
+ * the line cannot say one check two ways. One function, called by `/i/<key>` and by the
+ * `/dev/item` mirror, because a lookup written twice would drift.
+ */
+export function proseByCheck(run: RunView | null): (checkId: string) => string | null {
+  const prose = new Map(run?.checks.map((check) => [check.checkId, check.prose]) ?? []);
+  return (checkId) => prose.get(checkId) ?? null;
 }
 
 /**
@@ -172,26 +190,38 @@ export function GapList({
       {ordered.map((gap) => {
         const settled = gap.disposition !== "open";
         const accepted = gap.disposition === "accepted";
-        const label = accepted
-          ? t.item.gapAcceptedBy[gap.tag](actorWords(gap.resolvedBy, t))
-          : gap.disposition === "excluded"
-            ? t.item.gapExcluded
-            : t.item.gapOpen;
+        // §2 Dimming: a settled card's text steps to --n-secondary; opacity never touches it.
+        const text = settled ? "text-n-secondary" : "text-n-primary";
 
         return (
           // The anchor `gapOutcomeHref` targets, so a move scrolls its own card
           // into view. `tabIndex={-1}` makes it a focus destination without
           // putting it in the tab order — §11 keeps that for controls.
           <li key={gap.id} id={gapAnchor(gap.id)} tabIndex={-1}>
-            {/* §7 disabled is for controls; a settled gap is not disabled, it is
-                resolved — so it dims the way §0 law 7 dims idle work rather than
-                taking a disabled treatment. */}
-            <Card className={cx("flex flex-col gap-[8px]", settled && "opacity-60")}>
+            {/* §8.32: "a plain card, padding per §5 by where it stands" — 20, since it
+                stands on the page by itself. §7 disabled is for controls; a settled gap
+                is not disabled, it is resolved — so it dims the way §2 dims: its text to
+                --n-secondary and its chip's fill to .60, the card itself untouched. */}
+            <Card padding={20} className="flex flex-col gap-[8px]">
+              {/* §8.32: the check's wording, ui-body — prose, and it never truncates. The
+                  id alone when the loaded pack no longer names the check. */}
+              {gap.prose === null ? null : <p className={`type-ui-body ${text}`}>{gap.prose}</p>}
+
               <div className="flex flex-wrap items-center gap-[8px]">
                 {/* §3: check IDs are mono-readout. */}
-                <span className="type-mono-readout text-n-secondary">{gap.checkId}</span>
-                <Chip variant="gap" tone={toneFor(gap)}>
-                  {label}
+                <span className={`type-mono-readout ${text}`}>{gap.checkId}</span>
+                {/* §8.9's chip: open "Must · {check id}", the id in mono-readout — §12's
+                    four chip strings admit no "Open" — accepted "Must · {accepter}",
+                    excluded as it was. Settled, its fill dims to .60 on a layer beneath
+                    text that keeps its tone. */}
+                <Chip variant="gap" tone={toneFor(gap)} dimmed={settled} data-testid="gap-chip">
+                  {accepted ? (
+                    t.item.gapAcceptedBy[gap.tag](actorWords(gap.resolvedBy, t))
+                  ) : gap.disposition === "excluded" ? (
+                    t.item.gapExcluded
+                  ) : (
+                    <ChipIdLabel label={t.item.gapChip[gap.tag](gap.checkId)} id={gap.checkId} />
+                  )}
                 </Chip>
                 {/* The tag stays visible once a gap is settled. An open gap's
                     chip already carries it — §8 tones open Must and open Should
@@ -205,12 +235,19 @@ export function GapList({
                 ) : null}
               </div>
 
-              {/* §5: the exact quoted gap, never a paraphrase. */}
-              <p className="type-ui-body text-n-primary">{gap.evidence}</p>
+              {/* §5: the exact quoted gap, never a paraphrase — §8.32: "the quoted
+                  evidence on a --surface-1 card in ui-body", bordered, since a card must
+                  separate from a card (§5), at the 16 an evidence card under a check
+                  keeps. */}
+              <Card bordered className={`type-ui-body ${text}`}>
+                {gap.evidence}
+              </Card>
 
               {/* The stamp and the move, from the one component that writes
                   them — the expansion's unclear check renders the same thing
-                  for the same gap. */}
+                  for the same gap. No time estimate: product-spec has no typical
+                  time for a gap move, and the line never renders without a number
+                  (§8.32). No Undo: undo lives in the toast, never on the card. */}
               <GapMoves
                 gap={{
                   id: gap.id,

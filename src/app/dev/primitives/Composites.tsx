@@ -459,8 +459,8 @@ function Composites() {
             complete an emailed code. These are the real components — the page
             differs only in where the data comes from. */}
         <p className="type-ui-footnote text-n-secondary">
-          Real rows, fixed data. Every bucket, both accents, an idle row at .60, a row with more
-          gaps than fit, and hollow meters throughout.
+          Real rows, fixed data. Every bucket, both accents, an idle row dimmed per §2, a row with
+          three gaps — one chip and a count — and no meters until the scores exist.
         </p>
         <div className="flex flex-col gap-[16px]">
           <PipelineStrip
@@ -472,7 +472,7 @@ function Composites() {
           />
           {/* §11's walker wraps the buckets here as it does on /app, so the
               arrow keys can be driven in a browser. */}
-          <RowWalker className="flex flex-col gap-[16px]">
+          <RowWalker label={LIST_T.list.title} className="flex flex-col gap-[16px]">
             {(["your_move", "at_risk", "flowing"] as const).map((bucket) => (
               <BucketSection
                 key={bucket}
@@ -480,6 +480,7 @@ function Composites() {
                 items={LIST_FIXTURE.filter((row) => row.bucket === bucket)}
                 t={LIST_T}
                 now={LIST_NOW}
+                tabStopKey={LIST_FIXTURE[0]!.key}
               />
             ))}
           </RowWalker>

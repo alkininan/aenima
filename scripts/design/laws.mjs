@@ -832,6 +832,9 @@ export const DEFAULTS = [
   { key: "relativeTime.hours", default: "{} h ago", as: "row freshness" },
   { key: "relativeTime.days", default: "{} d ago", as: "row freshness" },
   { key: "relativeTime.weeks", default: "{} w ago", as: "row freshness" },
+  { key: "relativeTime.years", default: "{} y ago", as: "row freshness" },
+  { key: "item.gapChip.must", default: "Must · {}", as: "gap chip" },
+  { key: "item.gapChip.should", default: "Should · {}", as: "gap chip" },
 ];
 
 /** The English dictionary's strings by key path — `signIn.codeSentTo` — each with its shape. */

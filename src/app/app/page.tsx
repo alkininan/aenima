@@ -59,8 +59,8 @@ function toRowData(item: ItemListRow, input: BucketInput): ItemRowData {
     type: item.type,
     stage: item.stage,
     bucket: assignBucket(input),
-    // §8 shows two gap chips; Musts first, because a Should behind a Must is the
-    // less urgent of the two and only two fit.
+    // §8.27 shows one gap chip and counts the rest; Musts first, because a Should
+    // behind a Must is the less urgent of the two and only one shows.
     gaps: [...item.openGaps]
       .sort((a, b) => (a.tag === b.tag ? 0 : a.tag === "must" ? -1 : 1))
       .map((gap) => ({ id: gap.id, checkId: gap.checkId, tag: gap.tag })),
@@ -143,6 +143,15 @@ export default async function AppPage({ searchParams }: PageProps<"/app">) {
 
   const filtered = stageFilter !== null || productFilter !== undefined;
 
+  // §11: the list is one Tab stop — the first row's name, in the order the buckets render.
+  const inBuckets = BUCKETS.map((bucket) =>
+    rows
+      .filter((entry) => entry.row.bucket === bucket)
+      .sort((a, b) => compareInBucket(bucket, a.input, b.input))
+      .map((entry) => entry.row),
+  );
+  const tabStopKey = inBuckets.flat()[0]?.key;
+
   return (
     <main className={MAIN_CLASSES}>
       {/* §4: a page topbar is a display-xl title, and §4's subtitle slot is
@@ -182,19 +191,18 @@ export default async function AppPage({ searchParams }: PageProps<"/app">) {
             {filtered ? t.list.emptyFilteredTitle : t.list.emptyTitle}
           </EmptyState>
         ) : (
-          // §11: arrow keys walk the rows, across buckets. The one client island
-          // on this page; the rows inside it stay Server Components.
-          <RowWalker className="flex flex-col gap-[24px]">
-            {BUCKETS.map((bucket) => (
+          // §11: the grid — arrow keys walk the rows, across buckets. The one client
+          // island on this page; the rows inside it stay Server Components. It is also
+          // the container the row's line count is decided by (§8.27).
+          <RowWalker label={t.list.title} className="flex flex-col gap-[24px]">
+            {BUCKETS.map((bucket, index) => (
               <BucketSection
                 key={bucket}
                 bucket={bucket}
-                items={rows
-                  .filter((entry) => entry.row.bucket === bucket)
-                  .sort((a, b) => compareInBucket(bucket, a.input, b.input))
-                  .map((entry) => entry.row)}
+                items={inBuckets[index] ?? []}
                 t={t}
                 now={now}
+                {...(tabStopKey === undefined ? {} : { tabStopKey })}
               />
             ))}
           </RowWalker>

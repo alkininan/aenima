@@ -1,7 +1,7 @@
 import { ActivityFeed } from "@/app/i/[key]/ActivityFeed";
 import { ArtifactList } from "@/app/i/[key]/ArtifactList";
 import { DecisionList } from "@/app/i/[key]/DecisionList";
-import { GapList } from "@/app/i/[key]/GapList";
+import { GapList, proseByCheck } from "@/app/i/[key]/GapList";
 import { ItemHeader, ItemTaxonomy } from "@/app/i/[key]/ItemHeader";
 import { ItemSection } from "@/app/i/[key]/ItemSection";
 import { ReadinessPanel } from "@/app/i/[key]/ReadinessPanel";
@@ -12,7 +12,7 @@ import { MAIN_CLASSES } from "@/components/ui/variants";
 import { getDictionary } from "@/i18n";
 import { readGapMove } from "@/lib/gap-move";
 import { PAINT_MARKS } from "@/lib/layout";
-import { GAP_PARAMS } from "@/lib/routes";
+import { CHECK_PARAM, GAP_PARAMS } from "@/lib/routes";
 
 import { devOnly } from "../dev-only";
 import { holdContent } from "../frame-fixture";
@@ -66,7 +66,9 @@ export default async function DevItemPage({ searchParams }: PageProps<"/dev/item
   devOnly();
 
   const t = getDictionary();
-  const { run: requested, delay: _delay, ...move } = await searchParams;
+  const { run: requested, delay: _delay, [CHECK_PARAM]: linkedCheck, ...move } = await searchParams;
+  // §8.27: the check a row's chip named, read the way the real page reads it.
+  const openOnCheck = typeof linkedCheck === "string" ? linkedCheck : null;
   // C-40's held request: `?delay=` keeps the content behind its skeleton while
   // the chrome — the frame's and the topbar with its two slots — is measured.
   await holdContent({ delay: _delay });
@@ -115,6 +117,11 @@ export default async function DevItemPage({ searchParams }: PageProps<"/dev/item
         : "scored"
     ];
 
+  // §8.32: each gap's wording, threaded from the chosen run exactly as the real page
+  // threads it — so `?run=none` leaves the cards standing on their ids, as `/i/<key>` does.
+  const proseFor = proseByCheck(run);
+  const gaps = ITEM_GAPS.map((gap) => ({ ...gap, prose: proseFor(gap.checkId) }));
+
   return (
     <main className={MAIN_CLASSES}>
       <ItemHeader item={ITEM_HEADER} run={run} now={ITEM_NOW} t={t} />
@@ -135,6 +142,7 @@ export default async function DevItemPage({ searchParams }: PageProps<"/dev/item
               gapsByCheck={gapsByCheck}
               noLongerApplicable={ITEM_NO_LONGER_APPLICABLE}
               outcome={outcome}
+              openOnCheck={openOnCheck}
             />
           </div>
 
@@ -144,7 +152,7 @@ export default async function DevItemPage({ searchParams }: PageProps<"/dev/item
 
           <ItemSection title={t.item.gaps}>
             <GapList
-              gaps={ITEM_GAPS}
+              gaps={gaps}
               t={t}
               scored={run !== null}
               itemKey={ITEM_HEADER.key}

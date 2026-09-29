@@ -19,11 +19,16 @@ const gap = (overrides: Partial<GapView> & Pick<GapView, "id" | "disposition">):
   // requirement id lives inside the evidence where §7.2 puts it.
   checkId: "prd-19",
   tag: "must",
+  // §8.32: the check's wording, the pack's prose threaded from the run by check id.
+  prose: "Every story has testable GWT acceptance criteria",
   evidence: "MN-2: 'nearby' — same venue, or within 100 m?",
   resolvedBy: null,
   resolutionNote: null,
   ...overrides,
 });
+
+/** The card's own chip — its label carries the id in a span of its own, so it is found by shape. */
+const chipOf = (card: HTMLElement) => card.querySelector<HTMLElement>("[data-testid='gap-chip']")!;
 
 /**
  * §5's three dispositions, rendered.
@@ -45,11 +50,62 @@ describe("GapList", () => {
       />,
     );
 
-    expect(screen.getByText("prd-19")).not.toBeNull();
+    // §8.32: the check's wording in ui-body, then the id beside its chip.
+    expect(screen.getByText("Every story has testable GWT acceptance criteria")).not.toBeNull();
+    expect(screen.getAllByText("prd-19").length).toBeGreaterThanOrEqual(1);
     // §5: "a failure quotes the exact gap." The evidence is the body, not a
     // detail behind a disclosure.
     expect(screen.getByText("MN-2: 'nearby' — same venue, or within 100 m?")).not.toBeNull();
-    expect(screen.getByText(t.item.gapOpen)).not.toBeNull();
+    // §8.9: the open chip reads "Must · {check id}", the id in mono-readout — never "Open".
+    const chip = chipOf(screen.getByRole("listitem"));
+    expect(chip.textContent).toBe(t.item.gapChip.must("prd-19"));
+    expect(within(chip).getByText("prd-19").className).toContain("type-mono-readout");
+    expect(screen.queryByText(t.item.gapOpen)).toBeNull();
+  });
+
+  // The pack no longer names the check: the id stands alone, and the card still renders.
+  it("stands on the id alone when the pack no longer carries the wording", () => {
+    render(
+      <GapList
+        gaps={[gap({ id: "g1", disposition: "open", prose: null })]}
+        t={t}
+        itemKey="soc-12"
+        outcome={null}
+        scored
+      />,
+    );
+    expect(screen.queryByText("Every story has testable GWT acceptance criteria")).toBeNull();
+    expect(screen.getAllByText("prd-19").length).toBeGreaterThanOrEqual(1);
+  });
+
+  /**
+   * §8.32 (T0.49): a plain card at padding 20 — it stands on the page by itself — with the
+   * quoted evidence on its own `--surface-1` card, bordered, since a card must separate
+   * from a card (§5). No time estimate: product-spec has no typical time for a gap move,
+   * and the line never renders without a number. No Undo: undo lives in the toast.
+   */
+  it("pads 20, quotes the evidence on a bordered inner card, and carries no estimate or undo", () => {
+    render(
+      <GapList
+        gaps={[gap({ id: "g1", disposition: "open" })]}
+        t={t}
+        itemKey="soc-12"
+        outcome={null}
+        scored
+      />,
+    );
+    const card = screen.getByRole("listitem").firstElementChild as HTMLElement;
+    expect(card.className).toContain("p-[20px]");
+
+    const evidence = screen.getByText("MN-2: 'nearby' — same venue, or within 100 m?");
+    expect(evidence.className).toContain("border");
+    expect(evidence.className).toContain("p-[16px]");
+    expect(evidence.className).toContain("bg-surface-1");
+    expect(evidence.className).toContain("type-ui-body");
+
+    expect(document.body.textContent).not.toMatch(/Typically/);
+    expect(screen.queryByRole("button", { name: /undo/i })).toBeNull();
+    expect(document.body.textContent).not.toMatch(/\bUndo\b/);
   });
 
   it("keeps an accepted gap visible, with who accepted it and why", () => {
@@ -141,7 +197,7 @@ describe("GapList", () => {
 
     const ids = screen
       .getAllByRole("listitem")
-      .map((row) => within(row).getByText(/^prd-\d+$/).textContent);
+      .map((row) => within(row).getAllByText(/^prd-\d+$/)[0]!.textContent);
 
     expect(ids).toEqual(["prd-19", "prd-16", "prd-8", "prd-20"]);
   });
@@ -240,6 +296,71 @@ describe("GapList", () => {
     expect(screen.getByText(t.item.noGaps)).not.toBeNull();
   });
 
+  /**
+   * §2 Dimming (T0.49): "Opacity never touches text." A settled card's text — the wording,
+   * the evidence, the id, the stamp — steps to `--n-secondary`; the chip's fill goes to
+   * .60 on a layer of its own; its Reopen stays at 1 (§8.10: Secondary sm and fully live).
+   * The card-wide `opacity-60` is gone.
+   */
+  it("dims a settled card by colour and its chip's fill, never the card or its Reopen", () => {
+    const { container } = render(
+      <GapList
+        gaps={[
+          gap({
+            id: "g2",
+            disposition: "accepted",
+            resolvedBy: { kind: "self" },
+            resolutionNote: "For V1.",
+          }),
+        ]}
+        t={t}
+        itemKey="soc-12"
+        outcome={null}
+        scored
+      />,
+    );
+
+    const card = screen.getByRole("listitem").firstElementChild as HTMLElement;
+    expect(card.className).not.toContain("opacity-60");
+    expect(container.querySelectorAll('[class*="opacity-60"]:not([aria-hidden])')).toHaveLength(0);
+
+    expect(
+      screen.getByText("Every story has testable GWT acceptance criteria").className,
+    ).toContain("text-n-secondary");
+    expect(screen.getByText("MN-2: 'nearby' — same venue, or within 100 m?").className).toContain(
+      "text-n-secondary",
+    );
+    expect(screen.getAllByText("prd-19")[0]!.className).toContain("text-n-secondary");
+
+    const chip = chipOf(screen.getByRole("listitem"));
+    expect(chip.className).toContain("text-n-secondary");
+    const fill = chip.querySelector<HTMLElement>("[aria-hidden]")!;
+    expect(fill.className).toContain("opacity-60");
+    expect(fill.className).toContain("bg-surface-2");
+
+    const reopen = screen.getByRole("button", { name: t.item.gapReopen });
+    expect(reopen.className).not.toContain("opacity");
+    expect(reopen.className).toContain("border-glass-border");
+  });
+
+  it("keeps an open card's text in --n-primary with its chip's fill on the element", () => {
+    render(
+      <GapList
+        gaps={[gap({ id: "g1", disposition: "open" })]}
+        t={t}
+        itemKey="soc-12"
+        outcome={null}
+        scored
+      />,
+    );
+    expect(
+      screen.getByText("Every story has testable GWT acceptance criteria").className,
+    ).toContain("text-n-primary");
+    const chip = chipOf(screen.getByRole("listitem"));
+    expect(chip.className).toContain("bg-warning-soft");
+    expect(chip.querySelector("[aria-hidden]")).toBeNull();
+  });
+
   /* ------------------------------------------------------------------------ */
   /* T2.4: this list narrows to §13, and the run's full picture moves          */
   /* ------------------------------------------------------------------------ */
@@ -265,7 +386,7 @@ describe("GapList", () => {
       />,
     );
 
-    expect(screen.getByText("prd-19")).not.toBeNull();
+    expect(screen.getAllByText("prd-19").length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText("prd-8")).toBeNull();
   });
 

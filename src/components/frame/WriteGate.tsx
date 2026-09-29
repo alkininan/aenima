@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 
+import { READ_ONLY_HIDDEN_CLASSES } from "@/components/ui/variants";
 import { POINTER_QUERY, READ_ONLY_QUERY } from "@/lib/layout";
 
 import { useMediaQuery } from "./media";
@@ -13,14 +14,16 @@ import { useMediaQuery } from "./media";
  * renders one outside the auth path" — 768 on touch, 600 on pointer, "every mutation absent
  * from the page, not disabled". C-25 asserts on the attribute, and its grep half
  * (`src/app/writes.test.ts`) holds that every server action's call site sits inside one of
- * these, so the next write meets the rule by construction.
+ * these, so the next write meets the rule by construction. §4 names the overflow menu and
+ * park among the writes too, so the row's trigger and its Park control stand inside one.
  *
  * **It renders on the server and empties on the client.** The gap move is a plain form that
  * posts with JavaScript off, and a Server Component cannot see a viewport, so the gate keeps
  * both: the wrapper is in the server's HTML with the form inside it, hidden by CSS under the
- * two read-only queries before hydration (`pointer:max-[600px]:hidden`, `touch:max-md:hidden`),
- * and once hydrated it renders nothing at all below the line — gone from the DOM, never
- * `display: none`. Above it the wrapper is `display: contents` and changes no layout.
+ * two read-only queries before hydration (`READ_ONLY_HIDDEN_CLASSES`, spelled beside its
+ * inverse in `variants.ts`), and once hydrated it renders nothing at all below the line —
+ * gone from the DOM, never `display: none`. Above it the wrapper is `display: contents` and
+ * changes no layout.
  */
 export function WriteGate({ children }: { children: ReactNode }) {
   const pointer = useMediaQuery(POINTER_QUERY, true);
@@ -31,7 +34,7 @@ export function WriteGate({ children }: { children: ReactNode }) {
   if (readOnly) return null;
 
   return (
-    <div data-writes="" className="contents pointer:max-[600px]:hidden touch:max-md:hidden">
+    <div data-writes="" className={`contents ${READ_ONLY_HIDDEN_CLASSES}`}>
       {children}
     </div>
   );
