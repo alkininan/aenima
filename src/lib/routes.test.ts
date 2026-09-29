@@ -1,10 +1,27 @@
 import { describe, expect, it } from "vitest";
 
-import { NAV, ROUTES, itemHref, listHref } from "@/lib/routes";
+import { NAV, ROUTES, checkAnchor, checkHref, gapAnchor, itemHref, listHref } from "@/lib/routes";
 
 describe("routes", () => {
   it("keys an item by the key people say out loud, never a uuid", () => {
     expect(itemHref("soc-12")).toBe("/i/soc-12");
+  });
+
+  /**
+   * §8.27 (T0.49): the row's gap chip links to the item page "with the check list expanded
+   * and that check scrolled into view", so every check line carries an anchor of its own,
+   * keyed by check id — distinct from the gap's, which a move's redirect names by uuid.
+   */
+  it("anchors a check line by its check id, apart from the gap's anchor", () => {
+    expect(checkAnchor("prd-10")).toBe("check-prd-10");
+    expect(checkAnchor("prd-10")).not.toBe(gapAnchor("prd-10"));
+  });
+
+  // The chip's destination names the check twice: the param opens the panel on a client
+  // navigation, where the fragment alone reveals nothing; the fragment lands the scroll.
+  it("sends the row's chip to the item page with the check named in the query and the fragment", () => {
+    expect(checkHref("/i/soc-12", "prd-10")).toBe("/i/soc-12?check=prd-10#check-prd-10");
+    expect(checkHref("/dev/item", "prd-10")).toBe("/dev/item?check=prd-10#check-prd-10");
   });
 
   /**

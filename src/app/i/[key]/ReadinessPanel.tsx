@@ -1,6 +1,8 @@
+import { DisclosureChevron } from "@/components/ui/Disclosure";
 import { Meter } from "@/components/ui/Meter";
-import { ChevronDownIcon, ChevronRightIcon } from "@/components/ui/icons";
+import { DISCLOSURE_SUMMARY_CLASSES } from "@/components/ui/variants";
 import type { Dictionary } from "@/i18n";
+import { cx } from "@/lib/cx";
 import type { GapMoveClaim } from "@/lib/gap-move";
 import type { RunView } from "@/lib/scoring/run-view";
 
@@ -51,9 +53,18 @@ export function ReadinessPanel({
   gapsByCheck,
   noLongerApplicable,
   outcome,
+  openOnCheck = null,
 }: {
   run: RunView | null;
   t: Dictionary;
+  /**
+   * §8.27: a row's gap chip lands here "with the check list expanded and that check
+   * scrolled into view". The check's id, read off the URL's `check` param — the fragment
+   * alone reveals nothing on the app router's client navigation (`CHECK_PARAM`). Opens the
+   * panel only when the run draws that check; an id the run does not carry opens nothing,
+   * as a move naming a gap the page does not hold does not.
+   */
+  openOnCheck?: string | null;
   /**
    * The four below are the expansion's, not the meter's — this component only
    * carries them across. §5's moves belong to the checks inside `CheckList`,
@@ -69,9 +80,12 @@ export function ReadinessPanel({
 }) {
   if (run === null) {
     return (
-      // The same 400 and the same 8 inset the summary carries, so the track sits
-      // in one place whether or not there is a run behind it.
-      <div data-testid="readiness" className="flex max-w-[400px] flex-col gap-[8px] p-[8px]">
+      // The same 400 and the same inset the summary carries — §8.25's 8 by 4 — so the
+      // track sits in one place whether or not there is a run behind it.
+      <div
+        data-testid="readiness"
+        className="flex max-w-[400px] flex-col gap-[8px] px-[4px] py-[8px]"
+      >
         <Meter score={null} size={8} label={t.item.readiness} emptyLabel={t.list.noScoring} />
         <span className="type-ui-footnote text-n-secondary">{t.list.noScoring}</span>
       </div>
@@ -94,24 +108,28 @@ export function ReadinessPanel({
     return gap !== undefined && gap.id === outcome.gapId && !gapHasCard(gap);
   });
 
+  const opensOntoTheLinkedCheck =
+    openOnCheck !== null && run.checks.some((check) => check.checkId === openOnCheck);
+
   return (
     <details
       data-testid="readiness"
-      open={opensOntoTheMovedGap || undefined}
+      open={opensOntoTheMovedGap || opensOntoTheLinkedCheck || undefined}
       className="group flex flex-col"
     >
-      {/* §7's interaction states on the whole hit area, from `.control` — hover
-          overlay, press physics, and the focus ring *with* the aero glow §6 and
-          §7 pair it with. Hand-rolling `hover:bg-hover-overlay` got the first
-          and neither of the others; a disclosure is an interactive element and
-          §7 governs "any interactive element". `control-edge-none` opts out of
-          the specular edge, which §8 states for Primary alone — the same pairing
-          an interactive chip uses.
-
-          The marker is removed in both spellings — `list-none` for the standards
-          one, the pseudo-element for WebKit's — because §8's affordance is the
-          chevron, and a browser triangle beside it would be two. */}
-      <summary className="control control-edge-none type-mono-readout flex max-w-[400px] list-none flex-col gap-[8px] rounded-sm p-[8px] text-n-secondary [&::-webkit-details-marker]:hidden">
+      {/* §8.25's one recipe for a summary (`DISCLOSURE_SUMMARY_CLASSES`): §7's interaction
+          states on the whole hit area from `.control` — hover overlay, press physics, and
+          the focus ring *with* the aero glow §6 and §7 pair it with — with the specular
+          edge off, since that edge is Primary's alone; radius `--r-sm`; pad 8 vertical by 4
+          horizontal; the marker removed in both spellings, because the affordance is the
+          chevron and a browser triangle beside it would be two. §8.24 bounds the meter
+          block at 400: the summary is a column of two lines, the meter row and the points. */}
+      <summary
+        className={cx(
+          DISCLOSURE_SUMMARY_CLASSES,
+          "type-mono-readout max-w-[400px] flex-col items-stretch gap-[8px] text-n-secondary",
+        )}
+      >
         <span className="flex items-center gap-[12px]">
           <span className="min-w-0 flex-1">
             <Meter
@@ -122,17 +140,15 @@ export function ReadinessPanel({
             />
           </span>
 
-          {/* §8: the percentage sits beside the track, in mono-readout. It is
-              the same rounded number the fill is drawn at and the same one a
-              screen reader announces — §13 pairs colour with *the* value. The
-              sign comes from the dictionary because §12 renders numbers per
-              locale and Turkish puts it first. */}
-          <span className="shrink-0 text-n-primary">{t.item.scorePercent(run.score)}</span>
-
-          {/* Swapped rather than rotated: §6 names no duration for a disclosure
-              and v1 makes step changes instant, so nothing is invented here. */}
-          <ChevronRightIcon className="size-[16px] shrink-0 group-open:hidden" />
-          <ChevronDownIcon className="hidden size-[16px] shrink-0 group-open:block" />
+          {/* §8: the percentage sits beside the track, in mono-readout. It is the same
+              rounded number the fill is drawn at and the same one a screen reader
+              announces — §13 pairs colour with *the* value. The sign comes from the
+              dictionary because §12 renders numbers per locale and Turkish puts it
+              first. §8.25's chevron stands 4 from it, 16, swapped rather than rotated. */}
+          <span className="flex shrink-0 items-center gap-[4px]">
+            <span className="text-n-primary">{t.item.scorePercent(run.score)}</span>
+            <DisclosureChevron />
+          </span>
         </span>
 
         {/* §4's renormalized denominator. The not-asked lines below are why

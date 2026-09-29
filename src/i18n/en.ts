@@ -108,9 +108,15 @@ export const en = {
     subtitle: "Sorted by what needs you, not by when it was made.",
     /** §8: the strip's leading label, before the per-stage segments. */
     allStages: "All",
-    /** §8 gap chips overflow at two: "+3". */
+    /**
+     * §8.27: the row shows one gap chip and counts the rest as a chip of its own — "+2" in
+     * mono-readout, never a badge (§8.9). The count is a number, so it speaks mono (§0 law 6).
+     */
     moreGaps: (count: number) => `+${count}`,
-    /** §8's idle row. Park itself is a later ticket; the chip renders regardless. */
+    /**
+     * §8.27's idle row: the freshness readout gives way to a Soft sm "Park?" in its column.
+     * Park itself is T1.6's; the control stands inert until then.
+     */
     park: "Park?",
     /** §8 item row: the overflow menu's accessible name. */
     itemMenu: (title: string) => `Actions for ${title}`,
@@ -131,8 +137,6 @@ export const en = {
      */
     emptyFilteredTitle: "Nothing here with those filters",
     emptyFilteredAction: "Clear filters",
-    /** §8 row: mono-readout freshness beside the dot. */
-    freshness: (relative: string) => `updated ${relative}`,
   },
   /** §7's five artifact packs, named as §7 names them. */
   artifactKinds: {
@@ -363,6 +367,16 @@ export const en = {
       must: (accepter: string) => `Must · ${accepter}`,
       should: (accepter: string) => `Should · ${accepter}`,
     },
+    /**
+     * §8.9's open gap chip on a row and on the gap card: "Must · {check id}", the id in
+     * mono-readout — the chip's text carries priority and state, never colour alone (§13).
+     * §12's four chip strings admit no "Open". Keyed by tag; the id is set in mono by the
+     * chip, which splits the formatted string around it (`src/lib/chip-label.ts`).
+     */
+    gapChip: {
+      must: (checkId: string) => `Must · ${checkId}`,
+      should: (checkId: string) => `Should · ${checkId}`,
+    },
     gapExcluded: "Excluded",
     /** §5's two tags. Only a Must blocks handover; a Should is advisory. */
     gapMust: "Must",
@@ -402,13 +416,19 @@ export const en = {
      */
     noItems: "Nothing is being worked on here yet.",
   },
-  /** Relative time for the row's mono-readout. §12: calm, never exact-to-the-second. */
+  /**
+   * §12's row-freshness ladder, for the row's mono-readout and the item page's: calm,
+   * never exact-to-the-second, and "at most 8 characters in every locale" — §8.27's
+   * freshness column is 72 wide and budgets exactly that. Days run to 99 and weeks to 51,
+   * then years (`src/lib/relative-time.ts`).
+   */
   relativeTime: {
     justNow: "just now",
     minutes: (n: number) => `${n} m ago`,
     hours: (n: number) => `${n} h ago`,
     days: (n: number) => `${n} d ago`,
     weeks: (n: number) => `${n} w ago`,
+    years: (n: number) => `${n} y ago`,
   },
   workspace: {
     // First run: §16 defers real onboarding, so the workspace gets a plain name.

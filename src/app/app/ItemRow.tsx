@@ -1,23 +1,26 @@
 import Link from "next/link";
 
-import { Chip } from "@/components/ui/Chip";
+import { WriteGate } from "@/components/frame/WriteGate";
+import { Button } from "@/components/ui/Button";
+import { Chip, ChipIdLabel } from "@/components/ui/Chip";
+import { READ_ONLY_SHOWN_CLASSES } from "@/components/ui/variants";
 import type { Dictionary } from "@/i18n";
 import type { Bucket } from "@/lib/buckets";
 import { cx } from "@/lib/cx";
 import { relativeTime } from "@/lib/relative-time";
-import { itemHref } from "@/lib/routes";
+import { checkHref, itemHref } from "@/lib/routes";
 import type { Stage } from "@/lib/stage";
 
 import { ItemRowMenu } from "./ItemRowMenu";
-import { ROW_LINK_ATTRIBUTE } from "./row-link";
+import { ROW_CONTROL_ATTRIBUTE, ROW_LINK_ATTRIBUTE } from "./row-link";
 
 /**
  * Everything a row paints, and nothing else.
  *
  * A plain data shape rather than the query's `ItemListRow` so the row can be
  * rendered from a fixture — which is what lets §8's geometry be measured in a
- * browser on /dev/primitives, since /app itself is behind the proxy and
- * Playwright cannot sign in.
+ * browser on /dev/list, since /app itself is behind the proxy and Playwright
+ * cannot sign in.
  */
 export type ItemRowData = {
   key: string;
@@ -25,7 +28,7 @@ export type ItemRowData = {
   type: keyof Dictionary["itemTypes"];
   stage: Stage;
   bucket: Bucket;
-  /** Open gaps, most severe first. The row shows two and counts the rest. */
+  /** Open gaps, most severe first. The row shows one chip and counts the rest (§8.27). */
   gaps: { id: string; checkId: string; tag: "must" | "should" }[];
   /** Epoch ms. */
   lastActivityAt: number;
@@ -38,7 +41,9 @@ export type ItemRowData = {
   /** §10: §5's queue holds a retry for the artifact that run scored. */
   retrying: boolean;
   /**
-   * §8: "Idle: opacity .60 + trailing Soft chip 'Park?'".
+   * §8.27: "Idle: the name and readouts step to `--n-secondary` and the non-text
+   * parts — accent, meters, dots, chip fills — go to opacity .60 (§2 Dimming), and
+   * the freshness readout gives way to a Soft sm 'Park?' in its place."
    *
    * Idle is §3's "items dim relative to their stage baseline", which is the same
    * baseline table the at-risk rule reads — so this arrives decided rather than
@@ -47,32 +52,51 @@ export type ItemRowData = {
   idle: boolean;
 };
 
-/** §8: "gap chips (max 2 + overflow)". */
-const VISIBLE_GAPS = 2;
+/**
+ * §8.27: "2px bucket accent (`--prime` your-move / `--warning` at-risk / none flowing)",
+ * drawn by the row as a segment inside its inline padding (globals.css `.item-row::before`)
+ * so the group's edge reads unbroken and an idle row's span can dim alone. Flowing's stays
+ * transparent rather than absent, so every row is inset by the same 16.
+ */
+const ROW_ACCENT: Record<Bucket, string> = {
+  your_move: "before:bg-prime",
+  at_risk: "before:bg-warning",
+  flowing: "before:bg-transparent",
+};
+
+/** The row's own controls stand above the name's stretched hit area (§4's content rung). */
+const ABOVE_HIT_AREA = "relative z-[calc(var(--z-content)+1)]";
 
 /**
- * §8 item row: 56h · name ui-headline + type → gap chips (max 2 + overflow) →
- * freshness dot + mono-readout timestamp → overflow menu.
+ * §8.27's item row: the name (ui-headline, the link) → the type, bare mono-micro → the
+ * micro-meters, which render nothing until the scores do (§10) → one gap chip and an
+ * overflow count → the freshness dot and §12's readout, or on an idle row the Park
+ * control → the overflow trigger. One line of 56, or two lines of 72 in a content box
+ * under 760, decided by the list's container query in globals.css (`.item-row`).
  *
- * A Server Component: the only interactive part is the overflow menu, which is
- * its own client island. The whole row is a link to the item, so the key is
- * what someone copies out of the address bar.
+ * A Server Component: the overflow menu is its own client island, and the list's walker
+ * is the other. **No key on the row** — §8.27 lists none and its addends budget none; the
+ * key stands on the item page, in the URL and in the menu's Copy key.
  *
- * **The row draws no surface, no radius and no accent of its own** (§8, v2.15).
- * Rows are a continuous ledger rather than detached cards, so the fill, the
- * corners and the bucket accent all belong to the group — see `BucketSection`.
- * A row that painted its own would be a card again the moment someone rendered
- * one on its own.
+ * **The name's hit area is the row's empty surface** — a `::after` on the link covering the
+ * row, beneath the row's own controls — so a modifier click stays the browser's and the
+ * row remains a grid of controls (§11): the name is the row's one Tab stop, and the chip,
+ * Park and the trigger are reached with Right and Left, never Tab (`RowWalker`).
  *
- * **No meters** (§8/§10, v2.15). Nothing is scored until Phase 2, and a hollow
- * track on a row is an unlabelled stub repeated once per row: §10's line that
- * explains it only fits on the item page. The meters come back with the scores.
+ * **The row draws no surface and no radius of its own** (v2.15): rows are a continuous
+ * ledger, and the fill and the corners belong to the group — see `BucketSection`. It does
+ * draw its own segment of the accent, so that an idle row's span dims at .60 while the
+ * edge still reads as one line.
+ *
+ * **No meters** (§10): "Row micro-meters do not render at all without a key; the space
+ * goes to the content, and the meters appear when the scores do."
  */
 export function ItemRow({
   item,
   t,
   now,
   href = itemHref(item.key),
+  tabStop = false,
   className,
 }: {
   item: ItemRowData;
@@ -82,120 +106,150 @@ export function ItemRow({
   /**
    * Where the row goes — `/i/<key>`, always, but for the `/dev/list` fixture, whose rows
    * lead to the `/dev/item` fixture so the frame's route changes can be driven where no
-   * session exists (C-45).
+   * session exists (C-45). The gap chip's link is composed off it.
    */
   href?: string;
+  /**
+   * §11: the list is one Tab stop, and this row's name is it — the first row's, until a
+   * walk moves it. Every other name and every control carries `tabindex="-1"`.
+   */
+  tabStop?: boolean;
   className?: string;
 }) {
-  const shown = item.gaps.slice(0, VISIBLE_GAPS);
-  const overflow = item.gaps.length - shown.length;
-  // §10: "freshness shows `--warning` dot + mono-readout 'scored 6 h ago —
-  // retrying'; no banners" — the same two states the item page renders, read
-  // from the same run. A queued retry is the system working, not an error, and
-  // it never reddens (§1's first law). Before anything has scored the item
-  // there is no run to read, and the readout is last activity, as it was.
+  // §8.27: one chip — Musts first, since the query sorts them so — and a count of the rest.
+  const shown = item.gaps[0];
+  const overflow = item.gaps.length - (shown === undefined ? 0 : 1);
+
+  // §10: the newest run's clock once the item has been scored, last activity before that.
+  // §12's ladder string alone — "6 h ago", at most 8 characters — with no "updated" or
+  // "scored" in front of it and no "— retrying" after it: a row shows the `--warning` dot
+  // alone, its readout unchanged. A queued retry is the system working, not an error, and
+  // it never reddens (§1's first law).
   const relative = relativeTime(item.scoredAt ?? item.lastActivityAt, now);
-  const elapsed =
+  const readout =
     relative.unit === "justNow"
       ? t.relativeTime.justNow
       : t.relativeTime[relative.unit](relative.value);
-  const freshness =
-    item.scoredAt === null
-      ? t.list.freshness(elapsed)
-      : item.retrying
-        ? t.item.scoredRetrying(elapsed)
-        : t.item.scoredAt(elapsed);
   const retrying = item.scoredAt !== null && item.retrying;
+
+  const control = { [ROW_CONTROL_ATTRIBUTE]: "", tabIndex: -1 };
 
   return (
     <div
+      role="row"
       data-testid="item-row"
       data-bucket={item.bucket}
       className={cx(
-        // §4 density: list rows 56. The height is fixed rather than minimum —
-        // a row that grew with its content would break the rhythm the whole
-        // list is read by.
-        //
-        // §8 (v2.15): no fill, no radius, no accent. The group owns all three;
-        // a hairline above every row but the first is what divides them, and
-        // `--bg-base` showing through the gap is the divider rather than a
-        // border drawn on top of a surface.
-        "group relative flex h-[56px] items-center gap-[12px]",
-        "px-[12px] transition-colors duration-[var(--t-fast)] ease-brand",
+        // The geometry — both heights — is `.item-row` in globals.css. §6: rows never
+        // animate into a new order; only the hover fill transitions, at §6's `--t-fast`.
+        "item-row group relative transition-colors duration-[var(--t-fast)] ease-brand",
         "hover:bg-surface-3",
-        // §8: idle items dim to .60. §1's sixth law — idle work dims, it never
-        // turns red.
-        item.idle && "opacity-60",
+        ROW_ACCENT[item.bucket],
+        // §2 Dimming: the accent at .60 across an idle row's span, and only there.
+        item.idle && "before:opacity-60",
         className,
       )}
     >
-      {/* The whole row is the target. Stretched over the row rather than
-          wrapping it, so the overflow menu and the chips stay clickable in
-          their own right rather than being swallowed by an outer anchor. */}
-      <Link
-        href={href}
-        // §11: the link is the row's stop for the arrow keys — see `RowWalker`.
-        {...{ [ROW_LINK_ATTRIBUTE]: "" }}
-        className="min-w-0 flex-1 after:absolute after:inset-0 after:content-['']"
+      <div role="gridcell" className="item-row-name min-w-0">
+        {/* The whole row is the target: stretched over it rather than wrapping it, so the
+            chip, Park and the trigger stay clickable in their own right rather than being
+            swallowed by an outer anchor. §11: the link is the row's stop for the arrow keys
+            and its one Tab stop — see `RowWalker`. */}
+        <Link
+          href={href}
+          tabIndex={tabStop ? 0 : -1}
+          {...{ [ROW_LINK_ATTRIBUTE]: "" }}
+          className={cx(
+            "type-ui-headline block truncate after:absolute after:inset-0 after:content-['']",
+            // §2: an idle row's name steps to --n-secondary; opacity never touches text.
+            item.idle ? "text-n-secondary" : "text-n-primary",
+          )}
+        >
+          {item.title}
+        </Link>
+      </div>
+
+      {/* §8.27: the type, without a container — plain mono-micro in --n-secondary, at most
+          80 wide, rendered at every width. A bordered chip in a row means a gap; type is
+          taxonomy, and outlining it makes a permanent label compete with the one urgent
+          thing on the row. */}
+      <div
+        role="gridcell"
+        className="item-row-type type-mono-micro max-w-[80px] truncate text-n-secondary"
       >
-        <span className="flex min-w-0 items-center gap-[8px]">
-          {/* §3: mono-readout for IDs. The key is the name people say. */}
-          <span className="type-mono-readout shrink-0 text-n-secondary">{item.key}</span>
-          <span className="type-ui-headline truncate text-n-primary">{item.title}</span>
-        </span>
-      </Link>
-
-      {/* §8 (v2.15): the type, without a container. A bordered chip in a row
-          means a gap; type is taxonomy, and outlining it makes a permanent
-          label compete with the one urgent thing on the row. mono-micro is §3's
-          eyebrow, which is what a taxonomy label is.
-
-          Below sm it gives its width to the title, which is the part worth
-          reading on a phone. */}
-      <span className="type-mono-micro hidden shrink-0 text-n-secondary sm:inline">
         {t.itemTypes[item.type]}
-      </span>
+      </div>
 
-      {/* §8: gap chips, max 2 + overflow. Musts first — a Should behind a Must
-          is the less urgent of the two, and only two fit. */}
-      {item.gaps.length > 0 ? (
-        <span className="hidden shrink-0 items-center gap-[4px] lg:flex">
-          {shown.map((gap) => (
-            <Chip key={gap.id} variant="gap" tone={gap.tag}>
-              {gap.checkId}
-            </Chip>
-          ))}
-          {overflow > 0 ? <Chip variant="gap">{t.list.moreGaps(overflow)}</Chip> : null}
-        </span>
-      ) : null}
+      {/* §8.27: one gap chip at most 112, gap 4, and an overflow count chip of 44 — the
+          chip column. The chip is a link to the check's line on the item page (§8.27), and
+          the count is a chip, never a badge (§8.9): --surface-2, "+{n}" in mono-readout. */}
+      <div role="gridcell" className="item-row-chips flex min-w-0 items-center gap-[4px]">
+        {shown === undefined ? null : (
+          <Chip
+            variant="gap"
+            tone={shown.tag}
+            dimmed={item.idle}
+            href={checkHref(href, shown.checkId)}
+            {...control}
+            className={cx(ABOVE_HIT_AREA, "max-w-[112px]")}
+          >
+            <ChipIdLabel label={t.item.gapChip[shown.tag](shown.checkId)} id={shown.checkId} />
+          </Chip>
+        )}
+        {overflow > 0 ? (
+          <Chip dimmed={item.idle} className="max-w-[44px]">
+            <span className="type-mono-readout">{t.list.moreGaps(overflow)}</span>
+          </Chip>
+        ) : null}
+      </div>
 
-      {/* §8: idle rows carry a Soft "Park?" chip.
-
-          It does nothing. Park is a later ticket — §13 wants it one-tap and
-          reversible with an undo toast, which is a mutation and an activity row,
-          and neither exists yet. Rendering it inert is deliberate: the row's
-          geometry is what this ticket is for, and a chip that appears later
-          would change every idle row's layout after the fact. */}
-      {item.idle ? (
-        <span className="hidden shrink-0 sm:inline-flex">
-          <Chip variant="soft">{t.list.park}</Chip>
-        </span>
-      ) : null}
-
-      {/* §8: freshness dot + mono-readout timestamp. Every system dot is 8. */}
-      <span className="flex shrink-0 items-center gap-[6px]">
+      {/* §8.27: the freshness column — dot 8, gap 4, at most 8 characters of mono-readout;
+          on an idle row the readout gives way to a Soft sm "Park?" in the same 72. Every
+          system dot is 8. */}
+      <div role="gridcell" className="item-row-fresh flex min-w-0 items-center gap-[4px]">
         <span
           aria-hidden="true"
           data-testid="freshness-dot"
-          className={cx("size-[8px] shrink-0 rounded-pill", retrying ? "bg-warning" : "bg-prime")}
+          className={cx(
+            "size-[8px] shrink-0 rounded-pill",
+            retrying ? "bg-warning" : "bg-prime",
+            // §2: the dot is a non-text part; it dims at .60 on an idle row.
+            item.idle && "opacity-60",
+          )}
         />
-        <span className="type-mono-readout hidden text-n-secondary sm:inline">{freshness}</span>
-      </span>
+        {item.idle ? (
+          <>
+            {/* Park is a mutation and sits inside the gate (§4). It does nothing yet: the
+                tap, the mutation and its undo toast are T1.6's; the control stands so the
+                idle row's geometry is what it will be. 28 tall — which is why a line is 28. */}
+            <WriteGate>
+              <Button variant="soft" size="sm" {...control} className={ABOVE_HIT_AREA}>
+                {t.list.park}
+              </Button>
+            </WriteGate>
+            {/* Below the read-only line Park is absent with every other mutation and the
+                readout takes its place back — in CSS, under the same two queries the gate
+                hides under. */}
+            <span
+              className={cx("type-mono-readout truncate text-n-secondary", READ_ONLY_SHOWN_CLASSES)}
+            >
+              {readout}
+            </span>
+          </>
+        ) : (
+          <span className="type-mono-readout truncate text-n-secondary">{readout}</span>
+        )}
+      </div>
 
-      {/* The label is formatted here and passed as a string: the menu is a
-          client component, and the dictionary that formats it cannot cross the
-          boundary. */}
-      <ItemRowMenu itemKey={item.key} label={t.list.itemMenu(item.title)} />
+      {/* §8.27: the overflow trigger, a sm IconButton 28 — an overflow menu is a write
+          (§4), so it stands inside the gate and is absent below the read-only line. The
+          label is formatted here and passed as a string: the menu is a client component,
+          and the dictionary that formats it cannot cross the boundary. */}
+      <div role="gridcell" className="item-row-menu flex">
+        <WriteGate>
+          <ItemRowMenu itemKey={item.key} label={t.list.itemMenu(item.title)} />
+        </WriteGate>
+      </div>
     </div>
   );
 }

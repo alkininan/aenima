@@ -105,8 +105,14 @@ test("TC6 · C-45 the responsiveness budget over the fixed script", async ({ pag
   };
 
   const readiness = () => page.getByTestId("readiness").locator("summary").first();
-  const row = (key: string) =>
-    page.getByTestId("item-row").filter({ hasText: key }).locator("a[data-row-link]");
+  // By title: the row wears no key (§8.27), and the name is the link. Scoped to the fixture
+  // list's own links — the sink's list surface renders the same titles, and a row of its
+  // can still be in the DOM in the frame the route change is measured in.
+  const row = (title: string) =>
+    page
+      .getByTestId("item-row")
+      .filter({ hasText: title })
+      .locator("a[data-row-link][href='/dev/item']");
   const dashboard = () => page.getByRole("link", { name: "Dashboard" });
   const switcher = () => page.getByTestId("frame-switcher");
   const menu = () => page.getByRole("menu", { name: "Your work" });
@@ -119,7 +125,7 @@ test("TC6 · C-45 the responsiveness budget over the fixed script", async ({ pag
   await expect(menu()).toBeVisible();
   await page.keyboard.press("Escape"); // 3
   await expect(menu()).toBeHidden();
-  await routeChange(() => row("soc-12").click(), /\/dev\/item$/); // 4
+  await routeChange(() => row("Weekly digest email").click(), /\/dev\/item$/); // 4
   await readiness().click(); // 5
   await expect(page.getByTestId("check-list")).toBeVisible();
   await readiness().click(); // 6
@@ -132,7 +138,7 @@ test("TC6 · C-45 the responsiveness budget over the fixed script", async ({ pag
   await expect(page.getByRole("menu", { name: /Actions for/ })).toBeVisible();
   await page.keyboard.press("Escape"); // 9
   await expect(page.getByRole("menu", { name: /Actions for/ })).toBeHidden();
-  await routeChange(() => row("soc-4").click(), /\/dev\/item$/); // 10
+  await routeChange(() => row("Rewrite the empty states").click(), /\/dev\/item$/); // 10
   await page.keyboard.press("Tab"); // 11
   await page.keyboard.press("Tab"); // 12
   await routeChange(() => dashboard().click(), /\/dev\/list$/); // 13
@@ -141,11 +147,11 @@ test("TC6 · C-45 the responsiveness budget over the fixed script", async ({ pag
   await page.keyboard.press("ArrowDown"); // 15
   await page.keyboard.press("Escape"); // 16
   await expect(menu()).toBeHidden();
-  await routeChange(() => row("aur-1").click(), /\/dev\/item$/); // 17
+  await routeChange(() => row("Shared reading lists").click(), /\/dev\/item$/); // 17
   await readiness().click(); // 18
   await expect(page.getByTestId("check-list")).toBeVisible();
   await routeChange(() => page.getByTestId("frame-lockup").click(), /\/dev\/list$/); // 19
-  await routeChange(() => row("soc-7").click(), /\/dev\/item$/); // 20
+  await routeChange(() => row("Can we diff Figma").click(), /\/dev\/item$/); // 20
 
   // Let the last interaction's timing entry land.
   await page.waitForTimeout(300);

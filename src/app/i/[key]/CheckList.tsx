@@ -3,7 +3,7 @@ import { Chip } from "@/components/ui/Chip";
 import { CheckIcon } from "@/components/ui/icons";
 import type { Dictionary } from "@/i18n";
 import type { GapMoveClaim } from "@/lib/gap-move";
-import { gapAnchor } from "@/lib/routes";
+import { checkAnchor, gapAnchor } from "@/lib/routes";
 import type { CheckLine } from "@/lib/scoring/run-view";
 
 import { gapHasCard } from "./GapList";
@@ -173,7 +173,15 @@ export function CheckList({
             tabIndex={anchored ? -1 : undefined}
             className="flex flex-col gap-[8px]"
           >
-            <div className="flex flex-wrap items-baseline gap-x-[8px] gap-y-[4px]">
+            {/* §8.27: the row's gap chip links here — "the item page with the check
+                list expanded and that check scrolled into view" — so every line wears
+                its check's anchor, on the header line, beside the gap anchor the `<li>`
+                carries for a filed-away open Should. §8.24: gap 8 across a line, 4 when
+                it wraps. */}
+            <div
+              id={checkAnchor(check.checkId)}
+              className="flex flex-wrap items-baseline gap-x-[8px] gap-y-[4px]"
+            >
               {/* §3: check IDs are mono-readout. */}
               <span className="type-mono-readout shrink-0 text-n-secondary">{check.checkId}</span>
 
@@ -213,8 +221,9 @@ export function CheckList({
               line's own state is what keeps the notice in the present tense.
 
               §5's exact quoted gap, in the same card an unclear check puts its
-              evidence in, dimmed the way §0 law 7 dims work that is no longer
-              live — the gap is resolved, not disabled, which is the treatment
+              evidence in, dimmed the way §2 dims work that is no longer live —
+              its text to `--n-secondary`, never opacity on a card that holds
+              words — the gap is resolved, not disabled, which is the treatment
               the gap list gives a settled one. The question follows it so that
               "this gap" has already been read. §0 law 1: no Warning and no
               Danger; nothing here went wrong. */}
@@ -251,7 +260,7 @@ function ClosedGapNotice({ evidence, t }: { evidence: string | undefined; t: Dic
 
   return (
     <>
-      <Card className="type-ui-body text-n-primary opacity-60">{evidence}</Card>
+      <Card className="type-ui-body text-n-secondary">{evidence}</Card>
       <p className="type-ui-footnote text-n-secondary">{t.item.checkNotAskedClosedGap}</p>
     </>
   );

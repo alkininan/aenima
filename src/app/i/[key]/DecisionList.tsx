@@ -2,7 +2,6 @@ import { Card } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
 import type { Dictionary } from "@/i18n";
 import type { Actor } from "@/lib/actor";
-import { cx } from "@/lib/cx";
 import { relativeTime } from "@/lib/relative-time";
 
 export type DecisionView = {
@@ -32,6 +31,10 @@ function actorWords(actor: Actor | null, t: Dictionary): string {
  * correction a *new* decision naming the old one, so a replaced decision is
  * still a thing someone decided on a day — it is marked, not removed. Removing
  * it would make the log a statement of current opinion rather than a record.
+ *
+ * **And they dim the way §2 dims:** the text steps to `--n-secondary` and only the
+ * non-text part — the chip's outline — goes to .60. Opacity on a card that holds words
+ * would take them under AA, and a replaced decision is still a record someone reads.
  *
  * The supersede link points backwards: a decision carries the id of the one it
  * replaced. So "was this replaced?" is answered by the page scanning the item's
@@ -65,13 +68,10 @@ export function DecisionList({
 
         return (
           <li key={decision.id}>
-            <Card
-              padding={20}
-              className={cx("flex flex-col gap-[8px]", decision.superseded && "opacity-60")}
-            >
+            <Card padding={20} className="flex flex-col gap-[8px]">
               <div className="flex flex-wrap items-center gap-[8px]">
                 {decision.superseded ? (
-                  <Chip variant="gap" tone="excluded">
+                  <Chip variant="gap" tone="excluded" dimmed>
                     {t.item.supersededBy}
                   </Chip>
                 ) : null}
@@ -82,7 +82,15 @@ export function DecisionList({
 
               {/* What was decided, then why — §2 wants both, and a decision
                   without its reason is an assertion. */}
-              <p className="type-ui-headline text-n-primary">{decision.statement}</p>
+              <p
+                className={
+                  decision.superseded
+                    ? "type-ui-headline text-n-secondary"
+                    : "type-ui-headline text-n-primary"
+                }
+              >
+                {decision.statement}
+              </p>
               <p className="type-ui-body text-n-secondary">{decision.reason}</p>
 
               <p className="type-ui-footnote text-n-secondary">

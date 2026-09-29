@@ -252,3 +252,31 @@ describe("GapMoves", () => {
     expect([...container.querySelectorAll("details")].some((d) => d.contains(message))).toBe(false);
   });
 });
+
+/**
+ * §8.25 (T0.49): the accept summary "uses [the disclosure recipe] unchanged" — pad 8
+ * vertical by 4 horizontal, a 16 chevron 4 from the text that swaps between right and
+ * down, and no browser marker in either spelling. It used to pad 4 by 8 with no chevron.
+ */
+describe("GapMoves accept summary", () => {
+  it("takes §8.25's summary recipe: 8 by 4, the chevron pair, the marker gone", () => {
+    const { container } = show(gap());
+    const summary = container.querySelector("summary")!;
+
+    expect(summary.className).toContain("control");
+    expect(summary.className).toContain("control-edge-none");
+    expect(summary.className).toContain("py-[8px]");
+    expect(summary.className).toContain("px-[4px]");
+    expect(summary.className).not.toContain("py-[4px]");
+    expect(summary.className).toContain("gap-[4px]");
+    expect(summary.className).toContain("list-none");
+    expect(summary.className).toContain("[&::-webkit-details-marker]:hidden");
+
+    // Swapped, not rotated: one chevron for closed, one for open, 16 each.
+    const chevrons = summary.querySelectorAll("svg");
+    expect(chevrons).toHaveLength(2);
+    for (const chevron of chevrons) expect(chevron.getAttribute("class")).toContain("size-[16px]");
+    expect(chevrons[0]?.getAttribute("class")).toContain("group-open:hidden");
+    expect(chevrons[1]?.getAttribute("class")).toContain("group-open:block");
+  });
+});

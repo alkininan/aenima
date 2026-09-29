@@ -4,6 +4,12 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  LIST_CONTAINER_CLASSES,
+  READ_ONLY_HIDDEN_CLASSES,
+  READ_ONLY_SHOWN_CLASSES,
+} from "@/components/ui/variants";
+
+import {
   BREAKPOINTS,
   COMPONENT_LINE,
   isReadOnly,
@@ -11,6 +17,7 @@ import {
   POINTER_QUERY,
   READ_ONLY_LINE,
   READ_ONLY_QUERY,
+  ROW_BREAK,
   SIDEBAR_QUERY,
 } from "./layout";
 
@@ -64,14 +71,29 @@ describe("§4 · the read-only line is 768 on touch and 600 on pointer", () => {
 });
 
 /**
+ * §8.27 (T0.49): "Below a content box of 760 the row is two lines, 72h, decided by a
+ * container query on the list's own content box (§4 Grid), never by the viewport." The
+ * browser half — 56 at 1440 and 1048, 72 at 1047, 792, 791 and 375, and 72 at 1440 with the
+ * box held at 759 — is `e2e/list.spec.ts`; this holds the number and that the stylesheet
+ * spells the same one.
+ */
+describe("§8.27 · the row breaks to two lines under a content box of 760", () => {
+  it("holds §8.27's sum", () => {
+    // 32 + 44 + 48 + 200 + 80 + 96 + 160 + 72 + 28, the addends §8.27 lists.
+    expect(ROW_BREAK).toBe(32 + 44 + 48 + 200 + 80 + 96 + 160 + 72 + 28);
+    expect(ROW_BREAK).toBe(760);
+  });
+});
+
+/**
  * The stylesheet's numbers, read back. `globals.css` declares the `wide`, `pointer` and
- * `touch` variants the frame's class strings use, and the write gate's classes spell the
- * two read-only widths; each has to be the number this module holds.
+ * `touch` variants the frame's class strings use, the row's container query, and the
+ * write gate's classes spell the two read-only widths; each has to be the number this
+ * module holds.
  */
 describe("§4 · the stylesheet agrees with the module", () => {
   const root = process.cwd();
   const globals = readFileSync(join(root, "src/app/globals.css"), "utf8");
-  const gate = readFileSync(join(root, "src/components/frame/WriteGate.tsx"), "utf8");
 
   it("declares the wide variant at 1440 and the pointer variant on §7's query", () => {
     expect(globals).toContain(`@custom-variant wide (@media (min-width: ${BREAKPOINTS.wide}px));`);
@@ -79,9 +101,28 @@ describe("§4 · the stylesheet agrees with the module", () => {
     expect(globals).toContain(`@custom-variant touch (@media not all and ${POINTER_QUERY});`);
   });
 
-  it("hides the writes under the two lines before hydration", () => {
+  /**
+   * The gate's classes and their inverse — what stands in a write's place below the line,
+   * the idle row's readout (§8.27) — live side by side in `variants.ts`, so the line is
+   * spelled once on the stylesheet's side and once here.
+   */
+  it("hides the writes under the two lines before hydration, and shows the readout there", () => {
     // Tailwind's `max-[600px]` is `width < 600px`; `max-md` is `width < 768px`.
-    expect(gate).toContain(`pointer:max-[${READ_ONLY_LINE.pointer}px]:hidden`);
-    expect(gate).toContain("touch:max-md:hidden");
+    expect(READ_ONLY_HIDDEN_CLASSES).toBe(
+      `pointer:max-[${READ_ONLY_LINE.pointer}px]:hidden touch:max-md:hidden`,
+    );
+    expect(READ_ONLY_SHOWN_CLASSES).toBe(
+      `hidden pointer:max-[${READ_ONLY_LINE.pointer}px]:inline touch:max-md:inline`,
+    );
+  });
+
+  /**
+   * The row's query is on the list's named container, and the list declares that name:
+   * a query on a container nobody declares never matches, and every row would be one line
+   * at every width.
+   */
+  it("queries the list's container at §8.27's 760, and the list declares it", () => {
+    expect(globals).toContain(`@container list (width < ${ROW_BREAK}px)`);
+    expect(LIST_CONTAINER_CLASSES).toContain("@container/list");
   });
 });

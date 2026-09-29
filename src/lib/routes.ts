@@ -113,6 +113,38 @@ export function gapOutcomeHref(
 export const gapAnchor = (gapId: string) => `gap-${gapId}` as const;
 
 /**
+ * The anchor every check line in the meter's expansion wears, by check id (§8.27, T0.49).
+ *
+ * The row's gap chip links here: "the item page with the check list expanded and that
+ * check scrolled into view". Distinct from `gapAnchor`, which a move's redirect names by
+ * the gap's uuid and which exactly one element per gap carries — a check line can wear
+ * both, on elements of its own.
+ */
+export const checkAnchor = (checkId: string) => `check-${checkId}` as const;
+
+/**
+ * The search param the item page reads to open the check list on arrival (T0.49).
+ *
+ * The fragment alone opens a closed `<details>` on a real fragment navigation — HTML's
+ * ancestor-details revealing, which Chromium implements — but observed in the engine
+ * (TC4), the app router's client-side navigation from the list scrolls by
+ * `scrollIntoView()` on an element that is not rendered, and reveals nothing: the panel
+ * stayed closed. So the chip's link carries the check's id here as well, and the panel
+ * opens itself the way it does for a move that names a filed-away gap (`GAP_PARAMS`).
+ */
+export const CHECK_PARAM = "check";
+
+/**
+ * Where a row's gap chip goes: the item page with the check list open and that check's
+ * line scrolled into view (§8.27) — the param opens the panel, the fragment lands the
+ * scroll.
+ */
+export function checkHref(itemPage: string, checkId: string): string {
+  const params = new URLSearchParams({ [CHECK_PARAM]: checkId });
+  return `${itemPage}?${params.toString()}#${checkAnchor(checkId)}`;
+}
+
+/**
  * §4's nav, in order — "Dashboard `dashboard-dots` · Triage `mail-in` · Graveyard `archive` ·
  * Settings `settings`". `built` gates whether an entry is a link at all.
  *

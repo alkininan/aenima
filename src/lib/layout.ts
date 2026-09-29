@@ -24,6 +24,16 @@ export function modeFor(width: number): LayoutMode {
   return "hand";
 }
 
+/**
+ * §8.27: below a content box of this width the list row is two lines of 72, decided by a
+ * container query on the list's own content box — never the viewport (§4 Grid, C-12). The
+ * sum of the row's addends: inline padding 32, the leading slot 44, six gaps 48, the name's
+ * 200 minimum, the type 80, the micro-meters 96, the chip column 160, the freshness column
+ * 72, the trigger 28. One number for every list, taken from the fullest. The stylesheet
+ * spells it once in the row's `@container` rule; `layout.test.ts` holds the two equal.
+ */
+export const ROW_BREAK = 760;
+
 /** §4: below this the product is read-only — every `data-writes` control absent. */
 export const READ_ONLY_LINE = { pointer: 600, touch: 768 } as const;
 

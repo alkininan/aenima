@@ -113,8 +113,12 @@ export const ITEM_ARTIFACTS: ArtifactView[] = [
  * | `prd-8` open Should | unclear | fails; §13 files it under the score |
  * | `prd-19` closed | passed | the re-score found it passing and closed it |
  * | `prd-15` closed | not asked | §4's condition stopped holding; the gap closed with it |
+ *
+ * **The check's wording is not here** (§8.32): the page threads it from the run by check
+ * id, exactly as `/i/<key>` does, so the mirror cannot say a check one way and the real
+ * page another.
  */
-export const ITEM_GAPS: GapView[] = [
+export const ITEM_GAPS: Omit<GapView, "prose">[] = [
   // The failing Must. Its evidence is the same sentence `renderEvidence` builds
   // from the run's own three parts, because reconcile wrote it from them.
   {

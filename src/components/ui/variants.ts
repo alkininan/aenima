@@ -333,37 +333,52 @@ export type ChipGapTone = "must" | "should" | "accepted" | "excluded";
 export const CHIP_VARIANTS: readonly ChipVariant[] = ["base", "soft", "type-badge", "gap"];
 export const CHIP_GAP_TONES: readonly ChipGapTone[] = ["must", "should", "accepted", "excluded"];
 
-// §8: chip 24h, --r-pill, --surface-2 fill, ui-caption. Padding and gap are not
-// in the spec; 4/10 and gap 4 confirmed on the ticket, matching the sm button.
+// §8.9: chip 24h, pad 4/10, gap 4, --r-pill, --surface-2 fill, ui-caption — "the vertical
+// padding is derived, not free: ui-caption's 16px line box plus 4 above and below is
+// exactly the 24 height; the 10 horizontal matches the sm button."
 const CHIP_BASE =
   "inline-flex h-[24px] shrink-0 items-center gap-[4px] rounded-pill px-[10px] py-[4px] " +
   "type-ui-caption whitespace-nowrap [&_svg]:size-[16px] [&_svg]:shrink-0";
 
-const CHIP_VARIANT_CLASSES: Record<ChipVariant, string> = {
-  base: "bg-surface-2 text-n-primary",
-  // §8's idle row carries a "Park?" chip in the Soft tone — the same
-  // --prime-soft fill and --prime label §8 gives the Soft *button*, so the two
-  // read as one tier rather than two accents that happen to sit near each other.
-  soft: "bg-prime-soft text-prime",
-  // §8: types are informative, never colourful — outline chip, --glass-border,
+/**
+ * A chip's look in two halves — the fill (or the outline) and the text — because §2's
+ * dimming touches one and never the other: "opacity .60 to its non-text parts only —
+ * … chip fills". A dimmed chip keeps `text` on the element and paints `fill` on a layer of
+ * its own at .60 beneath the text; `edge` names an outline, which the layer draws instead.
+ */
+type ChipLook = { fill: string; text: string; edge?: string };
+
+const CHIP_VARIANT_LOOKS: Record<Exclude<ChipVariant, "gap">, ChipLook> = {
+  base: { fill: "bg-surface-2", text: "text-n-primary" },
+  // §8's Soft tone — the same --prime-soft fill and --prime label §8 gives the Soft
+  // *button*, so the two read as one tier rather than two accents near each other.
+  soft: { fill: "bg-prime-soft", text: "text-prime" },
+  // §8.9: types are informative, never colourful — outline chip, --glass-border,
   // --n-secondary.
-  "type-badge": "border border-glass-border bg-transparent text-n-secondary",
-  // A gap chip always carries a tone; the variant alone adds nothing.
-  gap: "",
+  "type-badge": { fill: "bg-transparent", edge: "border-glass-border", text: "text-n-secondary" },
 };
 
-const CHIP_GAP_TONE_CLASSES: Record<ChipGapTone, string> = {
-  must: "bg-warning-soft text-warning",
-  should: "bg-surface-2 text-n-secondary",
-  accepted: "bg-surface-2 text-n-secondary",
-  excluded: "border border-n-disabled bg-transparent text-n-disabled",
+// §8.9: open Must = --warning-soft + --warning · open Should = --surface-2 + --n-secondary ·
+// accepted = --surface-2 + --n-secondary · excluded = transparent + --n-disabled outline +
+// --n-secondary text — "disabled tone on the text would hide the name, and the chip is
+// information".
+const CHIP_GAP_LOOKS: Record<ChipGapTone, ChipLook> = {
+  must: { fill: "bg-warning-soft", text: "text-warning" },
+  should: { fill: "bg-surface-2", text: "text-n-secondary" },
+  accepted: { fill: "bg-surface-2", text: "text-n-secondary" },
+  excluded: { fill: "bg-transparent", edge: "border-n-disabled", text: "text-n-secondary" },
 };
+
+const chipLook = (variant: ChipVariant, tone: ChipGapTone): ChipLook =>
+  variant === "gap" ? CHIP_GAP_LOOKS[tone] : CHIP_VARIANT_LOOKS[variant];
 
 export type ChipClassOptions = {
   variant?: ChipVariant | undefined;
   tone?: ChipGapTone | undefined;
   /** §8: interactive chips get hover + press. */
   interactive?: boolean | undefined;
+  /** §2 Dimming: the fill at .60 on its own layer (`chipFillClasses`), the text at its tone. */
+  dimmed?: boolean | undefined;
   className?: string | undefined;
 };
 
@@ -371,15 +386,75 @@ export function chipClasses({
   variant = "base",
   tone = "should",
   interactive = false,
+  dimmed = false,
   className,
 }: ChipClassOptions = {}): string {
+  const look = chipLook(variant, tone);
   return cx(
     CHIP_BASE,
-    variant === "gap" ? CHIP_GAP_TONE_CLASSES[tone] : CHIP_VARIANT_CLASSES[variant],
+    look.text,
+    dimmed
+      ? // The fill leaves for the layer; an outlined chip keeps a transparent border so its
+        // geometry does not move by the pixel the outline took. `isolate` gives the layer's
+        // negative z-index something to sit inside.
+        cx("relative isolate", look.edge && "border border-transparent")
+      : cx(look.fill, look.edge && `border ${look.edge}`),
     interactive && "control control-edge-none",
     className,
   );
 }
+
+/**
+ * The dimmed chip's fill: the tone's fill — or, on an outlined chip, its outline drawn over
+ * the element's own border box — at opacity .60, one rung below the text inside the chip's
+ * own stacking context, and never in the way of a click.
+ */
+export function chipFillClasses({
+  variant = "base",
+  tone = "should",
+}: Pick<ChipClassOptions, "variant" | "tone"> = {}): string {
+  const look = chipLook(variant, tone);
+  return cx(
+    "pointer-events-none absolute rounded-pill opacity-60 z-[calc(var(--z-content)-1)]",
+    look.edge ? cx("-inset-px border", look.edge) : "inset-0",
+    look.fill,
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Count badge — §8.9 "Count badges"                                          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * §8.9: "display-num in a `--surface-2` pill, 30h — the 22 line with 4 above and below —
+ * pad 10, the chip's; a badge stands only where a count is a headline beside a title, and
+ * the row's overflow count is a chip, not a badge". The bucket header is that place.
+ */
+export const COUNT_BADGE_CLASSES =
+  "type-display-num inline-flex h-[30px] shrink-0 items-center rounded-pill bg-surface-2 " +
+  "px-[10px] text-n-secondary";
+
+/* -------------------------------------------------------------------------- */
+/* Disclosure — §8.25                                                         */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * §8.25's summary, the single source for its geometry — §8.10's accept form "uses it
+ * unchanged": the shared control class with the specular edge off, so §7's states arrive
+ * whole; radius `--r-sm`; pad 8 vertical / 4 horizontal; gap 4 between chevron and text;
+ * the browser marker removed in both spellings, since the affordance is the chevron and a
+ * triangle beside it would be two.
+ */
+export const DISCLOSURE_SUMMARY_CLASSES =
+  "control control-edge-none flex list-none items-center gap-[4px] rounded-sm px-[4px] " +
+  "py-[8px] [&::-webkit-details-marker]:hidden";
+
+/**
+ * §8.25: "Chevron 16, swapped rather than rotated — `nav-arrow-right` closed, `nav-arrow-down`
+ * open — because §6 names no duration for a disclosure and v1 makes step changes instant."
+ * The pair reads the `<details>`' open state through the `group` on it.
+ */
+export const DISCLOSURE_CHEVRON_CLASSES = "size-[16px] shrink-0";
 
 /* -------------------------------------------------------------------------- */
 /* Spinner — §8 "Spinner"                                                     */
@@ -833,6 +908,24 @@ export const MODAL_BODY_CLASSES = "scroll-thin min-h-0 flex-1 overflow-y-auto ty
 
 /** §4: the content column's gutters — 24, and 16 in hand chrome. */
 export const GUTTER_CLASSES = "px-[16px] lg:px-[24px]";
+
+/**
+ * §4's read-only line, as the stylesheet spells it — 600 on pointer, 768 on touch — the
+ * two widths `src/lib/layout.ts` holds for script. `WriteGate` hides a write under these
+ * before hydration; the inverse shows what takes a write's place below the line, the
+ * idle row's freshness readout (§8.27), by CSS alone. Tailwind's `max-[600px]` is
+ * `width < 600px`; `max-md` is `width < 768px`.
+ */
+export const READ_ONLY_HIDDEN_CLASSES = "pointer:max-[600px]:hidden touch:max-md:hidden";
+export const READ_ONLY_SHOWN_CLASSES = "hidden pointer:max-[600px]:inline touch:max-md:inline";
+
+/**
+ * §8.27: "decided by a container query on the list's own content box (§4 Grid), never by
+ * the viewport". The list declares itself the named container the row's `@container list`
+ * rule in globals.css queries; a wrapper with no padding of its own, so its inline size is
+ * the content box — the column less its gutters.
+ */
+export const LIST_CONTAINER_CLASSES = "@container/list";
 
 /**
  * The frame: the sidebar or the top bar, then the content column. It says its mode in

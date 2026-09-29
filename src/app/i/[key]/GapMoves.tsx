@@ -1,6 +1,8 @@
 import { WriteGate } from "@/components/frame/WriteGate";
 import { Button } from "@/components/ui/Button";
+import { DisclosureChevron } from "@/components/ui/Disclosure";
 import {
+  DISCLOSURE_SUMMARY_CLASSES,
   INPUT_CONTROL_CLASSES,
   INPUT_LABEL_CLASSES,
   inputCompositeClasses,
@@ -9,6 +11,7 @@ import {
 } from "@/components/ui/variants";
 import type { Dictionary } from "@/i18n";
 import type { Actor } from "@/lib/actor";
+import { cx } from "@/lib/cx";
 import type { GapMoveClaim, GapMoveReport } from "@/lib/gap-move";
 
 import { settleGap } from "./actions";
@@ -149,9 +152,10 @@ export function GapMoves({
             <input type="hidden" name="key" value={itemKey} />
             <input type="hidden" name="gapId" value={gap.id} />
             <input type="hidden" name="intent" value="reopen" />
-            {/* Secondary rather than Ghost: the accepted card is already at
-                opacity .60, and §8 warns a text-only control "vanishes precisely
-                when it has the most to say". §0 law 7 dims it, never disables it. */}
+            {/* Secondary rather than Ghost: the accepted card is already dimmed
+                (§8.32), and §8.10 warns a text-only control "vanishes precisely
+                when it has the most to say". §0 law 7 dims the card, never this:
+                Reopen stays fully live, at 1. */}
             <Button type="submit" size="sm" variant="secondary">
               {t.item.gapReopen}
             </Button>
@@ -233,8 +237,14 @@ function AcceptForm({
     <div className="flex flex-col">
       <WriteGate>
         <details open={outcome !== null && !landed} className="group flex flex-col">
-          <summary className="control control-edge-none type-ui-footnote flex w-fit list-none items-center gap-[4px] rounded-sm px-[8px] py-[4px] text-n-secondary [&::-webkit-details-marker]:hidden">
+          {/* §8.10: "Accept is a disclosure (§8.25) with a ui-footnote --n-secondary
+              summary" — §8.25's recipe unchanged: pad 8 by 4, the 16 chevron 4 from the
+              text, swapped between right and down, no browser marker. */}
+          <summary
+            className={cx(DISCLOSURE_SUMMARY_CLASSES, "type-ui-footnote w-fit text-n-secondary")}
+          >
             {t.item.gapAccept}
+            <DisclosureChevron />
           </summary>
 
           {/* No `encType`, and no hand-written `method`/`action`. Next drops a
@@ -244,8 +254,10 @@ function AcceptForm({
             for an action form and overrides an `encType` prop that disagrees —
             it warns about the mismatch rather than shipping the wrong body — so
             the real way to break this is to write the `<form>` by hand and post
-            somewhere else. The e2e submits this one with JavaScript disabled. */}
-          <form action={settleGap} className="flex flex-col gap-[8px] px-[8px] pt-[8px]">
+            somewhere else. The e2e submits this one with JavaScript disabled.
+
+            Inset to the summary's 4, so the field stands under the summary's text. */}
+          <form action={settleGap} className="flex flex-col gap-[8px] px-[4px] pt-[8px]">
             <input type="hidden" name="key" value={itemKey} />
             <input type="hidden" name="gapId" value={gap.id} />
             <input type="hidden" name="intent" value="accept" />
@@ -293,7 +305,7 @@ function AcceptForm({
           "Reopened." shipped invisible. The card's accepted branch puts its
           message outside every disclosure too; this mirrors it. */}
       {requestProblem === null ? null : (
-        <div className="px-[8px] pt-[8px]">
+        <div className="px-[4px] pt-[8px]">
           <MoveMessage report={requestProblem} t={t} />
         </div>
       )}

@@ -1,33 +1,28 @@
+import { COUNT_BADGE_CLASSES } from "@/components/ui/variants";
 import type { Dictionary } from "@/i18n";
 import type { Bucket } from "@/lib/buckets";
-import { cx } from "@/lib/cx";
 
 import { ItemRow, type ItemRowData } from "./ItemRow";
-
-/**
- * §8: 2px bucket accent — `--prime` your-move, `--warning` at-risk, none
- * flowing.
- *
- * It belongs to the group rather than the row (v2.15), and it can: a bucket is
- * homogeneous by construction, since `assignBucket` returns exactly one bucket
- * per item and this section renders only the items in it. One unbroken edge
- * down eight rows is a list; eight two-pixel marks is eight objects.
- *
- * Flowing's stays transparent rather than absent, so every group is inset by
- * the same 2 and the titles line up across buckets.
- */
-const BUCKET_ACCENT: Record<Bucket, string> = {
-  your_move: "border-l-prime",
-  at_risk: "border-l-warning",
-  flowing: "border-l-transparent",
-};
 
 /**
  * One of §13's three buckets, with its mono-micro header.
  *
  * §3 makes mono-micro the eyebrow — "the terminal label is the retro signature,
  * use it wherever a tiny section label appears" — and §8 names bucket headers as
- * one of its uses.
+ * one of its uses. Beside it §8.9's count badge: "display-num in a `--surface-2`
+ * pill, 30h, pad 10 — a badge stands only where a count is a headline beside a
+ * title", and this is that place.
+ *
+ * **The group is the ledger** (§8.27, v2.15): the rows sit flush on one `--surface-1`
+ * surface divided by 1px `--bg-base` hairlines, with `--r-sm` on the group — the rows
+ * are square and let the group's corners clip them. The 2px bucket accent runs
+ * unbroken down its left edge; since T0.49 each row draws its own segment of it inside
+ * its padding, one pixel taller than the row so no hairline breaks it, which is what lets
+ * an idle row's span dim at .60 alone (§2). A bucket is homogeneous by construction —
+ * `assignBucket` returns exactly one bucket per item — so the segments are one colour.
+ *
+ * §13: the list is a `grid` of one Tab stop (`RowWalker`); each bucket's rows are a
+ * `rowgroup` named by its header.
  *
  * An empty bucket renders nothing at all rather than a header over a void. §13's
  * buckets are a partition, so an empty one is a normal state and not a thing to
@@ -40,6 +35,7 @@ export function BucketSection({
   t,
   now,
   linkTo,
+  tabStopKey,
 }: {
   bucket: Bucket;
   items: readonly ItemRowData[];
@@ -47,38 +43,36 @@ export function BucketSection({
   now: number;
   /** A row's destination by key — see `ItemRow`'s `href`. Absent, a row goes to `/i/<key>`. */
   linkTo?: (key: string) => string;
+  /** §11: the row whose name is the list's one Tab stop — the list's first, until a walk moves it. */
+  tabStopKey?: string;
 }) {
   if (items.length === 0) return null;
 
   return (
-    <section aria-labelledby={`bucket-${bucket}`} className="flex flex-col gap-[8px]">
+    <section className="flex flex-col gap-[8px]">
       <h2
         id={`bucket-${bucket}`}
         data-testid="bucket-header"
         className="type-mono-micro flex items-center gap-[8px] text-n-secondary"
       >
         {t.buckets[bucket]}
-        {/* §8's count badge: display-num in a --surface-2 pill. */}
-        <span className="type-mono-readout rounded-pill bg-surface-2 px-[8px] py-[2px] text-n-secondary">
-          {items.length}
-        </span>
+        <span className={COUNT_BADGE_CLASSES}>{items.length}</span>
       </h2>
 
       {/* §8 (v2.15): one continuous surface, hairline-divided.
-          
+
           `gap-[1px]` on a `--bg-base` background is the hairline — the page
           showing through a one-pixel gap rather than a border painted on top of
           the fill. That way a row's hover can cover its whole height without
           eating the divider, and the first and last rows need no special case
           beyond the group's own corners.
-          
+
           `overflow-hidden` is what makes the square-cornered rows inherit the
           group's rounded ends: the corners are clipped rather than drawn. */}
       <div
-        className={cx(
-          "flex flex-col gap-[1px] overflow-hidden rounded-sm border-l-[2px] bg-bg-base",
-          BUCKET_ACCENT[bucket],
-        )}
+        role="rowgroup"
+        aria-labelledby={`bucket-${bucket}`}
+        className="flex flex-col gap-[1px] overflow-hidden rounded-sm bg-bg-base"
       >
         {items.map((item) => (
           <ItemRow
@@ -86,6 +80,7 @@ export function BucketSection({
             item={item}
             t={t}
             now={now}
+            tabStop={item.key === tabStopKey}
             className="bg-surface-1"
             {...(linkTo ? { href: linkTo(item.key) } : {})}
           />

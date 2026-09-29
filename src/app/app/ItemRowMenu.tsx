@@ -8,8 +8,10 @@ import { OverflowIcon } from "@/components/ui/icons";
 import { getDictionary } from "@/i18n";
 import { itemHref } from "@/lib/routes";
 
+import { ROW_CONTROL_ATTRIBUTE } from "./row-link";
+
 /**
- * §8's item-row overflow menu.
+ * §8.27's item-row overflow menu.
  *
  * The one client island in the row, and the reason is real interactivity rather
  * than convenience: a menu is focus management, arrow-key movement and
@@ -20,6 +22,10 @@ import { itemHref } from "@/lib/routes";
  * gaps, log a decision — are mutations that do not exist yet, and a menu full of
  * disabled rows would be worse than a short one. Open and copy-key both work
  * today, which is the whole test of whether an entry belongs here.
+ *
+ * **Its trigger is one of the row's controls** (§11): reached with Right from the name,
+ * never by Tab — `tabindex="-1"`, and the walker's mark. Open, the menu keeps its own
+ * keys; closed, Up and Down from the trigger walk the rows like any other control.
  *
  * **It reads its own copy rather than being handed a dictionary.** The
  * dictionary carries formatter functions, and a function cannot cross the
@@ -43,6 +49,8 @@ export function ItemRowMenu({ itemKey, label }: { itemKey: string; label: string
           size="sm"
           label={label}
           icon={<OverflowIcon />}
+          tabIndex={-1}
+          {...{ [ROW_CONTROL_ATTRIBUTE]: "" }}
           // The row is a link with a stretched hit area; the menu sits one above
           // §4's content rung so its own clicks land here rather than navigating.
           className="relative z-[calc(var(--z-content)+1)] shrink-0"
@@ -55,7 +63,7 @@ export function ItemRowMenu({ itemKey, label }: { itemKey: string; label: string
           label: t.list.copyKey,
           // `writeText` rejects without a permission or a secure context, and a
           // failed copy is not worth an error surface on a list row — the key is
-          // visible in the row and in the URL either way.
+          // in the URL either way.
           onSelect: () => void navigator.clipboard?.writeText(itemKey).catch(() => {}),
         },
       ]}

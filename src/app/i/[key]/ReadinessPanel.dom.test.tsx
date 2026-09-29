@@ -462,3 +462,89 @@ describe("ReadinessPanel", () => {
     expect(container.querySelectorAll("summary")).toHaveLength(1);
   });
 });
+
+/**
+ * §8.25 (T0.49): one recipe for the summary — pad 8 vertical by 4 horizontal, gap 4 between
+ * chevron and text, chevron 16 swapped — shared with the accept form's summary. The meter
+ * block keeps §8.24's 400, and the unscored block keeps the summary's inset so the track
+ * sits in one place whether or not there is a run behind it.
+ */
+/**
+ * §8.27 (T0.49): a row's gap chip lands "with the check list expanded and that check
+ * scrolled into view". The fragment alone was observed to reveal nothing on the app
+ * router's client navigation, so the link carries `?check=` and the panel opens on it —
+ * only for a check the run draws.
+ */
+describe("ReadinessPanel on a linked check", () => {
+  const shown = (openOnCheck: string | null) =>
+    render(
+      <ReadinessPanel
+        run={view()}
+        t={t}
+        itemKey="soc-12"
+        gapsByCheck={NO_GAPS}
+        noLongerApplicable={NO_CLOSURES}
+        outcome={null}
+        openOnCheck={openOnCheck}
+      />,
+    );
+
+  it("opens itself onto a check the run draws", () => {
+    const { container } = shown("prd-1");
+    expect(container.querySelector("details")?.hasAttribute("open")).toBe(true);
+  });
+
+  it("stays closed on a check the run does not carry, and with none named", () => {
+    const stranger = shown("prd-999");
+    expect(stranger.container.querySelector("details")?.hasAttribute("open")).toBe(false);
+    stranger.unmount();
+    const none = shown(null);
+    expect(none.container.querySelector("details")?.hasAttribute("open")).toBe(false);
+  });
+});
+
+describe("ReadinessPanel summary recipe", () => {
+  it("pads the summary 8 by 4 and swaps a 16 chevron 4 from the percentage", () => {
+    const { container } = render(
+      <ReadinessPanel
+        run={view()}
+        t={t}
+        itemKey="soc-12"
+        gapsByCheck={NO_GAPS}
+        noLongerApplicable={NO_CLOSURES}
+        outcome={null}
+      />,
+    );
+    const summary = container.querySelector("summary")!;
+    const summaryTokens = summary.className.split(/\s+/);
+    expect(summaryTokens).toContain("py-[8px]");
+    expect(summaryTokens).toContain("px-[4px]");
+    expect(summaryTokens).not.toContain("p-[8px]");
+    expect(summaryTokens).toContain("max-w-[400px]");
+
+    const chevrons = summary.querySelectorAll("svg");
+    expect(chevrons).toHaveLength(2);
+    for (const chevron of chevrons) expect(chevron.getAttribute("class")).toContain("size-[16px]");
+    // 4 between the chevron and the percentage it sits beside.
+    const percent = screen.getByText(t.item.scorePercent(67));
+    expect(percent.parentElement?.className).toContain("gap-[4px]");
+    expect(percent.parentElement?.contains(chevrons[0]!)).toBe(true);
+  });
+
+  it("keeps the unscored block on the summary's inset", () => {
+    render(
+      <ReadinessPanel
+        run={null}
+        t={t}
+        itemKey="soc-12"
+        gapsByCheck={NO_GAPS}
+        noLongerApplicable={NO_CLOSURES}
+        outcome={null}
+      />,
+    );
+    const blockTokens = screen.getByTestId("readiness").className.split(/\s+/);
+    expect(blockTokens).toContain("py-[8px]");
+    expect(blockTokens).toContain("px-[4px]");
+    expect(blockTokens).not.toContain("p-[8px]");
+  });
+});

@@ -199,6 +199,52 @@ test.describe("TC2 · C-25 the read-only line", () => {
   }
 
   /**
+   * §8.27's read-only clause (T0.49, AC5): below the line the overflow trigger and Park are
+   * absent with every other mutation, the freshness readout takes Park's place back, and
+   * the tap opens the item through the name's `::after`. Above it, on `/dev/list`, the
+   * row's writes stand: four triggers and the idle row's Park.
+   */
+  for (const [width, touch, present] of [
+    [599, false, false],
+    [640, false, true],
+    [767, true, false],
+    [768, true, true],
+  ] as const) {
+    test(`${width} on ${touch ? "touch" : "pointer"}: the list's writes are ${present ? "present" : "absent"}`, async ({
+      browser,
+    }) => {
+      const { context, page } = await pageAt(browser, width, 900, touch);
+      await page.goto(LIST);
+      await settle(page);
+      await expect(page.getByTestId("item-row").first()).toBeVisible();
+
+      const idle = page
+        .getByTestId("item-row")
+        .filter({ has: page.locator("a[data-row-link]", { hasText: "Can we diff Figma" }) });
+
+      if (present) {
+        await expect(page.locator("[data-writes]")).toHaveCount(5);
+        await expect(page.getByRole("button", { name: /^Actions for/ })).toHaveCount(4);
+        await expect(idle.getByRole("button", { name: "Park?" })).toBeVisible();
+        await expect(idle.getByText("40 d ago")).toBeHidden();
+      } else {
+        await expect(page.locator("[data-writes]")).toHaveCount(0);
+        await expect(page.getByRole("button", { name: /^Actions for/ })).toHaveCount(0);
+        await expect(page.getByRole("button", { name: "Park?" })).toHaveCount(0);
+        // The readout back in Park's place.
+        await expect(idle.getByText("40 d ago")).toBeVisible();
+
+        // A tap on the row's surface opens the item.
+        const row = page.getByTestId("item-row").first();
+        const rect = await rectOf(row);
+        await row.click({ position: { x: rect.width / 2, y: rect.height - 8 } });
+        await expect(page).toHaveURL(/\/dev\/item$/);
+      }
+      await context.close();
+    });
+  }
+
+  /**
    * §4: "**except the auth flow**, which must be fully usable at 375". The email step on
    * `/sign-in`, and the code step's controls — the OTP group and the resend — on the sink,
    * since a browser cannot be sent a code; each rendered, enabled and unclipped, no
@@ -603,7 +649,8 @@ test.describe("TC5 · C-44 200% zoom at 1280 on a pointer device", () => {
    */
   const STRINGS: Record<string, readonly string[]> = {
     [SINK]: [
-      "scored 6 h ago — retrying",
+      // The row's readout since T0.49: §12's ladder string alone, the dot saying the rest.
+      "6 h ago",
       "Nothing needs you right now",
       "Back to dashboard",
       "Retry",
@@ -614,9 +661,10 @@ test.describe("TC5 · C-44 200% zoom at 1280 on a pointer device", () => {
   };
 
   // The item's writes: three accepts and one reopen, and with no run — no expansion,
-  // so no check-line moves — the two on the gap cards.
+  // so no check-line moves — the two on the gap cards. The sink's list surface carries
+  // the row's writes since T0.49: four overflow triggers and the idle row's Park (§4).
   for (const [route, writes] of [
-    [SINK, 0],
+    [SINK, 5],
     [ITEM, 4],
     ["/dev/item?run=none", 2],
   ] as const) {

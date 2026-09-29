@@ -5,10 +5,14 @@ import {
   BUTTON_SPINNER_SIZE,
   BUTTON_VARIANTS,
   CHIP_GAP_TONES,
+  COUNT_BADGE_CLASSES,
+  DISCLOSURE_CHEVRON_CLASSES,
+  DISCLOSURE_SUMMARY_CLASSES,
   SPINNER_SIZES,
   SPINNER_TONES,
   buttonClasses,
   chipClasses,
+  chipFillClasses,
   iconButtonClasses,
   inputFieldClasses,
   OTP_BOX_COUNT,
@@ -335,15 +339,17 @@ describe("chipClasses", () => {
     expect(has(classes, "bg-surface-2")).toBe(false);
   });
 
-  // §8 gap chips: open Must warning-toned, open Should and accepted neutral,
-  // excluded a disabled outline.
+  // §8.9 gap chips: open Must warning-toned, open Should and accepted neutral, excluded a
+  // disabled outline with `--n-secondary` text — "disabled tone on the text would hide the
+  // name, and the chip is information" (T0.49).
   it.each([
     ["must", ["bg-warning-soft", "text-warning"]],
     ["should", ["bg-surface-2", "text-n-secondary"]],
     ["accepted", ["bg-surface-2", "text-n-secondary"]],
-    ["excluded", ["border-n-disabled", "bg-transparent", "text-n-disabled"]],
+    ["excluded", ["border-n-disabled", "bg-transparent", "text-n-secondary"]],
   ] as const)("tones the %s gap chip", (tone, expected) => {
     expect(has(chipClasses({ variant: "gap", tone }), ...expected)).toBe(true);
+    expect(chipClasses({ variant: "gap", tone })).not.toContain("text-n-disabled");
   });
 
   // §0 law 1: gaps never render in Danger red.
@@ -357,6 +363,90 @@ describe("chipClasses", () => {
   it("adds the tactile control only when interactive", () => {
     expect(has(chipClasses({ interactive: true }), "control")).toBe(true);
     expect(has(chipClasses(), "control")).toBe(false);
+  });
+
+  /**
+   * §2 Dimming (T0.49): "opacity .60 to its non-text parts only — … chip fills". A dimmed
+   * chip keeps its text tone on the element and paints its fill — or, on the excluded
+   * chip, its outline — on a layer of its own at .60, beneath the text.
+   */
+  it("moves a dimmed chip's fill onto a layer at .60 and keeps the text's tone", () => {
+    const dimmed = chipClasses({ variant: "gap", tone: "must", dimmed: true });
+    expect(has(dimmed, "text-warning", "relative", "isolate")).toBe(true);
+    expect(dimmed).not.toContain("bg-warning-soft");
+
+    const fill = chipFillClasses({ variant: "gap", tone: "must" });
+    expect(has(fill, "absolute", "inset-0", "rounded-pill", "opacity-60", "bg-warning-soft")).toBe(
+      true,
+    );
+    expect(fill).not.toContain("text-");
+  });
+
+  it("dims an outlined chip's edge, not its text, and keeps its geometry", () => {
+    const dimmed = chipClasses({ variant: "gap", tone: "excluded", dimmed: true });
+    expect(has(dimmed, "border", "border-transparent", "text-n-secondary")).toBe(true);
+    expect(dimmed).not.toContain("border-n-disabled");
+
+    const fill = chipFillClasses({ variant: "gap", tone: "excluded" });
+    expect(has(fill, "-inset-px", "border", "border-n-disabled", "opacity-60")).toBe(true);
+  });
+
+  it("dims the base chip's fill the same way", () => {
+    expect(chipClasses({ dimmed: true })).not.toContain("bg-surface-2");
+    expect(has(chipFillClasses(), "bg-surface-2", "opacity-60")).toBe(true);
+  });
+});
+
+/**
+ * §8.25 (T0.49): one recipe for every disclosure's summary — the shared control class with
+ * the specular edge off, radius `--r-sm`, pad 8 vertical / 4 horizontal, gap 4 between
+ * chevron and text, the marker removed in both spellings. §8.10's accept form "uses it
+ * unchanged", so the meter's summary and the accept summary read one constant.
+ */
+describe("disclosure summary", () => {
+  it("carries §8.25's geometry and §7's control states", () => {
+    expect(
+      has(
+        DISCLOSURE_SUMMARY_CLASSES,
+        "control",
+        "control-edge-none",
+        "list-none",
+        "rounded-sm",
+        "px-[4px]",
+        "py-[8px]",
+        "gap-[4px]",
+        "[&::-webkit-details-marker]:hidden",
+      ),
+    ).toBe(true);
+    expect(DISCLOSURE_SUMMARY_CLASSES).not.toContain("p-[8px]");
+    expect(DISCLOSURE_SUMMARY_CLASSES).not.toContain("px-[8px]");
+  });
+
+  // §8.25: "Chevron 16, swapped rather than rotated" — no rotation utility anywhere in it.
+  it("names the chevron's size and no rotation", () => {
+    expect(DISCLOSURE_CHEVRON_CLASSES).toContain("size-[16px]");
+    expect(DISCLOSURE_CHEVRON_CLASSES).not.toMatch(/rotate/);
+  });
+});
+
+/**
+ * §8.9 (T0.49): "Count badges: display-num in a `--surface-2` pill, 30h — the 22 line with
+ * 4 above and below — pad 10, the chip's". The bucket header is the one place a count is
+ * a headline beside a title.
+ */
+describe("count badge", () => {
+  it("is display-num in a 30 pill padded 10 on --surface-2", () => {
+    expect(
+      has(
+        COUNT_BADGE_CLASSES,
+        "type-display-num",
+        "h-[30px]",
+        "px-[10px]",
+        "rounded-pill",
+        "bg-surface-2",
+      ),
+    ).toBe(true);
+    expect(COUNT_BADGE_CLASSES).not.toContain("type-mono-readout");
   });
 });
 
