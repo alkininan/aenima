@@ -307,7 +307,8 @@ recorded in the build log so nobody goes looking for the scope.
 - 4.2 Notion intake: comments, hand-created tasks, hand-written docs, property changes
 - 4.3 Router: classify → product → type → file, with confidence policy and triage inbox
 - 4.4 Figma read + design hygiene checks + alignment map
-- 4.5 Remaining intake: Slack, Teams, Fireflies, Gmail forward-in, Drive
+- 4.5 Remaining intake: Slack, Teams, Fireflies, Gmail forward-in, Drive, and the calendar read for the
+  eligible-meeting roster (product spec §10)
 - Phase 4 also owns the scheduler that §5's retry field and the nightly sweep are waiting on.
 
 **Phase 5 — handover**

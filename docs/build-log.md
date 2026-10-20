@@ -1211,7 +1211,8 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
     which T2.4 vindicated for `item.key`, holding a third time.
 
 41. **§7.2 check 7 widened in product-spec v1.11; the `feature-prd` pack still carries the v1.10
-    prose — owner: the next pack version.** The check now asks for the measurement appointment
+    prose — owner: Phase 3, where the authoring loop next touches the pack's prose, or the Phase 2
+    scorer eval harness if it bumps the pack first.** The check now asks for the measurement appointment
     (owner, definition version, baseline period, cohort, window, minimum sample, review time) on
     the same 4 points. `src/packs/feature-prd.ts` is data the scorer reads, so the sentence it
     sends the model is the old one until the pack bumps, and a bump invalidates §5's cache for
@@ -1234,15 +1235,15 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
     table cannot carry a `status` column: the first-law test refuses `status`, `stage` and
     `state` anywhere in `public`, and it stays broad on purpose (`gap` chose `disposition` for the
     same reason). The ticket's status is the backlog's, read back as evidence; what aenima stores
-    locally is a reading of it with a time, under a word the guard does not forbid. Pick the
+    locally is that read-back with its time, under a word the guard does not forbid. Pick the
     word when 5.6 is written; do not carve the test.
 
 44. **A deputy signing in place of a stalled signer — Phase 5.4.** §8 now offers the slot's deputy
     the same walkthrough after three working days, and whichever of the two signs is the signer
     of record. The sign-off record therefore stores the slot beside the person, and whether the
-    deputy signed; the walkthrough's pre-built variants (§8) are generated per signer at packet
-    creation, so a deputy who arrives on day three needs variants of their own, not the stalled
-    signer's leftovers. Both belong to 5.4 with signatures and waivers.
+    deputy signed; the walkthrough's variants (§8) are pre-built per role at packet creation, so a
+    deputy who arrives on day three draws from the role's unused variants and the pool has to be
+    sized for two signers, not one. Both belong to 5.4 with signatures and waivers.
 
 45. **The registry and the workspace calendar — Phase 6.1.** §14's registry (the Loop's slots,
     each with a person, a deputy and an away interval; a Viewer refused in any slot; demotion

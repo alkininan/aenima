@@ -6,8 +6,8 @@ toolset, Teams, Notion, Fireflies, Figma, CodeRabbit, Azure DevOps and Amplitude
 the product spec section by section and folded in. Mechanics went into the spec; one team's
 operating rules (meeting rhythm, the 25% reserve, the Loop Scrum) stayed in the handbook.
 
-Twelve rulings settled the contradictions, and the spec header carries them. The ones that
-changed a law's reading rather than adding a mechanic: aenima v1 still ends at handover, with the
+Twelve contradictions were ruled on and the table of gaps was taken whole; the spec header
+carries all of it. The rulings that changed a law's reading rather than adding a mechanic: aenima v1 still ends at handover, with the
 measurement appointment the one thread that runs past it; the actor doing the work moves a
 ticket and an observer never does, which reconciles the Loop's "people set every status" with the
 board's self-moving run without touching law 1; pre-signature editing stays free and the Loop's
