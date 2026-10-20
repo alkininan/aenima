@@ -13,7 +13,8 @@ import { STAGES, type Stage } from "@/lib/stage";
  * §13 in full:
  *
  * - **Your move** — "anything awaiting a human: sign-offs, exclusion confirms,
- *   triage items, walkthrough answers, stalled packets (>48 h). Always on top."
+ *   triage items, walkthrough answers, measurement appointments due …, stalled
+ *   packets (two working days). Always on top."
  * - **At risk** — "score regressed this week, a handover-blocking gap older than
  *   5 days, or time-in-stage past ~1.5× the learned baseline."
  * - **Flowing** — "everything else, by recent activity."
@@ -80,7 +81,7 @@ export type BucketInput = {
   now: number;
 
   /**
-   * §13's "sign-offs" and "stalled packets (>48 h)".
+   * §13's "sign-offs" and "stalled packets (two working days)".
    *
    * No packet table exists, so nothing can observe a signature — the same
    * absence `StageInput.signedPacket` describes, and typed the same way. See

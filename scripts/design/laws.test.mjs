@@ -178,7 +178,8 @@ describe("C-34 · one term per concept (T0.38)", () => {
     const terms = c34Terms(readFileSync(join(root, "docs/design-spec.md"), "utf8"));
     expect(terms).toContain("walkthrough");
     expect(terms).toContain("version tuple");
-    expect(terms).toHaveLength(15);
+    expect(terms).toContain("registry");
+    expect(terms).toHaveLength(21);
   });
 
   it("reads Appendix G's table, a dash as no word, and fails with no appendix at all", () => {

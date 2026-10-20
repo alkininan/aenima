@@ -1,4 +1,8 @@
-<!-- build-guide.md · v2.11 · in the repo · §2 says how a phase is run by hand: a run is an
+<!-- build-guide.md · v2.12 · in the repo · §3 gains rule 9, the Notion write as Phase 4
+     will build it: journaled before it is sent, read back after, never retried blind, and a
+     stale mirror a rendering rather than a version — product-spec v1.11 §11, folded in from the
+     Loop operating handbook. The title line is corrected to the header's version.
+     v2.11 · in the repo · §2 says how a phase is run by hand: a run is an
      orchestrator and four phase agents (T0.44), and a person driving a ticket can run any one
      of them the same way — the phase set in the marker, the agent handed paths, the files the
      handoff.
@@ -26,7 +30,7 @@
      v2.0 was a rewrite rather than a revision: v1.0 was written before ticket 0.1 and proposed a
      stack, a setup script and a set of habits, all of which the build has since replaced. -->
 
-# aenima — build guide v2.10
+# aenima — build guide v2.12
 
 How to run a ticket on aenima with Claude Code.
 
@@ -201,6 +205,13 @@ with a long session — start a clean one.
 8. **Pre-launch, never preserve backward compatibility in code.** No compatibility layers, no
    fallbacks, no legacy paths — remove the old path in the same change. The database is the one
    exception, and it goes through migrations.
+9. **The Notion write is journaled, read back, and never retried blind.** Product spec §11's
+   write-safety rules are Phase 4's contract for every write to a mirror or to the Development
+   backlog: journal the intended write with a marker before it is sent, read every destination
+   back and call only a matching read-back Applied, send no second write to a page while an
+   earlier uncertain one could still arrive, and show a stale mirror as the version it renders
+   beside the ledger's rather than treating it as a version of its own. Notion's API offers no
+   conditional write and no fencing token; nothing in the code may assume one.
 
 ---
 
@@ -296,7 +307,8 @@ recorded in the build log so nobody goes looking for the scope.
 - 4.2 Notion intake: comments, hand-created tasks, hand-written docs, property changes
 - 4.3 Router: classify → product → type → file, with confidence policy and triage inbox
 - 4.4 Figma read + design hygiene checks + alignment map
-- 4.5 Remaining intake: Slack, Teams, Fireflies, Gmail forward-in, Drive
+- 4.5 Remaining intake: Slack, Teams, Fireflies, Gmail forward-in, Drive, and the calendar read for the
+  eligible-meeting roster (product spec §10)
 - Phase 4 also owns the scheduler that §5's retry field and the nightly sweep are waiting on.
 
 **Phase 5 — handover**
