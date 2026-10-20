@@ -8,8 +8,8 @@
 
 Written from the repo by `node scripts/run/log-index.mjs`, like the Tickets done list below, and its test refuses a stale copy: edit the documents and the log entries, never this block. No phase and no next ticket here — the board owns the queue and the roadmap owns the phases, and a stamp a human maintains is a stamp that is eventually wrong.
 
-**Specs:** product-spec v1.10 · design-spec v2.23 · guidelines v1.32
-**Newest entry:** [T0.49 — Row and cards to v2.21](log/T0.49.md) · 2026-09-29
+**Specs:** product-spec v1.11 · design-spec v2.24 · guidelines v1.32
+**Newest entry:** [Product spec v1.11 — the Loop folded in](log/product-spec-v1.11.md) · 2026-10-20
 **Repo:** github.com/alkininan/aenima
 **Deployed:** yes — **aeni.ma** on Vercel
 
@@ -104,6 +104,7 @@ One file per ticket under `docs/log/`, oldest first. This list is written by `no
 - [T0.47 — Confirm the deploy check reads Vercel](log/T0.47.md) · 2026-09-28
 - [T0.48 — Layout modes and chrome](log/T0.48.md) · 2026-09-28
 - [T0.49 — Row and cards to v2.21](log/T0.49.md) · 2026-09-29
+- [Product spec v1.11 — the Loop folded in](log/product-spec-v1.11.md) · 2026-10-20
 
 ## Decisions made during the build
 
@@ -1208,6 +1209,69 @@ If the answer is a rule that should hold everywhere, also add it to CLAUDE.md in
     **Closed 2026-09-21** by the run that applied `drizzle/0016`: it regenerated the file against
     the project and diffed it whole, and it came back identical. That is open question 5's rule,
     which T2.4 vindicated for `item.key`, holding a third time.
+
+41. **§7.2 check 7 widened in product-spec v1.11; the `feature-prd` pack still carries the v1.10
+    prose — owner: the next pack version.** The check now asks for the measurement appointment
+    (owner, definition version, baseline period, cohort, window, minimum sample, review time) on
+    the same 4 points. `src/packs/feature-prd.ts` is data the scorer reads, so the sentence it
+    sends the model is the old one until the pack bumps, and a bump invalidates §5's cache for
+    every stored run and wants the re-baseline pass (open question 15) that has no trigger yet.
+    Pay both at once: bump `feature-prd` to 1.3.0 with the new prose and probes for the
+    appointment, re-score the golden samples, and record the spread the way T2.9 did.
+
+42. **The Notion write journal — decide its shape at Phase 4.1.** Product spec §11 now says every
+    write to a mirror or to the Development backlog is journaled before it is sent, read back
+    after, shown as Applying until the read-back matches, and never retried while an earlier
+    uncertain write to the same page could still arrive. Build guide §3 rule 9 carries it. What
+    the spec does not say is where the journal lives — an append-only table beside `activity`,
+    which §2's ledger law would suggest, or a column set on the artifact row — nor how a page
+    lock is held across workers. Decide when 4.1 is cut; the constraint that stands either way is
+    that nothing in the code assumes Notion offers a conditional write.
+
+43. **Tickets' local copy, and the word for a ticket's position — Phase 5.6.** §11 has said since
+    v1.1 that aenima "keeps scoring from its own copy" of the backlog, and v1.11 gives tickets
+    Priority, Blockers, a QA status, Cancelled with reasons and a Blocked overlay. A local ticket
+    table cannot carry a `status` column: the first-law test refuses `status`, `stage` and
+    `state` anywhere in `public`, and it stays broad on purpose (`gap` chose `disposition` for the
+    same reason). The ticket's status is the backlog's, read back as evidence; what aenima stores
+    locally is a reading of it with a time, under a word the guard does not forbid. Pick the
+    word when 5.6 is written; do not carve the test.
+
+44. **A deputy signing in place of a stalled signer — Phase 5.4.** §8 now offers the slot's deputy
+    the same walkthrough after three working days, and whichever of the two signs is the signer
+    of record. The sign-off record therefore stores the slot beside the person, and whether the
+    deputy signed; the walkthrough's pre-built variants (§8) are generated per signer at packet
+    creation, so a deputy who arrives on day three needs variants of their own, not the stalled
+    signer's leftovers. Both belong to 5.4 with signatures and waivers.
+
+45. **The registry and the workspace calendar — Phase 6.1.** §14's registry (the Loop's slots,
+    each with a person, a deputy and an away interval; a Viewer refused in any slot; demotion
+    clearing every slot) and §13's workspace calendar (working days, holidays, hours, every clock
+    counting by it) are configuration Phase 6's roles ticket owns. The seam already here: §14's
+    Viewer-as-Decider refusal, which 6.1 was going to build, is now the general rule for every
+    slot. The timezone the workspace stores today is the calendar's first field.
+
+46. **Your move's "you / everyone" switch and the waiting-on-others filter need design law before
+    they are built.** §13 now opens Your move on the signed-in person's obligations with a
+    one-tap switch to everyone's, and names *waiting on others* a filter on Flowing. The design
+    spec defines neither control. Nothing is invented here: when the list ticket that builds
+    them is cut, the control is a Decision for the design spec — most likely §8's chip grammar
+    beside the product switcher — and until then the list stays workspace-wide as T1.2 built it.
+
+47. **Relayed tool words and C-33 / C-34 — v2.** Appendix G now says a tool's own result keeps
+    the tool's word: a suite "failed", a gate "passed". C-33 refuses "fail" as a whole word in
+    every UI string and C-34 greps the steer-away list, and today no string relays a tool
+    result, so nothing trips. The day v2 renders suites and gates, `scripts/design/laws.mjs`
+    needs an allowlist for strings that quote a tool — marked as quotations in the dictionary,
+    not exempted by file — so the checks keep refusing aenima's own copy.
+
+48. **The Loop's downstream is named in §17 and nothing here builds it — v2.** Sprint baseline,
+    scope change and cutoff with the B = C + R + U scorecard; the release approval order per
+    exact artifact; one candidate evidence record per build with its five result states; the
+    engineering summary; gates read from the team's tools and never added; scoring the standing
+    documents; and the minutes-a-day measure of administering aenima. Each is written as a rule
+    so the development and QA stages open from a specification rather than a blank page. None
+    of it is v1, and none of it changes a v1 ticket.
 
 ## On the horizon
 
